@@ -31,6 +31,14 @@ public:
     [[nodiscard]] bool is_minimized() const;
     void set_title(const std::string& title);
 
+    // Window management. Each call waits until the OS has applied the change (SDL_SyncWindow),
+    // which makes them usable from automated lifecycle tests.
+    void minimize();
+    void restore();
+    void set_size(std::uint32_t width, std::uint32_t height);  // logical size
+    [[nodiscard]] std::uint32_t display_index() const;
+    bool move_to_display(std::uint32_t index);  // centres the window there; false if no such display
+
     [[nodiscard]] Result<std::vector<const char*>> vulkan_instance_extensions() const override;
     [[nodiscard]] Result<VkSurfaceKHR> create_vulkan_surface(VkInstance instance) const override;
     void destroy_vulkan_surface(VkInstance instance, VkSurfaceKHR surface) const override;
@@ -42,5 +50,8 @@ private:
     explicit Window(void* handle) : handle_(handle) {}
     void* handle_ = nullptr;
 };
+
+// Number of connected displays (monitors).
+[[nodiscard]] std::uint32_t display_count();
 
 } // namespace noor::platform

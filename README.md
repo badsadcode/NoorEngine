@@ -11,15 +11,15 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 
 ## Honest status
 
-**Milestone 0 done; Milestone 1 (window, GPU, first real viewport) in progress.** What exists today:
+**Milestones 0 and 1 done** ([M1 review](docs/milestones/M1_REVIEW.md)); **Milestone 2 (projects, assets, scenes) next.** What exists today:
 
 | Piece | Status |
 |---|---|
 | Build (CMake + MSVC), pinned dependencies | Works on Windows 10/11 |
 | `foundation`: logging, errors (`Result<T>`), asserts, GUIDs, math | Works, unit-tested |
-| `platform`: SDL3 window + events | Works |
+| `platform`: SDL3 window, events, window control (minimize/restore/resize/move to display), live redraw while resizing | Works; automated lifecycle test |
 | `platform`: input (keyboard, mouse, relative mouse mode) | Works; used by the fly camera |
-| `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel and 2,500-cube stress tests with validation (resize/maximize tested by hand; minimize untested; device loss reported, not recovered) |
+| `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel, 2,500-cube stress and window lifecycle tests with validation; debug labels for RenderDoc. Device loss reported, not recovered; high-DPI >100% untested |
 | `noor_diag`: diagnostics app (fly camera, `--cubes N` stress grid, timings, `--verify-render`, `--screenshot`) | Works |
 | `editor_api`: C API DLL hosting engine viewports in a foreign window (v0) | Works in the Avalonia spike; API not stable |
 | Editor GUI stack: Avalonia + Dock ([ADR-003](docs/decisions/ADR-003-editor-gui-framework.md)) | **Spike only**, decision accepted; NoorEditor itself not started |
@@ -47,7 +47,7 @@ build/windows/tools/noor_diag/Debug/noor_diag.exe
 
 Controls: hold right mouse to look, WASD to move, Q/E down/up, Shift faster, wheel for speed, Esc quits.
 Options: `--frames N` (exit after N frames), `--cubes N`, `--no-validation`, `--verify-render`,
-`--screenshot <file.bmp>`, `--log <file>`.
+`--lifecycle-test`, `--screenshot <file.bmp>`, `--log <file>`.
 
 Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug -LE gpu`.
 CI (GitHub Actions) builds Debug and Release on every push and pull request and runs everything

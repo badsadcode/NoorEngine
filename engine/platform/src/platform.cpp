@@ -11,6 +11,20 @@ namespace {
 bool g_initialized = false;
 std::uint64_t g_start_ticks = 0;
 InputState g_input;
+std::function<void()> g_live_redraw;
+bool g_in_live_redraw = false;
+
+// SDL calls event watchers as events are produced, including from inside the Windows modal
+// size/move loop, where our own frame loop is blocked. Redraw on exposure and size changes.
+bool SDLCALL live_redraw_watch(void*, SDL_Event* event) {
+    if (g_live_redraw && !g_in_live_redraw &&
+        (event->type == SDL_EVENT_WINDOW_EXPOSED || event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)) {
+        g_in_live_redraw = true;
+        g_live_redraw();
+        g_in_live_redraw = false;
+    }
+    return true;
+}
 
 Key key_from_scancode(SDL_Scancode sc) {
     if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z) {
@@ -76,6 +90,7 @@ void shutdown() {
     if (!g_initialized) {
         return;
     }
+    set_live_redraw_callback({});
     SDL_Quit();
     g_initialized = false;
     NOOR_LOG_INFO("Platform", "Platform shut down");
@@ -136,6 +151,16 @@ const InputState& input() noexcept { return g_input; }
 void set_relative_mouse(Window& window, bool enabled) {
     if (!SDL_SetWindowRelativeMouseMode(static_cast<SDL_Window*>(window.backend_handle()), enabled)) {
         NOOR_LOG_WARN("Platform", "Relative mouse mode {} failed: {}", enabled ? "on" : "off", SDL_GetError());
+    }
+}
+
+void set_live_redraw_callback(std::function<void()> callback) {
+    const bool had = static_cast<bool>(g_live_redraw);
+    g_live_redraw = std::move(callback);
+    if (g_live_redraw && !had) {
+        SDL_AddEventWatch(&live_redraw_watch, nullptr);
+    } else if (!g_live_redraw && had) {
+        SDL_RemoveEventWatch(&live_redraw_watch, nullptr);
     }
 }
 

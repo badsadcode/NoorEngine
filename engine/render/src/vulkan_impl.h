@@ -7,8 +7,10 @@
 #include "noor/foundation/log.h"
 #include "noor/render/renderer.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <string>
 #include <cstdint>
 #include <format>
 #include <limits>
@@ -92,6 +94,32 @@ struct Renderer::Impl {
     const platform::PresentationTarget* target = nullptr;
     RendererDesc desc;
     bool validation = false;
+
+    // VK_EXT_debug_utils: object names and command labels for RenderDoc/Nsight.
+    bool debug_utils = false;
+    PFN_vkSetDebugUtilsObjectNameEXT pfn_set_object_name = nullptr;
+    PFN_vkCmdBeginDebugUtilsLabelEXT pfn_begin_label = nullptr;
+    PFN_vkCmdEndDebugUtilsLabelEXT pfn_end_label = nullptr;
+
+    template <class Handle>
+    void set_name(VkObjectType type, Handle handle, const std::string& name) const {
+        if (!pfn_set_object_name || device == VK_NULL_HANDLE || handle == VK_NULL_HANDLE) return;
+        VkDebugUtilsObjectNameInfoEXT name_info{VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+        name_info.objectType = type;
+        name_info.objectHandle = reinterpret_cast<std::uint64_t>(handle);
+        name_info.pObjectName = name.c_str();
+        pfn_set_object_name(device, &name_info);
+    }
+    void begin_label(VkCommandBuffer cmd, const char* name, std::array<float, 4> color) const {
+        if (!pfn_begin_label) return;
+        VkDebugUtilsLabelEXT label{VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT};
+        label.pLabelName = name;
+        std::copy(color.begin(), color.end(), label.color);
+        pfn_begin_label(cmd, &label);
+    }
+    void end_label(VkCommandBuffer cmd) const {
+        if (pfn_end_label) pfn_end_label(cmd);
+    }
 
     // Core objects
     VkInstance instance = VK_NULL_HANDLE;

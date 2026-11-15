@@ -6,6 +6,7 @@
 #include "noor/platform/input.h"
 
 #include <cstdint>
+#include <functional>
 
 namespace noor::platform {
 
@@ -33,6 +34,12 @@ struct EventSummary {
 // Relative mouse mode hides and captures the cursor and reports raw movement
 // (for mouse-look). Turn it off to give the cursor back.
 void set_relative_mouse(Window& window, bool enabled);
+
+// Called when the OS wants the window redrawn while the normal loop is blocked, e.g. while
+// the user drags a window edge on Windows (the OS runs its own modal loop then). The callback
+// should render one frame with the current state; it must not call pump_events().
+// Pass an empty function to remove it.
+void set_live_redraw_callback(std::function<void()> callback);
 
 // Blocks until an event arrives or the timeout passes (used while minimized).
 void wait_for_events(std::uint32_t timeout_ms);

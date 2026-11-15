@@ -49,6 +49,7 @@ struct Vertex {
 struct MeshData {
     std::span<const Vertex> vertices;
     std::span<const std::uint32_t> indices;  // triangle list, counter-clockwise front faces
+    std::string_view debug_name;             // shown in RenderDoc/Nsight; optional
 };
 
 // Opaque handle to a mesh living in GPU memory. 0 is never a valid handle.
@@ -134,6 +135,8 @@ public:
     [[nodiscard]] std::uint64_t validation_warning_count() const noexcept;
     [[nodiscard]] std::uint64_t frames_presented() const noexcept;
     [[nodiscard]] std::uint64_t swapchain_rebuilds() const noexcept;
+    // Size of the images currently being presented (zero before the first swapchain).
+    [[nodiscard]] platform::PixelSize swapchain_size() const noexcept;
 
 private:
     struct Impl;

@@ -37,6 +37,14 @@ bool has_layer(const char* name) {
     return std::ranges::any_of(layers, [&](const auto& l) { return std::strcmp(l.layerName, name) == 0; });
 }
 
+bool has_instance_extension(const char* name) {
+    std::uint32_t count = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+    std::vector<VkExtensionProperties> exts(count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &count, exts.data());
+    return std::ranges::any_of(exts, [&](const auto& e) { return std::strcmp(e.extensionName, name) == 0; });
+}
+
 bool has_device_extension(VkPhysicalDevice gpu, const char* name) {
     std::uint32_t count = 0;
     vkEnumerateDeviceExtensionProperties(gpu, nullptr, &count, nullptr);
@@ -98,6 +106,11 @@ Status Renderer::Impl::create_instance() {
     }
     if (validation) {
         layers.push_back(kValidationLayer);
+    }
+    // Debug utils gives validation messages *and* object names / command labels that RenderDoc
+    // and Nsight show. Enable it whenever the system offers it (the validation layer provides it too).
+    debug_utils = validation || has_instance_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    if (debug_utils) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
@@ -135,8 +148,17 @@ Status Renderer::Impl::create_instance() {
         }
     }
 
-    NOOR_LOG_INFO("Render", "Vulkan instance created (loader {}, validation {})", version_string(loader_version),
-                  validation ? "on" : "off");
+    if (debug_utils) {
+        pfn_set_object_name = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+            vkGetInstanceProcAddr(instance, "vkSetDebugUtilsObjectNameEXT"));
+        pfn_begin_label = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(instance, "vkCmdBeginDebugUtilsLabelEXT"));
+        pfn_end_label = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(instance, "vkCmdEndDebugUtilsLabelEXT"));
+    }
+
+    NOOR_LOG_INFO("Render", "Vulkan instance created (loader {}, validation {}, debug labels {})",
+                  version_string(loader_version), validation ? "on" : "off", debug_utils ? "on" : "off");
 
     auto surf = target->create_vulkan_surface(instance);
     if (!surf) {
@@ -275,6 +297,7 @@ Status Renderer::Impl::create_frames() {
         query_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
         query_info.queryCount = kFramesInFlight * 2;
         NOOR_VK_TRY(vkCreateQueryPool(device, &query_info, nullptr, &timestamp_pool));
+        set_name(VK_OBJECT_TYPE_QUERY_POOL, timestamp_pool, "GPU frame timestamps");
     } else {
         NOOR_LOG_WARN("Render", "GPU timestamps not supported on this queue; GPU frame time unavailable");
     }
@@ -283,6 +306,11 @@ Status Renderer::Impl::create_frames() {
     upload_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     upload_info.queueFamilyIndex = queue_family;
     NOOR_VK_TRY(vkCreateCommandPool(device, &upload_info, nullptr, &upload_pool));
+    for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
+        set_name(VK_OBJECT_TYPE_COMMAND_BUFFER, frames[i].cmd, std::format("Frame slot {} commands", i));
+        set_name(VK_OBJECT_TYPE_FENCE, frames[i].in_flight, std::format("Frame slot {} in-flight fence", i));
+        set_name(VK_OBJECT_TYPE_SEMAPHORE, frames[i].image_available, std::format("Frame slot {} image available", i));
+    }
     return {};
 }
 
@@ -388,6 +416,8 @@ Status Renderer::Impl::rebuild_swapchain() {
         view_info.format = surface_format.format;
         view_info.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         NOOR_VK_TRY(vkCreateImageView(device, &view_info, nullptr, &image_views[i]));
+        set_name(VK_OBJECT_TYPE_IMAGE, images[i], std::format("Swapchain image {}", i));
+        set_name(VK_OBJECT_TYPE_IMAGE_VIEW, image_views[i], std::format("Swapchain image {} view", i));
     }
     if (auto status = create_depth_buffer(); !status) {
         return status;
@@ -406,9 +436,14 @@ Status Renderer::Impl::rebuild_swapchain() {
 // ------------------------------------------------------------------ frame
 
 Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
+    // Nothing to draw into (minimized or hidden): skip before touching the swapchain. Some drivers
+    // still let us acquire and present to a minimized window, which only wastes GPU time.
+    const platform::PixelSize pixels = target->pixel_size();
+    if (pixels.width == 0 || pixels.height == 0) {
+        return FrameResult::Skipped;
+    }
     if (resize_requested) {
         resize_requested = false;
-        const platform::PixelSize pixels = target->pixel_size();
         if (pixels.width != extent.width || pixels.height != extent.height) {
             swapchain_dirty = true;
         }
@@ -459,6 +494,8 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
         vkCmdResetQueryPool(frame.cmd, timestamp_pool, frame_index * 2, 2);
         vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestamp_pool, frame_index * 2);
     }
+    const std::string frame_label = std::format("NoorEngine frame {}", frames_presented);
+    begin_label(frame.cmd, frame_label.c_str(), {0.42f, 0.25f, 0.85f, 1.0f});  // Noor purple
 
     const VkImage image = images[image_index];
 
@@ -494,9 +531,11 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &color;
     rendering.pDepthAttachment = &depth;
+    begin_label(frame.cmd, "Main pass", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_draws(frame.cmd, frame_desc);
     vkCmdEndRendering(frame.cmd);
+    end_label(frame.cmd);
 
     if (capture_requested && swapchain_supports_capture && !capture.pending) {
         if (auto status = record_capture(frame.cmd, image); !status) {
@@ -509,6 +548,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                       VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
     }
 
+    end_label(frame.cmd);  // frame
     if (timestamps_supported) {
         vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, timestamp_pool, frame_index * 2 + 1);
         timestamps_written[frame_index] = true;
@@ -643,5 +683,8 @@ std::uint64_t Renderer::validation_error_count() const noexcept { return impl_->
 std::uint64_t Renderer::validation_warning_count() const noexcept { return impl_->validation_warnings.load(); }
 std::uint64_t Renderer::frames_presented() const noexcept { return impl_->frames_presented; }
 std::uint64_t Renderer::swapchain_rebuilds() const noexcept { return impl_->swapchain_rebuilds; }
+platform::PixelSize Renderer::swapchain_size() const noexcept {
+    return {impl_->extent.width, impl_->extent.height};
+}
 
 } // namespace noor::render

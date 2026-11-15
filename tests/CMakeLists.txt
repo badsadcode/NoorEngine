@@ -36,3 +36,9 @@ set_tests_properties(render.cube_pixels PROPERTIES LABELS "gpu;render" TIMEOUT 6
 add_test(NAME stress.cubes_2500
     COMMAND noor_diag --frames 120 --cubes 2500 --log ${CMAKE_CURRENT_BINARY_DIR}/stress_cubes_2500.log)
 set_tests_properties(stress.cubes_2500 PROPERTIES LABELS "gpu;stress" TIMEOUT 120)
+
+# Window lifecycle: minimize, restore, resize (and a monitor move when 2+ displays exist),
+# checking that rendering pauses/resumes and the swapchain follows the window.
+add_test(NAME lifecycle.window
+    COMMAND noor_diag --lifecycle-test --log ${CMAKE_CURRENT_BINARY_DIR}/lifecycle_window.log)
+set_tests_properties(lifecycle.window PROPERTIES LABELS "gpu;lifecycle" TIMEOUT 60)

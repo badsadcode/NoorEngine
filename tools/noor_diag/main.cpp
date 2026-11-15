@@ -4,7 +4,7 @@
 // ground plane in front of Noor purple. Exits non-zero on any failure or Vulkan validation
 // error, which makes it the GPU smoke test. Stays as a permanent developer utility.
 //
-//   noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render]
+//   noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render] [--lifecycle-test]
 //             [--screenshot <file.bmp>] [--log <file>]
 //
 // Controls: hold the right mouse button to look around, WASD to move, Q/E down/up,
@@ -14,6 +14,8 @@
 // --verify-render shows only the hero cube from a fixed camera, reads a frame back from the
 // GPU and checks real pixels: background, the cube's front face and its top face must have
 // the expected colors. That catches broken projection, culling/winding, depth and color bugs.
+// --lifecycle-test minimizes, restores, resizes and (with 2+ monitors) moves the window by
+// itself and checks that rendering pauses, resumes and follows the window. Exit code 4 on failure.
 
 #include "noor/foundation/log.h"
 #include "noor/foundation/math.h"
@@ -44,6 +46,7 @@ struct Options {
     std::uint32_t cubes = 0;       // extra cubes in a grid (stress test)
     bool validation = true;
     bool verify_render = false;
+    bool lifecycle_test = false;
     std::string screenshot_path;  // non-empty: save frame 90 as a 24-bit BMP
     std::string log_path = "noor_diag.log";
 };
@@ -66,6 +69,8 @@ bool parse_options(int argc, char** argv, Options& out) {
             out.validation = false;
         } else if (arg == "--verify-render") {
             out.verify_render = true;
+        } else if (arg == "--lifecycle-test") {
+            out.lifecycle_test = true;
         } else if (arg == "--log" && i + 1 < argc) {
             out.log_path = argv[++i];
         } else if (arg == "--screenshot" && i + 1 < argc) {
@@ -126,6 +131,117 @@ CubeMesh make_cube(const std::array<std::uint32_t, 6>& colors = kHeroColors) {
     }
     return mesh;
 }
+
+// Automated window lifecycle test (--lifecycle-test): drives the window through minimize,
+// restore, resize and (with 2+ monitors) a move to another display, checking after each step
+// that rendering stops/resumes correctly and the swapchain follows the window.
+struct Lifecycle {
+    enum class Phase { Warmup, Minimized, Restored, Resized, ResizedBack, OtherDisplay, BackHome, Done };
+    bool enabled = false;
+    bool finished = false;
+    std::uint32_t failures = 0;
+    Phase phase = Phase::Warmup;
+    double phase_start = 0.0;
+    std::uint64_t frames_at_phase = 0;
+    std::uint64_t rebuilds_at_phase = 0;
+
+    void check(bool ok, std::string_view what) {
+        if (ok) {
+            NOOR_LOG_INFO("Lifecycle", "PASS: {}", what);
+        } else {
+            ++failures;
+            NOOR_LOG_ERROR("Lifecycle", "FAIL: {}", what);
+        }
+    }
+
+    void enter(Phase next, const noor::render::Renderer& r) {
+        phase = next;
+        phase_start = noor::platform::time_seconds();
+        frames_at_phase = r.frames_presented();
+        rebuilds_at_phase = r.swapchain_rebuilds();
+    }
+
+    // Returns true when the test is complete.
+    bool step(noor::platform::Window& window, noor::render::Renderer& r) {
+        const double elapsed = noor::platform::time_seconds() - phase_start;
+        const std::uint64_t presented = r.frames_presented();
+        const auto matches_window = [&] {
+            const auto win = window.pixel_size();
+            const auto sc = r.swapchain_size();
+            return win.width > 0 && win.width == sc.width && win.height == sc.height;
+        };
+
+        switch (phase) {
+        case Phase::Warmup:
+            if (presented >= 30) {
+                NOOR_LOG_INFO("Lifecycle", "Minimizing");
+                enter(Phase::Minimized, r);  // snapshot first: the action itself may render
+                window.minimize();
+            }
+            break;
+        case Phase::Minimized:
+            if (elapsed >= 0.75) {
+                check(window.is_minimized(), "window reports minimized");
+                check(presented == frames_at_phase, std::format("no frames presented while minimized ({} presented)",
+                                                                presented - frames_at_phase));
+                NOOR_LOG_INFO("Lifecycle", "Restoring");
+                enter(Phase::Restored, r);
+                window.restore();
+            }
+            break;
+        case Phase::Restored:
+            if (presented >= frames_at_phase + 10 || elapsed > 3.0) {
+                check(presented >= frames_at_phase + 10, "rendering resumes after restore");
+                NOOR_LOG_INFO("Lifecycle", "Resizing to 800x600");
+                enter(Phase::Resized, r);
+                window.set_size(800, 600);
+            }
+            break;
+        case Phase::Resized:
+        case Phase::ResizedBack:
+            if ((matches_window() && presented >= frames_at_phase + 10) || elapsed > 3.0) {
+                const auto sc = r.swapchain_size();
+                check(matches_window(), std::format("swapchain follows the window ({}x{})", sc.width, sc.height));
+                check(r.swapchain_rebuilds() > rebuilds_at_phase, "swapchain was rebuilt for the new size");
+                if (phase == Phase::Resized) {
+                    NOOR_LOG_INFO("Lifecycle", "Resizing back to 1280x720");
+                    enter(Phase::ResizedBack, r);
+                    window.set_size(1280, 720);
+                } else if (noor::platform::display_count() > 1) {
+                    NOOR_LOG_INFO("Lifecycle", "Moving to display 2 of {}", noor::platform::display_count());
+                    enter(Phase::OtherDisplay, r);
+                    window.move_to_display(1);
+                } else {
+                    NOOR_LOG_INFO("Lifecycle", "Only one display connected: skipping the monitor move");
+                    enter(Phase::Done, r);
+                }
+            }
+            break;
+        case Phase::OtherDisplay:
+        case Phase::BackHome:
+            if (elapsed > 1.5) {
+                const std::uint32_t expected = phase == Phase::OtherDisplay ? 1u : 0u;
+                check(window.display_index() == expected, std::format("window is on display {}", expected + 1));
+                check(presented >= frames_at_phase + 10, "rendering continues on that display");
+                if (phase == Phase::OtherDisplay) {
+                    enter(Phase::BackHome, r);
+                    window.move_to_display(0);
+                } else {
+                    enter(Phase::Done, r);
+                }
+            }
+            break;
+        case Phase::Done:
+            if (elapsed > 0.5) {
+                finished = true;
+                NOOR_LOG_INFO("Lifecycle", "Finished with {} failure(s)", failures);
+                return true;
+            }
+            break;
+        }
+        return false;
+    }
+};
 
 // Where a world-space point lands on screen, in pixels (Vulkan: y grows downward).
 std::array<std::uint32_t, 2> project_to_pixel(const noor::math::Mat4& clip_from_world, Vec3 p, std::uint32_t w,
@@ -239,8 +355,8 @@ int run(const Options& options) {
 
         const CubeMesh cube_data = make_cube();
         const CubeMesh ground_data = make_cube(kGroundColors);
-        auto cube = (*renderer)->create_mesh({cube_data.vertices, cube_data.indices});
-        auto ground = (*renderer)->create_mesh({ground_data.vertices, ground_data.indices});
+        auto cube = (*renderer)->create_mesh({cube_data.vertices, cube_data.indices, "Cube"});
+        auto ground = (*renderer)->create_mesh({ground_data.vertices, ground_data.indices, "Ground"});
         if (!cube || !ground) {
             NOOR_LOG_FATAL("Diag", "{}", (!cube ? cube.error() : ground.error()).describe());
             exit_code = 1;
@@ -283,6 +399,18 @@ int run(const Options& options) {
         double last_report = start;
         std::uint64_t frames_at_last_report = 0;
 
+        // While the user drags a window edge, Windows blocks this loop in its own modal loop.
+        // The platform layer calls this from there so the picture keeps up with the new size.
+        std::uint64_t live_redraws = 0;
+        noor::platform::set_live_redraw_callback([&] {
+            if (draws.empty()) return;  // nothing built yet
+            (*renderer)->notify_resized();
+            if ((*renderer)->render_frame({camera, draws})) ++live_redraws;
+        });
+
+        Lifecycle lifecycle;
+        lifecycle.enabled = options.lifecycle_test;
+
         while (exit_code == 0) {
             const auto events = noor::platform::pump_events();
             if (events.quit_requested) {
@@ -291,6 +419,9 @@ int run(const Options& options) {
             }
             if (events.window_resized || events.window_restored) {
                 (*renderer)->notify_resized();
+            }
+            if (lifecycle.enabled) {
+                if (lifecycle.step(**window, **renderer)) break;  // finished
             }
 
             const double now = noor::platform::time_seconds();
@@ -408,6 +539,19 @@ int run(const Options& options) {
             }
         }
 
+        noor::platform::set_live_redraw_callback({});
+        if (live_redraws > 0) {
+            NOOR_LOG_INFO("Diag", "{} frame(s) drawn during live window resizing", live_redraws);
+        }
+        if (lifecycle.enabled && exit_code == 0) {
+            if (!lifecycle.finished) {
+                NOOR_LOG_ERROR("Lifecycle", "Test did not finish (window closed or frame limit hit)");
+                exit_code = 4;
+            } else if (lifecycle.failures > 0) {
+                exit_code = 4;
+            }
+        }
+
         if (options.verify_render && !verified && exit_code == 0) {
             NOOR_LOG_ERROR("Diag", "--verify-render: no frame was captured (ran fewer than {} frames?)", kVerifyFrame + 1);
             exit_code = 3;
@@ -453,7 +597,7 @@ int main(int argc, char** argv) {
 
     Options options;
     if (!parse_options(argc, argv, options)) {
-        NOOR_LOG_ERROR("Diag", "Usage: noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render] "
+        NOOR_LOG_ERROR("Diag", "Usage: noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render] [--lifecycle-test] "
                                "[--screenshot <file.bmp>] [--log <file>]");
         return 64;
     }

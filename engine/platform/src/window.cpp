@@ -48,4 +48,51 @@ bool Window::is_minimized() const { return (SDL_GetWindowFlags(sdl(handle_)) & S
 
 void Window::set_title(const std::string& title) { SDL_SetWindowTitle(sdl(handle_), title.c_str()); }
 
+void Window::minimize() {
+    SDL_MinimizeWindow(sdl(handle_));
+    SDL_SyncWindow(sdl(handle_));
+}
+
+void Window::restore() {
+    SDL_RestoreWindow(sdl(handle_));
+    SDL_SyncWindow(sdl(handle_));
+}
+
+void Window::set_size(std::uint32_t width, std::uint32_t height) {
+    SDL_SetWindowSize(sdl(handle_), static_cast<int>(width), static_cast<int>(height));
+    SDL_SyncWindow(sdl(handle_));
+}
+
+std::uint32_t Window::display_index() const {
+    const SDL_DisplayID current = SDL_GetDisplayForWindow(sdl(handle_));
+    int count = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
+    std::uint32_t index = 0;
+    for (int i = 0; displays && i < count; ++i) {
+        if (displays[i] == current) index = static_cast<std::uint32_t>(i);
+    }
+    SDL_free(displays);
+    return index;
+}
+
+bool Window::move_to_display(std::uint32_t index) {
+    int count = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
+    const bool ok = displays && index < static_cast<std::uint32_t>(count);
+    if (ok) {
+        const SDL_DisplayID id = displays[index];
+        SDL_SetWindowPosition(sdl(handle_), SDL_WINDOWPOS_CENTERED_DISPLAY(id), SDL_WINDOWPOS_CENTERED_DISPLAY(id));
+        SDL_SyncWindow(sdl(handle_));
+    }
+    SDL_free(displays);
+    return ok;
+}
+
+std::uint32_t display_count() {
+    int count = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays(&count);
+    SDL_free(displays);
+    return static_cast<std::uint32_t>(count);
+}
+
 } // namespace noor::platform

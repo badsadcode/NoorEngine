@@ -26,6 +26,8 @@ Status Renderer::Impl::record_capture(VkCommandBuffer cmd, VkImage image) {
         return std::unexpected(buffer.error());
     }
 
+    set_name(VK_OBJECT_TYPE_BUFFER, buffer->buffer, "Frame capture readback");
+    begin_label(cmd, "Frame capture (readback for tests)", {0.98f, 0.75f, 0.14f, 1.0f});
     image_barrier(cmd, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
@@ -54,6 +56,7 @@ Status Renderer::Impl::record_capture(VkCommandBuffer cmd, VkImage image) {
                   VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_NONE,
                   VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
 
+    end_label(cmd);
     capture.buffer = *buffer;
     capture.frame_slot = frame_index;
     capture.width = extent.width;

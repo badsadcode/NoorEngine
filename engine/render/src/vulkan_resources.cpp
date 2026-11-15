@@ -144,6 +144,8 @@ Status Renderer::Impl::create_depth_buffer() {
     view_info.format = kDepthFormat;
     view_info.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
     NOOR_VK_TRY(vkCreateImageView(device, &view_info, nullptr, &depth_view));
+    set_name(VK_OBJECT_TYPE_IMAGE, depth_image, "Depth buffer (D32, reverse-Z)");
+    set_name(VK_OBJECT_TYPE_IMAGE_VIEW, depth_view, "Depth buffer view");
     return {};
 }
 
@@ -267,6 +269,8 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
         return fail(ErrorCode::GraphicsError, std::format("Mesh pipeline creation failed ({})", string_VkResult(result)));
     }
     pipeline_color_format = color_format;
+    set_name(VK_OBJECT_TYPE_PIPELINE, mesh_pipeline, "Mesh pipeline (lit vertex color)");
+    set_name(VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline_layout, "Mesh pipeline layout");
     NOOR_LOG_INFO("Render", "Mesh pipeline built for {}", string_VkFormat(color_format));
     return {};
 }
@@ -311,6 +315,9 @@ Result<MeshHandle> Renderer::Impl::create_mesh(const MeshData& data) {
     }
     mesh.index_count = static_cast<std::uint32_t>(data.indices.size());
     mesh.alive = true;
+    const std::string label = data.debug_name.empty() ? std::string("Mesh") : std::string(data.debug_name);
+    set_name(VK_OBJECT_TYPE_BUFFER, mesh.vertices.buffer, label + " vertices");
+    set_name(VK_OBJECT_TYPE_BUFFER, mesh.indices.buffer, label + " indices");
 
     for (std::uint32_t i = 0; i < meshes.size(); ++i) {
         if (!meshes[i].alive) {

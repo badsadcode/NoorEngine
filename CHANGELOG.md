@@ -2,7 +2,31 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 1 in progress
+## [Unreleased] — Milestone 1 complete, Milestone 2 next
+
+### 2026-11-15 — Milestone 1 complete: lifecycle test, live redraw, GPU labels
+**Added**
+- `Window::minimize/restore/set_size/display_index/move_to_display`, `platform::display_count()`
+  (each call waits for the OS with `SDL_SyncWindow`).
+- `platform::set_live_redraw_callback`: SDL event watch that redraws during the Windows modal
+  resize loop (fixes the Milestone 0 "stretched frame while dragging" limitation).
+- `noor_diag --lifecycle-test` and CTest `lifecycle.window`: minimize, restore, two resizes and,
+  with 2+ displays, a move to another monitor and back; 11 checks. Passes on the dev machine (2 displays).
+- `VK_EXT_debug_utils` whenever available: object names (swapchain, depth, meshes, pipeline,
+  command buffers, query pool, capture buffer) and command labels (frame, main pass, capture).
+  `MeshData::debug_name`.
+- `Renderer::swapchain_size()`.
+- `docs/milestones/M1_REVIEW.md`: gate review with evidence.
+
+**Fixed**
+- The renderer no longer acquires/presents while the window is minimized (it presented one
+  extra frame; found by the lifecycle test).
+
+**Known limitations** (accepted Milestone 1 exceptions)
+- Device loss is reported, not recovered.
+- High-DPI above 100% untested.
+
+36/36 tests pass (Ninja Debug).
 
 ### 2026-11-15 — Noor Interchange v0.2
 Feedback from the first real exporter (BadBuilding 6d59174):
