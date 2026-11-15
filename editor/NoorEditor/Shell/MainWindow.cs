@@ -138,7 +138,7 @@ public sealed class MainWindow : Window
             CreateView = () =>
             {
                 ContentBrowser = new ContentPanel(Doc);
-                ContentBrowser.AddRequested += a => AddAsset(a);
+                ContentBrowser.AddRequested += async a => { if (await ReadyToEdit()) AddAsset(a); };
                 ContentBrowser.OpenSceneRequested += s => _ = OpenScene(s);
                 return ContentBrowser;
             },
@@ -315,12 +315,12 @@ public sealed class MainWindow : Window
         foreach (var t in EntityTemplates.All)
         {
             var item = new MenuItem { Header = t.Name };
-            item.Click += (_, _) => CreateEntity(t);
+            item.Click += async (_, _) => { if (await ReadyToEdit()) CreateEntity(t); };
             menu.Items.Add(item);
         }
         menu.Items.Add(new Separator());
         var player = new MenuItem { Header = EntityTemplates.PlayerTemplateName };
-        player.Click += (_, _) => CreatePlayer(new Vec3(0, 0.05, 0));
+        player.Click += async (_, _) => { if (await ReadyToEdit()) CreatePlayer(new Vec3(0, 0.05, 0)); };
         menu.Items.Add(player);
         return menu;
     }
@@ -426,6 +426,22 @@ public sealed class MainWindow : Window
     }
 
     // ---- Commands ----
+
+    /// <summary>
+    /// Scene edits are off while playing. Instead of silently doing nothing, ask whether to stop.
+    /// True when the scene can be edited now.
+    /// </summary>
+    private async Task<bool> ReadyToEdit()
+    {
+        if (!Doc.Playing) return true;
+        var answer = await Dialogs.Ask(this, "The game is playing",
+            "The scene can't be changed while the game is playing. Stop the game and continue?\n" +
+            "(Stop throws away what changed during play, as always.)",
+            "Stop and continue", "Keep playing");
+        if (answer != "Stop and continue") return false;
+        if (Doc.Playing) TogglePlay();
+        return !Doc.Playing;
+    }
 
     /// <summary>Play ▸ Stop ▸ Play. While playing the engine runs a copy of the scene.</summary>
     public void TogglePlay()

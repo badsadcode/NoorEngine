@@ -27,6 +27,9 @@ bus is silent, measured from the mixed samples; one-shots clean up, a missing cl
 not a crash; a Lua script driving it all). The editor smoke test writes a WAV, adds it to the
 scene, and plays it with a C# script (looping emitter + one-shot), silently.
 
+**Fixed:** Create ▸ … and Add to scene did nothing while playing (only a Console warning); they now
+ask to stop the game first.
+
 **Not yet:** pause, fades, voice limits, device switching, `.ogg`, occlusion/reverb. Speaker output
 was not checked by ear in automated tests (they run without a device).
 
