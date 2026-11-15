@@ -51,12 +51,80 @@ public sealed class ComponentsEditor : StackPanel
         return _doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = _entity.Id, ["type"] = type, ["value"] = value?.DeepClone() });
     }
 
-    public bool SetField(string type, string field, JsonNode? value)
+    /// <summary>Sets a field; <paramref name="path"/> may go into nested objects ("params.speed").</summary>
+    public bool SetField(string type, string path, JsonNode? value)
     {
         if (_entity?.Components[type] is not JsonObject current) return false;
-        var next = (JsonObject)current.DeepClone();
-        next[field] = value?.DeepClone();
-        return SetComponent(type, next);
+        return SetComponent(type, WithPath(current, path, value, remove: false));
+    }
+
+    private static JsonObject WithPath(JsonObject root, string path, JsonNode? value, bool remove)
+    {
+        var next = (JsonObject)root.DeepClone();
+        var parts = path.Split('.');
+        var node = next;
+        foreach (var part in parts[..^1])
+        {
+            if (node[part] is not JsonObject child)
+            {
+                child = new JsonObject();
+                node[part] = child;
+            }
+            node = child;
+        }
+        if (remove) node.Remove(parts[^1]);
+        else node[parts[^1]] = value?.DeepClone();
+        return next;
+    }
+
+    // ---- Lua scripts ----
+
+    /// <summary>Creates Scripts/&lt;name&gt;.luau from a template (if missing) and attaches it.</summary>
+    public bool AddLuaScript(string name)
+    {
+        var relative = $"Scripts/{name}.luau";
+        var full = Path.Combine(_doc.ProjectRoot, relative);
+        if (!File.Exists(full))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, LuaTemplate(name));
+        }
+        return SetComponent("script", new JsonObject { ["file"] = relative, ["params"] = new JsonObject() });
+    }
+
+    private static string LuaTemplate(string name) => $$"""
+        -- {{name}}: a NoorEngine Lua (Luau) script.
+        -- Hooks: on_start, on_update(dt), on_fixed_update(dt), on_late_update(dt), on_destroy.
+        -- self.entity is the entity this script runs on; self.params holds the component's params.
+        -- API: docs/scripting/LUA_API.md
+
+        local {{name}} = {}
+
+        function {{name}}:on_start()
+            noor.log("{{name}} started on", self.entity:name())
+        end
+
+        function {{name}}:on_update(dt)
+            -- Example: turn around the vertical axis.
+            -- self.entity:rotate(vector.create(0, 1, 0), 45 * dt)
+        end
+
+        return {{name}}
+
+        """;
+
+    private void OpenScript(string relative)
+    {
+        var full = Path.Combine(_doc.ProjectRoot, relative);
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(full) { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // No program is associated with .luau yet (NoorCode arrives in part 7): fall back to Notepad.
+            System.Diagnostics.Process.Start("notepad.exe", $"\"{full}\"");
+        }
     }
 
     // ---- Views ----
@@ -75,9 +143,26 @@ public sealed class ComponentsEditor : StackPanel
         }
 
         var body = new StackPanel { Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
-        if (value is JsonObject obj && editable)
+        if (type == "script" && value is JsonObject script && editable)
         {
-            foreach (var (field, fieldValue) in obj) body.Children.Add(FieldRow(type, field, fieldValue));
+            // The script file, an Open button, and its params as editable fields.
+            var file = script["file"]?.GetValue<string>() ?? "";
+            var open = new Button { Content = "Open", Classes = { "tool" }, IsEnabled = file.Length > 0 };
+            ToolTip.SetTip(open, "Open the script in your editor");
+            open.Click += (_, _) => OpenScript(file);
+            var fileRow = new DockPanel { Children = { open, new TextBlock { Text = file, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis } } };
+            DockPanel.SetDock(open, Avalonia.Controls.Dock.Right);
+            body.Children.Add(fileRow);
+            if (script["params"] is JsonObject parameters)
+                foreach (var (field, fieldValue) in parameters) body.Children.Add(FieldRow(type, $"params.{field}", field, fieldValue));
+            var addParam = new Button { Content = "+ Param", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
+            ToolTip.SetTip(addParam, "Values the script reads as self.params.<name>");
+            addParam.Click += async (_, _) => await AddField(type, "params.");
+            body.Children.Add(addParam);
+        }
+        else if (value is JsonObject obj && editable)
+        {
+            foreach (var (field, fieldValue) in obj) body.Children.Add(FieldRow(type, field, field, fieldValue));
             var addField = new Button { Content = "+ Field", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
             addField.Click += async (_, _) => await AddField(type);
             body.Children.Add(addField);
@@ -103,9 +188,9 @@ public sealed class ComponentsEditor : StackPanel
         };
     }
 
-    private Control FieldRow(string type, string field, JsonNode? value)
+    private Control FieldRow(string type, string field, string labelText, JsonNode? value)
     {
-        var label = new TextBlock { Text = field, FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        var label = new TextBlock { Text = labelText, FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         Control editor;
         switch (value)
         {
@@ -147,9 +232,7 @@ public sealed class ComponentsEditor : StackPanel
         remove.Click += (_, _) =>
         {
             if (_entity?.Components[type] is not JsonObject current) return;
-            var next = (JsonObject)current.DeepClone();
-            next.Remove(field);
-            SetComponent(type, next);
+            SetComponent(type, WithPath(current, field, null, remove: true));
         };
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*,Auto") };
         Grid.SetColumn(editor, 1);
@@ -195,11 +278,24 @@ public sealed class ComponentsEditor : StackPanel
             }
             SetComponent(name, new JsonObject());
         };
-        button.Flyout = new MenuFlyout { Items = { marker, custom } };
+        var lua = new MenuItem { Header = "Lua script…", IsEnabled = _entity?.Components.ContainsKey("script") == false };
+        lua.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var name = await Dialogs.Prompt(owner, "Add Lua script", "Script name (creates Scripts/<name>.luau if it doesn't exist)", "MyScript");
+            if (name == null) return;
+            if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_') || !name.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                await Dialogs.Ask(owner, "Add Lua script", $"\"{name}\" isn't a valid script name: use letters, digits and _, starting with a letter.", "OK");
+                return;
+            }
+            AddLuaScript(name);
+        };
+        button.Flyout = new MenuFlyout { Items = { lua, marker, custom } };
         return button;
     }
 
-    private async Task AddField(string type)
+    private async Task AddField(string type, string prefix = "")
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
         var text = await Dialogs.Prompt(owner, $"Add field to {type}", "name = value  (value: a number, true/false, [1, 2, 3], or text)", "speed = 1");
@@ -211,6 +307,6 @@ public sealed class ComponentsEditor : StackPanel
         JsonNode? value;
         try { value = JsonNode.Parse(raw.Replace(',', raw.StartsWith('[') ? ',' : '.')); }
         catch (JsonException) { value = JsonValue.Create(raw); }
-        SetField(type, name, value);
+        SetField(type, prefix + name, value);
     }
 }

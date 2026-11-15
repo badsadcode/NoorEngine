@@ -48,6 +48,16 @@ add_library(noor_third_party_cgltf INTERFACE)
 target_include_directories(noor_third_party_cgltf SYSTEM INTERFACE ${cgltf_SOURCE_DIR})
 add_library(cgltf::cgltf ALIAS noor_third_party_cgltf)
 
+# --- Luau (MIT): Lua scripting (ADR-009) -----------------------------------------
+set(LUAU_BUILD_CLI OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_WEB OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(luau
+    GIT_REPOSITORY https://github.com/luau-lang/luau.git
+    GIT_TAG        2a3d8937c19c8fd9f7b72b6ec9068c62760e6588 # 0.745
+    SYSTEM)
+FetchContent_MakeAvailable(luau)
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

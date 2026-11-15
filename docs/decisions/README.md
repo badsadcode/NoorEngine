@@ -12,7 +12,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [005](ADR-005-project-serialization.md) | Deterministic JSON, atomic saves with backup, path rules | Accepted |
 | [006](ADR-006-asset-registry.md) | `.noormeta` sidecar GUIDs, move repair by content hash | Accepted |
 | [008](ADR-008-dotnet-hosting.md) | .NET 10 CoreCLR for C# scripts: in-process in the editor (collectible load context), hostfxr in the player | Accepted |
-| [009](ADR-009-lua-integration.md) | Lua: Luau recommended (sandboxing, types) over Lua 5.4 / LuaJIT | Proposed (one product question open) |
+| [009](ADR-009-lua-integration.md) | Lua: Luau (sandboxing, types) over Lua 5.4 / LuaJIT | Accepted |
 | [010](ADR-010-physics.md) | Physics: Jolt (MIT), fixed 60 Hz tick, `CharacterVirtual` controller | Accepted |
 | [011](ADR-011-audio.md) | Audio: miniaudio (public domain / MIT-0), buses, 3D sources | Accepted |
 | [019](ADR-019-licensing.md) | MIT license | Accepted |
@@ -24,5 +24,5 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [026](ADR-026-play-mode.md) | Play mode: a runtime copy of the scene, built-in behaviours until scripting, edits refused while playing | Accepted |
 | [027](ADR-027-runtime-and-scripting-api.md) | Runtime module: `World`, frame order, fixed step, input actions, one `noor_rt_*` API for C# and Lua | Accepted |
 
-Still open from the register: 007 plugin ABI, 009 Lua (proposal), 012 PBR model, 013 world coordinates,
+Still open from the register: 007 plugin ABI, 012 PBR model, 013 world coordinates,
 014–018, 020 branding.

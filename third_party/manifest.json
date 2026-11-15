@@ -102,6 +102,16 @@
       "linkage": "NuGet package (managed)",
       "shipped": "editor only, never in games",
       "purpose": "Editor docking panels and floating windows (ADR-003)"
+    },
+    {
+      "name": "Luau",
+      "version": "0.745",
+      "source": "https://github.com/luau-lang/luau",
+      "commit": "2a3d8937c19c8fd9f7b72b6ec9068c62760e6588",
+      "license": "MIT",
+      "linkage": "static",
+      "shipped": true,
+      "purpose": "Lua scripting: compiler and sandboxed VM (engine/scripting, ADR-009)"
     }
   ]
 }

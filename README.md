@@ -26,8 +26,9 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
 | `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
 | `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
-| `runtime`: game world, frame order, fixed 60 Hz step, input actions/axes, built-in behaviours; the editor's play mode runs it with keyboard input from the viewport | **Milestone 4, part 1.** Works, unit-tested; scripts, physics and audio plug in next |
-| Textures, scripting, physics, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
+| `runtime`: game world, frame order, fixed 60 Hz step, input actions/axes, built-in behaviours; the editor's play mode runs it with keyboard input from the viewport | **Milestone 4, part 1.** Works, unit-tested; physics and audio plug in next |
+| `scripting`: **Lua (Luau) scripts**, sandboxed, with entities, transforms, input, components and logging ([API](docs/scripting/LUA_API.md)) | **Milestone 4, part 2.** Works; unit-tested and driven from the editor. C# next (part 4) |
+| Textures, C# scripting, physics, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
 `docs/devlog/img` are real captures of the engine and the editor spike.
@@ -68,7 +69,8 @@ renderer changes. CI uses the `windows-ninja` preset (Ninja + whatever MSVC the 
 | `engine/editor_api` | C ABI DLL the C# editor uses: viewports and documents. |
 | `editor/NoorEditor` | The editor (C#, Avalonia). |
 | `engine/asset`, `engine/scene` | Projects, asset registry, GLB import; scene documents. |
-| `engine/runtime` | The running game: world, systems, input. |
+| `engine/runtime` | The running game: world, systems, input, the scripting API. |
+| `engine/scripting` | Script languages as runtime systems (Lua via Luau). |
 | `tools/noor_diag` | Diagnostics app; permanent developer utility. |
 | `tools/noor_cli` | Headless project tool. |
 | `spikes/` | Technology experiments that decide ADRs. Not product code. |

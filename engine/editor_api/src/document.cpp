@@ -2,6 +2,7 @@
 
 #include "noor/asset/gltf_import.h"
 #include "noor/runtime/behaviours.h"
+#include "noor/scripting/lua_scripts.h"
 #include "noor/foundation/log.h"
 
 #include <format>
@@ -97,6 +98,7 @@ Status Document::play() {
     auto input_map = runtime::InputMap::load(project_.root() / "Settings" / "input.json");
     if (!input_map) return std::unexpected(input_map.error());
     world_ = std::make_unique<runtime::World>(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, std::move(*input_map));
+    world_->add_system(std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{project_.root()}));
     world_->add_system(std::make_unique<runtime::BehavioursSystem>());
     NOOR_LOG_INFO("Editor", "Play");
     ++revision_;

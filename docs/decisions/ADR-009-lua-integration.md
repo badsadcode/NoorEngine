@@ -1,6 +1,6 @@
 # ADR-009: Lua integration
 
-**Status:** Proposed (recommendation: Luau; open for one question to the project owner) · **Date:** 2026-11-15 · **Milestone:** 4
+**Status:** Accepted (Luau, confirmed by the project owner) · **Date:** 2026-11-15 · **Milestone:** 4
 
 ## Context
 Lua is the second first-class gameplay language (spec 33.1): gameplay scripts, light tooling and
@@ -28,7 +28,8 @@ Luau was designed for exactly that, while its types make editor tooling much bet
 game scripting" acceptable as NoorEngine's Lua, or should modders get stock Lua 5.4? Either way,
 the engine side (bindings to `noor_rt_*`, reload, error reporting) is the same work.
 
-## Decision (pending the answer above)
+## Decision
+**Luau** (pinned, 0.745 at adoption).
 - Bind the `noor_rt_*` API by hand-written glue generated from one list of functions (shared with
   the C# bindings), not a general binding library, so both languages stay in step.
 - Each scene gets one Lua state; each `script` component with a `.lua`/`.luau` file gets its own
@@ -37,4 +38,4 @@ the engine side (bindings to `noor_rt_*`, reload, error reporting) is the same w
 - Reload: changed script files are reloaded on Stop (like C#); hot reload while playing later.
 
 ## Reviewed by
-Sage (proposal).
+Sage; product question answered by the project owner.

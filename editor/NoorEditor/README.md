@@ -29,6 +29,10 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   the project's `Settings/input.json`). Until scripts arrive, the built-in behaviours are
   `rotator` (`degrees_per_second`) and `input_mover` (`speed`). Edits are off while playing;
   Stop brings back the scene as you left it.
+- **Lua scripts**: Inspector ▸ **Add component ▸ Lua script…** creates `Scripts/<Name>.luau`
+  and attaches it; **Open** edits it in your editor; **+ Param** adds values the script reads as
+  `self.params`. Press Play to run it (changes are picked up on the next Play). API:
+  [docs/scripting/LUA_API.md](../../docs/scripting/LUA_API.md).
 - **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
   a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.

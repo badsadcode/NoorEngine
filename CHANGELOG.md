@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-15 — Milestone 4, part 2: Lua scripts (Luau)
+**Decided:** ADR-009 accepted: Luau (project owner confirmed). Pinned Luau 0.745 (MIT).
+
+**Added**
+- `runtime::api`: the scripting API in one place (entities, local/world transforms, Euler in the
+  editor's convention, directions, component data, input actions/axes, time), for Lua now and C#
+  in part 4.
+- `engine/scripting`: `LuaScriptSystem`, a runtime system. `script` component
+  (`{"file": "Scripts/X.luau", "params": {...}}`); hooks `on_start`, `on_update`,
+  `on_fixed_update`, `on_late_update`, `on_destroy`; one instance (`self`) per entity with
+  `self.entity` and `self.params`; Luau vectors for positions/directions; `noor.log` with file and
+  line. Sandbox: Luau's safe libraries, read-only globals and built-ins, per-file globals; a hook
+  that runs over 0.25 s is stopped; an erroring script is reported (file, line, stack) and
+  switched off for that entity while the game goes on.
+- NoorEditor: **Add component ▸ Lua script…** (creates `Scripts/<Name>.luau` from a template),
+  the script card shows the file with **Open** and its params as editable fields (**+ Param**).
+- `docs/scripting/LUA_API.md`.
+- Tests: 8 Lua tests (hooks/params/vectors, input/find/rotation/directions, runtime and syntax
+  errors with file:line, sandbox, endless-loop budget, destroy) and an Euler round trip; the editor
+  smoke test creates a script from the Inspector, edits it and drives the building with D and
+  Space in play mode (74 checks).
+
 ### 2026-11-15 — Milestone 4, part 1: the runtime module and game input
 **Decided:** ADR-027 (runtime, frame order, one scripting API for C# and Lua), ADR-008 (.NET 10
 CoreCLR hosting), ADR-010 (Jolt physics), ADR-011 (miniaudio), ADR-009 proposed (Luau recommended;

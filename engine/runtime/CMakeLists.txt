@@ -5,6 +5,7 @@ noor_add_module(runtime
         src/input.cpp
         src/world.cpp
         src/behaviours.cpp
+        src/script_api.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset

@@ -546,6 +546,56 @@ internal static class SmokeTest
         window.TogglePlay();
         check(doc.Selected!.Transform.Position == start, "stop: the input_mover is back where it was");
         check(doc.Undo() && !doc.Selected!.Components.ContainsKey("input_mover"), "undo the input_mover");
+
+        // Lua (Milestone 4, part 2): a script created from the Inspector drives the building.
+        var comps = window.Inspector!.Components;
+        check(comps.AddLuaScript("Driver") && doc.Selected!.Components["script"]?["file"]?.GetValue<string>() == "Scripts/Driver.luau",
+              "Lua: Add component > Lua script attaches Scripts/Driver.luau");
+        var scriptFile = Path.Combine(doc.ProjectRoot, "Scripts", "Driver.luau");
+        check(File.Exists(scriptFile) && File.ReadAllText(scriptFile).Contains("function Driver:on_update(dt)"), "Lua: the script file is created from the template");
+        File.WriteAllText(scriptFile, """
+            local Driver = {}
+            function Driver:on_start()
+                noor.log("Driver ready on", self.entity:name())
+            end
+            function Driver:on_update(dt)
+                local x = noor.input.axis("move_x")
+                self.entity:translate(vector.create(x * self.params.speed * dt, 0, 0))
+                if noor.input.pressed("jump") then
+                    self.entity:rotate(vector.create(0, 1, 0), 90)
+                end
+            end
+            return Driver
+            """);
+        check(comps.SetField("script", "params.speed", System.Text.Json.Nodes.JsonValue.Create(6.0)), "Lua: set the speed param");
+        await Task.Delay(150);
+        shot(TopLevel.GetTopLevel(window.Inspector!) as Window ?? window, "editor_10_lua_script.png");
+        var yawBefore = doc.Selected!.Transform.Rotation.ToEulerDegrees().Y;
+        window.TogglePlay();
+        for (var attempt = 0; attempt < 5 && !window.ViewportHasFocus(); attempt++)
+        {
+            window.Activate();
+            await Task.Delay(50);
+            SetFocus(hwnd);
+            await Task.Delay(50);
+        }
+        PostMessageW(hwnd, WmKeyDown, 'D', 1);
+        await Task.Delay(600);
+        PostMessageW(hwnd, WmKeyUp, 'D', unchecked((IntPtr)0xC0000001));
+        PostMessageW(hwnd, WmKeyDown, 0x20, 1);  // Space: jump action
+        await Task.Delay(100);
+        PostMessageW(hwnd, WmKeyUp, 0x20, unchecked((IntPtr)0xC0000001));
+        await Task.Delay(100);
+        doc.Refresh();
+        var driven = doc.Selected!.Transform;
+        var driveDx = driven.Position.X - start.X;
+        var turned90 = Math.Abs(((driven.Rotation.ToEulerDegrees().Y - yawBefore) % 360 + 360) % 360 - 90) < 1;
+        check(doc.Playing && driveDx is > 2 and < 5.5, $"Lua: the script moves the building with D (dx {driveDx:0.0} m in ~0.6 s at 6 m/s)");
+        check(turned90, "Lua: Space (the jump action) turns it 90 degrees once");
+        check(EngineLog.Lines.Any(l => l.Category == "Script" && l.Message.Contains("Driver ready on")), "Lua: noor.log reaches the Console");
+        window.TogglePlay();
+        check(doc.Selected!.Transform.Position == start, "stop: the scripted building is back");
+        check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("script"), "undo the script component");
         doc.SetTool(EditorTool.Move);
     }
 
