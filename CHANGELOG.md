@@ -2,7 +2,30 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 0 in progress
+## [Unreleased] — Milestone 1 in progress
+
+### 2026-11-15 — Milestone 1, first increment: meshes, camera, depth, GPU pixel tests
+**Added**
+- `noor/foundation/math.h`: Vec3/Vec4/Mat4, rotation, look_at, reverse-Z infinite perspective;
+  7 unit tests locking in ADR-022 conventions (right-handed, +Y up, column-major, reverse-Z).
+- ADR-022 (math and coordinate conventions).
+- Build-time HLSL → SPIR-V with DXC (`cmake/NoorShaders.cmake`), embedded into the binary.
+- VMA 3.5 for GPU memory.
+- Renderer: dynamic rendering, D32 reverse-Z depth buffer, swapchain image views, mesh pipeline
+  (lit vertex colors), `create_mesh`/`destroy_mesh` (staged upload, index validation),
+  `FrameDesc` with camera and draw list, per-frame stats, frame capture (`request_capture` /
+  `take_capture`). Renderer split into `vulkan_renderer.cpp`, `vulkan_resources.cpp`,
+  `vulkan_capture.cpp` with a shared internal header.
+- `noor_diag`: lit spinning cube, `--verify-render` (pixel probes) and `--screenshot` (BMP).
+- Test `render.cube_pixels`: checks background, front face and top face colors in a real frame.
+  Verified that it fails when triangle winding is deliberately broken. 27 tests pass.
+
+**Known limitations**
+- Mesh upload blocks on the GPU; mesh destruction waits for device idle.
+- Single hard-coded shader and light; editor viewport still clears only.
+- Not done yet for Milestone 1: input services, GPU timing markers, device-loss handling, stress tests.
+
+## Milestone 0
 
 ### 2026-11-15 — Avalonia editor spike (ADR-003 accepted)
 **Added**

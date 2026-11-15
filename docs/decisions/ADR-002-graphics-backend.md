@@ -26,7 +26,12 @@ validation error fails the smoke test.
 ## Consequences
 - Minimum GPU: one with a Vulkan 1.3 driver (roughly NVIDIA GTX 900+, AMD GCN 4+, Intel Gen9+).
 - macOS is "not supported" until MoltenVK is tested; we do not claim it.
-- Memory allocation will use VMA (MIT) once we allocate buffers/images (Milestone 1).
+- Memory allocation uses VMA 3.5 (MIT) since Milestone 1.
+- Shaders (Milestone 1): HLSL compiled to SPIR-V at build time with DXC from the Vulkan SDK
+  (`cmake/NoorShaders.cmake`), embedded in the binary, warnings as errors. Runtime shader
+  compilation, hot reload and a shader cache arrive with the material system; Slang is still
+  the candidate to evaluate then.
+- Rendering uses dynamic rendering (no render pass objects) and synchronization2 barriers.
 
 ## Evidence / benchmark
 Milestone 0 `noor_diag` creates a 1.3 device, swapchain and clears frames with zero validation

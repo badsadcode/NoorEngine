@@ -15,6 +15,7 @@ option(NOOR_BUILD_TESTS "Build NoorEngine tests" ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(NoorCompilerOptions)
 include(NoorDependencies)
+include(NoorShaders)
 
 add_subdirectory(engine/foundation)
 add_subdirectory(engine/platform)

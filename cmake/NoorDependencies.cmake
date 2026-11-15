@@ -21,6 +21,13 @@ FetchContent_Declare(SDL3
     SYSTEM)
 FetchContent_MakeAvailable(SDL3)
 
+# --- Vulkan Memory Allocator (MIT, header-only) ------------------------------
+FetchContent_Declare(VulkanMemoryAllocator
+    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+    GIT_TAG        0f1a757da579831283413295cc7f3b47eb521c77 # v3.5.0
+    SYSTEM)
+FetchContent_MakeAvailable(VulkanMemoryAllocator)
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

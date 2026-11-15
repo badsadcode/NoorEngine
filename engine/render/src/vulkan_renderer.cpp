@@ -1,32 +1,18 @@
-#include "noor/render/renderer.h"
+// Vulkan renderer core: instance, device, swapchain, frame loop, teardown.
+// Resources (meshes, pipeline, memory) live in vulkan_resources.cpp, readback in vulkan_capture.cpp.
 
-#include "noor/foundation/log.h"
+#include "vulkan_impl.h"
+
 #include "noor/platform/presentation_target.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
-#include <format>
-#include <limits>
 #include <optional>
-#include <vector>
-#include <vulkan/vk_enum_string_helper.h>
-#include <vulkan/vulkan.h>
 
 namespace noor::render {
 namespace {
 
-constexpr std::uint32_t kFramesInFlight = 2;
 constexpr const char* kValidationLayer = "VK_LAYER_KHRONOS_validation";
-constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
-
-#define NOOR_VK_TRY(expr)                                                                          \
-    do {                                                                                           \
-        if (const VkResult vk_result_ = (expr); vk_result_ != VK_SUCCESS) {                        \
-            return fail(ErrorCode::GraphicsError,                                                  \
-                        std::format("{} failed ({})", #expr, string_VkResult(vk_result_)));        \
-        }                                                                                          \
-    } while (false)
 
 std::string version_string(std::uint32_t v) {
     return std::format("{}.{}.{}", VK_API_VERSION_MAJOR(v), VK_API_VERSION_MINOR(v), VK_API_VERSION_PATCH(v));
@@ -58,63 +44,16 @@ bool has_device_extension(VkPhysicalDevice gpu, const char* name) {
     return std::ranges::any_of(exts, [&](const auto& e) { return std::strcmp(e.extensionName, name) == 0; });
 }
 
-struct FrameSync {
-    VkCommandPool pool = VK_NULL_HANDLE;
-    VkCommandBuffer cmd = VK_NULL_HANDLE;
-    VkSemaphore image_available = VK_NULL_HANDLE;
-    VkFence in_flight = VK_NULL_HANDLE;
-};
-
 } // namespace
 
-struct Renderer::Impl {
-    const platform::PresentationTarget* target = nullptr;
-    RendererDesc desc;
-    bool validation = false;
-
-    VkInstance instance = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkPhysicalDevice gpu = VK_NULL_HANDLE;
-    VkDevice device = VK_NULL_HANDLE;
-    std::uint32_t queue_family = 0;
-    VkQueue queue = VK_NULL_HANDLE;
-
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-    VkSurfaceFormatKHR surface_format{};
-    VkExtent2D extent{};
-    std::vector<VkImage> images;
-    std::vector<VkSemaphore> render_finished;  // one per swapchain image
-    bool swapchain_dirty = true;     // must rebuild (out of date, suboptimal, or first frame)
-    bool resize_requested = false;   // window says its size changed; rebuild only if it really did
-
-    std::array<FrameSync, kFramesInFlight> frames{};
-    std::uint32_t frame_index = 0;
-
-    GpuInfo info;
-    std::atomic<std::uint64_t> validation_errors{0};
-    std::atomic<std::uint64_t> validation_warnings{0};
-    std::uint64_t frames_presented = 0;
-    std::uint64_t swapchain_rebuilds = 0;
-
-    ~Impl() { destroy(); }
-
-    Status create_instance();
-    Status pick_gpu();
-    Status create_device();
-    Status create_frames();
-    Status rebuild_swapchain();
-    void destroy_swapchain_semaphores();
-    Result<FrameResult> render_frame();
-    void destroy();
-
-    // Validation errors (our API misuse) are logged as errors and fail the smoke test.
-    // Errors of other types come from the loader/environment, e.g. a third-party implicit
-    // layer such as an overlay failing to load; they are real but not our bug, so they are
-    // logged as warnings with a "[loader]" prefix and counted as warnings.
-    static VKAPI_ATTR VkBool32 VKAPI_CALL on_validation_message(
-        VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT types,
-        const VkDebugUtilsMessengerCallbackDataEXT* data, void* user) {
+// Validation errors (our API misuse) are logged as errors and fail the smoke test.
+// Errors of other types come from the loader/environment, e.g. a third-party implicit
+// layer such as an overlay failing to load; they are real but not our bug, so they are
+// logged as warnings with a "[loader]" prefix and counted as warnings.
+VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::Impl::on_validation_message(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT types,
+    const VkDebugUtilsMessengerCallbackDataEXT* data, void* user) {
+    {
         auto* self = static_cast<Impl*>(user);
         const char* text = data && data->pMessage ? data->pMessage : "(no message)";
         const bool is_validation = (types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) != 0;
@@ -132,7 +71,7 @@ struct Renderer::Impl {
         }
         return VK_FALSE;
     }
-};
+}
 
 // ------------------------------------------------------------------ instance
 
@@ -327,16 +266,27 @@ Status Renderer::Impl::create_frames() {
         fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         NOOR_VK_TRY(vkCreateFence(device, &fence_info, nullptr, &frame.in_flight));
     }
+
+    VkCommandPoolCreateInfo upload_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    upload_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    upload_info.queueFamilyIndex = queue_family;
+    NOOR_VK_TRY(vkCreateCommandPool(device, &upload_info, nullptr, &upload_pool));
     return {};
 }
 
 // ------------------------------------------------------------------ swapchain
 
-void Renderer::Impl::destroy_swapchain_semaphores() {
+// Per-image views, semaphores and the depth buffer. Caller guarantees the GPU is idle.
+void Renderer::Impl::destroy_swapchain_resources() {
     for (VkSemaphore s : render_finished) {
         vkDestroySemaphore(device, s, nullptr);
     }
     render_finished.clear();
+    for (VkImageView v : image_views) {
+        vkDestroyImageView(device, v, nullptr);
+    }
+    image_views.clear();
+    destroy_depth_buffer();
 }
 
 Status Renderer::Impl::rebuild_swapchain() {
@@ -347,9 +297,10 @@ Status Renderer::Impl::rebuild_swapchain() {
 
     VkSurfaceCapabilitiesKHR caps{};
     NOOR_VK_TRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &caps));
-    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
-        return fail(ErrorCode::Unsupported, "Swapchain images cannot be transfer destinations on this GPU");
+    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
+        return fail(ErrorCode::Unsupported, "Swapchain images cannot be color attachments on this GPU");
     }
+    swapchain_supports_capture = (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
 
     VkExtent2D new_extent = caps.currentExtent;
     if (new_extent.width == std::numeric_limits<std::uint32_t>::max()) {
@@ -388,7 +339,8 @@ Status Renderer::Impl::rebuild_swapchain() {
     create_info.imageColorSpace = surface_format.colorSpace;
     create_info.imageExtent = new_extent;
     create_info.imageArrayLayers = 1;
-    create_info.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                             (swapchain_supports_capture ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0u);
     create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     create_info.preTransform = caps.currentTransform;
     create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -410,11 +362,26 @@ Status Renderer::Impl::rebuild_swapchain() {
     images.resize(count);
     vkGetSwapchainImagesKHR(device, swapchain, &count, images.data());
 
-    destroy_swapchain_semaphores();
+    destroy_swapchain_resources();
     render_finished.resize(count, VK_NULL_HANDLE);
     for (VkSemaphore& s : render_finished) {
         VkSemaphoreCreateInfo sem_info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         NOOR_VK_TRY(vkCreateSemaphore(device, &sem_info, nullptr, &s));
+    }
+    image_views.resize(count, VK_NULL_HANDLE);
+    for (std::uint32_t i = 0; i < count; ++i) {
+        VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        view_info.image = images[i];
+        view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        view_info.format = surface_format.format;
+        view_info.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        NOOR_VK_TRY(vkCreateImageView(device, &view_info, nullptr, &image_views[i]));
+    }
+    if (auto status = create_depth_buffer(); !status) {
+        return status;
+    }
+    if (auto status = ensure_mesh_pipeline(surface_format.format); !status) {
+        return status;
     }
 
     swapchain_dirty = false;
@@ -426,7 +393,7 @@ Status Renderer::Impl::rebuild_swapchain() {
 
 // ------------------------------------------------------------------ frame
 
-Result<FrameResult> Renderer::Impl::render_frame() {
+Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     if (resize_requested) {
         resize_requested = false;
         const platform::PixelSize pixels = target->pixel_size();
@@ -467,45 +434,59 @@ Result<FrameResult> Renderer::Impl::render_frame() {
     NOOR_VK_TRY(vkBeginCommandBuffer(frame.cmd, &begin));
 
     const VkImage image = images[image_index];
-    VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    // The acquire semaphore is waited at the TRANSFER stage; this barrier chains on it.
-    VkImageMemoryBarrier2 to_clear{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
-    to_clear.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    to_clear.srcAccessMask = VK_ACCESS_2_NONE;
-    to_clear.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    to_clear.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    to_clear.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    to_clear.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    to_clear.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_clear.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    to_clear.image = image;
-    to_clear.subresourceRange = range;
+    // Color: the acquire semaphore is waited at COLOR_ATTACHMENT_OUTPUT; this barrier chains on it.
+    image_barrier(frame.cmd, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    // Depth: shared across frames in flight, so wait for the previous frame's depth writes.
+    image_barrier(frame.cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
 
-    VkDependencyInfo dep{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
-    dep.imageMemoryBarrierCount = 1;
-    dep.pImageMemoryBarriers = &to_clear;
-    vkCmdPipelineBarrier2(frame.cmd, &dep);
+    VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    color.imageView = image_views[image_index];
+    color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    std::memcpy(color.clearValue.color.float32, desc.clear_color.data(), sizeof(float) * 4);
 
-    VkClearColorValue clear{};
-    std::memcpy(clear.float32, desc.clear_color.data(), sizeof(clear.float32));
-    vkCmdClearColorImage(frame.cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+    VkRenderingAttachmentInfo depth{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    depth.imageView = depth_view;
+    depth.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth.clearValue.depthStencil = {0.0f, 0};  // reverse-Z: 0 is infinitely far (ADR-022)
 
-    VkImageMemoryBarrier2 to_present = to_clear;
-    to_present.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    to_present.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    to_present.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-    to_present.dstAccessMask = VK_ACCESS_2_NONE;
-    to_present.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    to_present.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    dep.pImageMemoryBarriers = &to_present;
-    vkCmdPipelineBarrier2(frame.cmd, &dep);
+    VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
+    rendering.renderArea = {{0, 0}, extent};
+    rendering.layerCount = 1;
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachments = &color;
+    rendering.pDepthAttachment = &depth;
+    vkCmdBeginRendering(frame.cmd, &rendering);
+    record_draws(frame.cmd, frame_desc);
+    vkCmdEndRendering(frame.cmd);
+
+    if (capture_requested && swapchain_supports_capture && !capture.pending) {
+        if (auto status = record_capture(frame.cmd, image); !status) {
+            return std::unexpected(status.error());
+        }
+        capture_requested = false;
+    } else {
+        image_barrier(frame.cmd, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
+    }
 
     NOOR_VK_TRY(vkEndCommandBuffer(frame.cmd));
 
     VkSemaphoreSubmitInfo wait{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     wait.semaphore = frame.image_available;
-    wait.stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    wait.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSemaphoreSubmitInfo signal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signal.semaphore = render_finished[image_index];
     signal.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -550,10 +531,23 @@ void Renderer::Impl::destroy() {
             vkDestroyCommandPool(device, frame.pool, nullptr);
             frame = {};
         }
-        destroy_swapchain_semaphores();
+        vkDestroyCommandPool(device, upload_pool, nullptr);
+        upload_pool = VK_NULL_HANDLE;
+        for (std::uint32_t i = 0; i < meshes.size(); ++i) {
+            destroy_mesh(MeshHandle{i + 1});
+        }
+        if (capture.buffer.buffer != VK_NULL_HANDLE) {
+            destroy_buffer(capture.buffer);
+        }
+        destroy_mesh_pipeline();
+        destroy_swapchain_resources();
         if (swapchain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device, swapchain, nullptr);
             swapchain = VK_NULL_HANDLE;
+        }
+        if (allocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(allocator);
+            allocator = VK_NULL_HANDLE;
         }
         vkDestroyDevice(device, nullptr);
         device = VK_NULL_HANDLE;
@@ -584,8 +578,8 @@ Result<std::unique_ptr<Renderer>> Renderer::create(const platform::PresentationT
     impl->target = &target;
     impl->desc = desc;
 
-    for (auto step : {&Impl::create_instance, &Impl::pick_gpu, &Impl::create_device, &Impl::create_frames,
-                      &Impl::rebuild_swapchain}) {
+    for (auto step : {&Impl::create_instance, &Impl::pick_gpu, &Impl::create_device, &Impl::create_allocator,
+                      &Impl::create_frames, &Impl::rebuild_swapchain}) {
         if (auto status = ((*impl).*step)(); !status) {
             return std::unexpected(status.error());  // Impl destructor releases what was created
         }
@@ -593,10 +587,20 @@ Result<std::unique_ptr<Renderer>> Renderer::create(const platform::PresentationT
     return std::unique_ptr<Renderer>(new Renderer(std::move(impl)));
 }
 
-Result<FrameResult> Renderer::render_frame() { return impl_->render_frame(); }
+Result<MeshHandle> Renderer::create_mesh(const MeshData& data) { return impl_->create_mesh(data); }
+void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
+Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) { return impl_->render_frame(frame); }
+void Renderer::request_capture() noexcept {
+    if (!impl_->swapchain_supports_capture) {
+        NOOR_LOG_WARN("Render", "Frame capture requested, but this swapchain cannot be read back");
+    }
+    impl_->capture_requested = true;
+}
+Result<std::optional<CapturedFrame>> Renderer::take_capture() { return impl_->take_capture(); }
 void Renderer::notify_resized() noexcept { impl_->resize_requested = true; }
 void Renderer::set_clear_color(const std::array<float, 4>& c) noexcept { impl_->desc.clear_color = c; }
 const GpuInfo& Renderer::gpu_info() const noexcept { return impl_->info; }
+const FrameStats& Renderer::last_frame_stats() const noexcept { return impl_->stats; }
 bool Renderer::validation_enabled() const noexcept { return impl_->validation; }
 std::uint64_t Renderer::validation_error_count() const noexcept { return impl_->validation_errors.load(); }
 std::uint64_t Renderer::validation_warning_count() const noexcept { return impl_->validation_warnings.load(); }
