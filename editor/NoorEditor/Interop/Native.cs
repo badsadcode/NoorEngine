@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 6;
+    public const uint ExpectedApiVersion = 7;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -84,6 +84,8 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_doc_stop(IntPtr doc);
     [DllImport(Dll)] public static extern void noor_doc_tick(IntPtr doc, double seconds, IntPtr inputViewport);
     [DllImport(Dll)] private static extern IntPtr noor_doc_poll_files(IntPtr doc);
+    [DllImport(Dll)] public static extern IntPtr noor_rt_get_api();
+    [DllImport(Dll)] public static extern void noor_doc_set_script_host(IntPtr doc, IntPtr host);
 
     private static string? Str(IntPtr p) => p == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(p);
     public static string? ProjectInfo(IntPtr doc) => Str(noor_doc_project_info(doc));

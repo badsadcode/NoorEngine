@@ -33,8 +33,9 @@ extern "C" {
  * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size).
  * 4: play mode, asset files watched for changes (live reload).
  * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport.
- * 6: "create" command; physics (ADR-010) and Lua (ADR-009) run in play mode; primitive shapes. */
-#define NOOR_EDITOR_API_VERSION 6u
+ * 6: "create" command; physics (ADR-010) and Lua (ADR-009) run in play mode; primitive shapes.
+ * 7: character controller, game camera, mouse capture; C# script host (noor_rt_api / noor_rt_host). */
+#define NOOR_EDITOR_API_VERSION 7u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -126,6 +127,12 @@ NOOR_API void noor_doc_tick(noor_doc* doc, double seconds, noor_viewport* input_
 /* Checks the project's asset files for changes on disk (call every ~0.5 s). Changed models are
  * reloaded by viewports and prefabs re-read. Returns a JSON array of the changed relative paths. */
 NOOR_API const char* noor_doc_poll_files(noor_doc* doc);
+
+/* C# scripts (ADR-008). The engine functions scripts call (a const noor_rt_api*, see
+ * noor_rt_api.h), and the managed host that runs them (a const noor_rt_host*, which must stay
+ * valid while the document plays; NULL: C# scripts are skipped with a message). */
+NOOR_API const void* noor_rt_get_api(void);
+NOOR_API void noor_doc_set_script_host(noor_doc* doc, const void* host);
 
 /* Viewports showing documents. Passing NULL detaches. The viewport keeps working if the
  * document is closed first (it keeps showing the last published scene). */

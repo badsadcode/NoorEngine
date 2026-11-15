@@ -33,6 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\engine\scripting\dotnet\NoorEngine.Scripting\NoorEngine.Scripting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="$(NoorNativeDir)noor_editor_api.dll" Link="noor_editor_api.dll"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.dll')" />
     <None Include="$(NoorNativeDir)noor_editor_api.pdb" Link="noor_editor_api.pdb"

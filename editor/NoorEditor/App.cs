@@ -38,6 +38,7 @@ public sealed class App : Application
             if (version != Native.ExpectedApiVersion)
                 throw new InvalidOperationException($"noor_editor_api.dll is API v{version}, this editor needs v{Native.ExpectedApiVersion}. Rebuild the engine.");
             EngineLog.Install();
+            NoorEngine.ScriptHost.Initialize(Native.noor_rt_get_api());  // C# scripts call the engine through this table
             EngineLog.Info("Editor", $"NoorEditor started, engine API v{version}");
             desktop.Exit += (_, _) => EngineLog.Uninstall();
 

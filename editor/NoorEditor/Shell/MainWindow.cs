@@ -387,8 +387,8 @@ public sealed class MainWindow : Window
         var s = Doc.Scene;
         var scene = s.Open ? $"{s.Name}{(s.Modified ? " •" : "")}" : "no scene";
         Title = $"NoorEditor — {Doc.ProjectName} — {scene}{(s.Playing ? "  ▶ Playing" : "")}";
-        _play.Content = s.Playing ? "■  Stop" : "▶  Play";
-        _play.IsEnabled = s.Open;
+        _play.Content = _compiling ? "Compiling…" : s.Playing ? "■  Stop" : "▶  Play";
+        _play.IsEnabled = s.Open && !_compiling;
         _undo.Header = s.CanUndo ? $"_Undo {s.UndoLabel}" : "_Undo";
         _undo.IsEnabled = s.CanUndo;
         _redo.Header = s.CanRedo ? $"_Redo {s.RedoLabel}" : "_Redo";
@@ -435,12 +435,54 @@ public sealed class MainWindow : Window
             _playTimer.Stop();
             if (ViewportView?.Viewport.EngineHandle is { } vp && vp != IntPtr.Zero) Native.noor_viewport_set_mouse_capture(vp, 0);  // the mouse always comes back on Stop
             Doc.Stop();
+            NoorEngine.ScriptHost.UnloadScripts();  // the next Play compiles and loads them fresh
             return;
         }
-        if (!Doc.Play()) return;  // the selection stays: the running copy keeps every entity's id
+        _ = PlayAsync();
+    }
+
+    private bool _compiling;
+
+    /// <summary>
+    /// Starts play mode. If the project has C# scripts they are compiled first (ADR-008); compile
+    /// errors go to the Console and play doesn't start. Returns whether play started.
+    /// </summary>
+    public async Task<bool> PlayAsync()
+    {
+        if (Doc.Playing || _compiling || !Doc.Scene.Open) return Doc.Playing;
+        if (ScriptBuilder.HasScripts(Doc.ProjectRoot))
+        {
+            _compiling = true;
+            _play.IsEnabled = false;
+            _play.Content = "Compiling…";
+            try
+            {
+                var build = await ScriptBuilder.BuildAsync(Doc.ProjectRoot);
+                if (!build.Ok)
+                {
+                    foreach (var error in build.Errors) EngineLog.Error("Script", error);
+                    EngineLog.Warn("Editor", $"Play didn't start: {build.Errors.Count} C# compile error(s)");
+                    return false;
+                }
+                var classes = NoorEngine.ScriptHost.LoadScripts(build.Assembly!, build.Symbols);
+                EngineLog.Info("Editor", $"C# scripts compiled in {build.Took.TotalSeconds:0.0} s ({classes.Count} script classes)");
+                Native.noor_doc_set_script_host(Doc.Handle, NoorEngine.ScriptHost.HostTable);
+            }
+            finally
+            {
+                _compiling = false;
+                OnSceneChanged();  // restores the Play button
+            }
+        }
+        else
+        {
+            Native.noor_doc_set_script_host(Doc.Handle, NoorEngine.ScriptHost.HostTable);
+        }
+        if (!Doc.Play()) return false;  // the selection stays: the running copy keeps every entity's id
         _playClock.Restart();
         _lastTick = _lastPanelRefresh = TimeSpan.Zero;
         _playTimer.Start();
+        return true;
     }
 
     private void PlayTick()

@@ -3,6 +3,7 @@
 #include "noor/asset/gltf_import.h"
 #include "noor/runtime/behaviours.h"
 #include "noor/physics/physics.h"
+#include "noor/scripting/csharp_scripts.h"
 #include "noor/scripting/lua_scripts.h"
 #include "noor/foundation/log.h"
 
@@ -102,6 +103,7 @@ Status Document::play() {
     if (!input_map) return std::unexpected(input_map.error());
     world_ = std::make_unique<runtime::World>(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, std::move(*input_map));
     world_->add_system(std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{project_.root()}));
+    world_->add_system(std::make_unique<scripting::CSharpScriptSystem>(static_cast<const noor_rt_host*>(script_host_)));
     physics::PhysicsSystem::Options physics_options;
     // Mesh colliders read triangles from the project's GLB files (cached per file for this play).
     auto cache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<asset::ImportedModel>>>();

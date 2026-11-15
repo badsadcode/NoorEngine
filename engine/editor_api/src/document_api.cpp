@@ -5,6 +5,7 @@
 
 #include "api_internal.h"
 #include "document.h"
+#include "noor/scripting/csharp_scripts.h"
 
 #include <exception>
 #include <memory>
@@ -164,6 +165,12 @@ NOOR_API void noor_doc_tick(noor_doc* doc, double seconds, noor_viewport* input_
             noor_viewport_set_mouse_capture(input_viewport, *want ? 1 : 0);
         return 0;
     });
+}
+
+NOOR_API const void* noor_rt_get_api(void) { return noor::scripting::rt_api(); }
+
+NOOR_API void noor_doc_set_script_host(noor_doc* doc, const void* host) {
+    if (doc) doc->doc->set_script_host(host);
 }
 
 NOOR_API const char* noor_doc_poll_files(noor_doc* doc) {

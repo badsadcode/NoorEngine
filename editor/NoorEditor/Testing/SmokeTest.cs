@@ -159,6 +159,7 @@ internal static class SmokeTest
         await PlayReloadAndWindows(window, id, results, Check, Shot);
         await PhysicsChecks(window, id, results, Check, Shot);
         await PlayerChecks(window, results, Check, Shot);
+        await CSharpChecks(window, results, Check, Shot);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -201,8 +202,10 @@ internal static class SmokeTest
         var last = VulkanViewport.Active?.Stats;
         results["validation_errors"] = last?.ValidationErrors ?? 0;
         results["engine_errors_logged"] = EngineLog.ErrorCount;
+        results["engine_errors_expected"] = _expectedErrors;
         Check((last?.ValidationErrors ?? 1) == 0, "zero Vulkan validation errors");
-        Check(EngineLog.ErrorCount == 0, "zero engine/editor errors logged");
+        Check(EngineLog.ErrorCount - _expectedErrors == 0,
+              $"zero unexpected engine/editor errors ({EngineLog.ErrorCount} logged, {_expectedErrors} provoked on purpose)");
     }
 
     // ---- Viewport interaction ----
@@ -610,6 +613,99 @@ internal static class SmokeTest
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr hwnd);
+
+    // Errors the test provokes on purpose (compile errors, a throwing script), excluded from the budget.
+    private static int _expectedErrors;
+
+    private static async Task<int> CountErrors(Func<Task> provoke)
+    {
+        await Task.Delay(150);
+        var before = EngineLog.ErrorCount;
+        await provoke();
+        await Task.Delay(300);  // log lines are posted to the UI thread
+        _expectedErrors += EngineLog.ErrorCount - before;
+        return EngineLog.ErrorCount - before;
+    }
+
+    // Milestone 4, part 4: C# scripts, compiled on Play.
+    private static async Task CSharpChecks(MainWindow window, Dictionary<string, object> results,
+                                           Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var box = window.CreateEntity(EntityTemplates.All.First(t => t.Name == "Box"));
+        if (box == null)
+        {
+            check(false, "C#: a box to script");
+            return;
+        }
+        var t0 = doc.Selected!.Transform;
+        doc.SetTransform(box, t0 with { Position = new Vec3(-22, 0.5, 6) });
+        var comps = window.Inspector!.Components;
+        check(comps.AddCSharpScript("Spinner") && doc.Selected!.Components["script"]?["file"]?.GetValue<string>() == "Scripts/Spinner.cs",
+              "C#: Add component > C# script attaches Scripts/Spinner.cs");
+        var file = Path.Combine(doc.ProjectRoot, "Scripts", "Spinner.cs");
+        check(File.Exists(file) && File.Exists(Path.Combine(doc.ProjectRoot, "Scripts", "Scripts.csproj")),
+              "C#: the script and Scripts.csproj are created");
+        comps.SetField("script", "params.speed", System.Text.Json.Nodes.JsonValue.Create(90.0));
+
+        const string good = """
+            using System.Numerics;
+            using System.Text.Json.Nodes;
+            using NoorEngine;
+
+            public class Spinner : NoorScript
+            {
+                public override void OnStart() => Noor.Log($"Spinner ready on {Entity.Name}");
+
+                public override void OnUpdate(float dt)
+                {
+                    Entity.Rotate(Vector3.UnitY, Param("speed", 0) * dt);
+                    Entity.Set("csharp", new JsonObject { ["time"] = Noor.Time, ["floor"] = Noor.Find("Floor")?.Name });
+                }
+            }
+            """;
+        File.WriteAllText(file, good);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var started = await window.PlayAsync();
+        results["csharp_first_compile_s"] = Math.Round(timer.Elapsed.TotalSeconds, 1);
+        check(started && doc.Playing, $"C#: Play compiles the scripts and starts ({timer.Elapsed.TotalSeconds:0.0} s)");
+        await Task.Delay(1000);
+        doc.Refresh();
+        var running = doc.Scene.Entities.First(e => e.Id == box);
+        var yaw = Math.Abs(running.Transform.Rotation.ToEulerDegrees().Y);
+        check(yaw > 20, $"C#: OnUpdate turns the box ({yaw:0} degrees after about 1 s at 90/s)");
+        check(running.Components["csharp"]?["floor"]?.GetValue<string>() == "Floor", "C#: Entity.Set and Noor.Find work");
+        check(EngineLog.Lines.Any(l => l.Category == "Script" && l.Message.Contains("Spinner ready on Box")), "C#: Noor.Log reaches the Console");
+        await Task.Delay(200);
+        shot(window, "editor_13_csharp.png");
+        window.TogglePlay();
+
+        // A compile error: shown with file and line; play doesn't start.
+        File.WriteAllText(file, good.Replace("Noor.Log($\"Spinner ready on {Entity.Name}\");", "Noor.Log(\"oops\")"));
+        var compileErrors = await CountErrors(async () => check(!await window.PlayAsync() && !doc.Playing, "C#: a compile error stops Play"));
+        check(compileErrors >= 1 && EngineLog.Lines.Any(l => l.Category == "Script" && l.Message.StartsWith("Scripts/Spinner.cs:7:") && l.Message.Contains("CS1002")),
+              "C#: the compile error names Scripts/Spinner.cs:7 (CS1002)");
+
+        // An exception: reported with the line; that script stops, the game keeps running.
+        File.WriteAllText(file, good.Replace("Entity.Rotate(Vector3.UnitY, Param(\"speed\", 0) * dt);", "throw new InvalidOperationException(\"boom\");"));
+        await CountErrors(async () =>
+        {
+            check(await window.PlayAsync(), "C#: a script that throws still compiles and plays");
+            await Task.Delay(300);
+        });
+        check(doc.Playing && EngineLog.Lines.Any(l => l.Category == "Script" && l.Message.Contains("InvalidOperationException: boom") && l.Message.Contains("Spinner.cs:")),
+              "C#: an exception is reported with its line and the game keeps running");
+        window.TogglePlay();
+
+        // Fixed again: the new code is compiled and loaded (the old assembly was unloaded on Stop).
+        File.WriteAllText(file, good.Replace("Param(\"speed\", 0)", "-Param(\"speed\", 0)"));
+        check(await window.PlayAsync(), "C#: edited scripts reload on the next Play");
+        await Task.Delay(700);
+        doc.Refresh();
+        var again = doc.Scene.Entities.First(e => e.Id == box).Transform.Rotation.ToEulerDegrees().Y;
+        check(again < -10, $"C#: the new version runs (turning the other way: {again:0} degrees)");
+        window.TogglePlay();
+    }
 
     // Milestone 4, part 3b: a first-person player on the physics floor.
     private static async Task PlayerChecks(MainWindow window, Dictionary<string, object> results,

@@ -115,6 +115,8 @@ public:
     void stop();
     [[nodiscard]] bool playing() const noexcept { return world_ != nullptr; }
     void tick(double seconds, const runtime::InputState& input = {});
+    // The managed C# script host (noor_rt_host) for play mode; null: C# scripts are skipped.
+    void set_script_host(const void* host) noexcept { script_host_ = host; }
     // A script asked to capture (true) or release (false) the mouse this frame.
     [[nodiscard]] std::optional<bool> take_mouse_capture_request() {
         return world_ ? world_->take_mouse_capture_request() : std::nullopt;
@@ -146,6 +148,7 @@ private:
     scene::History history_;
     std::uint64_t revision_ = 0;
     std::unique_ptr<runtime::World> world_;  // play mode (ADR-026/027)
+    const void* script_host_ = nullptr;      // noor_rt_host*
     asset::FileWatcher watcher_;
     std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version
     std::shared_ptr<SnapshotChannel> channel_ = std::make_shared<SnapshotChannel>();

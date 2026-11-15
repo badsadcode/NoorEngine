@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-15 — Milestone 4, part 4: C# scripts
+**Added**
+- `noor_rt_api.h`: the scripting ABI as two tables of C function pointers, `noor_rt_api` (engine
+  functions scripts call; the Lua set) and `noor_rt_host` (the managed host). ADR-008 updated.
+- `scripting::CSharpScriptSystem`: the engine half; same hook order and error handling as Lua;
+  reports once (not every frame) when no host is available.
+- `engine/scripting/dotnet/NoorEngine.Scripting`: `NoorScript`, `Entity`, `Noor`, `Input`,
+  `RaycastHit`, and `ScriptHost` (loads compiled scripts from memory into a collectible
+  `AssemblyLoadContext`, unloads on Stop; exceptions never cross into native code and are reported
+  with type, message and file:line).
+- Editor API **v7**: `noor_rt_get_api`, `noor_doc_set_script_host`. NoorEditor: Play compiles C#
+  scripts (`Scripts/Scripts.csproj` generated for IDEs; `dotnet build` ~1.2 s), compile errors go
+  to the Console as `Scripts/X.cs:7: CS1002: ...` and Play doesn't start; **Add component ▸ C#
+  script…** with a template.
+- `docs/scripting/CSHARP_API.md`.
+
+**Tests:** 3 engine-half tests with a fake host (hook order, callbacks into the world, input,
+exceptions, missing class, missing host, id round trip); the editor smoke test writes a real C#
+script, plays it (87° in ~1 s at 90°/s, `Entity.Set`, `Noor.Find`, `Noor.Log`), checks a compile
+error (file:line, no play), an exception (line, game continues) and reload after editing.
+Provoked errors are counted so the "zero errors" budget stays meaningful.
+
 ### 2026-11-15 — Milestone 4, part 3b: a walking first-person player
 **Added**
 - `character` component on Jolt `CharacterVirtual`: capsule with feet at the entity origin, slides

@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 6;  // v1-v6 kept the v0 viewport functions unchanged
+    public const uint ExpectedApiVersion = 7;  // v1-v7 kept the v0 viewport functions unchanged
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();

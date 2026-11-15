@@ -23,13 +23,16 @@ debuggable from NoorCode later and from external IDEs now. NoorEditor itself is 
   Visual Studio, Rider and VS Code open the same project (spec 7.2), and NoorCode can use Roslyn
   language services later.
 - **Scripts** derive from `NoorScript` (`OnStart`, `OnUpdate`, `OnFixedUpdate`, `OnLateUpdate`,
-  `OnDestroy`) and are attached by a `script` component naming the class. They call the engine
-  through the `noor_rt_*` C API (ADR-027) via P/Invoke; the runtime calls scripts through function
-  pointers that `NoorEngine.Scripting` registers at start-up (`[UnmanagedCallersOnly]`), the same
-  way in both hosts.
-- **Reload**: the editor rebuilds and reloads the script assembly when Stop is pressed or scripts
-  change while stopped. Reload while playing is not attempted in Milestone 4 (state would be lost
-  silently).
+  `OnDestroy`, collision/trigger hooks) and are attached by a `script` component naming the file
+  (`Scripts/Spinner.cs` → class `Spinner`).
+- **The boundary is two tables of C function pointers** (`noor_rt_api.h`, refined in Milestone 4
+  part 4): `noor_rt_api` (engine functions scripts call: the same set as Lua) and `noor_rt_host`
+  (the managed host's `[UnmanagedCallersOnly]` entry points the engine calls). No P/Invoke by DLL
+  name, so the same `NoorEngine.Scripting` works whichever binary hosts the engine (the editor DLL
+  now, the player executable later).
+- **Reload**: Play compiles the scripts and loads them (from memory, into a collectible
+  `AssemblyLoadContext`); Stop unloads them, so the next Play runs the edited code. Reload while
+  playing is not attempted in Milestone 4 (state would be lost silently).
 - **Debugging**: attach any .NET debugger to NoorEditor (scripts run in-process). A NoorCode
   debugger (e.g. via netcoredbg, MIT) is later work.
 - **Player builds** are framework-dependent in Milestone 4 (need the .NET 10 runtime installed;

@@ -39,6 +39,9 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 - **Physics**: Inspector ▸ **Add component ▸ Physics** (rigidbody, box/sphere/capsule/mesh
   collider). Press Play and things fall, bounce and collide (Jolt). A mesh collider on a GLB model
   makes the whole building solid.
+- **C# scripts**: **Add component ▸ C# script…** creates `Scripts/<Name>.cs` (and
+  `Scripts/Scripts.csproj` for Visual Studio / Rider). Play compiles them first; compile errors show
+  in the Console with file and line. API: [docs/scripting/CSHARP_API.md](../../docs/scripting/CSHARP_API.md).
 - **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
   a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.

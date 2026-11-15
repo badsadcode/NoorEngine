@@ -92,6 +92,13 @@ public sealed class ComponentsEditor : StackPanel
         return SetComponent("script", new JsonObject { ["file"] = relative, ["params"] = new JsonObject() });
     }
 
+    /// <summary>Creates Scripts/&lt;name&gt;.cs (and Scripts.csproj) if missing, and attaches it.</summary>
+    public bool AddCSharpScript(string name)
+    {
+        var relative = ScriptBuilder.CreateScript(_doc.ProjectRoot, name);
+        return SetComponent("script", new JsonObject { ["file"] = relative, ["params"] = new JsonObject() });
+    }
+
     private static string LuaTemplate(string name) => $$"""
         -- {{name}}: a NoorEngine Lua (Luau) script.
         -- Hooks: on_start, on_update(dt), on_fixed_update(dt), on_late_update(dt), on_destroy.
@@ -299,7 +306,20 @@ public sealed class ComponentsEditor : StackPanel
             item.Click += (_, _) => SetComponent(type, value());
             (type == "primitive" ? shapes : physics).Items.Add(item);
         }
-        button.Flyout = new MenuFlyout { Items = { lua, physics, shapes, marker, custom } };
+        var csharp = new MenuItem { Header = "C# script…", IsEnabled = _entity?.Components.ContainsKey("script") == false };
+        csharp.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var name = await Dialogs.Prompt(owner, "Add C# script", "Class name (creates Scripts/<name>.cs if it doesn't exist)", "MyScript");
+            if (name == null) return;
+            if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_') || !name.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                await Dialogs.Ask(owner, "Add C# script", $"\"{name}\" isn't a valid C# class name: use letters, digits and _, starting with a letter.", "OK");
+                return;
+            }
+            AddCSharpScript(name);
+        };
+        button.Flyout = new MenuFlyout { Items = { lua, csharp, physics, shapes, marker, custom } };
         return button;
     }
 
