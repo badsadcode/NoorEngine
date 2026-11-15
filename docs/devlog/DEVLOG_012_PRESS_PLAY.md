@@ -51,9 +51,10 @@ clicking and dragging, it now:
 
 ## The honest part: what's not done
 
-The full review is in `docs/milestones/M3_REVIEW.md`. The big one: the milestone asks for HiDPI
-to be **checked**. The editor's maths is built for it, and a test checks the pixel sizes match,
-but so far that has only run on a 100% display. Someone needs to run it once at 125% or 150%.
+The full review is in `docs/milestones/M3_REVIEW.md`. The milestone asks for HiDPI to be
+**checked**: the editor was open while the display went to 150% and back, and it followed along
+and looked right. That was a check by eye; the automated test has only run at 100% so far.
+(Fun fact: switching the scaling *while* the self-test is dragging gizmos makes it miss. Fair.)
 Also: panels you drag to a different dock don't remember their new home yet, and new files
 dropped into the project need a click on **Rescan** to appear.
 

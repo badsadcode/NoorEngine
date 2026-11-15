@@ -14,8 +14,9 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 - NoorEditor: **▶ Play / ■ Stop** (Ctrl+P), running values shown in the panels a few times per
   second, gizmos hidden and Inspector read-only while playing; asset files polled twice a second;
   the hierarchy only rebuilds when its structure changes.
-- `docs/milestones/M3_REVIEW.md`: gate review (complete with 6 exceptions; a HiDPI run on a real
-  scaled display is outstanding).
+- `docs/milestones/M3_REVIEW.md`: gate review (complete with 6 exceptions). HiDPI: checked by
+  hand at 150 % (the editor followed a live scaling change and looked right); the automated test
+  has run at 100 % only.
 - Tests: rotator unit test; document tests for play/stop, live prefab reload, undo edge cases
   (after save, redo branch, transactions, scene switch); the editor smoke test plays, live-reloads
   a model, edits through a floating Inspector and asserts swapchain = control × render scaling
