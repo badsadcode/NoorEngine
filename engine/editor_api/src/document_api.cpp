@@ -173,6 +173,10 @@ NOOR_API void noor_doc_set_script_host(noor_doc* doc, const void* host) {
     if (doc) doc->doc->set_script_host(host);
 }
 
+NOOR_API void noor_doc_set_audio_device(noor_doc* doc, int32_t enabled) {
+    if (doc) doc->doc->set_audio_device(enabled != 0);
+}
+
 NOOR_API const char* noor_doc_poll_files(noor_doc* doc) {
     if (!doc) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&] { return give(doc->doc->poll_files()); });

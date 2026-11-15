@@ -300,11 +300,12 @@ public sealed class ComponentsEditor : StackPanel
         };
         var physics = new MenuItem { Header = "Physics" };
         var shapes = new MenuItem { Header = "Shape" };
+        var sound = new MenuItem { Header = "Sound" };
         foreach (var (type, label, value) in EntityTemplates.ComponentPresets)
         {
             var item = new MenuItem { Header = label, IsEnabled = _entity?.Components.ContainsKey(type) == false };
             item.Click += (_, _) => SetComponent(type, value());
-            (type == "primitive" ? shapes : physics).Items.Add(item);
+            (type == "primitive" ? shapes : type.StartsWith("audio") ? sound : physics).Items.Add(item);
         }
         var csharp = new MenuItem { Header = "C# script…", IsEnabled = _entity?.Components.ContainsKey("script") == false };
         csharp.Click += async (_, _) =>
@@ -319,7 +320,7 @@ public sealed class ComponentsEditor : StackPanel
             }
             AddCSharpScript(name);
         };
-        button.Flyout = new MenuFlyout { Items = { lua, csharp, physics, shapes, marker, custom } };
+        button.Flyout = new MenuFlyout { Items = { lua, csharp, physics, sound, shapes, marker, custom } };
         return button;
     }
 

@@ -58,7 +58,18 @@ public static class EntityTemplates
     };
 
     public static JsonObject PlayerBody() => new() { ["primitive"] = Capsule(color: "#7C4DFF") };
-    public static JsonObject PlayerCamera() => new() { ["camera"] = new JsonObject { ["fov"] = 75, ["near"] = 0.05 } };
+    public static JsonObject PlayerCamera() => new()
+    {
+        ["camera"] = new JsonObject { ["fov"] = 75, ["near"] = 0.05 },
+        ["audio_listener"] = new JsonObject(),  // the player's ears
+    };
+
+    /// <summary>A sound emitter for an audio asset (Content Browser ▸ Add to scene).</summary>
+    public static JsonObject AudioSource(string clip) => new()
+    {
+        ["clip"] = clip, ["volume"] = 1, ["loop"] = false, ["spatial"] = true,
+        ["min_distance"] = 1, ["max_distance"] = 60, ["bus"] = "sfx", ["play_on_start"] = true,
+    };
 
     public const string PlayerScript = """
         -- PlayerController: first-person walking, looking and jumping (a NoorEngine template).
@@ -116,6 +127,8 @@ public static class EntityTemplates
         ("collider", "Sphere collider", () => new JsonObject { ["shape"] = "sphere", ["radius"] = 0.5 }),
         ("collider", "Capsule collider", () => new JsonObject { ["shape"] = "capsule", ["radius"] = 0.3, ["height"] = 1.8 }),
         ("collider", "Mesh collider (static, from the model)", () => new JsonObject { ["shape"] = "mesh" }),
+        ("audio_source", "Audio source", () => AudioSource("")),
+        ("audio_listener", "Audio listener (ears)", () => new JsonObject()),
         ("primitive", "Shape: box", () => Box()),
         ("primitive", "Shape: sphere", () => Sphere()),
         ("primitive", "Shape: capsule", () => Capsule()),

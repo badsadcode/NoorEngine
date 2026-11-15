@@ -2,6 +2,7 @@
 
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
+#include "noor/audio/audio.h"
 #include "noor/physics/physics.h"
 #include "noor/runtime/script_api.h"
 
@@ -48,6 +49,7 @@ struct LuaScriptSystem::Impl {
 
     static Impl* of(lua_State* L) { return static_cast<Impl*>(lua_callbacks(L)->userdata); }
     static physics::PhysicsSystem* physics_of(lua_State* L) { return world_of(L).system<physics::PhysicsSystem>(); }
+    static audio::AudioSystem* audio_of(lua_State* L) { return world_of(L).system<audio::AudioSystem>(); }
     static runtime::World& world_of(lua_State* L) {
         Impl* self = of(L);
         if (!self->world) luaL_errorL(L, "the world is not running");
@@ -245,6 +247,21 @@ struct LuaScriptSystem::Impl {
                  if (auto* p = physics_of(L)) p->add_force(check_entity(L, 1), check_vec(L, 2));
                  return 0;
              }},
+            // ---- Sound (needs an audio_source component) ----
+            {"play_sound", [](lua_State* L) {
+                 auto* a = audio_of(L);
+                 lua_pushboolean(L, a && a->play(check_entity(L, 1)));
+                 return 1;
+             }},
+            {"stop_sound", [](lua_State* L) {
+                 if (auto* a = audio_of(L)) a->stop(check_entity(L, 1));
+                 return 0;
+             }},
+            {"is_playing", [](lua_State* L) {
+                 auto* a = audio_of(L);
+                 lua_pushboolean(L, a && a->is_playing(check_entity(L, 1)));
+                 return 1;
+             }},
             // ---- Character controller (needs a character component) ----
             {"character_move", [](lua_State* L) {
                  if (auto* p = physics_of(L)) p->character_move(check_entity(L, 1), check_vec(L, 2));
@@ -309,6 +326,22 @@ struct LuaScriptSystem::Impl {
                  if (auto e = api::find(world_of(L), luaL_checkstring(L, 1))) push_entity(L, *e);
                  else lua_pushnil(L);
                  return 1;
+             }},
+            // noor.play_sound(clip [, position [, volume [, bus]]]) -> true if it started
+            {"play_sound", [](lua_State* L) {
+                 auto* a = audio_of(L);
+                 const char* clip = luaL_checkstring(L, 1);
+                 std::optional<math::Vec3> at;
+                 if (lua_gettop(L) >= 2 && !lua_isnil(L, 2)) at = check_vec(L, 2);
+                 const float volume = static_cast<float>(luaL_optnumber(L, 3, 1.0));
+                 const char* bus = luaL_optstring(L, 4, "sfx");
+                 lua_pushboolean(L, a && a->play_one_shot(clip, at, volume, bus));
+                 return 1;
+             }},
+            // noor.set_volume(bus, volume): master, music, sfx, ui, voice
+            {"set_volume", [](lua_State* L) {
+                 if (auto* a = audio_of(L)) a->set_bus_volume(luaL_checkstring(L, 1), static_cast<float>(luaL_checknumber(L, 2)));
+                 return 0;
              }},
             // noor.raycast(origin, direction, max_distance [, ignore_entity]) -> hit table or nil
             {"raycast", [](lua_State* L) {

@@ -1,6 +1,7 @@
 #include "noor/scripting/csharp_scripts.h"
 
 #include "noor/foundation/log.h"
+#include "noor/audio/audio.h"
 #include "noor/physics/physics.h"
 #include "noor/runtime/script_api.h"
 
@@ -166,6 +167,26 @@ int32_t rt_is_grounded(noor_rt_entity e) {
     return p && p->is_grounded(from_rt(e)) ? 1 : 0;
 }
 
+audio::AudioSystem* audio_of() { return t_world ? t_world->system<audio::AudioSystem>() : nullptr; }
+int32_t rt_sound(noor_rt_entity e, int32_t op) {
+    auto* a = audio_of();
+    if (!a) return 0;
+    switch (op) {
+    case NOOR_RT_SOUND_PLAY: return a->play(from_rt(e)) ? 1 : 0;
+    case NOOR_RT_SOUND_STOP: a->stop(from_rt(e)); return 1;
+    case NOOR_RT_SOUND_IS_PLAYING: return a->is_playing(from_rt(e)) ? 1 : 0;
+    default: return 0;
+    }
+}
+int32_t rt_play_one_shot(const char* clip, const noor_rt_vec3* position, float volume, const char* bus) {
+    auto* a = audio_of();
+    if (!a || !clip) return 0;
+    return a->play_one_shot(clip, position ? std::optional(vec(*position)) : std::nullopt, volume, bus ? bus : "sfx") ? 1 : 0;
+}
+void rt_set_bus_volume(const char* bus, float volume) {
+    if (auto* a = audio_of(); a && bus) a->set_bus_volume(bus, volume);
+}
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -174,6 +195,7 @@ const noor_rt_api kApi = {
     rt_get_component, rt_set_component,
     rt_input, rt_axis, rt_capture_mouse, rt_mouse_captured,
     rt_raycast, rt_push, rt_character_jump, rt_is_grounded,
+    rt_sound, rt_play_one_shot, rt_set_bus_volume,
 };
 
 } // namespace

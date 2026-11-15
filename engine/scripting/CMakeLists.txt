@@ -7,6 +7,7 @@ noor_add_module(scripting
     PUBLIC_DEPS
         noor::runtime
         noor::physics
+        noor::audio
     PRIVATE_DEPS
         Luau.VM
         Luau.Compiler

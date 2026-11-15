@@ -73,6 +73,7 @@ internal static class SmokeTest
         doc.RefreshAssets(rescan: true);
         if (!doc.NewScene("Scenes/Main.noorscene", "Main") || !doc.Save()) throw new InvalidOperationException("new scene failed");
         settings.AddRecent(project);
+        Native.noor_doc_set_audio_device(doc.Handle, 0);  // the test plays sounds silently
         return doc;
     }
 
@@ -160,6 +161,7 @@ internal static class SmokeTest
         await PhysicsChecks(window, id, results, Check, Shot);
         await PlayerChecks(window, results, Check, Shot);
         await CSharpChecks(window, results, Check, Shot);
+        await AudioChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -625,6 +627,75 @@ internal static class SmokeTest
         await Task.Delay(300);  // log lines are posted to the UI thread
         _expectedErrors += EngineLog.ErrorCount - before;
         return EngineLog.ErrorCount - before;
+    }
+
+    // Milestone 4, part 5: sound (mixed silently: the test switched the device off).
+    private static async Task AudioChecks(MainWindow window, Dictionary<string, object> results, Action<bool, string> check)
+    {
+        var doc = window.Doc;
+        var dir = Path.Combine(doc.ProjectRoot, "Assets", "Audio");
+        Directory.CreateDirectory(dir);
+        WriteTone(Path.Combine(dir, "beep.wav"), 1.0);
+        doc.RefreshAssets(rescan: true);
+        var asset = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Audio/beep.wav");
+        check(asset is { Kind: "Sound" }, "sound: a WAV in Assets/ becomes a Sound asset");
+        if (asset == null) return;
+        window.AddAsset(asset);
+        var emitter = doc.Selected;
+        check(emitter is { Kind: "Sound", Name: "beep" } && emitter.Components["audio_source"]?["clip"]?.GetValue<string>() == asset.Guid,
+              "sound: Add to scene makes an emitter with an audio_source");
+        if (emitter == null) return;
+        var comps = window.Inspector!.Components;
+        comps.SetField("audio_source", "loop", System.Text.Json.Nodes.JsonValue.Create(true));
+        comps.AddCSharpScript("Radio");
+        File.WriteAllText(Path.Combine(doc.ProjectRoot, "Scripts", "Radio.cs"), """
+            using System.Text.Json.Nodes;
+            using NoorEngine;
+
+            public class Radio : NoorScript
+            {
+                private bool _shot;
+
+                public override void OnStart()
+                {
+                    Noor.SetVolume("music", 0.5f);
+                    _shot = Noor.PlaySound("Assets/Audio/beep.wav", Entity.WorldPosition, 0.5f);
+                }
+
+                public override void OnUpdate(float dt) =>
+                    Entity.Set("heard", new JsonObject { ["playing"] = Entity.IsPlaying, ["shot"] = _shot });
+            }
+            """);
+        check(await window.PlayAsync(), "sound: play starts with an emitter and a C# radio script");
+        await Task.Delay(500);
+        doc.Refresh();
+        var heard = doc.Scene.Entities.First(e => e.Id == emitter.Id).Components["heard"];
+        check(heard?["playing"]?.GetValue<bool>() == true, "sound: the emitter's looping clip is playing");
+        check(heard?["shot"]?.GetValue<bool>() == true, "sound: Noor.PlaySound plays a one-shot from C#");
+        window.TogglePlay();
+        check(EngineLog.Lines.All(l => l.Category != "Audio" || l.Level < 4), "sound: no audio errors");
+        results["audio"] = "mixed silently (no device in tests)";
+    }
+
+    // A mono 16-bit WAV with a 440 Hz tone.
+    private static void WriteTone(string path, double seconds)
+    {
+        const int rate = 44100;
+        var frames = (int)(seconds * rate);
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write("RIFF"u8);
+        w.Write(36 + frames * 2);
+        w.Write("WAVEfmt "u8);
+        w.Write(16);
+        w.Write((short)1);
+        w.Write((short)1);
+        w.Write(rate);
+        w.Write(rate * 2);
+        w.Write((short)2);
+        w.Write((short)16);
+        w.Write("data"u8);
+        w.Write(frames * 2);
+        for (var i = 0; i < frames; i++) w.Write((short)(16383 * Math.Sin(2 * Math.PI * 440 * i / rate)));
     }
 
     // Milestone 4, part 4: C# scripts, compiled on Play.

@@ -117,6 +117,12 @@ public readonly unsafe struct Entity : IEquatable<Entity>
     public void CharacterJump(float speed = 5) => Engine.A.CharacterJump(Id, speed);
     public bool IsGrounded => Engine.A.IsGrounded(Id) != 0;
 
+    // ---- Sound (needs an audio_source component) ----
+    /// <summary>(Re)starts the entity's audio_source.</summary>
+    public bool PlaySound() => Engine.A.Sound(Id, 0) != 0;
+    public void StopSound() => Engine.A.Sound(Id, 1);
+    public bool IsPlaying => Engine.A.Sound(Id, 2) != 0;
+
     /// <summary>The entity's id (the same text as in the scene file and the Inspector).</summary>
     public string IdText
     {
@@ -159,6 +165,24 @@ public static unsafe class Noor
     {
         RtEntity e;
         fixed (byte* n = Engine.Utf8(name)) return Engine.A.Find(n, &e) != 0 ? new Entity(e) : null;
+    }
+
+    /// <summary>
+    /// Plays a sound once (an asset id or a path like "Assets/Audio/step.wav"), at a world position
+    /// (3D) or everywhere (no position). Bus: master, music, sfx, ui, voice.
+    /// </summary>
+    public static bool PlaySound(string clip, Vector3? position = null, float volume = 1, string bus = "sfx")
+    {
+        var at = position.HasValue ? new RtVec3(position.Value) : default;
+        fixed (byte* c = Engine.Utf8(clip))
+        fixed (byte* b = Engine.Utf8(bus))
+            return Engine.A.PlayOneShot(c, position.HasValue ? &at : null, volume, b) != 0;
+    }
+
+    /// <summary>Volume of a bus (master, music, sfx, ui, voice), 0..1 (more is louder).</summary>
+    public static void SetVolume(string bus, float volume)
+    {
+        fixed (byte* b = Engine.Utf8(bus)) Engine.A.SetBusVolume(b, volume);
     }
 
     /// <summary>The first physics body along the ray, or null.</summary>

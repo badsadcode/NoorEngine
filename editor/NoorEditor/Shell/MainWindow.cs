@@ -524,6 +524,14 @@ public sealed class MainWindow : Window
             _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
             return;
         }
+        if (asset.Importer == "audio")
+        {
+            // A sound emitter at the origin, playing its clip when play starts.
+            if (Doc.Create(Path.GetFileNameWithoutExtension(asset.Path), new System.Text.Json.Nodes.JsonObject { ["audio_source"] = EntityTemplates.AudioSource(asset.Guid) },
+                           new Vec3(0, 1, 0)) is { } sid)
+                FrameEntity(sid);
+            return;
+        }
         if (Doc.AddAsset(asset, new Vec3(0, 0, 0)) && Doc.SelectedId is { } id) FrameEntity(id);
     }
 

@@ -117,6 +117,8 @@ public:
     void tick(double seconds, const runtime::InputState& input = {});
     // The managed C# script host (noor_rt_host) for play mode; null: C# scripts are skipped.
     void set_script_host(const void* host) noexcept { script_host_ = host; }
+    // Play sounds through the speakers (default) or mix silently (tests).
+    void set_audio_device(bool enabled) noexcept { audio_device_ = enabled; }
     // A script asked to capture (true) or release (false) the mouse this frame.
     [[nodiscard]] std::optional<bool> take_mouse_capture_request() {
         return world_ ? world_->take_mouse_capture_request() : std::nullopt;
@@ -149,6 +151,7 @@ private:
     std::uint64_t revision_ = 0;
     std::unique_ptr<runtime::World> world_;  // play mode (ADR-026/027)
     const void* script_host_ = nullptr;      // noor_rt_host*
+    bool audio_device_ = true;
     asset::FileWatcher watcher_;
     std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version
     std::shared_ptr<SnapshotChannel> channel_ = std::make_shared<SnapshotChannel>();

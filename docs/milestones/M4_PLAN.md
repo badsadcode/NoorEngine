@@ -18,7 +18,7 @@ ADR-010 (physics: Jolt), ADR-011 (audio: miniaudio).
 | 2 | Lua scripting (ADR-009) + the `noor_rt_*` API (entities, transforms, input, time, log) | A script moves something in play mode |
 | 3 | Physics (Jolt): rigid bodies, colliders (incl. static meshes from GLBs), raycasts, triggers, `character` controller, camera component | A capsule walks and jumps around a BadBuilding street |
 | 4 | C# scripting (ADR-008): `NoorEngine.Scripting`, script project generation and build, reload on Stop, API parity with Lua | The same behaviour in C# and Lua |
-| 5 | Audio (miniaudio): audio assets, sources, listener, buses, 3D; script API | Footsteps and a one-shot sound in 3D |
+| 5 | Audio (miniaudio): audio assets, sources, listener, buses, 3D; script API | Footsteps and a one-shot sound in 3D. **Done** (one-shots and 3D tested; footsteps come with the sample in part 8) |
 | 6 | `noor_player` + `noor_cli build`: export a runnable build (scene, assets, scripts, runtime); CoreCLR hosting in the player | A build runs outside the editor |
 | 7 | NoorCode MVP (code editor panel: open/edit/save, highlighting, compile errors), gameplay UI (HUD text and shapes), mouse capture for FPS look | Scripts written and fixed inside NoorEditor |
 | 8 | Sample: **NoorFPS-lite** (walk, sprint, jump, look, shoot targets, sounds, HUD) in C# and a Lua twin of its basic behaviours; Milestone 4 review | The gate |

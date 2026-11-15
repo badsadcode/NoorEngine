@@ -34,8 +34,9 @@ extern "C" {
  * 4: play mode, asset files watched for changes (live reload).
  * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport.
  * 6: "create" command; physics (ADR-010) and Lua (ADR-009) run in play mode; primitive shapes.
- * 7: character controller, game camera, mouse capture; C# script host (noor_rt_api / noor_rt_host). */
-#define NOOR_EDITOR_API_VERSION 7u
+ * 7: character controller, game camera, mouse capture; C# script host (noor_rt_api / noor_rt_host).
+ * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound). */
+#define NOOR_EDITOR_API_VERSION 8u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -133,6 +134,10 @@ NOOR_API const char* noor_doc_poll_files(noor_doc* doc);
  * valid while the document plays; NULL: C# scripts are skipped with a message). */
 NOOR_API const void* noor_rt_get_api(void);
 NOOR_API void noor_doc_set_script_host(noor_doc* doc, const void* host);
+
+/* Sound in play mode goes to the speakers (enabled = 1, default) or is mixed silently (0, for
+ * automated tests). Takes effect at the next Play. */
+NOOR_API void noor_doc_set_audio_device(noor_doc* doc, int32_t enabled);
 
 /* Viewports showing documents. Passing NULL detaches. The viewport keeps working if the
  * document is closed first (it keeps showing the last published scene). */

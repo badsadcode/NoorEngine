@@ -4,6 +4,32 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-15 — Milestone 4, part 5: sound
+**Added**
+- `audio` module (ADR-011): **miniaudio** (pinned single header, MIT-0/public domain) as
+  `audio::AudioSystem`. `audio_source` (clip, volume, pitch, loop, spatial, min/max distance, bus,
+  play on start, stream), `audio_listener` (else the first camera hears), buses master/music/sfx/
+  ui/voice, inverse-distance 3D attenuation, one-shots that clean up after themselves.
+- `.wav`, `.flac`, `.mp3` files are `audio` assets (registry importer "audio").
+- Without a sound device (CI, tests, `NOOR_AUDIO_DEVICE=none`) the mixer still runs, into memory,
+  so the same code paths are tested everywhere.
+- Scripts: Lua `e:play_sound()`, `e:stop_sound()`, `e:is_playing()`, `noor.play_sound(clip [,
+  position [, volume [, bus]]])`, `noor.set_volume(bus, v)`; C# `Entity.PlaySound()/StopSound()/
+  IsPlaying`, `Noor.PlaySound(...)`, `Noor.SetVolume(...)`. `noor_rt_api` **v2**.
+- `System::starts_late()`: script systems start entities after engine systems, so `on_start` can
+  use the entity's sound (and anything else engine systems set up).
+- Editor API **v8**: `noor_doc_set_audio_device`. NoorEditor: audio assets show as **Sound** (♪);
+  **Add to scene** on one makes an emitter; **Add component ▸ Sound**; the first-person player's
+  camera has an `audio_listener`.
+
+**Tests:** 4 audio tests (silence when idle; play/loop/stop; near is louder than far and a muted
+bus is silent, measured from the mixed samples; one-shots clean up, a missing clip is an error,
+not a crash; a Lua script driving it all). The editor smoke test writes a WAV, adds it to the
+scene, and plays it with a C# script (looping emitter + one-shot), silently.
+
+**Not yet:** pause, fades, voice limits, device switching, `.ogg`, occlusion/reverb. Speaker output
+was not checked by ear in automated tests (they run without a device).
+
 ### 2026-11-15 — Milestone 4, part 4: C# scripts
 **Added**
 - `noor_rt_api.h`: the scripting ABI as two tables of C function pointers, `noor_rt_api` (engine

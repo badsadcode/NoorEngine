@@ -39,6 +39,9 @@ public:
     [[nodiscard]] virtual std::string_view name() const = 0;
     // An entity becomes active (scene start, or spawned last frame). Called once per entity.
     virtual void entity_started(World&, scene::Entity&) {}
+    // Script systems start entities after the engine's own systems (physics bodies, sounds...)
+    // have prepared them, so a script's on_start can use them.
+    [[nodiscard]] virtual bool starts_late() const { return false; }
     virtual void update(World&, double /*dt*/) {}
     virtual void fixed_update(World&, double /*fixed_dt*/) {}
     virtual void late_update(World&, double /*dt*/) {}

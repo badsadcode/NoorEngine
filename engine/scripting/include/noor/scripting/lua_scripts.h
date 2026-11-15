@@ -44,6 +44,7 @@ public:
     LuaScriptSystem& operator=(const LuaScriptSystem&) = delete;
 
     [[nodiscard]] std::string_view name() const override { return "lua"; }
+    [[nodiscard]] bool starts_late() const override { return true; }
     void entity_started(runtime::World& world, scene::Entity& entity) override;
     void update(runtime::World& world, double dt) override;
     void fixed_update(runtime::World& world, double dt) override;

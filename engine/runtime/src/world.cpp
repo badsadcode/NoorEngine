@@ -35,10 +35,13 @@ void World::start_new_entities() {
     for (std::size_t i = 0; i < scene_.entities.size(); ++i) {
         const Guid id = scene_.entities[i].id;
         if (!started_.insert(id).second) continue;
-        for (auto& s : systems_) {
-            scene::Entity* e = find(id);  // a system may have spawned entities (reallocation)
-            if (!e) break;
-            s->entity_started(*this, *e);
+        for (const bool late : {false, true}) {
+            for (auto& s : systems_) {
+                if (s->starts_late() != late) continue;
+                scene::Entity* e = find(id);  // a system may have spawned entities (reallocation)
+                if (!e) break;
+                s->entity_started(*this, *e);
+            }
         }
     }
 }

@@ -74,6 +74,12 @@ std::string lower_extension(const stdfs::path& path) {
 
 bool is_prefab(const stdfs::path& path) { return lower_extension(path) == ".noorprefab"; }
 
+// Formats miniaudio decodes out of the box (ADR-011). Ogg Vorbis would need stb_vorbis: later.
+bool is_audio(const stdfs::path& path) {
+    const std::string ext = lower_extension(path);
+    return ext == ".wav" || ext == ".flac" || ext == ".mp3";
+}
+
 // A prefab file carries its own id (ADR-024); the meta uses it so the two always agree.
 std::optional<Guid> prefab_guid(const stdfs::path& source) {
     auto text = fs::read_file(source, 64ull << 20);
@@ -86,7 +92,7 @@ std::optional<Guid> prefab_guid(const stdfs::path& source) {
 } // namespace
 
 bool AssetRegistry::is_importable(const stdfs::path& path) {
-    if (is_prefab(path)) return true;
+    if (is_prefab(path) || is_audio(path)) return true;
     const std::string ext = lower_extension(path);
     if (ext != ".glb" && ext != ".gltf") return false;
     static const std::regex lod(R"(\.lod[0-9]+$)", std::regex::icase);
@@ -182,12 +188,13 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                         *rel, matches.size()));
                 }
                 const bool prefab = is_prefab(source);
-                const auto from_manifest = prefab ? std::nullopt : interchange_guid(source);
+                const bool audio = is_audio(source);
+                const auto from_manifest = prefab || audio ? std::nullopt : interchange_guid(source);
                 const auto embedded = prefab ? prefab_guid(source) : from_manifest;
                 meta.json = Json::object();
                 meta.json["noor_meta"] = kMetaFormat;
                 meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
-                meta.json["importer"] = prefab ? "prefab" : "gltf";
+                meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
                 meta.json["settings"] = Json::object();

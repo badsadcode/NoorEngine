@@ -60,6 +60,10 @@ public unsafe struct RtApi
     public delegate* unmanaged<RtEntity, int, RtVec3, void> Push;
     public delegate* unmanaged<RtEntity, float, void> CharacterJump;
     public delegate* unmanaged<RtEntity, int> IsGrounded;
+    // v2: sound
+    public delegate* unmanaged<RtEntity, int, int> Sound;
+    public delegate* unmanaged<byte*, RtVec3*, float, byte*, int> PlayOneShot;
+    public delegate* unmanaged<byte*, float, void> SetBusVolume;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -75,7 +79,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 1;
+    public const uint ExpectedVersion = 2;
     public static RtApi* Api;
 
     public static ref RtApi A

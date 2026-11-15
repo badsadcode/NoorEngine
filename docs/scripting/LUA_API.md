@@ -1,6 +1,6 @@
 # NoorEngine Lua API (Luau)
 
-Status: **Milestone 4, parts 2–3**. The API grows each part (physics, audio and more arrive next);
+Status: **Milestone 4, parts 2–5**. The API grows each part;
 everything here is implemented and tested (`tests/unit/test_lua_scripts.cpp`).
 
 NoorEngine's Lua is **Luau** (ADR-009): Lua 5.1 syntax plus `continue`, compound assignment
@@ -62,6 +62,8 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.input.released(action)` | Action went up this frame |
 | `noor.input.axis(name)` | `-1..1` for key axes; mouse movement in pixels for `look_x` / `look_y` |
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
+| `noor.play_sound(clip [, position [, volume [, bus]]])` | Plays a sound once: `clip` is an asset id or a path like `"Assets/Audio/step.wav"`; with a `position` (vector) it's 3D, without it plays everywhere. Default bus `sfx`. Returns `true` if it started |
+| `noor.set_volume(bus, volume)` | Bus volume (`master`, `music`, `sfx`, `ui`, `voice`), `0` is silent, `1` normal |
 | `noor.input.capture_mouse(on)` | Ask to capture the mouse for looking (`true`) or release it. Works once the player has clicked into the game view; **Esc** always releases it |
 | `noor.input.mouse_captured()` | Whether the mouse is captured now (then `look_x` / `look_y` are raw mouse movement) |
 
@@ -102,6 +104,7 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |
 | `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground |
 | `e:is_grounded()` | Character controller: standing on walkable ground |
+| `e:play_sound()`, `e:stop_sound()`, `e:is_playing()` | The entity's `audio_source`: (re)start, stop, still playing? |
 
 ## Physics components
 
@@ -131,6 +134,22 @@ collision meshes (Noor Interchange `-colonly`) get static colliders automaticall
 
 Entities compare with `==`; a destroyed entity's methods return `nil` and do nothing.
 
+## Sound components
+
+Drag a `.wav`, `.flac` or `.mp3` into `Assets/`, then **Add to scene** in the Content Browser, or
+**Add component ▸ Sound**.
+
+```json
+"audio_source":   { "clip": "<asset id or Assets/... path>", "volume": 1, "pitch": 1, "loop": false,
+                    "spatial": true, "min_distance": 1, "max_distance": 60, "bus": "sfx",
+                    "play_on_start": true, "stream": false }   // stream: for long music files
+"audio_listener": {}                                         // the ears; normally on the camera
+```
+
+Spatial sounds get quieter with distance (full volume inside `min_distance`, no further fading
+past `max_distance`) and pan with the listener's orientation. Without an `audio_listener` the
+first `camera` hears.
+
 ## Not yet
-Audio, spawning prefabs, timers and
+Pause and fades, spawning prefabs, timers and
 coroutines-based waits, and require-ing other script files arrive in later parts of Milestone 4.

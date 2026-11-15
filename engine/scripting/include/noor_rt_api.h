@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 1u
+#define NOOR_RT_API_VERSION 2u /* 2: sound */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -45,6 +45,8 @@ enum {
 };
 /* push kinds */
 enum { NOOR_RT_IMPULSE = 0, NOOR_RT_FORCE = 1, NOOR_RT_CHARACTER_MOVE = 2 };
+/* sound(): ops */
+enum { NOOR_RT_SOUND_PLAY = 0, NOOR_RT_SOUND_STOP = 1, NOOR_RT_SOUND_IS_PLAYING = 2 };
 /* input queries */
 enum { NOOR_RT_DOWN = 0, NOOR_RT_PRESSED = 1, NOOR_RT_RELEASED = 2 };
 /* hooks (noor_rt_host.call) */
@@ -83,6 +85,11 @@ typedef struct noor_rt_api {
     void (*push)(noor_rt_entity e, int32_t kind, noor_rt_vec3 v);
     void (*character_jump)(noor_rt_entity e, float speed);
     int32_t (*is_grounded)(noor_rt_entity e);
+
+    /* v2: sound */
+    int32_t (*sound)(noor_rt_entity e, int32_t op);
+    int32_t (*play_one_shot)(const char* clip, const noor_rt_vec3* position, float volume, const char* bus);
+    void (*set_bus_volume)(const char* bus, float volume);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

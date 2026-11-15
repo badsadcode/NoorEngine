@@ -28,5 +28,15 @@ and spatial footsteps/gunshots for the FPS sample; the rest grows later.
 ## Consequences
 - Tests use miniaudio's null backend so CI (no sound card) can run audio logic headlessly.
 
+## Implementation notes (Milestone 4, part 5)
+- Implemented: assets (.wav/.flac/.mp3), `audio_source`, `audio_listener`, the five buses (master is
+  the engine volume), inverse-distance attenuation, one-shots, bus volume and the script API.
+  Not yet: pause, fades, mute flag, voice limits, device switching, `.ogg`.
+- "Null backend" became **no device at all**: `ma_engine` with `noDevice`, mixed by reading frames
+  (`AudioSystem::mix`). Tests measure the actual samples (near louder than far, muted bus silent).
+  Without a device, play mode advances the mix by the frame time so sounds still end.
+- Doppler is off (no velocities yet). miniaudio objects are owned by deleters that `uninit` before
+  freeing; forgetting that crashed teardown once.
+
 ## Reviewed by
 Sage.

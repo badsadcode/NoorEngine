@@ -42,7 +42,7 @@ public sealed class ContentPanel : DockPanel
 
         _scenes.ItemTemplate = new FuncDataTemplate<string>((path, _) => Row("◇", NoorTheme.Cyan, path ?? "", "Scene"));
         _assets.ItemTemplate = new FuncDataTemplate<AssetInfo>((a, _) => a == null ? new TextBlock() :
-            Row(a.Kind == "Prefab" ? "◆" : "▣", a.Kind == "Prefab" ? NoorTheme.Cyan : NoorTheme.Accent, a.Path, a.Kind));
+            Row(a.Kind switch { "Prefab" => "◆", "Sound" => "♪", _ => "▣" }, a.Kind == "Prefab" ? NoorTheme.Cyan : NoorTheme.Accent, a.Path, a.Kind));
         _scenes.DoubleTapped += (_, _) => { if (_scenes.SelectedItem is string s) OpenSceneRequested?.Invoke(s); };
         _assets.DoubleTapped += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
 

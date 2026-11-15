@@ -29,6 +29,7 @@ public:
     ~CSharpScriptSystem() override;
 
     [[nodiscard]] std::string_view name() const override { return "csharp"; }
+    [[nodiscard]] bool starts_late() const override { return true; }
     void entity_started(runtime::World& world, scene::Entity& entity) override;
     void update(runtime::World& world, double dt) override;
     void fixed_update(runtime::World& world, double dt) override;

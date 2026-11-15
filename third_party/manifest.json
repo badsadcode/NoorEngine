@@ -122,6 +122,16 @@
       "linkage": "static",
       "shipped": true,
       "purpose": "Physics: rigid bodies, colliders, queries, character controller (engine/physics, ADR-010)"
+    },
+    {
+      "name": "miniaudio",
+      "version": "0.11.26",
+      "source": "https://github.com/mackron/miniaudio",
+      "commit": "877ea4a7c2601c7b0f2a44e83dfac42e6470fea6",
+      "license": "Public domain or MIT-0 (dual)",
+      "linkage": "static (single file)",
+      "shipped": true,
+      "purpose": "Audio: devices, decoding (WAV/FLAC/MP3), mixing, buses, 3D sound (engine/audio, ADR-011)"
     }
   ]
 }

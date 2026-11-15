@@ -99,6 +99,7 @@ public sealed record EntityInfo(
     public string Kind =>
         Components.ContainsKey("prefab") ? "Prefab instance" :
         Components.ContainsKey("primitive") ? "Shape" :
+        Components.ContainsKey("audio_source") ? "Sound" :
         Components.ContainsKey("mesh") ? "Mesh" :
         Components.ContainsKey("marker") ? "Marker" :
         Components.ContainsKey("model") ? "Model" : "Entity";
@@ -133,7 +134,7 @@ public sealed record SceneSnapshot(
 
 public sealed record AssetInfo(string Guid, string Path, string Importer, string Name)
 {
-    public string Kind => Importer switch { "gltf" => "Model", "prefab" => "Prefab", _ => Importer };
+    public string Kind => Importer switch { "gltf" => "Model", "prefab" => "Prefab", "audio" => "Sound", _ => Importer };
     public string Folder => System.IO.Path.GetDirectoryName(Path)?.Replace('\\', '/') ?? "";
 }
 

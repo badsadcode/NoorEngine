@@ -1,6 +1,6 @@
 # NoorEngine C# API
 
-Status: **Milestone 4, part 4**. The same API as Lua ([LUA_API.md](LUA_API.md)), in C#.
+Status: **Milestone 4, parts 4–5**. The same API as Lua ([LUA_API.md](LUA_API.md)), in C#.
 Everything here is implemented and tested (`tests/unit/test_csharp_host.cpp` for the engine half,
 the editor smoke test with real scripts).
 
@@ -58,6 +58,8 @@ line); the game keeps running.
 | `Noor.Time` | Seconds since play started |
 | `Noor.Find(name)` | `Entity?` |
 | `Noor.Raycast(origin, direction, maxDistance = 1000, ignore = null)` | `RaycastHit?` (`Entity`, `Point`, `Normal`, `Distance`) |
+| `Noor.PlaySound(clip, position = null, volume = 1, bus = "sfx")` | A one-shot sound (asset id or `Assets/...` path); 3D with a position. `true` if it started |
+| `Noor.SetVolume(bus, volume)` | Bus volume: `master`, `music`, `sfx`, `ui`, `voice` |
 | `Input.Down/Pressed/Released(action)` | Actions from `Settings/input.json` (`jump`, `fire`, …) |
 | `Input.Axis(name)` | `move_x`, `move_y` (−1..1), `look_x`, `look_y` (mouse) |
 | `Input.CaptureMouse(bool)`, `Input.MouseCaptured` | Mouse capture for looking; Esc releases |
@@ -75,6 +77,7 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `Get(component)` → `JsonNode?`, `Set(component, JsonNode?)` | Component data (copies) |
 | `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies |
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
+| `PlaySound()`, `StopSound()`, `IsPlaying` | The entity's `audio_source` ([components](LUA_API.md#sound-components)) |
 
 ## How it works (for engine people)
 The engine calls scripts through `noor_rt_host` and scripts call the engine through `noor_rt_api`

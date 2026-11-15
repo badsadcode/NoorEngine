@@ -42,6 +42,9 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 - **C# scripts**: **Add component ▸ C# script…** creates `Scripts/<Name>.cs` (and
   `Scripts/Scripts.csproj` for Visual Studio / Rider). Play compiles them first; compile errors show
   in the Console with file and line. API: [docs/scripting/CSHARP_API.md](../../docs/scripting/CSHARP_API.md).
+- **Sound**: `.wav`/`.flac`/`.mp3` files in `Assets/` show as **Sound** (♪). **Add to scene** makes
+  an emitter that plays when you press Play; **Add component ▸ Sound** adds a source or a listener.
+  The first-person player hears through its camera.
 - **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
   a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.

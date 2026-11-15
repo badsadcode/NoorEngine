@@ -150,3 +150,23 @@ TEST_CASE("runtime behaviours: rotator turns, input_mover follows the move axes"
     CHECK(p.x == doctest::Approx(4.0f).epsilon(1e-4));   // D: +X
     CHECK(p.z == doctest::Approx(-4.0f).epsilon(1e-4));  // W: forward = -Z
 }
+
+TEST_CASE("runtime: script systems start an entity after the engine systems prepared it") {
+    std::vector<std::string> log;
+    struct Sys final : System {
+        std::vector<std::string>* log;
+        std::string label;
+        bool late;
+        Sys(std::vector<std::string>* l, std::string n, bool lt) : log(l), label(std::move(n)), late(lt) {}
+        std::string_view name() const override { return label; }
+        bool starts_late() const override { return late; }
+        void entity_started(World&, scene::Entity&) override { log->push_back(label); }
+    };
+    scene::Scene s;
+    s.entities = {entity("a")};
+    World w(s);
+    w.add_system(std::make_unique<Sys>(&log, "script", true));
+    w.add_system(std::make_unique<Sys>(&log, "audio", false));
+    w.frame(0.0, {});
+    CHECK(log == std::vector<std::string>{"audio", "script"});
+}

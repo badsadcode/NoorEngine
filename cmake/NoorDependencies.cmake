@@ -91,6 +91,18 @@ FetchContent_Declare(JoltPhysics
     SYSTEM)
 FetchContent_MakeAvailable(JoltPhysics)
 
+# --- miniaudio (public domain / MIT-0, single file): audio (ADR-011) ----------------
+FetchContent_Declare(miniaudio
+    URL      https://raw.githubusercontent.com/mackron/miniaudio/877ea4a7c2601c7b0f2a44e83dfac42e6470fea6/miniaudio.h
+    URL_HASH SHA256=6b376c7fbb1352ba1e0e432ab66069b335ea9405e45cb6c30b97ef0f3c9c3e0e
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME miniaudio.h)
+FetchContent_MakeAvailable(miniaudio)
+# The implementation is compiled once, here, without the engine's warnings-as-errors flags.
+add_library(noor_third_party_miniaudio STATIC ${CMAKE_CURRENT_LIST_DIR}/../third_party/miniaudio/miniaudio_impl.c)
+target_include_directories(noor_third_party_miniaudio SYSTEM PUBLIC ${miniaudio_SOURCE_DIR})
+add_library(miniaudio::miniaudio ALIAS noor_third_party_miniaudio)
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

@@ -2,6 +2,7 @@
 
 #include "noor/asset/gltf_import.h"
 #include "noor/runtime/behaviours.h"
+#include "noor/audio/audio.h"
 #include "noor/physics/physics.h"
 #include "noor/scripting/csharp_scripts.h"
 #include "noor/scripting/lua_scripts.h"
@@ -127,6 +128,20 @@ Status Document::play() {
         return t;
     };
     world_->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
+    audio::AudioSystem::Options audio_options;
+    audio_options.use_device = audio_device_;
+    // A clip is an asset id or a project-relative path.
+    audio_options.resolve_clip = [this](std::string_view clip) -> std::optional<stdfs::path> {
+        if (const auto guid = Guid::parse(clip)) {
+            const auto* rec = registry_.find(*guid);
+            if (!rec) return std::nullopt;
+            auto p = project_.resolve(rec->path);
+            return p ? std::optional(*p) : std::nullopt;
+        }
+        auto p = project_.resolve(clip);
+        return p && stdfs::exists(*p) ? std::optional(*p) : std::nullopt;
+    };
+    world_->add_system(std::make_unique<audio::AudioSystem>(std::move(audio_options)));
     world_->add_system(std::make_unique<runtime::BehavioursSystem>());
     NOOR_LOG_INFO("Editor", "Play");
     ++revision_;
