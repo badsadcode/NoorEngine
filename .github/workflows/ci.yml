@@ -1,0 +1,78 @@
+# Continuous integration: build everything and run the tests that don't need a GPU.
+#
+# GitHub-hosted runners have no GPU, so tests labelled "gpu" (window + Vulkan rendering)
+# are skipped here and must be run locally: ctest --preset debug
+# Actions are pinned to commit SHAs (dependency policy, ADR-021).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VULKAN_SDK_VERSION: 1.4.363.0
+  VULKAN_SDK_DIR: C:\VulkanSDK\1.4.363.0
+
+jobs:
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache Vulkan SDK
+        id: vulkan-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.VULKAN_SDK_DIR }}
+          key: vulkan-sdk-windows-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Install Vulkan SDK (official LunarG installer)
+        if: steps.vulkan-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $url = "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_SDK_VERSION.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\vulkansdk.exe"
+          & "$env:RUNNER_TEMP\vulkansdk.exe" --root "$env:VULKAN_SDK_DIR" --accept-licenses --default-answer --confirm-command install
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan SDK installer failed with exit code $LASTEXITCODE" }
+
+      - name: Point the build at the Vulkan SDK
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:VULKAN_SDK_DIR\Bin\dxc.exe")) { throw "dxc.exe missing from the Vulkan SDK" }
+          "VULKAN_SDK=$env:VULKAN_SDK_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$env:VULKAN_SDK_DIR\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Configure
+        run: cmake --preset windows
+
+      - name: Build (Debug)
+        run: cmake --build --preset debug
+
+      - name: Test (Debug, no GPU)
+        run: ctest --preset debug -LE gpu
+
+      - name: Build (Release)
+        run: cmake --build --preset release
+
+      - name: Test (Release, no GPU)
+        run: ctest --preset release -LE gpu
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Avalonia spike
+        run: dotnet build spikes/avalonia_viewport -c Debug
