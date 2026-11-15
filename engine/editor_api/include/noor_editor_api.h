@@ -31,8 +31,9 @@ extern "C" {
 /* 1: documents (ADR-025), viewports render documents.
  * 2: viewport selection highlight, gizmos and events (picking, gizmo edits).
  * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size).
- * 4: play mode, asset files watched for changes (live reload). */
-#define NOOR_EDITOR_API_VERSION 4u
+ * 4: play mode, asset files watched for changes (live reload).
+ * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport. */
+#define NOOR_EDITOR_API_VERSION 5u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -113,10 +114,12 @@ NOOR_API uint64_t noor_doc_revision(noor_doc* doc);
 
 /* Play mode (ADR-026): runs a copy of the scene; Stop discards it. While playing,
  * noor_doc_scene shows the running copy ("playing": true) and edits/undo are refused.
- * The host calls noor_doc_tick with the elapsed seconds (e.g. every UI frame). */
+ * The host calls noor_doc_tick with the elapsed seconds (e.g. every UI frame) and the viewport
+ * that acts as the game view: its keyboard and mouse become the game's input while it has the
+ * keyboard focus (NULL: no input). Actions and axes come from the project's Settings/input.json. */
 NOOR_API int32_t noor_doc_play(noor_doc* doc);
 NOOR_API void noor_doc_stop(noor_doc* doc);
-NOOR_API void noor_doc_tick(noor_doc* doc, double seconds);
+NOOR_API void noor_doc_tick(noor_doc* doc, double seconds, noor_viewport* input_viewport);
 
 /* Checks the project's asset files for changes on disk (call every ~0.5 s). Changed models are
  * reloaded by viewports and prefabs re-read. Returns a JSON array of the changed relative paths. */
@@ -165,6 +168,11 @@ NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport);
  * distance from the camera long (times the "gizmo_scale" option). */
 NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]);
 #define NOOR_GIZMO_SCREEN_SCALE 0.16f
+
+/* For automated tests: while enabled, the viewport ignores the real mouse and uses this pointer
+ * (physical pixels; buttons: 1 left, 2 right, 4 middle, 8 Ctrl, 16 Alt). Keyboard input is not
+ * affected. Pass enabled = 0 to give the mouse back. */
+NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enabled, int32_t x, int32_t y, int32_t buttons);
 
 #ifdef __cplusplus
 }

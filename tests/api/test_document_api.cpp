@@ -167,7 +167,7 @@ TEST_CASE("document api: play runs behaviours on a copy; stop restores; edits wa
 
     REQUIRE(noor_doc_play(t.doc) == 1);
     CHECK(t.scene()["playing"] == true);
-    for (int i = 0; i < 10; ++i) noor_doc_tick(t.doc, 0.1);  // 1 s at 90 deg/s
+    for (int i = 0; i < 10; ++i) noor_doc_tick(t.doc, 0.1, nullptr);  // 1 s at 90 deg/s
     const Json running = t.scene();
     const auto& rot = (*find_entity(running, "Spinner"))["transform"]["rotation"];
     // A quarter turn about Y: q = (0, sin 45, 0, cos 45).

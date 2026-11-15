@@ -1,7 +1,7 @@
 #include "document.h"
 
 #include "noor/asset/gltf_import.h"
-#include "noor/scene/behaviours.h"
+#include "noor/runtime/behaviours.h"
 #include "noor/foundation/log.h"
 
 #include <format>
@@ -75,7 +75,7 @@ asset::Json Document::poll_files() {
     }
     if (!changed_list.empty()) {
         if (prefab_changed) prefabs_.clear();
-        if (runtime_) {
+        if (world_) {
             // Keep playing on the old runtime copy; the new content shows after Stop.
             NOOR_LOG_INFO("Editor", "Changes apply when play mode stops");
         } else {
@@ -87,39 +87,39 @@ asset::Json Document::poll_files() {
 
 Status Document::require_editable() const {
     if (auto s = require_scene(); !s) return s;
-    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode to edit the scene");
+    if (world_) return fail(ErrorCode::InvalidArgument, "Stop play mode to edit the scene");
     return {};
 }
 
 Status Document::play() {
     if (auto s = require_scene(); !s) return s;
-    if (runtime_) return {};
-    runtime_ = scene::expand_prefabs(*scene_, prefabs_.resolver()).scene;
-    play_seconds_ = 0.0;
+    if (world_) return {};
+    auto input_map = runtime::InputMap::load(project_.root() / "Settings" / "input.json");
+    if (!input_map) return std::unexpected(input_map.error());
+    world_ = std::make_unique<runtime::World>(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, std::move(*input_map));
+    world_->add_system(std::make_unique<runtime::BehavioursSystem>());
     NOOR_LOG_INFO("Editor", "Play");
     ++revision_;
     std::unordered_set<Guid> authored;
     for (const auto& e : scene_->entities) authored.insert(e.id);
-    publish(*runtime_, authored);
+    publish(world_->scene(), authored);
     return {};
 }
 
 void Document::stop() {
-    if (!runtime_) return;
-    runtime_.reset();
-    NOOR_LOG_INFO("Editor", "Stop after {:.1f} s", play_seconds_);
+    if (!world_) return;
+    NOOR_LOG_INFO("Editor", "Stop after {:.1f} s ({} frames)", world_->time(), world_->frame_count());
+    world_.reset();
     changed();
 }
 
-void Document::tick(double seconds) {
-    if (!runtime_ || seconds <= 0.0) return;
-    seconds = std::min(seconds, 0.1);  // a stalled frame doesn't jump the simulation
-    play_seconds_ += seconds;
-    scene::update_behaviours(*runtime_, seconds);
+void Document::tick(double seconds, const runtime::InputState& input) {
+    if (!world_ || seconds <= 0.0) return;
+    world_->frame(seconds, input);  // caps dt itself
     ++revision_;
     std::unordered_set<Guid> authored;
     for (const auto& e : scene_->entities) authored.insert(e.id);
-    publish(*runtime_, authored);
+    publish(world_->scene(), authored);
 }
 
 Json Document::project_info() const {
@@ -135,7 +135,7 @@ Result<Json> Document::assets(bool rescan) {
         if (!r) return std::unexpected(r.error());
         prefabs_.clear();
         watch_assets();
-        if ((r->moved > 0 || r->content_changed > 0) && !runtime_) changed();
+        if ((r->moved > 0 || r->content_changed > 0) && !world_) changed();
     }
     Json list = Json::array();
     for (const auto& a : registry_.assets()) {
@@ -164,7 +164,7 @@ Json Document::scenes() const {
 }
 
 Status Document::open_scene(std::string_view relative) {
-    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode before opening another scene");
+    if (world_) return fail(ErrorCode::InvalidArgument, "Stop play mode before opening another scene");
     auto path = project_.resolve(relative);
     if (!path) return std::unexpected(path.error());
     auto s = scene::Scene::load(*path);
@@ -180,7 +180,7 @@ Status Document::open_scene(std::string_view relative) {
 }
 
 Status Document::new_scene(std::string_view relative, std::string_view name) {
-    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode before creating a scene");
+    if (world_) return fail(ErrorCode::InvalidArgument, "Stop play mode before creating a scene");
     auto path = project_.resolve(relative);
     if (!path) return std::unexpected(path.error());
     if (path->extension() != ".noorscene") return fail(ErrorCode::InvalidArgument, "Scene files end in .noorscene");
@@ -222,14 +222,14 @@ Json Document::scene_snapshot() const {
     snap["can_redo"] = history_.can_redo();
     snap["undo_label"] = history_.undo_label().value_or("");
     snap["redo_label"] = history_.redo_label().value_or("");
-    snap["playing"] = runtime_.has_value();
-    snap["play_seconds"] = play_seconds_;
+    snap["playing"] = playing();
+    snap["play_seconds"] = world_ ? world_->time() : 0.0;
 
     // List the scene as it will run (prefabs expanded); entities that come from a prefab are
     // marked read-only with the instance they belong to.
     // While playing, the runtime copy is shown (values change as behaviours run).
     const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
-    const scene::Scene& shown = runtime_ ? *runtime_ : expanded.scene;
+    const scene::Scene& shown = world_ ? world_->scene() : expanded.scene;
     std::unordered_set<Guid> authored;
     for (const auto& e : scene_->entities) authored.insert(e.id);
     std::unordered_map<Guid, Guid> instance_of;  // expanded id -> owning instance (authored) id
@@ -356,13 +356,13 @@ Status Document::add_asset(const Json& command) {
 }
 
 bool Document::undo() {
-    if (!scene_ || runtime_ || !history_.undo(*scene_)) return false;
+    if (!scene_ || world_ || !history_.undo(*scene_)) return false;
     changed();
     return true;
 }
 
 bool Document::redo() {
-    if (!scene_ || runtime_ || !history_.redo(*scene_)) return false;
+    if (!scene_ || world_ || !history_.redo(*scene_)) return false;
     changed();
     return true;
 }
@@ -401,7 +401,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
         const math::Mat4 world = expanded.world_matrix(i);
-        snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !runtime_ && authored.contains(e.id)});
+        snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id});
         if (!e.has("mesh")) continue;
         const auto& mesh = e.components["mesh"];

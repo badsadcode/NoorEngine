@@ -156,10 +156,10 @@ NOOR_API void noor_doc_stop(noor_doc* doc) {
     });
 }
 
-NOOR_API void noor_doc_tick(noor_doc* doc, double seconds) {
+NOOR_API void noor_doc_tick(noor_doc* doc, double seconds, noor_viewport* input_viewport) {
     if (!doc) return;
     guarded<>(0, [&] {
-        doc->doc->tick(seconds);
+        doc->doc->tick(seconds, noor_viewport_game_input(input_viewport));
         return 0;
     });
 }

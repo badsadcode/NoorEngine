@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 4;
+    public const uint ExpectedApiVersion = 5;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -55,6 +55,7 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_viewport_poll_events(IntPtr viewport);
     [DllImport(Dll)] public static extern void noor_viewport_set_options(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string optionsJson);
     [DllImport(Dll)] public static extern int noor_viewport_world_to_screen(IntPtr viewport, float[] world, float[] output);
+    [DllImport(Dll)] public static extern void noor_viewport_test_pointer(IntPtr viewport, int enabled, int x, int y, int buttons);
 
     /// <summary>Gizmo arrow length relative to its distance from the camera (NOOR_GIZMO_SCREEN_SCALE).</summary>
     public const float GizmoScreenScale = 0.16f;
@@ -78,7 +79,7 @@ public static class Native
     [DllImport(Dll)] public static extern ulong noor_doc_revision(IntPtr doc);
     [DllImport(Dll)] public static extern int noor_doc_play(IntPtr doc);
     [DllImport(Dll)] public static extern void noor_doc_stop(IntPtr doc);
-    [DllImport(Dll)] public static extern void noor_doc_tick(IntPtr doc, double seconds);
+    [DllImport(Dll)] public static extern void noor_doc_tick(IntPtr doc, double seconds, IntPtr inputViewport);
     [DllImport(Dll)] private static extern IntPtr noor_doc_poll_files(IntPtr doc);
 
     private static string? Str(IntPtr p) => p == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(p);

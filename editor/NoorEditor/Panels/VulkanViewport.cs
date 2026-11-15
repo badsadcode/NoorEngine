@@ -25,6 +25,9 @@ public sealed class VulkanViewport : NativeControlHost
 
     public VulkanViewport(EditorDocument doc) => _doc = doc;
 
+    /// <summary>The engine viewport handle (noor_viewport*), e.g. as the game view for play mode.</summary>
+    public IntPtr EngineHandle => _viewport;
+
     /// <summary>The engine's child window (HWND), used to tell whether keyboard focus is in the viewport.</summary>
     public IntPtr NativeWindow => _viewport == IntPtr.Zero ? IntPtr.Zero : Native.noor_viewport_native_handle(_viewport);
 

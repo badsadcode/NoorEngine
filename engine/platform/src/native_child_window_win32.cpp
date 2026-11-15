@@ -37,6 +37,10 @@ NativeChildWindow::Input* input_of(HWND hwnd) {
 
 LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     NativeChildWindow::Input* input = input_of(hwnd);
+    if (input && input->test_pointer.load() &&
+        ((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || msg == WM_MOUSELEAVE || msg == WM_CAPTURECHANGED)) {
+        return msg == WM_MOUSEMOVE || msg == WM_MOUSELEAVE ? 0 : DefWindowProcW(hwnd, msg, wparam, lparam);
+    }
     if (input && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
         input->alt.store(GetKeyState(VK_MENU) < 0);
         input->ctrl.store((wparam & MK_CONTROL) != 0);
@@ -99,6 +103,11 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
     case WM_SYSKEYUP:
         if (input) {
             const bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+            if (wparam < 256) {
+                const std::uint64_t bit = 1ull << (wparam % 64);
+                if (down) input->vk[wparam / 64].fetch_or(bit);
+                else input->vk[wparam / 64].fetch_and(~bit);
+            }
             if (const std::uint32_t bit = key_bit(wparam)) {
                 if (down) input->keys.fetch_or(bit);
                 else input->keys.fetch_and(~bit);
@@ -114,7 +123,10 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     case WM_KILLFOCUS:  // keys released elsewhere would never reach us
-        if (input) input->keys.store(0);
+        if (input) {
+            input->keys.store(0);
+            for (auto& word : input->vk) word.store(0);
+        }
         return 0;
     case WM_CAPTURECHANGED:  // capture lost (e.g. Alt+Tab while dragging): release everything
         if (input) {
@@ -180,6 +192,26 @@ PointerState NativeChildWindow::pointer_state() const noexcept {
 }
 
 std::uint32_t NativeChildWindow::keys() const noexcept { return input_->keys.load(); }
+
+bool NativeChildWindow::key_down(int vk) const noexcept {
+    if (vk < 0 || vk >= 256) return false;
+    return (input_->vk[vk / 64].load() >> (vk % 64)) & 1u;
+}
+
+bool NativeChildWindow::has_focus() const noexcept { return GetFocus() == static_cast<HWND>(hwnd_); }
+
+void NativeChildWindow::set_test_pointer(bool enabled, const PointerState& s) noexcept {
+    input_->test_pointer.store(enabled);
+    if (!enabled) return;
+    input_->x.store(s.x);
+    input_->y.store(s.y);
+    input_->inside.store(true);
+    input_->left_down.store(s.left_down);
+    input_->right_down.store(s.right_down);
+    input_->middle_down.store(s.middle_down);
+    input_->alt.store(s.alt);
+    input_->ctrl.store(s.ctrl);
+}
 
 float NativeChildWindow::take_wheel() noexcept {
     return static_cast<float>(input_->wheel.exchange(0)) / static_cast<float>(WHEEL_DELTA);

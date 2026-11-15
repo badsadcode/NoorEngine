@@ -3,7 +3,6 @@ noor_add_module(scene
         src/scene.cpp
         src/history.cpp
         src/prefab.cpp
-        src/behaviours.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset

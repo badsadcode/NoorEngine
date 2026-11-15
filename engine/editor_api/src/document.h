@@ -8,6 +8,7 @@
 #include "noor/asset/registry.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
+#include "noor/runtime/world.h"
 #include "noor/scene/history.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
@@ -95,8 +96,8 @@ public:
     // refused while playing; Stop throws the runtime copy away.
     [[nodiscard]] Status play();
     void stop();
-    [[nodiscard]] bool playing() const noexcept { return runtime_.has_value(); }
-    void tick(double seconds);
+    [[nodiscard]] bool playing() const noexcept { return world_ != nullptr; }
+    void tick(double seconds, const runtime::InputState& input = {});
 
     // Checks watched asset files (models, prefabs) for changes on disk. Changed files get a new
     // version in the render snapshot (viewports reload them) and prefabs are re-read.
@@ -122,8 +123,7 @@ private:
     std::filesystem::path scene_file_;
     scene::History history_;
     std::uint64_t revision_ = 0;
-    std::optional<scene::Scene> runtime_;  // play mode
-    double play_seconds_ = 0.0;
+    std::unique_ptr<runtime::World> world_;  // play mode (ADR-026/027)
     asset::FileWatcher watcher_;
     std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version
     std::shared_ptr<SnapshotChannel> channel_ = std::make_shared<SnapshotChannel>();

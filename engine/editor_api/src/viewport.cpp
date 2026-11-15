@@ -80,6 +80,10 @@ struct noor_viewport {
     std::optional<ed::CameraBasis> camera;
     float camera_width = 0, camera_height = 0;
 
+    // Game input bookkeeping (UI thread).
+    std::int32_t last_game_mouse_x = 0, last_game_mouse_y = 0;
+    bool game_mouse_valid = false;
+
     // Written by the render thread, drained by the UI thread.
     std::mutex event_mutex;
     noor::asset::Json events = noor::asset::Json::array();
@@ -788,7 +792,57 @@ std::vector<Guid> parse_ids(const char* json) {
 
 thread_local std::string t_events;
 
+#if defined(_WIN32)
+noor::runtime::Key key_from_vk(int vk) {
+    using noor::runtime::Key;
+    if (vk >= 'A' && vk <= 'Z') return static_cast<Key>(static_cast<int>(Key::A) + (vk - 'A'));
+    if (vk >= '0' && vk <= '9') return static_cast<Key>(static_cast<int>(Key::Num0) + (vk - '0'));
+    if (vk >= VK_F1 && vk <= VK_F12) return static_cast<Key>(static_cast<int>(Key::F1) + (vk - VK_F1));
+    switch (vk) {
+    case VK_SPACE: return Key::Space;
+    case VK_RETURN: return Key::Enter;
+    case VK_ESCAPE: return Key::Escape;
+    case VK_TAB: return Key::Tab;
+    case VK_BACK: return Key::Backspace;
+    case VK_SHIFT: return Key::Shift;
+    case VK_CONTROL: return Key::Ctrl;
+    case VK_MENU: return Key::Alt;
+    case VK_UP: return Key::Up;
+    case VK_DOWN: return Key::Down;
+    case VK_LEFT: return Key::Left;
+    case VK_RIGHT: return Key::Right;
+    default: return Key::None;
+    }
+}
+#endif
+
 } // namespace
+
+noor::runtime::InputState noor_viewport_game_input(noor_viewport* vp) {
+    noor::runtime::InputState in;
+    if (!vp || !vp->window) return in;
+    const auto pointer = vp->window->pointer_state();
+    if (pointer.right_down) {  // the editor camera is flying: the game gets nothing
+        vp->game_mouse_valid = false;
+        return in;
+    }
+    in.mouse = {static_cast<float>(pointer.x), static_cast<float>(pointer.y)};
+    if (vp->game_mouse_valid) {
+        in.mouse_delta = {static_cast<float>(pointer.x - vp->last_game_mouse_x), static_cast<float>(pointer.y - vp->last_game_mouse_y)};
+    }
+    vp->last_game_mouse_x = pointer.x;
+    vp->last_game_mouse_y = pointer.y;
+    vp->game_mouse_valid = true;
+    if (!vp->window->has_focus()) return in;
+    in.set(noor::runtime::Key::MouseLeft, pointer.left_down);
+    in.set(noor::runtime::Key::MouseMiddle, pointer.middle_down);
+#if defined(_WIN32)
+    for (int vk = 0; vk < 256; ++vk) {
+        if (vp->window->key_down(vk)) in.set(key_from_vk(vk));
+    }
+#endif
+    return in;
+}
 
 extern "C" {
 
@@ -887,6 +941,19 @@ NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const fl
     out[1] = sp->y;
     out[2] = sp->distance;
     return 1;
+}
+
+NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enabled, int32_t x, int32_t y, int32_t buttons) {
+    if (!viewport || !viewport->window) return;
+    noor::platform::PointerState s;
+    s.x = x;
+    s.y = y;
+    s.left_down = (buttons & 1) != 0;
+    s.right_down = (buttons & 2) != 0;
+    s.middle_down = (buttons & 4) != 0;
+    s.ctrl = (buttons & 8) != 0;
+    s.alt = (buttons & 16) != 0;
+    viewport->window->set_test_pointer(enabled != 0, s);
 }
 
 NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport) {

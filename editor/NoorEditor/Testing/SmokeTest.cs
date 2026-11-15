@@ -214,27 +214,29 @@ internal static class SmokeTest
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    /// <summary>Sends a mouse message to OUR viewport child window only (never to the desktop).</summary>
-    private static async Task Mouse(IntPtr hwnd, uint msg, double x, double y, bool leftDown)
+    // The viewport under test. Mouse input is injected into it (noor_viewport_test_pointer) so the
+    // results don't depend on where the real cursor is; keys are posted to its window.
+    private static IntPtr _testViewport;
+
+    private static async Task Pointer(double x, double y, int buttons)
     {
-        var lParam = (IntPtr)((((int)Math.Round(y) & 0xFFFF) << 16) | ((int)Math.Round(x) & 0xFFFF));
-        PostMessageW(hwnd, msg, leftDown ? 1 : 0, lParam);
+        Native.noor_viewport_test_pointer(_testViewport, 1, (int)Math.Round(x), (int)Math.Round(y), buttons);
         await Task.Delay(60);  // a few frames: the render thread samples the pointer once per frame
     }
 
     private static async Task Click(IntPtr hwnd, double x, double y)
     {
-        await Mouse(hwnd, WmMouseMove, x, y, false);
-        await Mouse(hwnd, WmLButtonDown, x, y, true);
-        await Mouse(hwnd, WmLButtonUp, x, y, false);
+        await Pointer(x, y, 0);
+        await Pointer(x, y, 1);
+        await Pointer(x, y, 0);
     }
 
     private static async Task Drag(IntPtr hwnd, IReadOnlyList<(float X, float Y)> path)
     {
-        await Mouse(hwnd, WmMouseMove, path[0].X, path[0].Y, false);
-        await Mouse(hwnd, WmLButtonDown, path[0].X, path[0].Y, true);
-        foreach (var p in path.Skip(1)) await Mouse(hwnd, WmMouseMove, p.X, p.Y, true);
-        await Mouse(hwnd, WmLButtonUp, path[^1].X, path[^1].Y, false);
+        await Pointer(path[0].X, path[0].Y, 0);
+        await Pointer(path[0].X, path[0].Y, 1);
+        foreach (var p in path.Skip(1)) await Pointer(p.X, p.Y, 1);
+        await Pointer(path[^1].X, path[^1].Y, 0);
     }
 
     private static async Task ViewportInteraction(MainWindow window, string rootId, Action<bool, string> check, Action<Window, string> shot)
@@ -243,6 +245,7 @@ internal static class SmokeTest
         var panel = window.ViewportView!;
         var vp = panel.Viewport;
         var hwnd = vp.NativeWindow;
+        _testViewport = vp.EngineHandle;
         var stats = vp.Stats!.Value;
         async Task Settle()
         {
@@ -336,9 +339,10 @@ internal static class SmokeTest
         await Task.Delay(150);
         var mid = (X: stats.Width / 2.0, Y: stats.Height / 2.0);
         var d0 = vp.WorldToScreen(p0)?.Distance ?? 0;
-        await Mouse(hwnd, WmMouseMove, mid.X, mid.Y, false);
-        PostMessageW(hwnd, WmRButtonDown, 2, MakeLParam(mid.X, mid.Y));
-        await Task.Delay(100);
+        await Pointer(mid.X, mid.Y, 0);
+        await Pointer(mid.X, mid.Y, 2);
+        SetFocus(hwnd);  // keys go to the focused window (a real right-click focuses it)
+        await Task.Delay(40);
         PostMessageW(hwnd, WmKeyDown, 'W', 1);
         await Task.Delay(600);
         PostMessageW(hwnd, WmKeyUp, 'W', unchecked((IntPtr)0xC0000001));
@@ -347,11 +351,12 @@ internal static class SmokeTest
         check(d0 - d1 > 1.0, $"fly: holding W moves the camera forward ({d0 - d1:0.0} m closer)");
         check(doc.Tool == EditorTool.Rotate, "fly: W while flying is not the Move shortcut");
         var sx0 = vp.WorldToScreen(p0)?.X ?? 0;
-        PostMessageW(hwnd, WmMouseMove, 2, MakeLParam(mid.X + 80, mid.Y));
-        await Task.Delay(150);
+        await Pointer(mid.X + 80, mid.Y, 2);
+        await Task.Delay(90);
         var looked = vp.WorldToScreen(p0);
-        PostMessageW(hwnd, WmRButtonUp, 0, MakeLParam(mid.X + 80, mid.Y));
-        await Task.Delay(100);
+        await Pointer(mid.X + 80, mid.Y, 0);
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
+        await Task.Delay(40);
         check(looked is { } l && l.X < sx0 - 20 && Math.Abs(l.Distance - d1) < 0.01,
               "fly: mouse-look turns the view without moving the camera");
         doc.SetTool(EditorTool.Move);
@@ -374,6 +379,7 @@ internal static class SmokeTest
         var panel = window.ViewportView!;
         var vp = panel.Viewport;
         var hwnd = vp.NativeWindow;
+        _testViewport = vp.EngineHandle;
         async Task Settle()
         {
             await Task.Delay(250);
@@ -442,6 +448,7 @@ internal static class SmokeTest
         check(comps.SetComponent("smoke_test", null) && !doc.Selected!.Components.ContainsKey("smoke_test"), "remove a component");
         check(doc.Undo() && doc.Selected!.Components.ContainsKey("smoke_test"), "undo the removal");
         check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("smoke_test"), "undo back to no component");
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
     }
 
     private static async Task PlayReloadAndWindows(MainWindow window, string rootId, Dictionary<string, object> results,
@@ -504,7 +511,46 @@ internal static class SmokeTest
         check(!doc.Playing && Math.Abs(doc.Selected!.Transform.Rotation.ToEulerDegrees().Y - yaw0) < 1e-3,
               "stop: the scene is back as it was edited");
         check(doc.Undo() && !doc.Selected!.Components.ContainsKey("rotator"), "undo the rotator");
+
+        // Game input (Milestone 4, ADR-027): keys pressed in the viewport drive the running game.
+        // An input_mover follows W/A/S/D; W must not switch the editor to the Move tool while playing.
+        var start = doc.Selected!.Transform.Position;
+        check(window.Inspector!.Components.SetComponent("input_mover", new System.Text.Json.Nodes.JsonObject { ["speed"] = 5.0 }),
+              "add an input_mover");
+        doc.SetTool(EditorTool.Rotate);
+        window.TogglePlay();
+        var hwnd = window.ViewportView!.Viewport.NativeWindow;
+        // Keys go to the focused window; another window (or app) may be active right now.
+        var focused = false;
+        for (var attempt = 0; attempt < 5 && !focused; attempt++)
+        {
+            window.Activate();
+            await Task.Delay(50);
+            SetFocus(hwnd);
+            await Task.Delay(50);
+            focused = window.ViewportHasFocus();
+        }
+        PostMessageW(hwnd, WmKeyDown, 'D', 1);
+        PostMessageW(hwnd, WmKeyDown, 'W', 1);
+        await Task.Delay(600);
+        PostMessageW(hwnd, WmKeyUp, 'D', unchecked((IntPtr)0xC0000001));
+        PostMessageW(hwnd, WmKeyUp, 'W', unchecked((IntPtr)0xC0000001));
+        await Task.Delay(100);
+        doc.Refresh();
+        var moved = doc.Selected!.Transform.Position;
+        var dx = moved.X - start.X;
+        var dz = moved.Z - start.Z;
+        check(doc.Playing && dx is > 1.5 and < 4.5 && dz is < -1.5 and > -4.5,
+              $"game input: D and W move the input_mover while playing (dx {dx:0.0}, dz {dz:0.0} m in ~0.6 s at 5 m/s; viewport focused: {focused})");
+        check(doc.Tool == EditorTool.Rotate, "game input: W while playing is not the Move-tool shortcut");
+        window.TogglePlay();
+        check(doc.Selected!.Transform.Position == start, "stop: the input_mover is back where it was");
+        check(doc.Undo() && !doc.Selected!.Components.ContainsKey("input_mover"), "undo the input_mover");
+        doc.SetTool(EditorTool.Move);
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr hwnd);
 
     private static async Task<T?> WaitFor<T>(Func<T?> read, Func<T?, bool> done, double seconds) where T : struct
     {

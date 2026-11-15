@@ -22,6 +22,7 @@ add_subdirectory(engine/platform)
 add_subdirectory(engine/render)
 add_subdirectory(engine/asset)
 add_subdirectory(engine/scene)
+add_subdirectory(engine/runtime)
 add_subdirectory(tools/noor_cli)
 if(WIN32)
     add_subdirectory(engine/editor_api)  # native child-window viewports are Windows-only for now

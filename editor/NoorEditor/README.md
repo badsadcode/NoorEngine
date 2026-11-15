@@ -24,9 +24,11 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 - **Snapping**: the **Snap** toggle in the viewport toolbar (or hold **Ctrl** while dragging to
   flip it). Moves land on a world grid, rotations on angle steps, scales on scale steps.
 - **Preferences** (Edit ▸ Preferences): fly speed, look sensitivity, gizmo size, snap steps.
-- **Play / Stop** (Ctrl+P): runs a copy of the scene (ADR-026). Before scripting, the only
-  behaviour is `rotator` (add a component named `rotator` with `degrees_per_second`). Edits are
-  off while playing; Stop brings back the scene as you left it.
+- **Play / Stop** (Ctrl+P): runs the scene in the engine's runtime (ADR-026/027). Click the
+  viewport and your keys are the game's input (W/A/S/D, arrows, Space...; the mapping lives in
+  the project's `Settings/input.json`). Until scripts arrive, the built-in behaviours are
+  `rotator` (`degrees_per_second`) and `input_mover` (`speed`). Edits are off while playing;
+  Stop brings back the scene as you left it.
 - **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
   a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.

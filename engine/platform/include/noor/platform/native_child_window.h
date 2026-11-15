@@ -54,6 +54,14 @@ public:
     [[nodiscard]] float take_wheel() noexcept;
     // ViewportKey bits currently held while the viewport has keyboard focus.
     [[nodiscard]] std::uint32_t keys() const noexcept;
+    // Any key held while the viewport has keyboard focus, by platform key code (Win32 virtual key).
+    [[nodiscard]] bool key_down(int platform_key) const noexcept;
+    // True if this window has the keyboard focus (UI thread only).
+    [[nodiscard]] bool has_focus() const noexcept;
+    // Automated tests: while on, real mouse messages are ignored and the pointer is whatever the
+    // test sets. (Posted mouse messages are not enough: Windows also delivers the real cursor
+    // position, e.g. after SetCapture, so a test would depend on where the user left the mouse.)
+    void set_test_pointer(bool enabled, const PointerState& state = {}) noexcept;
 
     [[nodiscard]] PixelSize pixel_size() const override;
     [[nodiscard]] Result<std::vector<const char*>> vulkan_instance_extensions() const override;
@@ -72,6 +80,8 @@ public:
         std::atomic<bool> alt{false};
         std::atomic<bool> ctrl{false};
         std::atomic<std::uint32_t> keys{0};
+        std::atomic<std::uint64_t> vk[4]{};  // 256 virtual-key bits
+        std::atomic<bool> test_pointer{false};
     };
 
 private:

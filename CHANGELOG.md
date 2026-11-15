@@ -2,7 +2,35 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 3 complete, Milestone 4 next
+## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
+
+### 2026-11-15 — Milestone 4, part 1: the runtime module and game input
+**Decided:** ADR-027 (runtime, frame order, one scripting API for C# and Lua), ADR-008 (.NET 10
+CoreCLR hosting), ADR-010 (Jolt physics), ADR-011 (miniaudio), ADR-009 proposed (Luau recommended;
+one question open). Plan: `docs/milestones/M4_PLAN.md` (8 parts, risks).
+
+**Added**
+- `engine/runtime`: `World` (systems; frame order start → update → fixed 60 Hz steps (max 5) →
+  late update → destroy; dt capped at 0.1 s; spawn/destroy with whole subtrees), `Input` with
+  actions and axes (`Settings/input.json`, defaults: move_x/move_y, jump, sprint, crouch, fire,
+  aim, interact, pause; look_x/look_y from the mouse), built-in behaviours moved here
+  (`rotator`, new `input_mover`).
+- Editor API **v5**: play mode runs a `World`; `noor_doc_tick` takes the game-view viewport, whose
+  keyboard and mouse are the game's input while it has focus (not while the right button flies
+  the editor camera). While playing, keys typed into the viewport go to the game; only Ctrl
+  shortcuts reach the editor.
+- `noor_viewport_test_pointer`: tests inject the pointer instead of posting mouse messages.
+
+**Fixed**
+- The editor smoke test's clicks and drags depended on where the real cursor was: Windows sends a
+  mouse-move with the real cursor position after `SetCapture`, so a cursor resting over the editor
+  bent every drag. Found when the test failed identically twice in a row.
+
+**Tests:** 7 runtime tests (frame order, fixed step, lifecycle, input edges/axes, input.json,
+behaviours); the editor smoke test plays with keys pressed in the viewport (66 checks).
+115/115 Debug, 109/109 Release without GPU.
+
+## Milestone 3 complete
 
 ### 2026-11-15 — Milestone 3 complete: play mode, live reload, gate review
 **Added**

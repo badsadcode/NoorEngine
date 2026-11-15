@@ -390,7 +390,7 @@ public sealed class MainWindow : Window
     private void PlayTick()
     {
         var now = _playClock.Elapsed;
-        Doc.Tick((now - _lastTick).TotalSeconds);
+        Doc.Tick((now - _lastTick).TotalSeconds, ViewportView?.Viewport.EngineHandle ?? IntPtr.Zero);
         _lastTick = now;
         // Panels follow the running scene a few times per second, not every frame.
         if (now - _lastPanelRefresh > TimeSpan.FromMilliseconds(200))
@@ -513,6 +513,9 @@ public sealed class MainWindow : Window
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         var inText = !ViewportHasFocus() && FocusManager?.GetFocusedElement() is TextBox;
+        // While playing, keys typed into the viewport belong to the game: only Ctrl shortcuts
+        // (Ctrl+P stop, Ctrl+S save) reach the editor.
+        if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         switch (e.Key)
@@ -554,7 +557,7 @@ public sealed class MainWindow : Window
         e.Handled = true;
     }
 
-    private bool ViewportHasFocus()
+    public bool ViewportHasFocus()
     {
         var hwnd = ViewportView?.Viewport.NativeWindow ?? IntPtr.Zero;
         return hwnd != IntPtr.Zero && GetFocus() == hwnd;

@@ -116,8 +116,12 @@ public sealed class EditorDocument : IDisposable
         Refresh();
     }
 
-    /// <summary>Advances the running copy. Doesn't refresh the panels (call Refresh at a lower rate).</summary>
-    public void Tick(double seconds) => Native.noor_doc_tick(_handle, seconds);
+    /// <summary>
+    /// Advances the running game. <paramref name="gameView"/> is the engine viewport whose keyboard and
+    /// mouse are the game's input while it has focus (IntPtr.Zero: no input). Doesn't refresh the
+    /// panels (call Refresh at a lower rate).
+    /// </summary>
+    public void Tick(double seconds, IntPtr gameView) => Native.noor_doc_tick(_handle, seconds, gameView);
 
     /// <summary>Asks the engine which asset files changed on disk (it reloads them); returns their paths.</summary>
     public IReadOnlyList<string> PollFiles()
