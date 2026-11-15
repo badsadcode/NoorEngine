@@ -45,7 +45,10 @@ other people's computers, and other people's computers are full of surprises.
   opinions.
 
 ## Known limitations
-- Resize/minimize are implemented but nobody has tested them yet. Tom, grab a window edge.
+- Tom grabbed a window edge. It stayed purple. Confirmed by human eyes and by the log
+  (222×161 to 1920×1017, zero errors). Minimize is still untested.
+- While you drag, Windows pauses our frame loop and stretches the last frame. Invisible on a
+  purple rectangle, very visible on a forest. On the list.
 - Windows only, no CI yet.
 - There is no editor. There are no scenes. There is a purple rectangle.
 

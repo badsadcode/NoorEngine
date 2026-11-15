@@ -13,7 +13,7 @@
 | Build (CMake + MSVC), pinned dependencies | Works on Windows 10/11 |
 | `foundation`: logging, errors (`Result<T>`), asserts, GUIDs | Works, unit-tested |
 | `platform`: SDL3 window + events | Works |
-| `render`: Vulkan 1.3 device, swapchain, clear-screen frame loop | Works, smoke-tested with validation layers (resize/minimize implemented but not yet tested) |
+| `render`: Vulkan 1.3 device, swapchain, clear-screen frame loop | Works, smoke-tested with validation layers (resize and maximize tested by hand; minimize untested; see CHANGELOG limitations) |
 | `noor_diag`: diagnostics app (window + GPU info + purple clear) | Works |
 | Editor, scenes, assets, scripting, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 

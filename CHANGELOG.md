@@ -26,7 +26,11 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 - Startup no longer builds the swapchain twice (resize event with unchanged size is ignored).
 
 **Known limitations**
-- Window resize, minimize/restore and monitor changes are implemented but not yet tested,
-  neither by hand nor by automated tests.
+- Window resize and maximize tested by hand by Tom (1280×720 → 222×161 → 1920×1017; swapchain
+  rebuilt correctly, 1,311 frames, zero validation errors). Minimize/restore and monitor changes
+  remain untested. No automated resize test yet.
+- No live redraw while dragging a window edge: Win32's modal resize loop pauses our frame loop,
+  so the swapchain rebuilds only when the drag ends and Windows stretches the last frame meanwhile.
+  Fix before the editor (render from an SDL event watch during resize).
 - No negative test yet proving a deliberate validation error fails the smoke test.
 - Windows only. No CI yet (GitHub Actions runners have no GPU; unit tests can run there).
