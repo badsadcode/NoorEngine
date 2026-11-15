@@ -5,3 +5,7 @@
 *.jpg binary
 *.exr binary
 *.hdr binary
+*.glb binary
+*.gltf -text
+# Test data is generator output: keep it byte-for-byte (manifests hold checksums of siblings).
+tests/data/** -text
