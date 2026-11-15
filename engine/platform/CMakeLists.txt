@@ -2,10 +2,12 @@ noor_add_module(platform
     SOURCES
         src/platform.cpp
         src/window.cpp
-        src/vulkan_bridge.cpp
+        src/window_vulkan.cpp
+        $<$<PLATFORM_ID:Windows>:src/native_child_window_win32.cpp>
     PUBLIC_DEPS
         noor::foundation
         Vulkan::Headers
     PRIVATE_DEPS
         SDL3::SDL3-static
+        Vulkan::Vulkan
 )

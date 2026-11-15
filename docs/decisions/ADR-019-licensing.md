@@ -17,7 +17,9 @@ to learn from, use and contribute to NoorEngine, including in commercial games.
 ## Decision
 **MIT**, copyright Bad Ideas Works. Every dependency must be MIT-compatible for
 redistribution (MIT, BSD, zlib, Apache-2.0, MIT-0, public domain, Boost). LGPL is allowed only
-for optional, dynamically linked tools and requires a new ADR. GPL code is not allowed in
+for optional, dynamically linked tools and requires a new ADR. Fonts under the SIL Open Font
+License 1.1 may be bundled (e.g. Inter in the editor), since OFL explicitly permits bundling
+with software; the font itself stays under OFL. GPL code is not allowed in
 shipped engine, editor or runtime binaries.
 
 ## Consequences

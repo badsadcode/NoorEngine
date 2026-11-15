@@ -18,9 +18,12 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `platform`: SDL3 window + events | Works |
 | `render`: Vulkan 1.3 device, swapchain, clear-screen frame loop | Works, smoke-tested with validation layers (resize and maximize tested by hand; minimize untested; see CHANGELOG limitations) |
 | `noor_diag`: diagnostics app (window + GPU info + purple clear) | Works |
-| Editor, scenes, assets, scripting, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
+| `editor_api`: C API DLL hosting engine viewports in a foreign window (v0) | Works in the Avalonia spike; API not stable |
+| Editor GUI stack: Avalonia + Dock ([ADR-003](docs/decisions/ADR-003-editor-gui-framework.md)) | **Spike only**, decision accepted; NoorEditor itself not started |
+| Scenes, assets, scripting, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
-All editor images in `docs/` are **concept art**, not screenshots.
+Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
+`docs/devlog/img` are real captures of the spike.
 
 ## Build
 
@@ -50,7 +53,9 @@ Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug
 | `engine/foundation` | Logging, errors, asserts, IDs. Depends on nothing. |
 | `engine/platform` | OS layer (windows, events) on SDL3. |
 | `engine/render` | Vulkan backend. |
+| `engine/editor_api` | C ABI DLL the C# editor uses to host engine viewports. |
 | `tools/noor_diag` | Diagnostics app; permanent developer utility. |
+| `spikes/` | Technology experiments that decide ADRs. Not product code. |
 | `tests/` | Unit and smoke tests (doctest + CTest). |
 | `docs/decisions` | Architecture Decision Records. Read these before arguing. 😉 |
 | `docs/devlog` | The public devlog. Funny, never fake. |

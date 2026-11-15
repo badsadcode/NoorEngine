@@ -1,7 +1,7 @@
 #include "noor/render/renderer.h"
 
 #include "noor/foundation/log.h"
-#include "noor/platform/vulkan_bridge.h"
+#include "noor/platform/presentation_target.h"
 
 #include <algorithm>
 #include <atomic>
@@ -68,7 +68,7 @@ struct FrameSync {
 } // namespace
 
 struct Renderer::Impl {
-    platform::Window* window = nullptr;
+    const platform::PresentationTarget* target = nullptr;
     RendererDesc desc;
     bool validation = false;
 
@@ -144,7 +144,7 @@ Status Renderer::Impl::create_instance() {
                     std::format("Vulkan loader is {}, NoorEngine needs 1.3+", version_string(loader_version)));
     }
 
-    auto platform_exts = platform::vulkan_instance_extensions();
+    auto platform_exts = target->vulkan_instance_extensions();
     if (!platform_exts) {
         return std::unexpected(platform_exts.error());
     }
@@ -198,7 +198,7 @@ Status Renderer::Impl::create_instance() {
     NOOR_LOG_INFO("Render", "Vulkan instance created (loader {}, validation {})", version_string(loader_version),
                   validation ? "on" : "off");
 
-    auto surf = platform::create_vulkan_surface(*window, instance);
+    auto surf = target->create_vulkan_surface(instance);
     if (!surf) {
         return std::unexpected(surf.error());
     }
@@ -340,7 +340,7 @@ void Renderer::Impl::destroy_swapchain_semaphores() {
 }
 
 Status Renderer::Impl::rebuild_swapchain() {
-    const platform::PixelSize pixels = window->pixel_size();
+    const platform::PixelSize pixels = target->pixel_size();
     if (pixels.width == 0 || pixels.height == 0) {
         return {};  // minimized; stay dirty and try again later
     }
@@ -429,7 +429,7 @@ Status Renderer::Impl::rebuild_swapchain() {
 Result<FrameResult> Renderer::Impl::render_frame() {
     if (resize_requested) {
         resize_requested = false;
-        const platform::PixelSize pixels = window->pixel_size();
+        const platform::PixelSize pixels = target->pixel_size();
         if (pixels.width != extent.width || pixels.height != extent.height) {
             swapchain_dirty = true;
         }
@@ -559,7 +559,7 @@ void Renderer::Impl::destroy() {
         device = VK_NULL_HANDLE;
     }
     if (instance != VK_NULL_HANDLE) {
-        platform::destroy_vulkan_surface(instance, surface);
+        target->destroy_vulkan_surface(instance, surface);
         surface = VK_NULL_HANDLE;
         if (messenger != VK_NULL_HANDLE) {
             auto destroy_messenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
@@ -579,9 +579,9 @@ void Renderer::Impl::destroy() {
 Renderer::Renderer(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 Renderer::~Renderer() = default;
 
-Result<std::unique_ptr<Renderer>> Renderer::create(platform::Window& window, const RendererDesc& desc) {
+Result<std::unique_ptr<Renderer>> Renderer::create(const platform::PresentationTarget& target, const RendererDesc& desc) {
     auto impl = std::make_unique<Impl>();
-    impl->window = &window;
+    impl->target = &target;
     impl->desc = desc;
 
     for (auto step : {&Impl::create_instance, &Impl::pick_gpu, &Impl::create_device, &Impl::create_frames,

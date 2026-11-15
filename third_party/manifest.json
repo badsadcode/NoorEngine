@@ -30,6 +30,36 @@
       "linkage": "dynamic (vulkan-1.dll is provided by the GPU driver)",
       "shipped": false,
       "purpose": "Graphics API; installed by developer, runtime loader comes with drivers"
+    },
+    {
+      "name": "Avalonia (+ Desktop, Themes.Fluent)",
+      "version": "12.1.4",
+      "source": "https://www.nuget.org/packages/Avalonia",
+      "commit": null,
+      "license": "MIT",
+      "linkage": "NuGet package (managed)",
+      "shipped": "editor only, never in games",
+      "purpose": "Editor GUI toolkit (ADR-003). Currently used by spikes/avalonia_viewport"
+    },
+    {
+      "name": "Avalonia.Fonts.Inter (Inter typeface)",
+      "version": "12.1.4",
+      "source": "https://www.nuget.org/packages/Avalonia.Fonts.Inter",
+      "commit": null,
+      "license": "MIT (package) / SIL OFL 1.1 (font)",
+      "linkage": "NuGet package (embedded font)",
+      "shipped": "editor only",
+      "purpose": "Editor UI typeface; OFL bundling allowed per ADR-019"
+    },
+    {
+      "name": "Dock (Dock.Avalonia, Dock.Model.Mvvm, Dock.Avalonia.Themes.Fluent)",
+      "version": "12.1.0.13",
+      "source": "https://github.com/wieslawsoltes/Dock",
+      "commit": null,
+      "license": "MIT",
+      "linkage": "NuGet package (managed)",
+      "shipped": "editor only, never in games",
+      "purpose": "Editor docking panels and floating windows (ADR-003)"
     }
   ]
 }

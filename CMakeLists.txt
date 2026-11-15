@@ -19,6 +19,9 @@ include(NoorDependencies)
 add_subdirectory(engine/foundation)
 add_subdirectory(engine/platform)
 add_subdirectory(engine/render)
+if(WIN32)
+    add_subdirectory(engine/editor_api)  # native child-window viewports are Windows-only for now
+endif()
 add_subdirectory(tools/noor_diag)
 
 if(NOOR_BUILD_TESTS)

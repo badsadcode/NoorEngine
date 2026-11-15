@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ADR-003 spike: Avalonia + Dock hosting a NoorEngine Vulkan viewport.
+    Spike code: proves or disproves the GUI stack. Pieces that survive move to editor/.
+    Build the engine first (cmake build preset "debug") so noor_editor_api.dll exists.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>NoorEditorSpike</AssemblyName>
+    <RootNamespace>NoorEditorSpike</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PlatformTarget>x64</PlatformTarget>
+    <NoorNativeConfig Condition="'$(NoorNativeConfig)' == ''">Debug</NoorNativeConfig>
+    <NoorNativeDir>$(MSBuildThisFileDirectory)..\..\build\windows\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageReference Include="Dock.Avalonia" Version="12.1.0.13" />
+    <PackageReference Include="Dock.Model.Mvvm" Version="12.1.0.13" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(NoorNativeDir)noor_editor_api.dll" Link="noor_editor_api.dll"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.dll')" />
+    <None Include="$(NoorNativeDir)noor_editor_api.pdb" Link="noor_editor_api.pdb"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.pdb')" />
+  </ItemGroup>
+
+  <Target Name="NoorCheckNative" BeforeTargets="Build">
+    <Warning Condition="!Exists('$(NoorNativeDir)noor_editor_api.dll')"
+             Text="noor_editor_api.dll not found in $(NoorNativeDir). Build the engine first: cmake --build --preset debug (from the repository root)" />
+  </Target>
+</Project>

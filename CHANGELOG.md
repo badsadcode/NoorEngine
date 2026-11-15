@@ -4,6 +4,33 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 0 in progress
 
+### 2026-11-15 — Avalonia editor spike (ADR-003 accepted)
+**Added**
+- `platform::PresentationTarget`: interface the renderer presents to. `Window` (SDL) and the new
+  `NativeChildWindow` (Win32 child window inside a foreign parent, e.g. the editor UI) implement it.
+  The renderer no longer depends on SDL windows.
+- `noor_editor_api.dll` (v0, spike-grade C ABI): log forwarding, viewports (native child window +
+  dedicated render thread, live stats). Destroy pumps UI messages while joining the render thread.
+- `spikes/avalonia_viewport`: Avalonia 12.1.4 + Dock 12.1.0.13 editor shell with a docked Vulkan
+  viewport, live Inspector/Console/status bar, labeled sample panels, and `--smoke` automated checks.
+- Devlog #003 with real screenshots.
+
+**Measured** (Debug, validation on, RTX 3080, 60 Hz, 100% scale): 60 FPS; 236 ms viewport → first
+frame; 1.6 s process start → first frame; resize reaches swapchain; float into own window re-renders
+after 363 ms; 0 validation errors; 0.74% machine CPU; 247 MB working set. Details in ADR-003.
+
+**Fixed during development**
+- Spike screenshots first used a screen BitBlt, which captured another application overlapping the
+  window. Deleted immediately; capture now uses `PrintWindow`, which only renders our own window.
+
+**Known limitations**
+- Untested: high-DPI >100%, mouse drag-and-drop docking (airspace), live drag-resize, keyboard
+  focus, hover/click input by a human, Release numbers.
+- One Vulkan instance + device per viewport (floating costs ~360 ms); needs a shared device.
+- Floating Dock windows show the default blue accent instead of the theme purple.
+- `renderer.h` now includes `vulkan.h` indirectly through `presentation_target.h`, weakening
+  ADR-002's "no Vulkan types above render/" rule. To be tidied when the RHI layer arrives.
+
 ### 2026-11-15 — Devlog website
 **Added**
 - `website/`: static site (home with the README "Honest status" table, devlog index, one page

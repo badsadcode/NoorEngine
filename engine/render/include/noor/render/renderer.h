@@ -3,7 +3,7 @@
 // Vulkan types are deliberately hidden behind a pimpl (ADR-002).
 
 #include "noor/foundation/error.h"
-#include "noor/platform/window.h"
+#include "noor/platform/presentation_target.h"
 
 #include <array>
 #include <cstdint>
@@ -35,7 +35,7 @@ enum class FrameResult : std::uint8_t {
 
 class Renderer {
 public:
-    [[nodiscard]] static Result<std::unique_ptr<Renderer>> create(platform::Window& window,
+    [[nodiscard]] static Result<std::unique_ptr<Renderer>> create(const platform::PresentationTarget& target,
                                                                   const RendererDesc& desc);
     ~Renderer();
 
