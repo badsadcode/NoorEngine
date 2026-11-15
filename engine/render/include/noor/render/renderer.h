@@ -78,6 +78,11 @@ struct FrameDesc {
 struct FrameStats {
     std::uint32_t draw_calls = 0;
     std::uint64_t triangles = 0;
+    // CPU time spent recording and submitting the frame (excludes waiting for the GPU/vsync).
+    double cpu_record_ms = 0.0;
+    // GPU time of the most recent frame whose results are available (lags 1–2 frames).
+    // Negative when timestamps are unsupported or not available yet.
+    double gpu_ms = -1.0;
 };
 
 // A copy of a presented frame, read back from the GPU. Pixels are tightly packed

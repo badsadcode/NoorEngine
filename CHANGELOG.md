@@ -4,6 +4,27 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 1 in progress
 
+### 2026-11-15 — Milestone 1, second increment: input, fly camera, GPU timing, stress test
+**Added**
+- `platform/input.h`: keyboard (physical scancodes) and mouse state with pressed/released edges,
+  mouse deltas, wheel; released on focus loss. `platform::input()`, `set_relative_mouse()`.
+- `render/fly_camera.h`: free-fly camera (yaw/pitch, flattened forward, clamped pitch,
+  speed/boost); 7 unit tests.
+- GPU timestamps per frame (`FrameStats::gpu_ms`) and CPU record time (`cpu_record_ms`).
+- `ErrorCode::DeviceLost` with a plain-language message for lost devices (all Vulkan calls via
+  `vk_failure`). Detection and reporting only; recovery not implemented.
+- `noor_diag`: ground plane, fly camera controls, `--cubes N` grid, timings in the title and an
+  exit summary. Verify mode unchanged (fixed camera, hero cube only).
+- Test `stress.cubes_2500`: 2,502 draws/frame for 120 frames with validation. 35/35 tests pass
+  (Ninja Debug build).
+
+**Measured** (RTX 3080, 1280×720, 2,502 draws): Release CPU record 0.38 ms without validation,
+9.0 ms with validation; GPU 0.06–0.09 ms.
+
+**Known limitations**
+- One draw call per object; no instancing yet.
+- Minimize/restore and monitor changes still untested; device loss is reported, not recovered.
+
 ### 2026-11-15 — Continuous integration
 **Added**
 - `.github/workflows/ci.yml`: Windows, Debug + RelWithDebInfo builds, all tests except `gpu`-labelled

@@ -35,7 +35,7 @@ TEST_CASE("error: describe() is human readable") {
 }
 
 TEST_CASE("error: every code has a name") {
-    for (int i = 0; i <= static_cast<int>(noor::ErrorCode::GraphicsError); ++i) {
+    for (int i = 0; i <= static_cast<int>(noor::ErrorCode::DeviceLost); ++i) {
         const auto name = noor::to_string(static_cast<noor::ErrorCode>(i));
         CHECK_FALSE(name.empty());
         if (i != 0) {

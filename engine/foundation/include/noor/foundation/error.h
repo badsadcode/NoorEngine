@@ -22,6 +22,7 @@ enum class ErrorCode : std::uint16_t {
     VersionMismatch,
     PlatformError,
     GraphicsError,
+    DeviceLost,  // the GPU device was lost (driver reset, crash, removal); needs recreation
 };
 
 [[nodiscard]] std::string_view to_string(ErrorCode code) noexcept;

@@ -8,8 +8,11 @@ add_executable(noor_unit_tests
     unit/test_assert.cpp
     unit/test_guid.cpp
     unit/test_math.cpp
+    unit/test_fly_camera.cpp
 )
 target_link_libraries(noor_unit_tests PRIVATE noor::foundation doctest::doctest)
+# Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
+target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
 noor_set_target_options(noor_unit_tests)
 set_target_properties(noor_unit_tests PROPERTIES FOLDER "Tests")
 doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit")
@@ -27,3 +30,9 @@ set_tests_properties(smoke.noor_diag PROPERTIES LABELS "gpu;smoke" TIMEOUT 60)
 add_test(NAME render.cube_pixels
     COMMAND noor_diag --frames 60 --verify-render --log ${CMAKE_CURRENT_BINARY_DIR}/render_cube_pixels.log)
 set_tests_properties(render.cube_pixels PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+
+# 2,500 spinning cubes + ground (2,502 draw calls per frame) for 120 frames with validation on:
+# catches leaks, sync errors and slow paths under load. Frame timings go to the log.
+add_test(NAME stress.cubes_2500
+    COMMAND noor_diag --frames 120 --cubes 2500 --log ${CMAKE_CURRENT_BINARY_DIR}/stress_cubes_2500.log)
+set_tests_properties(stress.cubes_2500 PROPERTIES LABELS "gpu;stress" TIMEOUT 120)

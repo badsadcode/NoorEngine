@@ -27,12 +27,25 @@
 #define NOOR_VK_TRY(expr)                                                                          \
     do {                                                                                           \
         if (const VkResult vk_result_ = (expr); vk_result_ != VK_SUCCESS) {                        \
-            return ::noor::fail(::noor::ErrorCode::GraphicsError,                                  \
-                                std::format("{} failed ({})", #expr, string_VkResult(vk_result_))); \
+            return ::noor::render::vk_failure(vk_result_, #expr);                                  \
         }                                                                                          \
     } while (false)
 
 namespace noor::render {
+
+// Turns a failed VkResult into an Error. A lost device gets its own code and a plain-language
+// message: it means the driver reset or crashed, and every GPU object must be recreated.
+[[nodiscard]] inline std::unexpected<Error> vk_failure(VkResult result, const char* what,
+                                                      std::source_location where = std::source_location::current()) {
+    if (result == VK_ERROR_DEVICE_LOST) {
+        return fail(ErrorCode::DeviceLost,
+                    std::format("GPU device lost during {} (driver reset, GPU crash or hang). Recovery is not "
+                                "implemented yet: restart the application. If it repeats, capture the frame "
+                                "with RenderDoc and check the Vulkan log.", what),
+                    where);
+    }
+    return fail(ErrorCode::GraphicsError, std::format("{} failed ({})", what, string_VkResult(result)), where);
+}
 
 inline constexpr std::uint32_t kFramesInFlight = 2;
 inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
@@ -114,6 +127,12 @@ struct Renderer::Impl {
 
     std::array<FrameSync, kFramesInFlight> frames{};
     std::uint32_t frame_index = 0;
+
+    // GPU timestamps: two queries (start, end) per frame in flight.
+    VkQueryPool timestamp_pool = VK_NULL_HANDLE;
+    double timestamp_period_ns = 0.0;
+    bool timestamps_supported = false;
+    std::array<bool, kFramesInFlight> timestamps_written{};
 
     std::vector<GpuMesh> meshes;  // MeshHandle.id = index + 1
     bool capture_requested = false;

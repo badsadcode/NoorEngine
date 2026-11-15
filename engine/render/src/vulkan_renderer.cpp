@@ -6,6 +6,7 @@
 #include "noor/platform/presentation_target.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <optional>
 
@@ -211,6 +212,8 @@ Status Renderer::Impl::pick_gpu() {
             info.api_version = version_string(props.apiVersion);
             info.vendor_id = props.vendorID;
             info.driver_version_raw = props.driverVersion;
+            timestamp_period_ns = props.limits.timestampPeriod;
+            timestamps_supported = families[*family].timestampValidBits > 0 && props.limits.timestampPeriod > 0.0f;
         }
     }
 
@@ -265,6 +268,15 @@ Status Renderer::Impl::create_frames() {
         VkFenceCreateInfo fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
         fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         NOOR_VK_TRY(vkCreateFence(device, &fence_info, nullptr, &frame.in_flight));
+    }
+
+    if (timestamps_supported) {
+        VkQueryPoolCreateInfo query_info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+        query_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        query_info.queryCount = kFramesInFlight * 2;
+        NOOR_VK_TRY(vkCreateQueryPool(device, &query_info, nullptr, &timestamp_pool));
+    } else {
+        NOOR_LOG_WARN("Render", "GPU timestamps not supported on this queue; GPU frame time unavailable");
     }
 
     VkCommandPoolCreateInfo upload_info{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -413,6 +425,16 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     FrameSync& frame = frames[frame_index];
     NOOR_VK_TRY(vkWaitForFences(device, 1, &frame.in_flight, VK_TRUE, kNoTimeout));
 
+    // This slot's previous frame has finished on the GPU, so its timestamps are ready.
+    if (timestamps_supported && timestamps_written[frame_index]) {
+        std::uint64_t ticks[2]{};
+        if (vkGetQueryPoolResults(device, timestamp_pool, frame_index * 2, 2, sizeof(ticks), ticks,
+                                  sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+            ticks[1] >= ticks[0]) {
+            stats.gpu_ms = static_cast<double>(ticks[1] - ticks[0]) * timestamp_period_ns / 1.0e6;
+        }
+    }
+
     std::uint32_t image_index = 0;
     const VkResult acquired =
         vkAcquireNextImageKHR(device, swapchain, kNoTimeout, frame.image_available, VK_NULL_HANDLE, &image_index);
@@ -423,15 +445,20 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     if (acquired == VK_SUBOPTIMAL_KHR) {
         swapchain_dirty = true;  // still usable this frame; rebuild next frame
     } else if (acquired != VK_SUCCESS) {
-        return fail(ErrorCode::GraphicsError, std::format("vkAcquireNextImageKHR failed ({})", string_VkResult(acquired)));
+        return vk_failure(acquired, "vkAcquireNextImageKHR");
     }
 
+    const auto record_start = std::chrono::steady_clock::now();
     NOOR_VK_TRY(vkResetFences(device, 1, &frame.in_flight));
     NOOR_VK_TRY(vkResetCommandPool(device, frame.pool, 0));
 
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     NOOR_VK_TRY(vkBeginCommandBuffer(frame.cmd, &begin));
+    if (timestamps_supported) {
+        vkCmdResetQueryPool(frame.cmd, timestamp_pool, frame_index * 2, 2);
+        vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestamp_pool, frame_index * 2);
+    }
 
     const VkImage image = images[image_index];
 
@@ -482,6 +509,10 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                       VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE);
     }
 
+    if (timestamps_supported) {
+        vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, timestamp_pool, frame_index * 2 + 1);
+        timestamps_written[frame_index] = true;
+    }
     NOOR_VK_TRY(vkEndCommandBuffer(frame.cmd));
 
     VkSemaphoreSubmitInfo wait{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
@@ -501,6 +532,8 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     submit.signalSemaphoreInfoCount = 1;
     submit.pSignalSemaphoreInfos = &signal;
     NOOR_VK_TRY(vkQueueSubmit2(queue, 1, &submit, frame.in_flight));
+    stats.cpu_record_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - record_start).count();
 
     VkPresentInfoKHR present{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     present.waitSemaphoreCount = 1;
@@ -512,7 +545,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     if (presented == VK_ERROR_OUT_OF_DATE_KHR || presented == VK_SUBOPTIMAL_KHR) {
         swapchain_dirty = true;
     } else if (presented != VK_SUCCESS) {
-        return fail(ErrorCode::GraphicsError, std::format("vkQueuePresentKHR failed ({})", string_VkResult(presented)));
+        return vk_failure(presented, "vkQueuePresentKHR");
     }
 
     frame_index = (frame_index + 1) % kFramesInFlight;
@@ -533,6 +566,10 @@ void Renderer::Impl::destroy() {
         }
         vkDestroyCommandPool(device, upload_pool, nullptr);
         upload_pool = VK_NULL_HANDLE;
+        if (timestamp_pool != VK_NULL_HANDLE) {
+            vkDestroyQueryPool(device, timestamp_pool, nullptr);
+            timestamp_pool = VK_NULL_HANDLE;
+        }
         for (std::uint32_t i = 0; i < meshes.size(); ++i) {
             destroy_mesh(MeshHandle{i + 1});
         }

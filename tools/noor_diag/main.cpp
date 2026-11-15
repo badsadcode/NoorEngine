@@ -1,21 +1,28 @@
 // noor_diag: NoorEngine diagnostics tool.
 //
-// Opens a window, initializes Vulkan, reports the GPU and draws a lit, spinning cube on
-// Noor purple. Exits non-zero on any failure or Vulkan validation error, which makes it
-// the GPU smoke test. Stays as a permanent developer utility.
+// Opens a window, initializes Vulkan, reports the GPU and draws a lit, spinning cube on a
+// ground plane in front of Noor purple. Exits non-zero on any failure or Vulkan validation
+// error, which makes it the GPU smoke test. Stays as a permanent developer utility.
 //
-//   noor_diag [--frames N] [--no-validation] [--verify-render] [--screenshot <file.bmp>] [--log <file>]
+//   noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render]
+//             [--screenshot <file.bmp>] [--log <file>]
 //
-// --verify-render holds the cube still, reads a frame back from the GPU and checks real
-// pixels: background, the cube's front face and its top face must have the expected colors.
-// That catches broken projection (Y flip), culling/winding, depth and color-space bugs.
+// Controls: hold the right mouse button to look around, WASD to move, Q/E down/up,
+// Shift to go faster, mouse wheel to change speed, Esc to quit.
+//
+// --cubes N adds a grid of N spinning cubes (one draw call each): a simple stress test.
+// --verify-render shows only the hero cube from a fixed camera, reads a frame back from the
+// GPU and checks real pixels: background, the cube's front face and its top face must have
+// the expected colors. That catches broken projection, culling/winding, depth and color bugs.
 
 #include "noor/foundation/log.h"
 #include "noor/foundation/math.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
+#include "noor/render/fly_camera.h"
 #include "noor/render/renderer.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -34,6 +41,7 @@ using noor::math::Vec3;
 
 struct Options {
     std::uint64_t max_frames = 0;  // 0 = run until the window is closed
+    std::uint32_t cubes = 0;       // extra cubes in a grid (stress test)
     bool validation = true;
     bool verify_render = false;
     std::string screenshot_path;  // non-empty: save frame 90 as a 24-bit BMP
@@ -46,6 +54,12 @@ bool parse_options(int argc, char** argv, Options& out) {
         if (arg == "--frames" && i + 1 < argc) {
             const std::string_view value = argv[++i];
             if (std::from_chars(value.data(), value.data() + value.size(), out.max_frames).ec != std::errc{}) {
+                return false;
+            }
+        } else if (arg == "--cubes" && i + 1 < argc) {
+            const std::string_view value = argv[++i];
+            if (std::from_chars(value.data(), value.data() + value.size(), out.cubes).ec != std::errc{} ||
+                out.cubes > 100'000) {
                 return false;
             }
         } else if (arg == "--no-validation") {
@@ -73,30 +87,34 @@ Vec3 srgb_hex(std::uint32_t rgb) {
 
 constexpr std::uint32_t kNoorPurple = 0x6B3FD9;
 
-// A 2 m cube with one color per face, counter-clockwise front faces (ADR-022).
+// A 2 m box (−1..1 on each axis) with one color per face, counter-clockwise front faces (ADR-022).
 struct CubeMesh {
     std::vector<noor::render::Vertex> vertices;
     std::vector<std::uint32_t> indices;
 };
 
-CubeMesh make_cube() {
+// Face order: +Y, −Y, +Z, −Z, +X, −X.
+constexpr std::array<std::uint32_t, 6> kHeroColors = {0x22D3EE, 0xE5484D, 0x7C4DFF, 0xF59E0B, 0xEC4899, 0xFACC15};
+constexpr std::array<std::uint32_t, 6> kGroundColors = {0x3B3354, 0x221D30, 0x2A2440, 0x2A2440, 0x2A2440, 0x2A2440};
+
+CubeMesh make_cube(const std::array<std::uint32_t, 6>& colors = kHeroColors) {
     struct Face {
         Vec3 normal, u, v;
-        std::uint32_t color;
     };
     // u × v = normal, so (−u−v, +u−v, +u+v, −u+v) winds counter-clockwise seen from outside.
     const Face faces[] = {
-        {{0, 1, 0}, {1, 0, 0}, {0, 0, -1}, 0x22D3EE},   // +Y top: cyan
-        {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}, 0xE5484D},   // −Y bottom: red
-        {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}, 0x7C4DFF},    // +Z front: purple
-        {{0, 0, -1}, {-1, 0, 0}, {0, 1, 0}, 0xF59E0B},  // −Z back: orange
-        {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}, 0xEC4899},   // +X right: pink
-        {{-1, 0, 0}, {0, 0, 1}, {0, 1, 0}, 0xFACC15},   // −X left: yellow
+        {{0, 1, 0}, {1, 0, 0}, {0, 0, -1}},   // +Y top: cyan
+        {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}},   // −Y bottom: red
+        {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}},    // +Z front: purple
+        {{0, 0, -1}, {-1, 0, 0}, {0, 1, 0}},  // −Z back: orange
+        {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}},   // +X right: pink
+        {{-1, 0, 0}, {0, 0, 1}, {0, 1, 0}},   // −X left: yellow
     };
     CubeMesh mesh;
-    for (const Face& f : faces) {
+    for (std::size_t fi = 0; fi < 6; ++fi) {
+        const Face& f = faces[fi];
         const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
-        const Vec3 color = srgb_hex(f.color);
+        const Vec3 color = srgb_hex(colors[fi]);
         const Vec3 corners[4] = {f.normal - f.u - f.v, f.normal + f.u - f.v, f.normal + f.u + f.v,
                                  f.normal - f.u + f.v};
         for (const Vec3& p : corners) {
@@ -220,15 +238,42 @@ int run(const Options& options) {
                       gpu.api_version, gpu.vendor_id);
 
         const CubeMesh cube_data = make_cube();
+        const CubeMesh ground_data = make_cube(kGroundColors);
         auto cube = (*renderer)->create_mesh({cube_data.vertices, cube_data.indices});
-        if (!cube) {
-            NOOR_LOG_FATAL("Diag", "{}", cube.error().describe());
+        auto ground = (*renderer)->create_mesh({ground_data.vertices, ground_data.indices});
+        if (!cube || !ground) {
+            NOOR_LOG_FATAL("Diag", "{}", (!cube ? cube.error() : ground.error()).describe());
             exit_code = 1;
+        }
+
+        // Scene: hero cube at the origin, ground slab just below it, optional grid of small cubes.
+        using noor::math::rotation;
+        using noor::math::scale;
+        using noor::math::translation;
+        const auto grid_side = static_cast<std::uint32_t>(std::ceil(std::sqrt(static_cast<double>(options.cubes))));
+        constexpr float kSpacing = 3.0f;
+        const float grid_half = static_cast<float>(grid_side) * kSpacing * 0.5f;
+        const float ground_half = std::max(20.0f, grid_half + 8.0f);
+        const float grid_center_z = -(grid_half + 4.0f);  // grid sits behind the hero cube
+        std::vector<noor::render::DrawItem> draws;
+        draws.reserve(options.cubes + 2);
+
+        noor::render::FlyCamera fly;
+        fly.position = options.cubes > 0 ? Vec3{0.0f, 2.0f + grid_half * 0.5f, grid_half + 8.0f} : Vec3{0.0f, 1.8f, 5.0f};
+        fly.look_at(options.cubes > 0 ? Vec3{0.0f, 0.0f, grid_center_z} : Vec3{0, 0, 0});
+        bool mouse_captured = false;
+        if (!options.verify_render && options.max_frames == 0) {
+            NOOR_LOG_INFO("Diag", "Controls: hold right mouse = look, WASD = move, Q/E = down/up, Shift = faster, "
+                                  "wheel = speed, Esc = quit");
         }
 
         noor::render::Camera camera;
         camera.view = noor::math::look_at({0.0f, 1.8f, 5.0f}, {0, 0, 0}, {0, 1, 0});
         camera.fov_y = noor::math::radians(50.0f);
+
+        double cpu_ms_sum = 0.0, gpu_ms_sum = 0.0, gpu_ms_max = 0.0;
+        std::uint64_t timed_frames = 0, gpu_timed_frames = 0;
+        double last_frame_time = noor::platform::time_seconds();
 
         constexpr std::uint64_t kVerifyFrame = 30;
         constexpr std::uint64_t kScreenshotFrame = 90;
@@ -249,9 +294,54 @@ int run(const Options& options) {
             }
 
             const double now = noor::platform::time_seconds();
-            // In verify mode the cube holds still, so the pixel probes are deterministic.
-            const float angle = options.verify_render ? 0.0f : static_cast<float>(now - start) * 0.8f;
-            const noor::render::DrawItem draws[] = {{*cube, noor::math::rotation({0.2f, 1.0f, 0.1f}, angle)}};
+            const auto dt = static_cast<float>(std::min(now - last_frame_time, 0.1));
+            last_frame_time = now;
+
+            // Camera controls (not in verify mode, which needs a fixed camera).
+            const auto& in = noor::platform::input();
+            using noor::platform::Key;
+            using noor::platform::MouseButton;
+            if (in.pressed(Key::Escape)) {
+                NOOR_LOG_INFO("Diag", "Escape pressed");
+                break;
+            }
+            if (!options.verify_render) {
+                const bool want_capture = in.down(MouseButton::Right);
+                if (want_capture != mouse_captured) {
+                    noor::platform::set_relative_mouse(**window, want_capture);
+                    mouse_captured = want_capture;
+                }
+                if (in.wheel != 0.0f) {
+                    fly.speed = std::clamp(fly.speed * std::pow(1.25f, in.wheel), 0.5f, 200.0f);
+                }
+                const auto axis = [&](Key pos, Key neg) {
+                    return (in.down(pos) ? 1.0f : 0.0f) - (in.down(neg) ? 1.0f : 0.0f);
+                };
+                fly.update({.move = {axis(Key::D, Key::A), axis(Key::E, Key::Q), axis(Key::W, Key::S)},
+                            .look_dx = mouse_captured ? in.mouse_dx : 0.0f,
+                            .look_dy = mouse_captured ? in.mouse_dy : 0.0f,
+                            .boost = in.down(Key::LeftShift)},
+                           dt);
+                camera.view = fly.view();
+            }
+
+            // In verify mode the cube holds still and nothing else is drawn, so the pixel probes
+            // are deterministic.
+            const auto t = static_cast<float>(now - start);
+            draws.clear();
+            draws.push_back({*cube, rotation({0.2f, 1.0f, 0.1f}, options.verify_render ? 0.0f : t * 0.8f)});
+            if (!options.verify_render) {
+                draws.push_back({*ground, translation({0.0f, -1.6f, grid_center_z * 0.5f}) *
+                                              scale({ground_half, 0.1f, ground_half - grid_center_z * 0.5f})});
+                for (std::uint32_t i = 0; i < options.cubes; ++i) {
+                    const float gx = static_cast<float>(i % grid_side) * kSpacing - grid_half + kSpacing * 0.5f;
+                    const float gz = static_cast<float>(i / grid_side) * kSpacing - grid_half + kSpacing * 0.5f;
+                    const float phase = static_cast<float>(i) * 0.37f;
+                    draws.push_back({*cube, translation({gx, -0.9f, gz + grid_center_z}) *
+                                                rotation({0.3f, 1.0f, 0.2f}, t * 0.6f + phase) *
+                                                scale({0.5f, 0.5f, 0.5f})});
+                }
+            }
 
             const std::uint64_t presented = (*renderer)->frames_presented();
             if ((options.verify_render && presented == kVerifyFrame) ||
@@ -268,6 +358,16 @@ int run(const Options& options) {
             if (*frame == noor::render::FrameResult::Skipped && (*window)->is_minimized()) {
                 noor::platform::wait_for_events(100);
                 continue;
+            }
+            if (*frame == noor::render::FrameResult::Presented) {
+                const auto& stats = (*renderer)->last_frame_stats();
+                cpu_ms_sum += stats.cpu_record_ms;
+                ++timed_frames;
+                if (stats.gpu_ms >= 0.0) {
+                    gpu_ms_sum += stats.gpu_ms;
+                    gpu_ms_max = std::max(gpu_ms_max, stats.gpu_ms);
+                    ++gpu_timed_frames;
+                }
             }
 
             if (!screenshot_taken) {
@@ -297,8 +397,9 @@ int run(const Options& options) {
                 const std::uint64_t done = (*renderer)->frames_presented();
                 const double fps = static_cast<double>(done - frames_at_last_report) / (now - last_report);
                 const auto& stats = (*renderer)->last_frame_stats();
-                (*window)->set_title(std::format("NoorEngine Diagnostics | {} | {:.0f} FPS (vsync) | {} draw, {} tris",
-                                                 gpu.name, fps, stats.draw_calls, stats.triangles));
+                (*window)->set_title(std::format(
+                    "NoorEngine Diagnostics | {} | {:.0f} FPS (vsync) | CPU {:.2f} ms | GPU {:.2f} ms | {} draws, {} tris",
+                    gpu.name, fps, stats.cpu_record_ms, stats.gpu_ms, stats.draw_calls, stats.triangles));
                 last_report = now;
                 frames_at_last_report = done;
             }
@@ -317,6 +418,13 @@ int run(const Options& options) {
         NOOR_LOG_INFO("Diag", "Presented {} frames in {:.2f}s (avg {:.2f} ms/frame, vsync-limited), {} swapchain build(s)",
                       presented, elapsed, presented ? elapsed * 1000.0 / static_cast<double>(presented) : 0.0,
                       (*renderer)->swapchain_rebuilds());
+        if (timed_frames > 0) {
+            const auto& last = (*renderer)->last_frame_stats();
+            NOOR_LOG_INFO("Diag", "Frame cost: {} draws, {} triangles | CPU record avg {:.3f} ms | GPU avg {} ms, max {} ms",
+                          last.draw_calls, last.triangles, cpu_ms_sum / static_cast<double>(timed_frames),
+                          gpu_timed_frames ? std::format("{:.3f}", gpu_ms_sum / static_cast<double>(gpu_timed_frames)) : "n/a",
+                          gpu_timed_frames ? std::format("{:.3f}", gpu_ms_max) : "n/a");
+        }
 
         const bool validated = (*renderer)->validation_enabled();
         const std::uint64_t vk_warnings = (*renderer)->validation_warning_count();
@@ -345,7 +453,8 @@ int main(int argc, char** argv) {
 
     Options options;
     if (!parse_options(argc, argv, options)) {
-        NOOR_LOG_ERROR("Diag", "Usage: noor_diag [--frames N] [--no-validation] [--verify-render] [--log <file>]");
+        NOOR_LOG_ERROR("Diag", "Usage: noor_diag [--frames N] [--cubes N] [--no-validation] [--verify-render] "
+                               "[--screenshot <file.bmp>] [--log <file>]");
         return 64;
     }
 

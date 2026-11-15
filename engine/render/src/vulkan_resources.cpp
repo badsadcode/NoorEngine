@@ -334,7 +334,8 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
 }
 
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame) {
-    stats = {};
+    stats.draw_calls = 0;  // timings are set by the frame loop, not here
+    stats.triangles = 0;
     if (frame.draws.empty()) {
         return;
     }

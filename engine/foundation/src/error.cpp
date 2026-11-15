@@ -16,6 +16,7 @@ std::string_view to_string(ErrorCode code) noexcept {
     case ErrorCode::OutOfMemory: return "OutOfMemory";
     case ErrorCode::VersionMismatch: return "VersionMismatch";
     case ErrorCode::PlatformError: return "PlatformError";
+    case ErrorCode::DeviceLost: return "DeviceLost";
     case ErrorCode::GraphicsError: return "GraphicsError";
     }
     return "Unknown";

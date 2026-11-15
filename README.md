@@ -18,14 +18,15 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | Build (CMake + MSVC), pinned dependencies | Works on Windows 10/11 |
 | `foundation`: logging, errors (`Result<T>`), asserts, GUIDs, math | Works, unit-tested |
 | `platform`: SDL3 window + events | Works |
-| `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, frame capture | Works; smoke test + GPU pixel test with validation layers (resize/maximize tested by hand; minimize untested) |
-| `noor_diag`: diagnostics app (GPU info + lit spinning cube, `--verify-render`, `--screenshot`) | Works |
+| `platform`: input (keyboard, mouse, relative mouse mode) | Works; used by the fly camera |
+| `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel and 2,500-cube stress tests with validation (resize/maximize tested by hand; minimize untested; device loss reported, not recovered) |
+| `noor_diag`: diagnostics app (fly camera, `--cubes N` stress grid, timings, `--verify-render`, `--screenshot`) | Works |
 | `editor_api`: C API DLL hosting engine viewports in a foreign window (v0) | Works in the Avalonia spike; API not stable |
 | Editor GUI stack: Avalonia + Dock ([ADR-003](docs/decisions/ADR-003-editor-gui-framework.md)) | **Spike only**, decision accepted; NoorEditor itself not started |
 | Scenes, assets, scripting, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
-`docs/devlog/img` are real captures of the spike.
+`docs/devlog/img` are real captures of the engine and the editor spike.
 
 ## Build
 
@@ -44,7 +45,8 @@ Run the diagnostics app:
 build/windows/tools/noor_diag/Debug/noor_diag.exe
 ```
 
-Options: `--frames N` (exit after N frames), `--no-validation`, `--verify-render`,
+Controls: hold right mouse to look, WASD to move, Q/E down/up, Shift faster, wheel for speed, Esc quits.
+Options: `--frames N` (exit after N frames), `--cubes N`, `--no-validation`, `--verify-render`,
 `--screenshot <file.bmp>`, `--log <file>`.
 
 Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug -LE gpu`.

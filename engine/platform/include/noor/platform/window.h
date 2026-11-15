@@ -35,6 +35,9 @@ public:
     [[nodiscard]] Result<VkSurfaceKHR> create_vulkan_surface(VkInstance instance) const override;
     void destroy_vulkan_surface(VkInstance instance, VkSurfaceKHR surface) const override;
 
+    // Opaque backend handle for the platform layer itself. Not for general use.
+    [[nodiscard]] void* backend_handle() const noexcept { return handle_; }
+
 private:
     explicit Window(void* handle) : handle_(handle) {}
     void* handle_ = nullptr;
