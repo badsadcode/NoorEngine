@@ -8,12 +8,16 @@
 // With a document attached (ADR-025) the viewport draws the document's scene: it picks up
 // each published RenderSnapshot, loads the GLBs it references (on the render thread) and
 // draws every mesh with its world matrix. Camera: right-drag orbits, middle-drag pans, the
-// wheel zooms. Without a document it shows the spike's input demo (hue follows the pointer).
+// wheel zooms. Left click picks (reported as an event), and a gizmo on the selected entity can
+// be dragged: the drag is previewed here and reported as an event on release. The viewport
+// never edits the document; the editor turns events into undoable commands.
+// Without a document it shows the spike's input demo (hue follows the pointer).
 
 #include "noor_editor_api.h"
 
 #include "api_internal.h"
 #include "document.h"
+#include "viewport_tools.h"
 #include "noor/asset/gltf_import.h"
 #include "noor/asset/json.h"
 #include "noor/foundation/log.h"
@@ -25,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -37,7 +42,12 @@
 #endif
 
 using namespace std::chrono_literals;
+using noor::Guid;
+using noor::math::Mat4;
+using noor::math::Quat;
 using noor::math::Vec3;
+using noor::math::Vec4;
+namespace ed = noor::editor;
 
 struct noor_viewport {
     std::unique_ptr<noor::platform::NativeChildWindow> window;
@@ -51,8 +61,21 @@ struct noor_viewport {
 
     // Set from the UI thread, read by the render thread.
     std::mutex doc_mutex;
-    std::shared_ptr<noor::editor::SnapshotChannel> channel;
-    std::optional<std::vector<noor::Guid>> frame_request;  // empty vector = frame everything
+    std::shared_ptr<ed::SnapshotChannel> channel;
+    std::optional<std::vector<Guid>> frame_request;  // empty vector = frame everything
+    std::vector<Guid> selection;
+    std::optional<Guid> gizmo_entity;
+    ed::GizmoMode gizmo_mode = ed::GizmoMode::None;
+    std::uint64_t selection_version = 0;
+
+    // The camera of the last drawn frame (for noor_viewport_world_to_screen).
+    std::mutex camera_mutex;
+    std::optional<ed::CameraBasis> camera;
+    float camera_width = 0, camera_height = 0;
+
+    // Written by the render thread, drained by the UI thread.
+    std::mutex event_mutex;
+    noor::asset::Json events = noor::asset::Json::array();
 };
 
 namespace {
@@ -63,6 +86,11 @@ Vec3 srgb(std::uint32_t rgb) {
     return {srgb_to_linear(static_cast<float>((rgb >> 16) & 0xFF) / 255.0f),
             srgb_to_linear(static_cast<float>((rgb >> 8) & 0xFF) / 255.0f),
             srgb_to_linear(static_cast<float>(rgb & 0xFF) / 255.0f)};
+}
+
+Vec4 tint(std::uint32_t rgb, float amount) {
+    const Vec3 c = srgb(rgb);
+    return {c.x, c.y, c.z, amount};
 }
 
 // HSV (h in degrees) to sRGB.
@@ -87,20 +115,97 @@ std::array<float, 4> demo_clear_color(const noor::platform::PointerState& p, noo
     return {srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2]), 1.0f};
 }
 
-// A unit box (−1..1), one color, counter-clockwise faces: the ground slab and marker cubes.
-std::pair<std::vector<noor::render::Vertex>, std::vector<std::uint32_t>> make_box(Vec3 color) {
+using Geometry = std::pair<std::vector<noor::render::Vertex>, std::vector<std::uint32_t>>;
+
+// An axis-aligned box from lo to hi, one color, counter-clockwise faces.
+Geometry make_box(Vec3 color, Vec3 lo = {-1, -1, -1}, Vec3 hi = {1, 1, 1}) {
     struct Face { Vec3 n, u, v; };
     const Face faces[] = {{{0, 1, 0}, {1, 0, 0}, {0, 0, -1}}, {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}},
                           {{0, 0, 1}, {1, 0, 0}, {0, 1, 0}},  {{0, 0, -1}, {-1, 0, 0}, {0, 1, 0}},
                           {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}}, {{-1, 0, 0}, {0, 0, 1}, {0, 1, 0}}};
-    std::vector<noor::render::Vertex> v;
-    std::vector<std::uint32_t> idx;
+    const Vec3 c = (lo + hi) * 0.5f, h = (hi - lo) * 0.5f;
+    Geometry g;
     for (const Face& f : faces) {
-        const auto base = static_cast<std::uint32_t>(v.size());
-        for (const Vec3 p : {f.n - f.u - f.v, f.n + f.u - f.v, f.n + f.u + f.v, f.n - f.u + f.v}) v.push_back({p, f.n, color});
-        for (const std::uint32_t i : {0u, 1u, 2u, 0u, 2u, 3u}) idx.push_back(base + i);
+        const auto base = static_cast<std::uint32_t>(g.first.size());
+        for (const Vec3 p : {f.n - f.u - f.v, f.n + f.u - f.v, f.n + f.u + f.v, f.n - f.u + f.v})
+            g.first.push_back({{c.x + p.x * h.x, c.y + p.y * h.y, c.z + p.z * h.z}, f.n, color});
+        for (const std::uint32_t i : {0u, 1u, 2u, 0u, 2u, 3u}) g.second.push_back(base + i);
     }
-    return {v, idx};
+    return g;
+}
+
+// Gizmo arrow along +Y from 0 to 1: a thin shaft and a cone tip.
+Geometry make_arrow() {
+    constexpr int kSides = 16;
+    Geometry g;
+    auto ring = [&](float y, float r, float ny) {
+        const auto base = static_cast<std::uint32_t>(g.first.size());
+        for (int i = 0; i < kSides; ++i) {
+            const float a = 2.0f * noor::math::kPi * static_cast<float>(i) / kSides;
+            const Vec3 n = noor::math::normalize(Vec3{std::cos(a), ny, std::sin(a)});
+            g.first.push_back({{std::cos(a) * r, y, std::sin(a) * r}, n, {1, 1, 1}});
+        }
+        return base;
+    };
+    auto connect = [&](std::uint32_t a, std::uint32_t b) {
+        for (std::uint32_t i = 0; i < kSides; ++i) {
+            const std::uint32_t j = (i + 1) % kSides;
+            for (const std::uint32_t k : {a + i, b + i, b + j, a + i, b + j, a + j}) g.second.push_back(k);
+        }
+    };
+    const auto s0 = ring(0.0f, 0.018f, 0.0f), s1 = ring(0.78f, 0.018f, 0.0f);
+    connect(s0, s1);
+    const auto c0 = ring(0.78f, 0.065f, 0.35f);
+    const auto tip = static_cast<std::uint32_t>(g.first.size());
+    g.first.push_back({{0, 1, 0}, {0, 1, 0}, {1, 1, 1}});
+    for (std::uint32_t i = 0; i < kSides; ++i) {
+        for (const std::uint32_t k : {c0 + i, tip, c0 + (i + 1) % kSides}) g.second.push_back(k);
+    }
+    return g;
+}
+
+// Gizmo ring around the Y axis.
+Geometry make_ring(float radius, float tube) {
+    constexpr int kMajor = 72, kMinor = 8;
+    Geometry g;
+    for (int i = 0; i < kMajor; ++i) {
+        const float a = 2.0f * noor::math::kPi * static_cast<float>(i) / kMajor;
+        const Vec3 dir{std::cos(a), 0, std::sin(a)};
+        for (int j = 0; j < kMinor; ++j) {
+            const float b = 2.0f * noor::math::kPi * static_cast<float>(j) / kMinor;
+            const Vec3 n = dir * std::cos(b) + Vec3{0, std::sin(b), 0};
+            g.first.push_back({dir * radius + n * tube, n, {1, 1, 1}});
+        }
+    }
+    for (int i = 0; i < kMajor; ++i) {
+        for (int j = 0; j < kMinor; ++j) {
+            const auto a = static_cast<std::uint32_t>(i * kMinor + j);
+            const auto b = static_cast<std::uint32_t>(((i + 1) % kMajor) * kMinor + j);
+            const auto c = static_cast<std::uint32_t>(((i + 1) % kMajor) * kMinor + (j + 1) % kMinor);
+            const auto d = static_cast<std::uint32_t>(i * kMinor + (j + 1) % kMinor);
+            for (const std::uint32_t k : {a, c, b, a, d, c}) g.second.push_back(k);
+        }
+    }
+    return g;
+}
+
+// Maps the gizmo's +Y-built parts onto an axis.
+Mat4 axis_frame(ed::Handle h) {
+    const Vec3 a = ed::handle_axis(h);
+    if (a.x > 0.5f) return noor::math::rotation({0, 0, 1}, -noor::math::kPi * 0.5f);
+    if (a.z > 0.5f) return noor::math::rotation({1, 0, 0}, noor::math::kPi * 0.5f);
+    return Mat4::identity();
+}
+
+std::uint32_t handle_color(ed::Handle h) {
+    switch (h) {
+    case ed::Handle::MoveX:
+    case ed::Handle::RotateX: return 0xF06A6A;
+    case ed::Handle::MoveZ:
+    case ed::Handle::RotateZ: return 0x6AA8F0;
+    case ed::Handle::MoveXZ: return 0xFBBF24;
+    default: return 0x7BD88F;
+    }
 }
 
 // Orbit camera: yaw/pitch/distance around a target.
@@ -109,28 +214,61 @@ struct OrbitCamera {
     float yaw = 0.6f;
     float pitch = 0.45f;
     float distance = 30.0f;
+    float fov_y = noor::math::radians(50.0f);
 
     [[nodiscard]] Vec3 eye() const {
         return target + Vec3{std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)} * distance;
     }
-    [[nodiscard]] noor::math::Mat4 view() const { return noor::math::look_at(eye(), target, {0, 1, 0}); }
+    [[nodiscard]] Mat4 view() const { return noor::math::look_at(eye(), target, {0, 1, 0}); }
+    [[nodiscard]] ed::CameraBasis basis() const {
+        const Vec3 e = eye();
+        const Vec3 f = noor::math::normalize(target - e);
+        const Vec3 r = noor::math::normalize(noor::math::cross(f, {0, 1, 0}));
+        return {e, f, r, noor::math::cross(r, f), fov_y};
+    }
 
     void frame(Vec3 lo, Vec3 hi) {
         target = (lo + hi) * 0.5f;
         const float radius = std::max(1.0f, noor::math::length(hi - lo) * 0.5f);
-        distance = radius / std::sin(noor::math::radians(25.0f)) * 1.1f;  // fits a 50° field of view
+        distance = radius / std::sin(fov_y * 0.5f) * 1.1f;
     }
 };
 
-struct LoadedAsset {
-    std::vector<noor::render::MeshHandle> handles;
-    std::vector<std::pair<Vec3, Vec3>> bounds;  // per mesh, local space
+struct LoadedMesh {
+    noor::render::MeshHandle handle;
+    Vec3 lo, hi;  // local bounds
+    std::vector<Vec3> positions;  // CPU copy for picking
+    std::vector<std::uint32_t> indices;
 };
 
 void set_state(noor_viewport* vp, noor_viewport_state state) {
     std::scoped_lock lock(vp->stats_mutex);
     vp->stats.state = state;
 }
+
+void push_event(noor_viewport* vp, noor::asset::Json event) {
+    std::scoped_lock lock(vp->event_mutex);
+    vp->events.push_back(std::move(event));
+}
+
+noor::asset::Json transform_json(const noor::scene::Transform& t) {
+    return {{"position", {t.position.x, t.position.y, t.position.z}},
+            {"rotation", {t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w}},
+            {"scale", {t.scale.x, t.scale.y, t.scale.z}}};
+}
+
+void grow(Vec3& lo, Vec3& hi, Vec3 p) {
+    lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
+    hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+}
+
+// A gizmo drag in progress, or one just released whose result the document hasn't shown yet.
+struct Preview {
+    Guid entity;
+    Mat4 delta = Mat4::identity();  // applied to the world matrices of the entity's subtree
+    const ed::RenderSnapshot* shown_at_release = nullptr;
+    std::chrono::steady_clock::time_point released{};
+};
 
 void render_thread_main(noor_viewport* vp) {
     auto renderer = noor::render::Renderer::create(*vp->window, {.enable_validation = vp->enable_validation});
@@ -147,17 +285,47 @@ void render_thread_main(noor_viewport* vp) {
     }
 
     auto& r = **renderer;
-    const auto [ground_v, ground_i] = make_box(srgb(0x26222F));
-    const auto [marker_v, marker_i] = make_box(srgb(0x22D3EE));
-    const auto ground = r.create_mesh({ground_v, ground_i, "Editor ground"});
-    const auto marker = r.create_mesh({marker_v, marker_i, "Editor marker"});
+    auto upload = [&](const Geometry& g, std::string_view name) {
+        auto h = r.create_mesh({g.first, g.second, name});
+        return h ? *h : noor::render::MeshHandle{};
+    };
+    const auto ground = upload(make_box(srgb(0x26222F)), "Editor ground");
+    const auto marker = upload(make_box(srgb(0x22D3EE)), "Editor marker");
+    const auto arrow = upload(make_arrow(), "Gizmo arrow");
+    const auto ring = upload(make_ring(ed::kRingRadius, 0.012f), "Gizmo ring");
+    const auto plane = upload(make_box({1, 1, 1}, {ed::kPlaneMin, -0.004f, ed::kPlaneMin}, {ed::kPlaneMax, 0.004f, ed::kPlaneMax}), "Gizmo plane");
+    const auto hub = upload(make_box({1, 1, 1}, {-0.04f, -0.04f, -0.04f}, {0.04f, 0.04f, 0.04f}), "Gizmo center");
 
-    std::unordered_map<std::string, std::optional<LoadedAsset>> assets;  // by absolute path
-    std::shared_ptr<const noor::editor::RenderSnapshot> shown;
-    std::vector<noor::render::DrawItem> draws;
+    std::unordered_map<std::string, std::optional<std::vector<LoadedMesh>>> assets;  // by absolute path
+    std::shared_ptr<const ed::RenderSnapshot> shown;
+
+    // Per snapshot: what to draw, and for each draw the entity it belongs to.
+    struct SceneDraw {
+        noor::render::DrawItem item;
+        Guid entity;
+        const LoadedMesh* mesh = nullptr;  // null for markers
+    };
+    std::vector<SceneDraw> scene_draws;
+    std::unordered_map<Guid, const ed::RenderSnapshot::Entity*> entity_by_id;
+    std::unordered_map<Guid, std::vector<Guid>> children;
     Vec3 scene_lo{-10, 0, -10}, scene_hi{10, 10, 10};
     bool framed_once = false;
     OrbitCamera camera;
+
+    // Selection/gizmo state as last read from the UI thread, plus derived per-draw flags.
+    std::vector<Guid> selection;
+    std::optional<Guid> gizmo_entity;
+    ed::GizmoMode gizmo_mode = ed::GizmoMode::None;
+    std::uint64_t seen_selection_version = ~0ull;
+    std::vector<char> draw_selected, draw_in_gizmo_subtree;
+    bool flags_dirty = true;
+
+    // Pointer interaction.
+    std::optional<ed::GizmoDrag> drag;
+    std::optional<Preview> preview;
+    ed::Handle hovered = ed::Handle::None;
+    bool click_pending = false;
+    noor::platform::PointerState press{};
 
     noor::platform::PixelSize last_size = vp->window->pixel_size();
     noor::platform::PointerState last_pointer = vp->window->pointer_state();
@@ -165,59 +333,87 @@ void render_thread_main(noor_viewport* vp) {
     std::uint64_t frames_at_last_fps = 0;
     double fps = 0.0;
 
+    auto subtree_of = [&](const Guid& root) {
+        std::unordered_set<Guid> set{root};
+        std::vector<Guid> stack{root};
+        while (!stack.empty()) {
+            const Guid id = stack.back();
+            stack.pop_back();
+            if (auto it = children.find(id); it != children.end()) {
+                for (const Guid& c : it->second)
+                    if (set.insert(c).second) stack.push_back(c);
+            }
+        }
+        return set;
+    };
+
     while (!vp->stop.load()) {
-        std::shared_ptr<noor::editor::SnapshotChannel> channel;
-        std::optional<std::vector<noor::Guid>> frame_request;
+        std::shared_ptr<ed::SnapshotChannel> channel;
+        std::optional<std::vector<Guid>> frame_request;
         {
             std::scoped_lock lock(vp->doc_mutex);
             channel = vp->channel;
             frame_request = std::exchange(vp->frame_request, std::nullopt);
+            if (vp->selection_version != seen_selection_version) {
+                seen_selection_version = vp->selection_version;
+                selection = vp->selection;
+                if (gizmo_entity != vp->gizmo_entity) drag.reset();
+                gizmo_entity = vp->gizmo_entity;
+                gizmo_mode = vp->gizmo_mode;
+                flags_dirty = true;
+            }
         }
 
         // New scene state? Load what it needs and rebuild the draw list.
         auto snap = channel ? channel->get() : nullptr;
         if (snap != shown) {
             shown = snap;
-            draws.clear();
+            scene_draws.clear();
+            entity_by_id.clear();
+            children.clear();
+            flags_dirty = true;
             bool any = false;
             Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
             if (snap) {
+                for (const auto& e : snap->entities) {
+                    entity_by_id[e.id] = &e;
+                    if (e.parent) children[*e.parent].push_back(e.id);
+                }
                 for (const auto& m : snap->meshes) {
                     auto [it, fresh] = assets.try_emplace(m.asset_path);
                     if (fresh) {
                         if (auto model = noor::asset::import_gltf(m.asset_path)) {
-                            LoadedAsset loaded;
+                            std::vector<LoadedMesh> loaded;
                             for (const auto& mesh : model->meshes) {
                                 auto h = r.create_mesh({{reinterpret_cast<const noor::render::Vertex*>(mesh.vertices.data()),
                                                          mesh.vertices.size()},
                                                         mesh.indices, mesh.name});
-                                loaded.handles.push_back(h ? *h : noor::render::MeshHandle{});
-                                Vec3 a{1e30f, 1e30f, 1e30f}, b{-1e30f, -1e30f, -1e30f};
+                                LoadedMesh lm{h ? *h : noor::render::MeshHandle{}, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, {}, {}};
+                                lm.positions.reserve(mesh.vertices.size());
                                 for (const auto& v : mesh.vertices) {
-                                    a = {std::min(a.x, v.position.x), std::min(a.y, v.position.y), std::min(a.z, v.position.z)};
-                                    b = {std::max(b.x, v.position.x), std::max(b.y, v.position.y), std::max(b.z, v.position.z)};
+                                    lm.positions.push_back(v.position);
+                                    grow(lm.lo, lm.hi, v.position);
                                 }
-                                loaded.bounds.emplace_back(a, b);
+                                lm.indices.assign(mesh.indices.begin(), mesh.indices.end());
+                                loaded.push_back(std::move(lm));
                             }
                             it->second = std::move(loaded);
                         } else {
                             NOOR_LOG_WARN("Viewport", "{}", model.error().describe());
                         }
                     }
-                    if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->handles.size())) continue;
-                    const auto handle = it->second->handles[static_cast<std::size_t>(m.mesh_index)];
-                    if (!handle.valid()) continue;
-                    draws.push_back({handle, m.world});
-                    const auto [a, b] = it->second->bounds[static_cast<std::size_t>(m.mesh_index)];
+                    if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->size())) continue;
+                    const LoadedMesh& lm = (*it->second)[static_cast<std::size_t>(m.mesh_index)];
+                    if (!lm.handle.valid()) continue;
+                    scene_draws.push_back({{lm.handle, m.world}, m.entity, &lm});
                     for (int c = 0; c < 8; ++c) {
-                        const Vec3 p = m.world.transform_point({c & 1 ? b.x : a.x, c & 2 ? b.y : a.y, c & 4 ? b.z : a.z});
-                        lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
-                        hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+                        grow(lo, hi, m.world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));
                         any = true;
                     }
                 }
-                if (marker) {
-                    for (const auto& w : snap->markers) draws.push_back({*marker, w * noor::math::scale({0.25f, 0.25f, 0.25f})});
+                if (marker.valid()) {
+                    for (const auto& mk : snap->markers)
+                        scene_draws.push_back({{marker, mk.world * noor::math::scale({0.25f, 0.25f, 0.25f})}, mk.entity, nullptr});
                 }
             }
             if (any) {
@@ -228,6 +424,21 @@ void render_thread_main(noor_viewport* vp) {
                     framed_once = true;
                 }
             }
+            // The document has caught up with a released drag (or moved on): stop previewing.
+            if (preview && !drag && preview->shown_at_release != snap.get()) preview.reset();
+        }
+        if (preview && !drag && std::chrono::steady_clock::now() - preview->released > 1500ms) preview.reset();  // edit rejected
+
+        if (flags_dirty) {
+            flags_dirty = false;
+            std::unordered_set<Guid> selected(selection.begin(), selection.end());
+            const auto moving = gizmo_entity ? subtree_of(*gizmo_entity) : std::unordered_set<Guid>{};
+            draw_selected.assign(scene_draws.size(), 0);
+            draw_in_gizmo_subtree.assign(scene_draws.size(), 0);
+            for (std::size_t i = 0; i < scene_draws.size(); ++i) {
+                draw_selected[i] = selected.contains(scene_draws[i].entity);
+                draw_in_gizmo_subtree[i] = moving.contains(scene_draws[i].entity);
+            }
         }
 
         // Frame request from the editor (F key, double-click in the hierarchy...).
@@ -235,45 +446,30 @@ void render_thread_main(noor_viewport* vp) {
             if (frame_request->empty()) {
                 camera.frame(scene_lo, scene_hi);
             } else {
-                const std::unordered_set<noor::Guid> wanted(frame_request->begin(), frame_request->end());
+                const std::unordered_set<Guid> wanted(frame_request->begin(), frame_request->end());
                 Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
                 bool any = false;
-                for (const auto& m : shown->meshes) {
-                    if (!wanted.contains(m.entity)) continue;
-                    const auto it = assets.find(m.asset_path);
-                    if (it == assets.end() || !it->second || m.mesh_index < 0 ||
-                        m.mesh_index >= static_cast<int>(it->second->bounds.size()))
-                        continue;
-                    const auto [a, b] = it->second->bounds[static_cast<std::size_t>(m.mesh_index)];
+                for (const auto& d : scene_draws) {
+                    if (!wanted.contains(d.entity)) continue;
+                    const Vec3 a = d.mesh ? d.mesh->lo : Vec3{-1, -1, -1}, b = d.mesh ? d.mesh->hi : Vec3{1, 1, 1};
                     for (int c = 0; c < 8; ++c) {
-                        const Vec3 p = m.world.transform_point({c & 1 ? b.x : a.x, c & 2 ? b.y : a.y, c & 4 ? b.z : a.z});
-                        lo = {std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
-                        hi = {std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+                        grow(lo, hi, d.item.world_from_object.transform_point({c & 1 ? b.x : a.x, c & 2 ? b.y : a.y, c & 4 ? b.z : a.z}));
                         any = true;
+                    }
+                }
+                if (!any) {  // no geometry (an empty entity): frame its origin
+                    for (const Guid& id : *frame_request) {
+                        if (auto it = entity_by_id.find(id); it != entity_by_id.end()) {
+                            const Vec3 p = it->second->world.transform_point({0, 0, 0});
+                            grow(lo, hi, p - Vec3{2, 2, 2});
+                            grow(lo, hi, p + Vec3{2, 2, 2});
+                            any = true;
+                        }
                     }
                 }
                 if (any) camera.frame(lo, hi);
             }
         }
-
-        // Camera input.
-        const auto pointer = vp->window->pointer_state();
-        const float dx = static_cast<float>(pointer.x - last_pointer.x);
-        const float dy = static_cast<float>(pointer.y - last_pointer.y);
-        if (pointer.right_down && last_pointer.right_down) {
-            camera.yaw -= dx * 0.006f;
-            camera.pitch = std::clamp(camera.pitch + dy * 0.006f, -1.5f, 1.5f);
-        } else if (pointer.middle_down && last_pointer.middle_down) {
-            const Vec3 fwd = noor::math::normalize(camera.target - camera.eye());
-            const Vec3 right = noor::math::normalize(noor::math::cross(fwd, {0, 1, 0}));
-            const Vec3 up = noor::math::cross(right, fwd);
-            const float k = camera.distance * 0.0015f;
-            camera.target = camera.target - right * (dx * k) + up * (dy * k);
-        }
-        if (const float wheel = vp->window->take_wheel(); wheel != 0.0f) {
-            camera.distance = std::clamp(camera.distance * std::pow(0.88f, wheel), 0.5f, 50'000.0f);
-        }
-        last_pointer = pointer;
 
         const noor::platform::PixelSize size = vp->window->pixel_size();
         if (size != last_size) {
@@ -281,18 +477,167 @@ void render_thread_main(noor_viewport* vp) {
             last_size = size;
         }
 
+        // ---- Pointer: camera, gizmo, picking ----
+        const auto pointer = vp->window->pointer_state();
+        const float dx = static_cast<float>(pointer.x - last_pointer.x);
+        const float dy = static_cast<float>(pointer.y - last_pointer.y);
+        if (pointer.right_down && last_pointer.right_down) {
+            camera.yaw -= dx * 0.006f;
+            camera.pitch = std::clamp(camera.pitch + dy * 0.006f, -1.5f, 1.5f);
+        } else if (pointer.middle_down && last_pointer.middle_down) {
+            const auto b = camera.basis();
+            const float k = camera.distance * 0.0015f;
+            camera.target = camera.target - b.right * (dx * k) + b.up * (dy * k);
+        }
+        if (const float wheel = vp->window->take_wheel(); wheel != 0.0f) {
+            camera.distance = std::clamp(camera.distance * std::pow(0.88f, wheel), 0.5f, 50'000.0f);
+        }
+
+        const auto basis = camera.basis();
+        const ed::Ray ray = ed::screen_ray(basis, static_cast<float>(size.width), static_cast<float>(size.height),
+                                           static_cast<float>(pointer.x), static_cast<float>(pointer.y));
+
+        // The gizmo sits on the entity's origin (moved by any preview) and keeps a constant size on screen.
+        const ed::RenderSnapshot::Entity* target = nullptr;
+        if (gizmo_entity && gizmo_mode != ed::GizmoMode::None) {
+            if (auto it = entity_by_id.find(*gizmo_entity); it != entity_by_id.end() && it->second->editable) target = it->second;
+        }
+        Vec3 gizmo_center{};
+        float gizmo_size = 1.0f;
+        if (target) {
+            const Mat4 world = preview ? preview->delta * target->world : target->world;
+            gizmo_center = world.transform_point({0, 0, 0});
+            gizmo_size = std::max(0.05f, noor::math::length(gizmo_center - basis.eye) * ed::kGizmoScreenScale);
+        }
+
+        const bool pressed = pointer.left_down && !last_pointer.left_down;
+        const bool released = !pointer.left_down && last_pointer.left_down;
+        if (!drag) hovered = target && pointer.inside ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
+
+        if (pressed) {
+            // Hit-test at the press itself (hover tracking may not have run, e.g. a click that
+            // arrives without a preceding move).
+            const ed::Handle grabbed = target ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
+            if (grabbed != ed::Handle::None) {
+                hovered = grabbed;
+                drag = ed::GizmoDrag::begin(grabbed, ray, gizmo_center, basis.forward);
+                if (drag) preview = Preview{target->id};
+            }
+            click_pending = !drag;
+            press = pointer;
+        }
+        if (drag && preview && target) {
+            if (ed::is_rotate(drag->handle())) {
+                const float angle = drag->angle(ray);
+                preview->delta = noor::math::translation(gizmo_center) * noor::math::rotation(ed::handle_axis(drag->handle()), angle) *
+                                 noor::math::translation(-gizmo_center);
+            } else {
+                preview->delta = noor::math::translation(drag->translation(ray));
+            }
+        }
+        if (released) {
+            if (drag && preview && target) {
+                // Turn the world-space change into the entity's new local transform.
+                noor::scene::Transform local = target->local;
+                const Mat4 parent_world = target->parent && entity_by_id.contains(*target->parent)
+                                              ? entity_by_id[*target->parent]->world : Mat4::identity();
+                const Quat parent_rot = target->parent && entity_by_id.contains(*target->parent)
+                                            ? entity_by_id[*target->parent]->world_rotation : Quat{};
+                const bool rotating = ed::is_rotate(drag->handle());
+                bool changed = false;
+                if (rotating) {
+                    const float angle = drag->angle(ray);
+                    const Quat world_delta = Quat::from_axis_angle(ed::handle_axis(drag->handle()), angle);
+                    local.rotation = noor::math::normalize_quat(noor::math::conjugate(parent_rot) * world_delta * parent_rot * local.rotation);
+                    changed = std::fabs(angle) > 1e-5f;
+                } else {
+                    const Vec3 d = drag->translation(ray);
+                    local.position = local.position + noor::math::transform_vector(noor::math::inverse(parent_world), d);
+                    changed = noor::math::length(d) > 1e-6f;
+                }
+                if (changed) {
+                    push_event(vp, {{"type", "transform"}, {"entity", target->id.to_string()}, {"label", rotating ? "Rotate" : "Move"},
+                                    {"transform", transform_json(local)}});
+                    preview->shown_at_release = shown.get();
+                    preview->released = std::chrono::steady_clock::now();
+                } else {
+                    preview.reset();
+                }
+            } else if (click_pending && std::abs(pointer.x - press.x) + std::abs(pointer.y - press.y) <= 4 && shown) {
+                // Pick the nearest mesh or marker under the pointer.
+                float best = std::numeric_limits<float>::max();
+                std::optional<Guid> hit;
+                for (const auto& d : scene_draws) {
+                    const ed::Ray local_ray = ed::to_object_space(ray, d.item.world_from_object);
+                    if (!d.mesh) {
+                        if (auto t = ed::ray_aabb(local_ray, {-1, -1, -1}, {1, 1, 1}); t && *t < best) {
+                            best = *t;
+                            hit = d.entity;
+                        }
+                        continue;
+                    }
+                    const auto box = ed::ray_aabb(local_ray, d.mesh->lo, d.mesh->hi);
+                    if (!box || *box >= best) continue;
+                    const auto& p = d.mesh->positions;
+                    const auto& idx = d.mesh->indices;
+                    for (std::size_t i = 0; i + 2 < idx.size(); i += 3) {
+                        if (auto t = ed::ray_triangle(local_ray, p[idx[i]], p[idx[i + 1]], p[idx[i + 2]]); t && *t < best) {
+                            best = *t;
+                            hit = d.entity;
+                        }
+                    }
+                }
+                push_event(vp, {{"type", "click"}, {"entity", hit ? noor::asset::Json(hit->to_string()) : noor::asset::Json(nullptr)}});
+            }
+            drag.reset();
+            click_pending = false;
+        }
+        last_pointer = pointer;
+
+        {
+            std::scoped_lock lock(vp->camera_mutex);
+            vp->camera = basis;
+            vp->camera_width = static_cast<float>(size.width);
+            vp->camera_height = static_cast<float>(size.height);
+        }
+
+        // ---- Draw ----
         noor::render::FrameDesc frame;
         std::vector<noor::render::DrawItem> frame_draws;
         if (channel) {
             r.set_clear_color({srgb(0x14121C).x, srgb(0x14121C).y, srgb(0x14121C).z, 1.0f});
-            frame_draws = draws;
-            if (ground) {
+            frame_draws.reserve(scene_draws.size() + 8);
+            const Vec4 highlight = tint(0x9B7BFF, 0.45f);
+            for (std::size_t i = 0; i < scene_draws.size(); ++i) {
+                noor::render::DrawItem item = scene_draws[i].item;
+                if (preview && i < draw_in_gizmo_subtree.size() && draw_in_gizmo_subtree[i]) item.world_from_object = preview->delta * item.world_from_object;
+                if (i < draw_selected.size() && draw_selected[i]) item.tint = highlight;
+                frame_draws.push_back(item);
+            }
+            if (ground.valid()) {
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
                 const Vec3 c = (scene_lo + scene_hi) * 0.5f;
-                frame_draws.push_back({*ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})});
+                frame_draws.push_back({ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})});
+            }
+            if (target) {
+                const Mat4 place = noor::math::translation(gizmo_center);
+                const Mat4 sized = noor::math::scale({gizmo_size, gizmo_size, gizmo_size});
+                auto gizmo = [&](noor::render::MeshHandle mesh, ed::Handle h, const Mat4& frame_m) {
+                    const bool hot = (drag && drag->handle() == h) || (!drag && hovered == h);
+                    Vec3 c = srgb(handle_color(h));
+                    if (hot) c = c * 0.35f + Vec3{0.65f, 0.65f, 0.65f};
+                    frame_draws.push_back({mesh, place * frame_m * sized, {c.x, c.y, c.z, 1.0f}, true});
+                };
+                if (gizmo_mode == ed::GizmoMode::Move) {
+                    for (ed::Handle h : {ed::Handle::MoveX, ed::Handle::MoveY, ed::Handle::MoveZ}) gizmo(arrow, h, axis_frame(h));
+                    gizmo(plane, ed::Handle::MoveXZ, Mat4::identity());
+                    frame_draws.push_back({hub, place * sized, tint(0xE7E3F2, 1.0f), true});
+                } else {
+                    for (ed::Handle h : {ed::Handle::RotateX, ed::Handle::RotateY, ed::Handle::RotateZ}) gizmo(ring, h, axis_frame(h));
+                }
             }
             frame.camera.view = camera.view();
-            frame.camera.fov_y = noor::math::radians(50.0f);
+            frame.camera.fov_y = camera.fov_y;
             frame.camera.near_plane = std::max(0.05f, camera.distance * 0.002f);
             frame.draws = frame_draws;
         } else {
@@ -350,17 +695,19 @@ void join_pumping_messages(std::thread& thread) {
     thread.join();
 }
 
-std::vector<noor::Guid> parse_ids(const char* json) {
-    std::vector<noor::Guid> ids;
+std::vector<Guid> parse_ids(const char* json) {
+    std::vector<Guid> ids;
     if (!json) return ids;
     auto parsed = noor::asset::parse_json(json, "entity ids");
     if (!parsed || !parsed->is_array()) return ids;
     for (const auto& v : *parsed) {
         if (!v.is_string()) continue;
-        if (auto g = noor::Guid::parse(v.get<std::string>())) ids.push_back(*g);
+        if (auto g = Guid::parse(v.get<std::string>())) ids.push_back(*g);
     }
     return ids;
 }
+
+thread_local std::string t_events;
 
 } // namespace
 
@@ -403,6 +750,48 @@ NOOR_API void noor_viewport_frame(noor_viewport* viewport, const char* entity_id
     if (!viewport) return;
     std::scoped_lock lock(viewport->doc_mutex);
     viewport->frame_request = parse_ids(entity_ids_json);
+}
+
+NOOR_API void noor_viewport_set_selection(noor_viewport* viewport, const char* entity_ids_json) {
+    if (!viewport) return;
+    auto ids = parse_ids(entity_ids_json);
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->selection = std::move(ids);
+    ++viewport->selection_version;
+}
+
+NOOR_API void noor_viewport_set_gizmo(noor_viewport* viewport, const char* entity_id, int32_t mode) {
+    if (!viewport) return;
+    std::optional<Guid> id;
+    if (entity_id) {
+        if (auto g = Guid::parse(entity_id)) id = *g;
+    }
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->gizmo_entity = id;
+    viewport->gizmo_mode = mode == NOOR_GIZMO_MOVE ? ed::GizmoMode::Move : mode == NOOR_GIZMO_ROTATE ? ed::GizmoMode::Rotate : ed::GizmoMode::None;
+    ++viewport->selection_version;
+}
+
+NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]) {
+    if (!viewport || !world || !out) return 0;
+    std::scoped_lock lock(viewport->camera_mutex);
+    if (!viewport->camera) return 0;
+    const auto sp = ed::world_to_screen(*viewport->camera, viewport->camera_width, viewport->camera_height, {world[0], world[1], world[2]});
+    if (!sp) return 0;
+    out[0] = sp->x;
+    out[1] = sp->y;
+    out[2] = sp->distance;
+    return 1;
+}
+
+NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport) {
+    noor::asset::Json events = noor::asset::Json::array();
+    if (viewport) {
+        std::scoped_lock lock(viewport->event_mutex);
+        std::swap(events, viewport->events);
+    }
+    t_events = events.dump();
+    return t_events.c_str();
 }
 
 NOOR_API void noor_viewport_destroy(noor_viewport* viewport) {

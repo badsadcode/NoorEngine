@@ -153,7 +153,28 @@ internal static class SmokeTest
         Check(doc.Undo() && doc.Scene.Entities.Count == 29, "undo delete restores 29 entities");
         window.Save();
 
-        // 7. Float the viewport into its own window: a new engine viewport, same document.
+        // 7. Viewport interaction with real (posted) mouse input on the engine's child window.
+        await ViewportInteraction(window, id, Check, Shot);
+
+        // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
+        var left = window.FindDock("Left");
+        if (left != null)
+        {
+            left.Proportion = 0.3;
+            window.RememberLayout();
+            Check(settings.DockProportions.GetValueOrDefault("Left") == 0.3, "layout: panel size saved to settings");
+            window.ReloadLayout();
+            Check(Math.Abs((window.FindDock("Left")?.Proportion ?? 0) - 0.3) < 1e-6, "layout: saved panel size restored");
+            window.ResetLayout();
+            Check(Math.Abs((window.FindDock("Left")?.Proportion ?? 0) - 0.18) < 1e-6 && settings.DockProportions.Count == 0, "layout: reset restores the default");
+            await WaitFor(() => VulkanViewport.Active?.Stats, s => s is { State: Native.ViewportState.Running, FramesPresented: > 0 }, 10);
+        }
+        else
+        {
+            Check(false, "layout: Left dock found");
+        }
+
+        // 9. Float the viewport into its own window: a new engine viewport, same document.
         var created = VulkanViewport.CreatedCount;
         window.DockFactory.FloatDockable(window.ViewportDockable);
         var floated = await WaitFor(() => VulkanViewport.CreatedCount > created ? VulkanViewport.Active?.Stats : null,
@@ -163,7 +184,7 @@ internal static class SmokeTest
         var i = 0;
         foreach (var w in desktop.Windows.Where(w => w != window).ToList()) Shot(w, $"editor_3_floating_{i++}.png");
 
-        // 8. The project hub lists the project.
+        // 10. The project hub lists the project.
         var hub = new ProjectHub(settings);
         hub.Show();
         await Task.Delay(800);
@@ -171,13 +192,138 @@ internal static class SmokeTest
         hub.Close();
         Check(settings.RecentProjects.FirstOrDefault()?.EndsWith("SmokeProject", StringComparison.Ordinal) == true, "recent projects remember the project");
 
-        // 9. Error budget.
+        // 11. Error budget.
         await Task.Delay(300);  // let posted log lines land
         var last = VulkanViewport.Active?.Stats;
         results["validation_errors"] = last?.ValidationErrors ?? 0;
         results["engine_errors_logged"] = EngineLog.ErrorCount;
         Check((last?.ValidationErrors ?? 1) == 0, "zero Vulkan validation errors");
         Check(EngineLog.ErrorCount == 0, "zero engine/editor errors logged");
+    }
+
+    // ---- Viewport interaction ----
+
+    private const uint WmMouseMove = 0x0200, WmLButtonDown = 0x0201, WmLButtonUp = 0x0202;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    /// <summary>Sends a mouse message to OUR viewport child window only (never to the desktop).</summary>
+    private static async Task Mouse(IntPtr hwnd, uint msg, double x, double y, bool leftDown)
+    {
+        var lParam = (IntPtr)((((int)Math.Round(y) & 0xFFFF) << 16) | ((int)Math.Round(x) & 0xFFFF));
+        PostMessageW(hwnd, msg, leftDown ? 1 : 0, lParam);
+        await Task.Delay(60);  // a few frames: the render thread samples the pointer once per frame
+    }
+
+    private static async Task Click(IntPtr hwnd, double x, double y)
+    {
+        await Mouse(hwnd, WmMouseMove, x, y, false);
+        await Mouse(hwnd, WmLButtonDown, x, y, true);
+        await Mouse(hwnd, WmLButtonUp, x, y, false);
+    }
+
+    private static async Task Drag(IntPtr hwnd, IReadOnlyList<(float X, float Y)> path)
+    {
+        await Mouse(hwnd, WmMouseMove, path[0].X, path[0].Y, false);
+        await Mouse(hwnd, WmLButtonDown, path[0].X, path[0].Y, true);
+        foreach (var p in path.Skip(1)) await Mouse(hwnd, WmMouseMove, p.X, p.Y, true);
+        await Mouse(hwnd, WmLButtonUp, path[^1].X, path[^1].Y, false);
+    }
+
+    private static async Task ViewportInteraction(MainWindow window, string rootId, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var panel = window.ViewportView!;
+        var vp = panel.Viewport;
+        var hwnd = vp.NativeWindow;
+        var stats = vp.Stats!.Value;
+        async Task Settle()
+        {
+            await Task.Delay(250);
+            panel.DrainEvents();
+        }
+
+        // Picking: frame the building, then click near the middle until something is hit.
+        doc.Select(null);
+        vp.Frame(doc.Subtree(rootId));
+        await Task.Delay(400);
+        (double X, double Y)? hitAt = null;
+        foreach (var (ox, oy) in new[] { (0, 0), (0, 40), (-60, 20), (60, 20), (0, -40), (-100, 40), (100, 40) })
+        {
+            var x = stats.Width / 2.0 + ox;
+            var y = stats.Height / 2.0 + oy;
+            await Click(hwnd, x, y);
+            await Settle();
+            if (doc.SelectedId != null)
+            {
+                hitAt = (x, y);
+                break;
+            }
+        }
+        check(doc.SelectedId == rootId, "viewport click selects the whole building first");
+        if (hitAt is { } at)
+        {
+            // With the Select tool: under the Move tool a click on the building's middle can land
+            // on the gizmo's Y arrow, which (correctly) starts a drag instead of selecting.
+            doc.SetTool(EditorTool.Select);
+            await Task.Delay(150);
+            await Click(hwnd, at.X, at.Y);
+            await Settle();
+            var deeper = doc.Selected;
+            check(deeper?.Parent == rootId, $"second click goes one level deeper (selected {(deeper == null ? "nothing" : deeper.Id == rootId ? "the root again" : deeper.Name)}, gizmo tool {doc.Tool})");
+        }
+        await Click(hwnd, 4, 4);  // the sky: nothing there
+        await Settle();
+        check(doc.SelectedId == null, "clicking empty space clears the selection");
+
+        // Move gizmo: drag the X arrow 3 m.
+        doc.Select(rootId);
+        doc.SetTool(EditorTool.Move);
+        await Task.Delay(300);
+        shot(window, "editor_5_selected_move_gizmo.png");
+        var before = doc.Selected!.Transform;
+        var p0 = before.Position;
+        if (vp.WorldToScreen(p0) is not { } c0)
+        {
+            check(false, "gizmo centre is on screen");
+            return;
+        }
+        var size = Native.GizmoScreenScale * c0.Distance;
+        var path = new List<(float X, float Y)>();
+        for (var i = 0; i <= 5; i++)
+        {
+            var along = 0.6 * size + 3.0 * i / 5.0;
+            if (vp.WorldToScreen(p0 with { X = p0.X + along }) is { } s) path.Add((s.X, s.Y));
+        }
+        await Drag(hwnd, path);
+        await Settle();
+        var moved = doc.Selected!.Transform.Position;
+        check(Math.Abs(moved.X - (p0.X + 3.0)) < 0.2 && Math.Abs(moved.Y - p0.Y) < 0.01 && Math.Abs(moved.Z - p0.Z) < 0.01,
+              $"move gizmo drags along X (dx = {moved.X - p0.X:0.###} m, expected 3)");
+        check(doc.Scene.UndoLabel == "Move", "gizmo move is one undo step");
+        check(doc.Undo() && doc.Selected!.Transform.Position == p0, "undo gizmo move");
+
+        // Rotate gizmo: drag the Y ring 40 degrees (clockwise seen from above = +yaw).
+        doc.SetTool(EditorTool.Rotate);
+        await Task.Delay(300);
+        var radius = 0.85 * size;
+        (float X, float Y)? Ring(double degrees)
+        {
+            var a = degrees * Math.PI / 180.0;
+            return vp.WorldToScreen(new Vec3(p0.X + Math.Cos(a) * radius, p0.Y, p0.Z + Math.Sin(a) * radius)) is { } s ? (s.X, s.Y) : null;
+        }
+        var start = Enumerable.Range(0, 36).Select(i => i * 10.0).OrderByDescending(a => Ring(a)?.Y ?? -1).First();  // nearest the viewer
+        var arc = Enumerable.Range(0, 9).Select(i => Ring(start - 5.0 * i)).Where(p => p != null).Select(p => p!.Value).ToList();
+        var yaw0 = before.Rotation.ToEulerDegrees().Y;
+        shot(window, "editor_6_rotate_gizmo.png");
+        await Drag(hwnd, arc);
+        await Settle();
+        var yaw1 = doc.Selected!.Transform.Rotation.ToEulerDegrees().Y;
+        check(Math.Abs(yaw1 - yaw0 - 40) < 2.5, $"rotate gizmo turns about Y (dyaw = {yaw1 - yaw0:0.#} deg, expected 40)");
+        check(doc.Scene.UndoLabel == "Rotate", "gizmo rotation is labelled Rotate");
+        check(doc.Undo(), "undo gizmo rotation");
+        doc.SetTool(EditorTool.Move);
     }
 
     private static async Task<T?> WaitFor<T>(Func<T?> read, Func<T?, bool> done, double seconds) where T : struct

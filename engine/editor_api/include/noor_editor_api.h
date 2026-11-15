@@ -28,8 +28,9 @@
 extern "C" {
 #endif
 
-/* 1: documents (ADR-025), viewports render documents. */
-#define NOOR_EDITOR_API_VERSION 1u
+/* 1: documents (ADR-025), viewports render documents.
+ * 2: viewport selection highlight, gizmos and events (picking, gizmo edits). */
+#define NOOR_EDITOR_API_VERSION 2u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -114,6 +115,35 @@ NOOR_API void noor_viewport_set_document(noor_viewport* viewport, noor_doc* doc)
 /* Moves the viewport camera to show everything (NULL or "[]") or the given entities
  * (JSON array of ids; include descendants to frame a whole subtree). */
 NOOR_API void noor_viewport_frame(noor_viewport* viewport, const char* entity_ids_json);
+
+/* Entities drawn highlighted (JSON array of ids; include descendants to highlight a subtree).
+ * NULL or "[]" clears. */
+NOOR_API void noor_viewport_set_selection(noor_viewport* viewport, const char* entity_ids_json);
+
+typedef enum noor_gizmo_mode {
+    NOOR_GIZMO_NONE = 0,
+    NOOR_GIZMO_MOVE = 1,   /* world-axis arrows + an XZ plane handle */
+    NOOR_GIZMO_ROTATE = 2  /* world-axis rings, around the entity's origin */
+} noor_gizmo_mode;
+
+/* Shows a transform gizmo on one entity (its id as a string; NULL hides it). Dragging it
+ * previews the change in the viewport and, on release, reports a "transform" event: the
+ * viewport never edits the document itself. */
+NOOR_API void noor_viewport_set_gizmo(noor_viewport* viewport, const char* entity_id, int32_t mode);
+
+/* Drains the viewport's events as a JSON array (UI thread; string valid until the next call):
+ *   {"type":"click","entity":"<id>"|null}  left click without dragging; entity = the mesh or
+ *                                           marker under the pointer (expanded entity id)
+ *   {"type":"transform","entity":"<id>","label":"Move"|"Rotate",
+ *    "transform":{position,rotation,scale}} a finished gizmo drag: the entity's new LOCAL transform */
+NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport);
+
+/* Projects a world point with the camera of the last drawn frame: out = {x, y, distance},
+ * x/y in the viewport's physical pixels (origin top-left). Returns 0 if the point is behind
+ * the camera or nothing was drawn yet. Gizmo arrows are NOOR_GIZMO_SCREEN_SCALE x their
+ * distance from the camera long. */
+NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]);
+#define NOOR_GIZMO_SCREEN_SCALE 0.16f
 
 #ifdef __cplusplus
 }

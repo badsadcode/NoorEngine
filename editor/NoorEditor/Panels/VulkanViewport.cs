@@ -45,6 +45,38 @@ public sealed class VulkanViewport : NativeControlHost
         Native.noor_viewport_frame(_viewport, ids is { Count: > 0 } ? JsonSerializer.Serialize(ids) : null);
     }
 
+    // Kept here so a recreated engine viewport (after floating the panel) gets them again.
+    private string _selectionJson = "[]";
+    private string? _gizmoEntity;
+    private int _gizmoMode;
+
+    /// <summary>Highlights these entities (pass a whole subtree to highlight an object).</summary>
+    public void SetSelection(IReadOnlyList<string> ids)
+    {
+        _selectionJson = JsonSerializer.Serialize(ids);
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_selection(_viewport, _selectionJson);
+    }
+
+    /// <summary>Shows the gizmo (mode 1 move, 2 rotate) on one entity, or hides it (null / 0).</summary>
+    public void SetGizmo(string? entityId, int mode)
+    {
+        _gizmoEntity = entityId;
+        _gizmoMode = mode;
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_gizmo(_viewport, entityId, mode);
+    }
+
+    /// <summary>Clicks and finished gizmo drags since the last call (JSON array).</summary>
+    public string PollEvents() => _viewport == IntPtr.Zero ? "[]" : Native.PollEvents(_viewport);
+
+    /// <summary>Where a world point is in the viewport (physical pixels) and its distance from the camera.</summary>
+    public (float X, float Y, float Distance)? WorldToScreen(Vec3 p)
+    {
+        if (_viewport == IntPtr.Zero) return null;
+        var output = new float[3];
+        return Native.noor_viewport_world_to_screen(_viewport, [(float)p.X, (float)p.Y, (float)p.Z], output) == 1
+            ? (output[0], output[1], output[2]) : null;
+    }
+
     /// <summary>Detaches from the document; call before the document is disposed.</summary>
     public void Detach()
     {
@@ -61,6 +93,8 @@ public sealed class VulkanViewport : NativeControlHost
             return base.CreateNativeControlCore(parent);
         }
         if (_doc.Handle != IntPtr.Zero) Native.noor_viewport_set_document(_viewport, _doc.Handle);
+        Native.noor_viewport_set_selection(_viewport, _selectionJson);
+        Native.noor_viewport_set_gizmo(_viewport, _gizmoEntity, _gizmoMode);
         CreatedCount++;
         Active = this;
         return new PlatformHandle(Native.noor_viewport_native_handle(_viewport), "HWND");

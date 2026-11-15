@@ -24,7 +24,10 @@ doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit")
 
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
-    add_executable(noor_editor_api_tests api/test_document_api.cpp)
+    # The viewport maths is internal to the DLL, so its source is compiled into the test too.
+    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp
+                   ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
+    target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
     target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene doctest::doctest)
     target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
     noor_set_target_options(noor_editor_api_tests)

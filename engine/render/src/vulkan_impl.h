@@ -74,9 +74,13 @@ struct GpuMesh {
 };
 
 // Push constants for mesh.hlsl (must match its PushConstants struct; 128 bytes = guaranteed minimum).
+// Only the 3x3 part of world_from_object is needed (normals), sent as three columns.
 struct MeshPushConstants {
     math::Mat4 clip_from_object;
-    math::Mat4 world_from_object;
+    math::Vec4 world_col0;
+    math::Vec4 world_col1;
+    math::Vec4 world_col2;
+    math::Vec4 tint;  // rgb = linear color, a = blend amount (0 = mesh colors)
 };
 static_assert(sizeof(MeshPushConstants) == 128);
 static_assert(sizeof(Vertex) == 36, "mesh pipeline vertex layout assumes 3 x float3");

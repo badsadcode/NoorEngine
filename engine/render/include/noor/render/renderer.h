@@ -69,6 +69,11 @@ struct Camera {
 struct DrawItem {
     MeshHandle mesh;
     math::Mat4 world_from_object = math::Mat4::identity();
+    // rgb = linear color, a = how much of it replaces the mesh's own colors (0 = none).
+    math::Vec4 tint{0, 0, 0, 0};
+    // Overlay items are drawn after everything else, in front of it (editor gizmos). They
+    // still depth-test against each other.
+    bool overlay = false;
 };
 
 struct FrameDesc {

@@ -10,6 +10,10 @@ public sealed class EditorSettings
     public double WindowWidth { get; set; } = 1600;
     public double WindowHeight { get; set; } = 920;
     public bool WindowMaximized { get; set; }
+    /// <summary>Panel sizes by dock id (NoorEditor main window).</summary>
+    public Dictionary<string, double> DockProportions { get; set; } = new();
+    /// <summary>Active tab by dock id.</summary>
+    public Dictionary<string, string> ActiveTabs { get; set; } = new();
 
     /// <summary>Settings file location. Tests point this somewhere temporary.</summary>
     public static string FilePath { get; set; } =

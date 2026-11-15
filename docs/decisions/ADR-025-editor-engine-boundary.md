@@ -32,6 +32,16 @@ and without the editor reimplementing engine rules (prefab expansion, migrations
 - Strings returned by the API are owned by the DLL and valid until the next call on the same
   thread; errors via `noor_last_error()`.
 
+### Addendum (API v2, Milestone 3 part 2): viewport interaction
+Viewports never edit the document either. Picking and gizmo dragging run on the viewport's render
+thread (it has the camera, the pointer and the meshes), and the results come back as **events**
+(`noor_viewport_poll_events`): `click` (the expanded entity under the pointer, or null) and
+`transform` (a finished gizmo drag, as the entity's new local transform). The editor turns a click
+into a selection and a transform into one `set_transform` command (with an optional undo `label`).
+During a drag the viewport previews the change locally and keeps showing it until the document
+publishes the result. The editor tells the viewport what to highlight and where the gizmo goes
+(`noor_viewport_set_selection`, `noor_viewport_set_gizmo`); selection stays editor state.
+
 ## Consequences
 - The C# side stays thin and testable; engine rules have exactly one implementation.
 - Selection, camera, layout and preferences are editor state (C#), not document state.

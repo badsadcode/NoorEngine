@@ -356,12 +356,14 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame) {
     const math::Mat4 clip_from_world =
         math::perspective_reverse_z(frame.camera.fov_y, aspect, frame.camera.near_plane) * frame.camera.view;
 
-    for (const DrawItem& item : frame.draws) {
+    bool has_overlay = false;
+    auto draw = [&](const DrawItem& item) {
         if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) {
-            continue;
+            return;
         }
         const GpuMesh& mesh = meshes[item.mesh.id - 1];
-        const MeshPushConstants push{clip_from_world * item.world_from_object, item.world_from_object};
+        const math::Mat4& w = item.world_from_object;
+        const MeshPushConstants push{clip_from_world * w, w.m[0], w.m[1], w.m[2], item.tint};
         vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
         const VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
@@ -369,6 +371,20 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame) {
         vkCmdDrawIndexed(cmd, mesh.index_count, 1, 0, 0, 0);
         ++stats.draw_calls;
         stats.triangles += mesh.index_count / 3;
+    };
+    for (const DrawItem& item : frame.draws) {
+        if (item.overlay) has_overlay = true;
+        else draw(item);
+    }
+    if (!has_overlay) return;
+
+    // Overlay pass: forget the scene's depth (reverse-Z: 0 = far) so overlays draw on top.
+    VkClearAttachment clear{VK_IMAGE_ASPECT_DEPTH_BIT, 0, {}};
+    clear.clearValue.depthStencil = {0.0f, 0};
+    const VkClearRect rect{scissor, 0, 1};
+    vkCmdClearAttachments(cmd, 1, &clear, 1, &rect);
+    for (const DrawItem& item : frame.draws) {
+        if (item.overlay) draw(item);
     }
 }
 

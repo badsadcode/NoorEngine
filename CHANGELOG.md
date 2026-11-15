@@ -4,6 +4,33 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 3 in progress (NoorEditor)
 
+### 2026-11-15 — Milestone 3, part 2: click to select, gizmos, layout memory
+**Added**
+- Editor API **v2** (ADR-025 addendum): `noor_viewport_set_selection` (highlight),
+  `noor_viewport_set_gizmo` (move/rotate gizmo on one entity), `noor_viewport_poll_events`
+  (`click`, `transform`), `noor_viewport_world_to_screen`. `set_transform` accepts an undo `label`.
+- Viewport: left click picks the nearest mesh or marker (ray vs. triangles, AABB first); selected
+  objects drawn with a purple tint; **move gizmo** (X/Y/Z arrows + XZ plane square) and **rotate
+  gizmo** (X/Y/Z rings, around the entity's origin), world-aligned, constant size on screen, hover
+  highlight; drags previewed live and reported on release.
+- Renderer: per-draw `tint` and `overlay` draws (drawn after the scene with depth cleared). Push
+  constants stay at 128 bytes (the world 3x3 is sent as three columns).
+- Math: `inverse(Mat4)`, `transform_vector`, `conjugate`/`normalize_quat`/`rotate` for quaternions.
+- Render snapshots carry every expanded entity (world matrix, world rotation, local transform,
+  editable flag) and marker ids.
+- NoorEditor: Select/Move/Rotate tools (Q/W/E, toolbar, Edit menu); a click selects the whole
+  object first, clicking again inside the selection goes one level deeper; gizmo results become
+  one undo step each ("Move"/"Rotate"). Panel sizes and active tabs are remembered;
+  Window ▸ Reset Layout.
+- Tests: 7 viewport-maths tests (rays, triangles, boxes, handle picking, drags, rotation sign,
+  projection round trip), 2 math tests; the editor smoke test now clicks and drags in the real
+  viewport (posted mouse messages to its own child window): pick, drill down, empty click, a 3 m
+  X drag, a 40° yaw drag, undo, layout save/restore/reset (37 checks). 96/96 Debug, 90/90 Release
+  without GPU.
+
+**Not yet:** snapping, local-space gizmos, scale gizmo, multi-select, box select, an outline
+instead of a tint; panels moved to another dock or floated are not remembered.
+
 ### 2026-11-15 — Milestone 3, part 1: NoorEditor exists
 **Added**
 - ADR-025: the engine owns the document (project, registry, scene, undo history, prefabs); the

@@ -9,6 +9,8 @@ namespace NoorEditor.Model;
 /// latest JSON snapshots, tracks the selection (an editor concern) and raises change events.
 /// UI thread only.
 /// </summary>
+public enum EditorTool { Select = 0, Move = 1, Rotate = 2 }
+
 public sealed class EditorDocument : IDisposable
 {
     private IntPtr _handle;
@@ -25,6 +27,17 @@ public sealed class EditorDocument : IDisposable
     public event Action? SceneChanged;
     public event Action? AssetsChanged;
     public event Action? SelectionChanged;
+    public event Action? ToolChanged;
+
+    /// <summary>The viewport tool (editor state, like the selection).</summary>
+    public EditorTool Tool { get; private set; } = EditorTool.Move;
+
+    public void SetTool(EditorTool tool)
+    {
+        if (tool == Tool) return;
+        Tool = tool;
+        ToolChanged?.Invoke();
+    }
 
     /// <summary>Native handle for noor_viewport_set_document. Valid until Dispose.</summary>
     public IntPtr Handle => _handle;
@@ -90,8 +103,28 @@ public sealed class EditorDocument : IDisposable
     public bool Undo() => Scene.CanUndo && Run(Native.noor_doc_undo(_handle), "Undo");
     public bool Redo() => Scene.CanRedo && Run(Native.noor_doc_redo(_handle), "Redo");
 
-    public bool SetTransform(string id, Transform t) =>
-        Execute(new JsonObject { ["op"] = "set_transform", ["entity"] = id, ["transform"] = t.ToJson() });
+    public bool SetTransform(string id, Transform t, string? label = null)
+    {
+        var cmd = new JsonObject { ["op"] = "set_transform", ["entity"] = id, ["transform"] = t.ToJson() };
+        if (label != null) cmd["label"] = label;
+        return Execute(cmd);
+    }
+
+    /// <summary>
+    /// What a click in the viewport on <paramref name="hitId"/> selects: first the outermost object
+    /// (a whole building, a prefab instance); clicking again inside the current selection goes one
+    /// level deeper toward the part that was hit.
+    /// </summary>
+    public string? ClickTarget(string? hitId)
+    {
+        if (hitId == null) return null;
+        var byId = Scene.Entities.ToDictionary(e => e.Id);
+        var chain = new List<string>();  // hit .. root
+        for (var id = hitId; id != null && byId.TryGetValue(id, out var e) && chain.Count < 256; id = e.Parent) chain.Add(id);
+        if (chain.Count == 0) return null;
+        var at = SelectedId == null ? -1 : chain.IndexOf(SelectedId);
+        return at > 0 ? chain[at - 1] : at == 0 ? chain[0] : chain[^1];
+    }
 
     public bool Rename(string id, string name) => Execute(new JsonObject { ["op"] = "rename", ["entity"] = id, ["name"] = name });
 

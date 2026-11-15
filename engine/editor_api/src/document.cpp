@@ -217,7 +217,14 @@ Status Document::execute(const Json& command) {
         if (tj.contains("position") && read_vec(tj["position"], 3, v)) t.position = {v[0], v[1], v[2]};
         if (tj.contains("rotation") && read_vec(tj["rotation"], 4, v)) t.rotation = {v[0], v[1], v[2], v[3]};
         if (tj.contains("scale") && read_vec(tj["scale"], 3, v)) t.scale = {v[0], v[1], v[2]};
-        applied = history_.execute(*scene_, scene::set_transform(*id, t));
+        // An optional "label" names the undo step ("Rotate" from a gizmo instead of "Move").
+        if (command.contains("label") && command["label"].is_string()) {
+            history_.begin_transaction(command["label"].get<std::string>());
+            applied = history_.execute(*scene_, scene::set_transform(*id, t));
+            history_.end_transaction();
+        } else {
+            applied = history_.execute(*scene_, scene::set_transform(*id, t));
+        }
     } else if (op == "rename") {
         applied = history_.execute(*scene_, scene::rename(*id, command.value("name", std::string{})));
     } else if (op == "set_component") {
@@ -291,9 +298,29 @@ void Document::changed() {
     if (scene_) {
         const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
         const auto& entities = expanded.scene.entities;
+        std::unordered_set<Guid> authored;
+        for (const auto& e : scene_->entities) authored.insert(e.id);
+        std::unordered_map<Guid, std::size_t> index;
+        for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
+        auto world_rotation = [&](std::size_t i) {
+            math::Quat q = entities[i].transform.rotation;
+            std::optional<Guid> p = entities[i].parent;
+            for (int depth = 0; p && depth < 256; ++depth) {  // depth guard: cycles are reported elsewhere
+                const auto it = index.find(*p);
+                if (it == index.end()) break;
+                q = entities[it->second].transform.rotation * q;
+                p = entities[it->second].parent;
+            }
+            return math::normalize_quat(q);
+        };
+        snap->entities.reserve(entities.size());
         for (std::size_t i = 0; i < entities.size(); ++i) {
             const auto& e = entities[i];
-            if (e.has("marker")) snap->markers.push_back(expanded.scene.world_matrix(i));
+            snap->entities.push_back({e.id, e.parent, expanded.scene.world_matrix(i), world_rotation(i), e.transform, authored.contains(e.id)});
+        }
+        for (std::size_t i = 0; i < entities.size(); ++i) {
+            const auto& e = entities[i];
+            if (e.has("marker")) snap->markers.push_back({expanded.scene.world_matrix(i), e.id});
             if (!e.has("mesh")) continue;
             const auto& mesh = e.components["mesh"];
             const auto guid = asset::guid_field(mesh, "asset");

@@ -80,3 +80,29 @@ TEST_CASE("math: compose is translate * rotate * scale (glTF TRS order)") {
     // (1,0,0) -> scaled (2,0,0) -> rotated (0,0,-2) -> translated (10,0,-2)
     CHECK(near(m.transform_point({1, 0, 0}), {10, 0, -2}));
 }
+
+TEST_CASE("math: inverse undoes a TRS matrix") {
+    const Mat4 m = compose({3, -2, 7}, Quat::from_axis_angle({0.3f, 1, 0.2f}, 1.1f), {2, 0.5f, 3});
+    const Mat4 i = inverse(m);
+    const Vec3 p{1.5f, -4, 2};
+    const Vec3 back = i.transform_point(m.transform_point(p));
+    CHECK(back.x == doctest::Approx(p.x).epsilon(1e-4));
+    CHECK(back.y == doctest::Approx(p.y).epsilon(1e-4));
+    CHECK(back.z == doctest::Approx(p.z).epsilon(1e-4));
+    const Mat4 id = m * i;
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c) CHECK(id.at(r, c) == doctest::Approx(r == c ? 1.0f : 0.0f).epsilon(1e-4));
+}
+
+TEST_CASE("math: quaternion rotate matches the rotation matrix; conjugate undoes it") {
+    const Quat q = Quat::from_axis_angle({1, 2, -0.5f}, 0.8f);
+    const Vec3 v{0.3f, -1.2f, 2.5f};
+    const Vec3 a = rotate(q, v);
+    const Vec3 b = transform_vector(to_mat4(q), v);
+    CHECK(a.x == doctest::Approx(b.x).epsilon(1e-5));
+    CHECK(a.y == doctest::Approx(b.y).epsilon(1e-5));
+    CHECK(a.z == doctest::Approx(b.z).epsilon(1e-5));
+    const Vec3 c = rotate(conjugate(q), a);
+    CHECK(c.x == doctest::Approx(v.x).epsilon(1e-5));
+    CHECK(c.z == doctest::Approx(v.z).epsilon(1e-5));
+}

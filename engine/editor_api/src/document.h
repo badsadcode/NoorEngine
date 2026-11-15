@@ -27,11 +27,25 @@ struct RenderSnapshot {
         std::string asset_path;  // absolute path of the GLB
         int mesh_index = -1;
         math::Mat4 world;
-        Guid entity;             // expanded entity id (for selection highlighting later)
+        Guid entity;             // expanded entity id
+    };
+    // Every entity of the expanded scene, for picking, highlighting and gizmos.
+    struct Entity {
+        Guid id;
+        std::optional<Guid> parent;
+        math::Mat4 world;
+        math::Quat world_rotation;  // product of the rotations up the parent chain
+        scene::Transform local;
+        bool editable = true;  // false for entities that come from a prefab
     };
     std::uint64_t revision = 0;
     std::vector<Mesh> meshes;
-    std::vector<math::Mat4> markers;
+    std::vector<Entity> entities;
+    struct Marker {
+        math::Mat4 world;
+        Guid entity;
+    };
+    std::vector<Marker> markers;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.

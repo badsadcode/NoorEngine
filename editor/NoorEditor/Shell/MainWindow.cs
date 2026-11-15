@@ -41,6 +41,8 @@ public sealed class MainWindow : Window
     private readonly MenuItem _save = new() { Header = "_Save Scene", InputGesture = KeyGesture.Parse("Ctrl+S") };
     private readonly MenuItem _openScene = new() { Header = "_Open Scene" };
     private bool _closeConfirmed;
+    private readonly DockControl _dockControl;
+    private IRootDock _rootDock;
 
     /// <summary>Set when the user picked File ▸ Close Project (the app shows the hub again).</summary>
     public bool ReturnToHub { get; private set; }
@@ -68,7 +70,9 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(status, Avalonia.Controls.Dock.Bottom);
         root.Children.Add(menu);
         root.Children.Add(status);
-        root.Children.Add(new DockControl { Factory = DockFactory, Layout = BuildLayout() });
+        _rootDock = BuildLayout(useSaved: true);
+        _dockControl = new DockControl { Factory = DockFactory, Layout = _rootDock };
+        root.Children.Add(_dockControl);
         Content = root;
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
@@ -96,7 +100,7 @@ public sealed class MainWindow : Window
 
     // ---- Layout ----
 
-    private IRootDock BuildLayout()
+    private IRootDock BuildLayout(bool useSaved)
     {
         var hierarchy = new PanelTool
         {
@@ -158,8 +162,64 @@ public sealed class MainWindow : Window
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };
         DockFactory.InitLayout(rootDock);
+        if (useSaved) ApplySavedLayout(rootDock);
         return rootDock;
     }
+
+    // Layout persistence: panel sizes (dock proportions) and each dock's active tab, by dock id.
+    // Panels moved to another dock or floated are not remembered yet; they return home next run.
+
+    private static IEnumerable<IDock> Docks(IDockable dockable)
+    {
+        if (dockable is not IDock dock) yield break;
+        yield return dock;
+        foreach (var child in dock.VisibleDockables ?? [])
+            foreach (var d in Docks(child)) yield return d;
+    }
+
+    private void ApplySavedLayout(IRootDock root)
+    {
+        foreach (var dock in Docks(root))
+        {
+            if (dock.Id is not { } id) continue;
+            if (_settings.DockProportions.TryGetValue(id, out var p) && p is > 0.02 and < 0.98) dock.Proportion = p;
+            if (_settings.ActiveTabs.TryGetValue(id, out var tab) && dock.VisibleDockables?.FirstOrDefault(d => d.Id == tab) is { } active)
+                dock.ActiveDockable = active;
+        }
+    }
+
+    /// <summary>Copies the current panel sizes and active tabs into the settings (saved with them).</summary>
+    public void RememberLayout()
+    {
+        _settings.DockProportions.Clear();
+        _settings.ActiveTabs.Clear();
+        foreach (var dock in Docks(_rootDock))
+        {
+            if (dock.Id is not { } id || dock is IRootDock) continue;
+            if (double.IsFinite(dock.Proportion) && dock.Proportion > 0) _settings.DockProportions[id] = Math.Round(dock.Proportion, 4);
+            if (dock.ActiveDockable?.Id is { } tab && dock is IToolDock) _settings.ActiveTabs[id] = tab;
+        }
+    }
+
+    /// <summary>Window ▸ Reset Layout: the default arrangement, and forget the saved one.</summary>
+    public void ResetLayout()
+    {
+        _settings.DockProportions.Clear();
+        _settings.ActiveTabs.Clear();
+        _settings.Save();
+        _rootDock = BuildLayout(useSaved: false);
+        _dockControl.Layout = _rootDock;
+    }
+
+    /// <summary>Rebuilds the layout from the saved settings (tests).</summary>
+    public void ReloadLayout()
+    {
+        _rootDock = BuildLayout(useSaved: true);
+        _dockControl.Layout = _rootDock;
+    }
+
+    /// <summary>The dock with this id in the current layout (tests).</summary>
+    public IDock? FindDock(string id) => Docks(_rootDock).FirstOrDefault(d => d.Id == id);
 
     private Control MenuBar()
     {
@@ -186,6 +246,15 @@ public sealed class MainWindow : Window
         var frame = new MenuItem { Header = "_Frame Selected", InputGesture = KeyGesture.Parse("F") };
         frame.Click += (_, _) => FrameSelectedOrAll();
 
+        var resetLayout = new MenuItem { Header = "_Reset Layout" };
+        resetLayout.Click += (_, _) => ResetLayout();
+        MenuItem Tool(string header, string key, EditorTool tool)
+        {
+            var item = new MenuItem { Header = header, InputGesture = KeyGesture.Parse(key) };
+            item.Click += (_, _) => Doc.SetTool(tool);
+            return item;
+        }
+
         var about = new MenuItem { Header = "_About NoorEditor" };
         about.Click += async (_, _) => await Dialogs.Ask(this, "About NoorEditor",
             $"NoorEditor (Milestone 3 preview)\nEngine API v{Native.noor_editor_api_version()} · MIT licence\nBad Ideas Works", "OK");
@@ -196,7 +265,10 @@ public sealed class MainWindow : Window
             Items =
             {
                 new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), closeProject, exit } },
-                new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame } },
+                new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, new Separator(),
+                                                         Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
+                                                         Tool("_Rotate tool", "E", EditorTool.Rotate) } },
+                new MenuItem { Header = "_Window", Items = { resetLayout } },
                 new MenuItem { Header = "_Help", Items = { about } },
             },
         };
@@ -356,6 +428,7 @@ public sealed class MainWindow : Window
 
     private void RememberWindow()
     {
+        RememberLayout();
         _settings.WindowMaximized = WindowState == WindowState.Maximized;
         if (WindowState == WindowState.Normal)
         {
@@ -388,6 +461,15 @@ public sealed class MainWindow : Window
                 break;
             case Key.F when e.KeyModifiers == KeyModifiers.None && !inText:
                 FrameSelectedOrAll();
+                break;
+            case Key.Q when e.KeyModifiers == KeyModifiers.None && !inText:
+                Doc.SetTool(EditorTool.Select);
+                break;
+            case Key.W when e.KeyModifiers == KeyModifiers.None && !inText:
+                Doc.SetTool(EditorTool.Move);
+                break;
+            case Key.E when e.KeyModifiers == KeyModifiers.None && !inText:
+                Doc.SetTool(EditorTool.Rotate);
                 break;
             case Key.Delete when !inText && ViewportHasFocus():
                 DeleteSelected();
