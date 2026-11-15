@@ -9,8 +9,11 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 
 - **Project hub**: recent projects, New Project (creates the folder and an empty `Scenes/Main.noorscene`), Open Project.
 - **Viewport**: the engine renders the open scene (GLB models, prefab instances, markers) on its
-  own thread. Right-drag orbits, middle-drag pans, the wheel zooms, **F** frames the selection
-  (or everything). Float the viewport tab into its own window and it keeps rendering.
+  own thread. Float the viewport tab into its own window and it keeps rendering.
+- **Camera**: **hold the right mouse button** to look around and fly with **WASD**, **Q/E** for
+  down/up, **Shift** for 4x speed, the **wheel** (while holding right) to change the fly speed.
+  **Alt + left-drag** orbits, **middle-drag** pans, the **wheel** zooms, **F** frames the
+  selection (or everything).
 - **Selecting in the viewport**: click an object to select all of it (a whole building); click it
   again to go one level deeper, toward the part you clicked. Click empty space to deselect. The
   selection is tinted purple.
@@ -51,7 +54,8 @@ dotnet run --project editor/NoorEditor -- --project build/street
 `ctest --preset ninja-debug -L editor` builds the editor against that build's DLL and runs
 `NoorEditor --smoke <dir> --test-data tests/data`: it creates a project, adds a BadBuilding
 model from the content browser, edits it through the inspector, undoes/redoes, saves and checks
-the file, deletes and restores, then clicks and drags in the real viewport (mouse messages posted
-to its own child window: pick, drill down, a 3 m move along X, a 40° turn), checks layout
+the file, deletes and restores, then clicks and drags in the real viewport (mouse and key messages
+posted to its own child window: pick, drill down, a 3 m move along X, a 40° turn, flying with W,
+mouse-look), checks layout
 save/restore, floats the viewport, and requires zero validation and engine errors. Results (`editor_results.json`) and screenshots of the editor's own windows land in
 `build/ninja/tests/editor_smoke/<config>/`. It needs a GPU, so CI only builds the editor.

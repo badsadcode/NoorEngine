@@ -18,12 +18,26 @@ namespace {
 
 constexpr wchar_t kClassName[] = L"NoorViewportWindow";
 
+std::uint32_t key_bit(WPARAM vk) {
+    switch (vk) {
+    case 'W': return kKeyForward;
+    case 'A': return kKeyLeft;
+    case 'S': return kKeyBack;
+    case 'D': return kKeyRight;
+    case 'Q': return kKeyDown;
+    case 'E': return kKeyUp;
+    case VK_SHIFT: return kKeyFast;
+    default: return 0;
+    }
+}
+
 NativeChildWindow::Input* input_of(HWND hwnd) {
     return reinterpret_cast<NativeChildWindow::Input*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 }
 
 LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     NativeChildWindow::Input* input = input_of(hwnd);
+    if (input && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) input->alt.store(GetKeyState(VK_MENU) < 0);
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;  // Vulkan owns every pixel; erasing would flicker
@@ -80,13 +94,25 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
     case WM_KEYUP:
     case WM_SYSKEYDOWN:
     case WM_SYSKEYUP:
-        // The viewport has no keyboard handling of its own yet. Forward keys to the top-level
-        // window so the host's shortcuts (undo, save, frame...) work while the viewport has focus.
+        if (input) {
+            const bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
+            if (const std::uint32_t bit = key_bit(wparam)) {
+                if (down) input->keys.fetch_or(bit);
+                else input->keys.fetch_and(~bit);
+            }
+            // While the right button is held the keys fly the camera; they are not shortcuts.
+            if (input->right_down.load() && key_bit(wparam)) return 0;
+        }
+        // Everything else goes to the top-level window so the host's shortcuts (undo, save,
+        // frame...) work while the viewport has focus.
         if (HWND root = GetAncestor(hwnd, GA_ROOT); root && root != hwnd) {
             PostMessageW(root, msg, wparam, lparam);
             return 0;
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
+    case WM_KILLFOCUS:  // keys released elsewhere would never reach us
+        if (input) input->keys.store(0);
+        return 0;
     case WM_CAPTURECHANGED:  // capture lost (e.g. Alt+Tab while dragging): release everything
         if (input) {
             input->left_down.store(false);
@@ -147,8 +173,10 @@ NativeChildWindow::~NativeChildWindow() {
 
 PointerState NativeChildWindow::pointer_state() const noexcept {
     return {input_->x.load(), input_->y.load(), input_->inside.load(), input_->left_down.load(),
-            input_->right_down.load(), input_->middle_down.load()};
+            input_->right_down.load(), input_->middle_down.load(), input_->alt.load()};
 }
+
+std::uint32_t NativeChildWindow::keys() const noexcept { return input_->keys.load(); }
 
 float NativeChildWindow::take_wheel() noexcept {
     return static_cast<float>(input_->wheel.exchange(0)) / static_cast<float>(WHEEL_DELTA);

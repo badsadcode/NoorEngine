@@ -204,6 +204,10 @@ internal static class SmokeTest
     // ---- Viewport interaction ----
 
     private const uint WmMouseMove = 0x0200, WmLButtonDown = 0x0201, WmLButtonUp = 0x0202;
+    private const uint WmRButtonDown = 0x0204, WmRButtonUp = 0x0205, WmKeyDown = 0x0100, WmKeyUp = 0x0101;
+
+    private static IntPtr MakeLParam(double x, double y) =>
+        (IntPtr)((((int)Math.Round(y) & 0xFFFF) << 16) | ((int)Math.Round(x) & 0xFFFF));
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -323,6 +327,31 @@ internal static class SmokeTest
         check(Math.Abs(yaw1 - yaw0 - 40) < 2.5, $"rotate gizmo turns about Y (dyaw = {yaw1 - yaw0:0.#} deg, expected 40)");
         check(doc.Scene.UndoLabel == "Rotate", "gizmo rotation is labelled Rotate");
         check(doc.Undo(), "undo gizmo rotation");
+
+        // Fly mode: hold the right button, press W. The camera moves toward what it looks at,
+        // and W does NOT switch to the Move tool while flying. Then mouse-look to the right.
+        doc.SetTool(EditorTool.Rotate);
+        await Task.Delay(150);
+        var mid = (X: stats.Width / 2.0, Y: stats.Height / 2.0);
+        var d0 = vp.WorldToScreen(p0)?.Distance ?? 0;
+        await Mouse(hwnd, WmMouseMove, mid.X, mid.Y, false);
+        PostMessageW(hwnd, WmRButtonDown, 2, MakeLParam(mid.X, mid.Y));
+        await Task.Delay(100);
+        PostMessageW(hwnd, WmKeyDown, 'W', 1);
+        await Task.Delay(600);
+        PostMessageW(hwnd, WmKeyUp, 'W', unchecked((IntPtr)0xC0000001));
+        await Task.Delay(100);
+        var d1 = vp.WorldToScreen(p0)?.Distance ?? 0;
+        check(d0 - d1 > 1.0, $"fly: holding W moves the camera forward ({d0 - d1:0.0} m closer)");
+        check(doc.Tool == EditorTool.Rotate, "fly: W while flying is not the Move shortcut");
+        var sx0 = vp.WorldToScreen(p0)?.X ?? 0;
+        PostMessageW(hwnd, WmMouseMove, 2, MakeLParam(mid.X + 80, mid.Y));
+        await Task.Delay(150);
+        var looked = vp.WorldToScreen(p0);
+        PostMessageW(hwnd, WmRButtonUp, 0, MakeLParam(mid.X + 80, mid.Y));
+        await Task.Delay(100);
+        check(looked is { } l && l.X < sx0 - 20 && Math.Abs(l.Distance - d1) < 0.01,
+              "fly: mouse-look turns the view without moving the camera");
         doc.SetTool(EditorTool.Move);
     }
 

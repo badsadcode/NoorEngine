@@ -12,7 +12,8 @@ using Transform = NoorEditor.Model.Transform;
 namespace NoorEditor.Panels;
 
 /// <summary>
-/// Toolbar + engine viewport. Camera: right-drag orbits, middle-drag pans, wheel zooms, F frames.
+/// Toolbar + engine viewport. Camera: hold right to look and fly (WASD, Q/E), Alt + left-drag orbits,
+/// middle-drag pans, the wheel zooms, F frames.
 /// Left click selects (again to go one level deeper); the gizmo moves or rotates the selection.
 /// The viewport reports clicks and finished drags as events; this panel turns them into
 /// selection changes and undoable document commands.
@@ -48,7 +49,7 @@ public sealed class ViewportPanel : DockPanel
         toolbar.Children.Add(frameSel);
         toolbar.Children.Add(new TextBlock
         {
-            Text = "Click select · Right-drag orbit · Middle-drag pan · Wheel zoom · F frame",
+            Text = "Click select · Hold right: look + WASD/QE fly (Shift fast, wheel speed) · Alt+drag orbit · Middle pan · Wheel zoom · F frame",
             FontSize = 11, Classes = { "muted" }, Margin = new Thickness(12, 0, 0, 0),
         });
         foreach (var c in toolbar.Children) c.VerticalAlignment = VerticalAlignment.Center;

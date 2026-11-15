@@ -24,6 +24,18 @@ struct PointerState {
     bool left_down = false;
     bool right_down = false;
     bool middle_down = false;
+    bool alt = false;  // Alt held at the last mouse message
+};
+
+// Keys the viewport itself uses (fly camera), as bits of NativeChildWindow::keys().
+enum ViewportKey : std::uint32_t {
+    kKeyForward = 1u << 0,   // W
+    kKeyLeft = 1u << 1,      // A
+    kKeyBack = 1u << 2,      // S
+    kKeyRight = 1u << 3,     // D
+    kKeyDown = 1u << 4,      // Q
+    kKeyUp = 1u << 5,        // E
+    kKeyFast = 1u << 6,      // Shift
 };
 
 class NativeChildWindow final : public PresentationTarget {
@@ -39,6 +51,8 @@ public:
     [[nodiscard]] PointerState pointer_state() const noexcept;
     // Wheel movement since the last call, in notches (positive = away from the user).
     [[nodiscard]] float take_wheel() noexcept;
+    // ViewportKey bits currently held while the viewport has keyboard focus.
+    [[nodiscard]] std::uint32_t keys() const noexcept;
 
     [[nodiscard]] PixelSize pixel_size() const override;
     [[nodiscard]] Result<std::vector<const char*>> vulkan_instance_extensions() const override;
@@ -54,6 +68,8 @@ public:
         std::atomic<bool> right_down{false};
         std::atomic<bool> middle_down{false};
         std::atomic<std::int32_t> wheel{0};  // raw WHEEL_DELTA units
+        std::atomic<bool> alt{false};
+        std::atomic<std::uint32_t> keys{0};
     };
 
 private:

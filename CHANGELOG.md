@@ -4,6 +4,16 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 3 in progress (NoorEditor)
 
+### 2026-11-15 — Fly mode
+Requested after the first hands-on try of the gizmos on the street demo ("no fly mode?").
+- Viewport camera: **hold the right button** to look around and fly (WASD, Q/E down/up, Shift x4,
+  wheel changes the speed while flying). Orbit moved to **Alt + left-drag**; middle-drag pans and
+  the wheel zooms as before. Fly keys are not forwarded as editor shortcuts while flying.
+- `editor::EditorCamera` (orbit/look/pan/zoom/fly) moved out of the render loop into the
+  unit-tested viewport tools; the native child window tracks fly keys and Alt.
+- Tests: 2 camera unit tests; the editor smoke test flies (right button + W through the viewport's
+  own window: 4.8 m in 0.6 s) and mouse-looks (40 checks). 99/99 Debug.
+
 ### 2026-11-15 — Milestone 3, part 2: click to select, gizmos, layout memory
 **Added**
 - Editor API **v2** (ADR-025 addendum): `noor_viewport_set_selection` (highlight),

@@ -106,3 +106,38 @@ TEST_CASE("viewport tools: world_to_screen inverts screen_ray") {
     CHECK(near(p, {1.5f, 0.5f, -2}, 1e-3f));
     CHECK_FALSE(world_to_screen(c, 1280, 720, c.eye - c.forward));  // behind the camera
 }
+
+TEST_CASE("editor camera: look turns the view around the eye; orbit circles the target") {
+    EditorCamera cam;
+    const Vec3 eye0 = cam.eye();
+    const auto b0 = cam.basis();
+    cam.look(50, 0);  // mouse right: turn right
+    CHECK(near(cam.eye(), eye0, 1e-3f));
+    CHECK(noor::math::dot(cam.basis().forward, b0.right) > 0.1f);
+    cam.look(0, -40);  // mouse up: look up
+    CHECK(cam.basis().forward.y > b0.forward.y);
+    CHECK(near(cam.eye(), eye0, 1e-3f));
+
+    EditorCamera orbiting;
+    const Vec3 target0 = orbiting.target;
+    orbiting.orbit(80, 20);
+    CHECK(near(orbiting.target, target0));
+    CHECK(noor::math::length(orbiting.eye() - orbiting.target) == doctest::Approx(orbiting.distance));
+}
+
+TEST_CASE("editor camera: fly moves at fly_speed, Shift is faster, a stalled frame doesn't leap") {
+    EditorCamera cam;
+    cam.fly_speed = 10.0f;
+    const auto b = cam.basis();
+    const Vec3 e0 = cam.eye();
+    cam.fly({0, 0, 1}, 0.05f, false);
+    CHECK(near(cam.eye() - e0, b.forward * 0.5f, 1e-3f));
+    const Vec3 e1 = cam.eye();
+    cam.fly({0, 1, 0}, 0.05f, true);  // E: straight up in world space, x4
+    CHECK(near(cam.eye() - e1, {0, 2.0f, 0}, 1e-3f));
+    const Vec3 e2 = cam.eye();
+    cam.fly({1, 0, 0}, 3.0f, false);  // a 3 s hitch counts as 0.1 s
+    CHECK(noor::math::length(cam.eye() - e2) == doctest::Approx(1.0f).epsilon(1e-3));
+    cam.change_fly_speed(1);
+    CHECK(cam.fly_speed == doctest::Approx(12.5f));
+}

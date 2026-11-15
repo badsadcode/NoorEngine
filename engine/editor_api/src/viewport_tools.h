@@ -46,6 +46,32 @@ inline constexpr float kGizmoScreenScale = 0.16f;
 // Ray/plane intersection. Returns t > 0.
 [[nodiscard]] std::optional<float> ray_plane(const Ray& ray, math::Vec3 point, math::Vec3 normal);
 
+// ---- Editor camera ----
+// A target point, a direction (yaw/pitch) and a distance. The eye sits `distance` from the target
+// along the direction, looking at it. Orbit moves the eye around the target; look turns the view
+// around the eye; fly moves both. Mouse deltas are in pixels.
+struct EditorCamera {
+    math::Vec3 target{0, 0, 0};
+    float yaw = 0.6f;
+    float pitch = 0.45f;
+    float distance = 30.0f;
+    float fov_y = math::radians(50.0f);
+    float fly_speed = 8.0f;  // metres per second (Shift: x4)
+
+    [[nodiscard]] math::Vec3 eye() const;
+    [[nodiscard]] math::Mat4 view() const;
+    [[nodiscard]] CameraBasis basis() const;
+
+    void frame(math::Vec3 lo, math::Vec3 hi);   // fit a box in view
+    void orbit(float dx, float dy);              // eye circles the target
+    void look(float dx, float dy);               // eye stays, view turns (fly mode)
+    void pan(float dx, float dy);                // slide sideways/up, screen-relative
+    void zoom(float notches);                    // wheel: closer/further
+    // move: x = right, y = world up, z = forward (each -1..1); seconds = frame time.
+    void fly(math::Vec3 move, float seconds, bool fast);
+    void change_fly_speed(float notches);        // wheel while flying
+};
+
 // ---- Gizmos (world-aligned, centered on the entity's origin, `size` = arrow length in metres) ----
 
 enum class GizmoMode { None = 0, Move = 1, Rotate = 2 };

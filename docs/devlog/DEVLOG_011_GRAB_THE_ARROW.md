@@ -58,6 +58,14 @@ the Select tool first, like a person would. Sage has been outsmarted by an arrow
 No snapping to a grid, no scale gizmo, the gizmo is always aligned to the world (not the object),
 one object selected at a time, and the selection is a tint rather than an outline.
 
+## P.S. Fly mode
+
+Ten minutes after the first real try of the gizmos, the obvious question arrived: "no fly mode?"
+Now there is. **Hold the right mouse button** and look around; **W A S D** fly, **Q** and **E** go down and
+up, **Shift** goes 4x faster, and the wheel changes your speed. Orbiting moved to
+**Alt + left-drag**, like in the big engines. The self-test flies too: it holds the right button,
+presses W for 0.6 seconds, and measures how much closer it got to the building: 4.8 metres.
+
 ## Next engineering target
 Finishing Milestone 3: snapping, a scale gizmo, and component editing in the Inspector, then the
 milestone review.

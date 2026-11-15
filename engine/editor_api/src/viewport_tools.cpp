@@ -75,6 +75,64 @@ std::optional<float> ray_plane(const Ray& r, Vec3 point, Vec3 normal) {
     return t > 0.0f ? std::optional(t) : std::nullopt;
 }
 
+// ---- EditorCamera ----
+
+namespace {
+constexpr float kTurn = 0.006f;  // radians per pixel
+constexpr float kMaxPitch = 1.55f;
+
+Vec3 direction(float yaw, float pitch) {
+    return {std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+}
+} // namespace
+
+Vec3 EditorCamera::eye() const { return target + direction(yaw, pitch) * distance; }
+
+math::Mat4 EditorCamera::view() const { return math::look_at(eye(), target, {0, 1, 0}); }
+
+CameraBasis EditorCamera::basis() const {
+    const Vec3 e = eye();
+    const Vec3 f = normalize(target - e);
+    const Vec3 r = normalize(cross(f, {0, 1, 0}));
+    return {e, f, r, cross(r, f), fov_y};
+}
+
+void EditorCamera::frame(Vec3 lo, Vec3 hi) {
+    target = (lo + hi) * 0.5f;
+    const float radius = std::max(1.0f, math::length(hi - lo) * 0.5f);
+    distance = radius / std::sin(fov_y * 0.5f) * 1.1f;
+}
+
+void EditorCamera::orbit(float dx, float dy) {
+    yaw -= dx * kTurn;
+    pitch = std::clamp(pitch + dy * kTurn, -kMaxPitch, kMaxPitch);
+}
+
+void EditorCamera::look(float dx, float dy) {
+    const Vec3 e = eye();
+    orbit(dx, dy);  // same angles; then move the target so the eye stays put
+    target = e - direction(yaw, pitch) * distance;
+}
+
+void EditorCamera::pan(float dx, float dy) {
+    const auto b = basis();
+    const float k = distance * 0.0015f;
+    target = target - b.right * (dx * k) + b.up * (dy * k);
+}
+
+void EditorCamera::zoom(float notches) { distance = std::clamp(distance * std::pow(0.88f, notches), 0.5f, 50'000.0f); }
+
+void EditorCamera::fly(Vec3 move, float seconds, bool fast) {
+    if (move == Vec3{}) return;
+    const auto b = basis();
+    const float step = fly_speed * (fast ? 4.0f : 1.0f) * std::clamp(seconds, 0.0f, 0.1f);  // no leaps after a stall
+    target = target + (b.right * move.x + Vec3{0, 1, 0} * move.y + b.forward * move.z) * step;
+}
+
+void EditorCamera::change_fly_speed(float notches) { fly_speed = std::clamp(fly_speed * std::pow(1.25f, notches), 0.25f, 2000.0f); }
+
+// ---- Gizmos ----
+
 Vec3 handle_axis(Handle h) {
     switch (h) {
     case Handle::MoveX:

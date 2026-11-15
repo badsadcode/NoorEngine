@@ -7,8 +7,8 @@
 //
 // With a document attached (ADR-025) the viewport draws the document's scene: it picks up
 // each published RenderSnapshot, loads the GLBs it references (on the render thread) and
-// draws every mesh with its world matrix. Camera: right-drag orbits, middle-drag pans, the
-// wheel zooms. Left click picks (reported as an event), and a gizmo on the selected entity can
+// draws every mesh with its world matrix. Camera: hold the right button to look and fly (WASD,
+// Q/E, Shift), Alt + left-drag orbits, middle-drag pans, the wheel zooms. Left click picks (reported as an event), and a gizmo on the selected entity can
 // be dragged: the drag is previewed here and reported as an event on release. The viewport
 // never edits the document; the editor turns events into undoable commands.
 // Without a document it shows the spike's input demo (hue follows the pointer).
@@ -208,32 +208,6 @@ std::uint32_t handle_color(ed::Handle h) {
     }
 }
 
-// Orbit camera: yaw/pitch/distance around a target.
-struct OrbitCamera {
-    Vec3 target{0, 0, 0};
-    float yaw = 0.6f;
-    float pitch = 0.45f;
-    float distance = 30.0f;
-    float fov_y = noor::math::radians(50.0f);
-
-    [[nodiscard]] Vec3 eye() const {
-        return target + Vec3{std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)} * distance;
-    }
-    [[nodiscard]] Mat4 view() const { return noor::math::look_at(eye(), target, {0, 1, 0}); }
-    [[nodiscard]] ed::CameraBasis basis() const {
-        const Vec3 e = eye();
-        const Vec3 f = noor::math::normalize(target - e);
-        const Vec3 r = noor::math::normalize(noor::math::cross(f, {0, 1, 0}));
-        return {e, f, r, noor::math::cross(r, f), fov_y};
-    }
-
-    void frame(Vec3 lo, Vec3 hi) {
-        target = (lo + hi) * 0.5f;
-        const float radius = std::max(1.0f, noor::math::length(hi - lo) * 0.5f);
-        distance = radius / std::sin(fov_y * 0.5f) * 1.1f;
-    }
-};
-
 struct LoadedMesh {
     noor::render::MeshHandle handle;
     Vec3 lo, hi;  // local bounds
@@ -310,7 +284,9 @@ void render_thread_main(noor_viewport* vp) {
     std::unordered_map<Guid, std::vector<Guid>> children;
     Vec3 scene_lo{-10, 0, -10}, scene_hi{10, 10, 10};
     bool framed_once = false;
-    OrbitCamera camera;
+    ed::EditorCamera camera;
+    bool alt_orbit = false;  // this left-drag orbits instead of picking
+    auto last_frame_time = std::chrono::steady_clock::now();
 
     // Selection/gizmo state as last read from the UI thread, plus derived per-draw flags.
     std::vector<Guid> selection;
@@ -481,16 +457,31 @@ void render_thread_main(noor_viewport* vp) {
         const auto pointer = vp->window->pointer_state();
         const float dx = static_cast<float>(pointer.x - last_pointer.x);
         const float dy = static_cast<float>(pointer.y - last_pointer.y);
-        if (pointer.right_down && last_pointer.right_down) {
-            camera.yaw -= dx * 0.006f;
-            camera.pitch = std::clamp(camera.pitch + dy * 0.006f, -1.5f, 1.5f);
+        const auto frame_now = std::chrono::steady_clock::now();
+        const float frame_seconds = std::chrono::duration<float>(frame_now - last_frame_time).count();
+        last_frame_time = frame_now;
+        // Fly mode (hold the right button): mouse looks, WASD moves, Q/E down/up, Shift faster,
+        // wheel changes the speed. Alt + left-drag orbits; middle-drag pans; the wheel zooms.
+        const bool flying = pointer.right_down;
+        if (pointer.left_down && !last_pointer.left_down) alt_orbit = pointer.alt;
+        if (flying && last_pointer.right_down) {
+            camera.look(dx, dy);
+        } else if (pointer.left_down && last_pointer.left_down && alt_orbit) {
+            camera.orbit(dx, dy);
         } else if (pointer.middle_down && last_pointer.middle_down) {
-            const auto b = camera.basis();
-            const float k = camera.distance * 0.0015f;
-            camera.target = camera.target - b.right * (dx * k) + b.up * (dy * k);
+            camera.pan(dx, dy);
+        }
+        if (flying) {
+            using namespace noor::platform;
+            const std::uint32_t k = vp->window->keys();
+            const Vec3 move{static_cast<float>(((k & kKeyRight) != 0) - ((k & kKeyLeft) != 0)),
+                            static_cast<float>(((k & kKeyUp) != 0) - ((k & kKeyDown) != 0)),
+                            static_cast<float>(((k & kKeyForward) != 0) - ((k & kKeyBack) != 0))};
+            camera.fly(move, frame_seconds, (k & kKeyFast) != 0);
         }
         if (const float wheel = vp->window->take_wheel(); wheel != 0.0f) {
-            camera.distance = std::clamp(camera.distance * std::pow(0.88f, wheel), 0.5f, 50'000.0f);
+            if (flying) camera.change_fly_speed(wheel);
+            else camera.zoom(wheel);
         }
 
         const auto basis = camera.basis();
@@ -514,7 +505,9 @@ void render_thread_main(noor_viewport* vp) {
         const bool released = !pointer.left_down && last_pointer.left_down;
         if (!drag) hovered = target && pointer.inside ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
 
-        if (pressed) {
+        if (pressed && alt_orbit) {
+            click_pending = false;
+        } else if (pressed) {
             // Hit-test at the press itself (hover tracking may not have run, e.g. a click that
             // arrives without a preceding move).
             const ed::Handle grabbed = target ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
