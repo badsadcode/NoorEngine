@@ -157,7 +157,7 @@ TEST_CASE("document api: bad input fails cleanly with a reason") {
     CHECK(noor_doc_undo(t.doc) == 0);  // nothing to undo
 }
 
-TEST_CASE("document api: play runs behaviours on a copy; stop restores; edits wait") {
+TEST_CASE("document api: play runs behaviours on a copy, stop restores, edits wait") {
     TempDoc t;
     REQUIRE(noor_doc_new_scene(t.doc, "Scenes/Play.noorscene", "Play") == 1);
     REQUIRE(t.exec({{"op", "add_asset"}, {"asset", kBuilding}, {"name", "Spinner"}}));

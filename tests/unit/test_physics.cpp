@@ -102,7 +102,7 @@ TEST_CASE("physics: one collision-enter event per contact, none when the crate g
     CHECK(count(after, runtime::Event::Kind::CollisionEnter) == 2);
 }
 
-TEST_CASE("physics: raycasts report entity, point, normal and distance; ignore skips one entity") {
+TEST_CASE("physics: raycasts report entity, point, normal and distance, ignore skips one entity") {
     scene::Scene s;
     s.entities = {floor_entity(), body("Crate", {0, 0.5f, 0}, {{"shape", "box"}}, {{"type", "dynamic"}})};
     const auto floor = s.entities[0];
@@ -167,7 +167,7 @@ TEST_CASE("physics: kinematic bodies follow their entity and push dynamic bodies
     CHECK(sim.pos(crate).x > 2.5f);  // shoved along
 }
 
-TEST_CASE("physics: a mesh collider from the host's triangles; dynamic mesh colliders are refused") {
+TEST_CASE("physics: a mesh collider from the host's triangles, dynamic mesh colliders are refused") {
     scene::Scene s;
     auto ground = body("Ground", {0, 0, 0}, {{"shape", "mesh"}});
     ground.components["mesh"] = {{"asset", "test"}, {"mesh_index", 0}};

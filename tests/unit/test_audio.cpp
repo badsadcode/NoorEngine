@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <chrono>
+#include <thread>
 
 using namespace noor;
 using audio::AudioSystem;
@@ -99,7 +101,7 @@ struct Fixture {
 
 } // namespace
 
-TEST_CASE("audio: silence until something plays; a source plays, loops and stops") {
+TEST_CASE("audio: silence until something plays, a source plays, loops and stops") {
     Fixture f(false);
     f.world.frame(0.016, {});
     CHECK_FALSE(f.audio->device_open());
@@ -111,10 +113,11 @@ TEST_CASE("audio: silence until something plays; a source plays, loops and stops
     CHECK(f.audio->is_playing(f.near_src));
     f.audio->stop(f.near_src);
     CHECK_FALSE(f.audio->is_playing(f.near_src));
-    CHECK(f.audio->mix(4800) < 1e-3f);
+    (void)f.audio->mix(4800);              // the stop's short fade-out (no click)
+    CHECK(f.audio->mix(4800) < 1e-3f);     // then silence
 }
 
-TEST_CASE("audio: 3D sources are quieter far away; bus volume 0 silences them") {
+TEST_CASE("audio: 3D sources are quieter far away, bus volume 0 silences them") {
     float near_peak = 0, far_peak = 0;
     {
         Fixture f;
@@ -139,7 +142,7 @@ TEST_CASE("audio: 3D sources are quieter far away; bus volume 0 silences them") 
     CHECK(near_peak > far_peak * 4.0f);  // 2 m vs 40 m with inverse attenuation
 }
 
-TEST_CASE("audio: one-shots play once and are cleaned up; bad clips are reported, not fatal") {
+TEST_CASE("audio: one-shots play once and are cleaned up, bad clips are reported, not fatal") {
     Fixture f(false);
     f.world.frame(0.016, {});
     CHECK(f.audio->play_one_shot("tone", std::nullopt, 1.0f));
@@ -183,4 +186,27 @@ TEST_CASE("audio + lua: scripts start sounds, check them, fire one-shots and set
     REQUIRE(radio);
     CHECK((*radio)["playing"] == true);  // on_start could play the source the audio system had just made
     CHECK((*radio)["shot"] == true);
+}
+
+TEST_CASE("audio: a lost sound device is rebuilt (needs a real device, skipped without one)") {
+    AudioSystem::Options o;
+    o.use_device = true;
+    o.device_stall_seconds = 0.1;
+    AudioSystem audio(o);
+    if (!audio.device_open()) {
+        MESSAGE("no sound device here: skipped");
+        return;
+    }
+    audio.debug_stall_device();  // what Windows does when the earbuds go back in their case
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    audio.maintain_device();  // a frame: sees the last audio the device took
+    CHECK(audio.device_reconnects() == 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    audio.maintain_device();  // a later frame: nothing for 0.3 s (> 0.1 s), rebuilds the device
+    CHECK(audio.device_open());
+    CHECK(audio.device_reconnects() == 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    audio.maintain_device();  // the new device is pulling audio: nothing to do
+    CHECK(audio.device_open());
+    CHECK(audio.device_reconnects() == 1);
 }

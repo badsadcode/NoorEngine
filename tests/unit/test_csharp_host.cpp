@@ -96,7 +96,7 @@ TEST_CASE("csharp host: instances are created, hooks run in order, scripts call 
     CHECK(Fake::calls[5] == "hook 3");  // OnLateUpdate
 }
 
-TEST_CASE("csharp host: an exception stops that script; missing classes and hosts are reported") {
+TEST_CASE("csharp host: an exception stops that script, missing classes and hosts are reported") {
     Fake::reset();
     {
         runtime::World w(scene_with("Scripts/Mover.cs", 1.0));
@@ -133,7 +133,7 @@ TEST_CASE("csharp host: an exception stops that script; missing classes and host
     }
 }
 
-TEST_CASE("csharp host: entity ids round-trip through the ABI; Lua files are not ours") {
+TEST_CASE("csharp host: entity ids round-trip through the ABI, Lua files are not ours") {
     const Guid g = Guid::generate();
     CHECK(scripting::from_rt(scripting::to_rt(g)) == g);
     CHECK(CSharpScriptSystem::handles("Scripts/A.cs"));

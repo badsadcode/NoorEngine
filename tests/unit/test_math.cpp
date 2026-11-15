@@ -94,7 +94,7 @@ TEST_CASE("math: inverse undoes a TRS matrix") {
         for (int c = 0; c < 4; ++c) CHECK(id.at(r, c) == doctest::Approx(r == c ? 1.0f : 0.0f).epsilon(1e-4));
 }
 
-TEST_CASE("math: quaternion rotate matches the rotation matrix; conjugate undoes it") {
+TEST_CASE("math: quaternion rotate matches the rotation matrix, conjugate undoes it") {
     const Quat q = Quat::from_axis_angle({1, 2, -0.5f}, 0.8f);
     const Vec3 v{0.3f, -1.2f, 2.5f};
     const Vec3 a = rotate(q, v);

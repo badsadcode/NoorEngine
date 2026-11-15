@@ -46,7 +46,7 @@ struct Fixture {
 
 } // namespace
 
-TEST_CASE("lua: hooks run with self.entity and self.params; vectors move entities") {
+TEST_CASE("lua: hooks run with self.entity and self.params, vectors move entities") {
     Fixture f(R"(
         local Mover = {}
         function Mover:on_start()

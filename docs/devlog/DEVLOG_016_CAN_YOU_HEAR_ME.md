@@ -58,6 +58,18 @@ human ears.
    moment, before the sound system had even loaded the sound. Fix: scripts now start *after* the
    engine's own systems have set everything up.
 
+3. **The earbuds went back in their case.** Tom tested with Bluetooth earbuds (his only
+   speakers): case closed, case opened, and the music never came back. Windows hands the sound
+   over in stages when Bluetooth reconnects, and the library we use gave up halfway without
+   telling anyone. Now NoorEngine keeps an eye on it: if the sound device stops asking for audio for
+   a second, NoorEngine builds a new one, and keeps trying every few seconds while there's none.
+4. **Fifteen tests that never ran.** While checking the fix, we noticed some tests "passed" in
+   0.01 seconds without testing anything. Their names contained a semicolon, which our build tools
+   read as "two names". Each half matched no test, and a test that does nothing counts as a pass.
+   Fixed, and now a test that runs nothing *fails*. One of the fifteen turned out to be wrong
+   (it expected a stopped sound to cut off instantly; it actually fades out for a few milliseconds,
+   which is better: no click). Embarrassing, and exactly why we look at the numbers.
+
 ## Next engineering target
 **Part 6: standalone builds.** A game that runs without the editor: `noor_player` and
 `noor_cli build`.

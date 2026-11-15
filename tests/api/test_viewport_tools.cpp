@@ -20,7 +20,7 @@ CameraBasis front_camera() { return {{0, 0, 10}, {0, 0, -1}, {1, 0, 0}, {0, 1, 0
 
 } // namespace
 
-TEST_CASE("viewport tools: the centre pixel's ray goes straight ahead; screen up is world up") {
+TEST_CASE("viewport tools: the centre pixel's ray goes straight ahead, screen up is world up") {
     const Ray centre = screen_ray(front_camera(), 101, 101, 50, 50);
     CHECK(near(centre.origin, {0, 0, 10}));
     CHECK(near(centre.dir, {0, 0, -1}));
@@ -107,7 +107,7 @@ TEST_CASE("viewport tools: world_to_screen inverts screen_ray") {
     CHECK_FALSE(world_to_screen(c, 1280, 720, c.eye - c.forward));  // behind the camera
 }
 
-TEST_CASE("editor camera: look turns the view around the eye; orbit circles the target") {
+TEST_CASE("editor camera: look turns the view around the eye, orbit circles the target") {
     EditorCamera cam;
     const Vec3 eye0 = cam.eye();
     const auto b0 = cam.basis();

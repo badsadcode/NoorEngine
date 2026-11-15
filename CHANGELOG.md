@@ -27,8 +27,20 @@ bus is silent, measured from the mixed samples; one-shots clean up, a missing cl
 not a crash; a Lua script driving it all). The editor smoke test writes a WAV, adds it to the
 scene, and plays it with a C# script (looping emitter + one-shot), silently.
 
-**Fixed:** Create ▸ … and Add to scene did nothing while playing (only a Console warning); they now
-ask to stop the game first.
+**Fixed**
+- Create ▸ … and Add to scene did nothing while playing (only a Console warning); they now ask to
+  stop the game first.
+- Sound stopped for good after Bluetooth earbuds went into their case and came back (found by Tom).
+  miniaudio follows default-device changes but ignores failures, and Bluetooth reconnects in stages.
+  NoorEngine now owns the device: one that stops pulling audio for 1 s is rebuilt, with retries
+  every 1-5 s while there's none (sounds keep playing silently meanwhile). Also: a game started
+  with no device picks one up when it appears. Tested by stopping the device as Windows would
+  (local only: CI has no sound card, so that test skips there).
+- **Tests that never ran.** CMake splits lists on `;`, so 15 test cases with a `;` in their name
+  became ctest entries that matched nothing and "passed". Renamed; every ctest entry that runs zero
+  test cases now fails. Of the 15, one had a wrong expectation (a stopped sound fades out for a few
+  ms instead of cutting off with a click) and was corrected; the rest passed as they were. 138 real
+  tests now, instead of 152 entries.
 
 **Not yet:** pause, fades, voice limits, device switching, `.ogg`, occlusion/reverb. Automated tests run
 without a device; speaker output was checked by ear by Tom (music box emitter, walking around it).

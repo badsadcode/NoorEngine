@@ -6,6 +6,8 @@
 #include <miniaudio.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <format>
@@ -46,6 +48,26 @@ struct GroupDeleter {
 };
 using Sound = std::unique_ptr<ma_sound, SoundDeleter>;
 using Group = std::unique_ptr<ma_sound_group, GroupDeleter>;
+struct DeviceDeleter {
+    void operator()(ma_device* d) const {
+        ma_device_uninit(d);
+        delete d;
+    }
+};
+using Device = std::unique_ptr<ma_device, DeviceDeleter>;
+using Clock = std::chrono::steady_clock;
+
+const char* notification_name(int type) {
+    switch (type) {
+    case ma_device_notification_type_started: return "started";
+    case ma_device_notification_type_stopped: return "stopped";
+    case ma_device_notification_type_rerouted: return "switched to the new default output";
+    case ma_device_notification_type_interruption_began: return "interrupted";
+    case ma_device_notification_type_interruption_ended: return "interruption ended";
+    case ma_device_notification_type_unlocked: return "unlocked";
+    default: return "changed";
+    }
+}
 
 bool device_disabled_by_environment() {
 #if defined(_MSC_VER)
@@ -66,7 +88,18 @@ struct AudioSystem::Impl {
     Options options;
     ma_engine engine{};
     bool engine_ok = false;
-    bool device = false;
+    // The sound device. The engine is always created without one and this device's callback pulls
+    // the mix from it, so the device can be thrown away and rebuilt without touching any sound.
+    bool want_device = false;
+    Device device;
+    std::atomic<std::uint64_t> frames_out{0};   // written by the device thread
+    std::atomic<int> notification{-1};          // the latest device notification, for the log
+    std::uint64_t frames_seen = 0;
+    Clock::time_point last_progress{};
+    Clock::time_point next_retry{};
+    double retry_delay = 1.0;
+    bool missing_reported = false;
+    std::size_t reconnects = 0;
     std::unordered_map<std::string, Group> buses;
     struct Source {
         Sound sound;
@@ -77,36 +110,103 @@ struct AudioSystem::Impl {
     std::vector<float> scratch;
 
     explicit Impl(Options o) : options(std::move(o)) {
-        const bool want_device = options.use_device && !device_disabled_by_environment();
+        want_device = options.use_device && !device_disabled_by_environment();
         ma_engine_config config = ma_engine_config_init();
         config.channels = 2;
         config.sampleRate = options.sample_rate;
-        config.noDevice = want_device ? MA_FALSE : MA_TRUE;
-        if (ma_engine_init(&config, &engine) != MA_SUCCESS && want_device) {
-            NOOR_LOG_WARN("Audio", "No sound device could be opened; sounds play silently");
-            config.noDevice = MA_TRUE;
-            if (ma_engine_init(&config, &engine) != MA_SUCCESS) {
-                NOOR_LOG_ERROR("Audio", "The audio engine could not start");
-                return;
-            }
-        } else if (!want_device) {
-            // noDevice init can't fail for a reason a retry would fix; report if it did.
+        config.noDevice = MA_TRUE;
+        if (ma_engine_init(&config, &engine) != MA_SUCCESS) {
+            NOOR_LOG_ERROR("Audio", "The audio engine could not start");
+            return;
         }
         engine_ok = true;
-        device = config.noDevice == MA_FALSE;
         for (const char* name : kBuses) {
             auto* group = new ma_sound_group{};
             if (ma_sound_group_init(&engine, 0, nullptr, group) == MA_SUCCESS) buses[name] = Group(group);
             else delete group;
         }
+        if (want_device && !open_device()) {
+            NOOR_LOG_WARN("Audio", "No sound device right now; sounds play silently until one appears");
+            missing_reported = true;
+            next_retry = Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(retry_delay));
+        }
         NOOR_LOG_INFO("Audio", "Audio ready ({}, {} Hz)", device ? "sound device" : "no device: mixing to memory", options.sample_rate);
     }
 
     ~Impl() {
+        device.reset();   // stop pulling the mix first
         sources.clear();  // sounds, then their groups, then the engine
         one_shots.clear();
         buses.clear();
         if (engine_ok) ma_engine_uninit(&engine);
+    }
+
+    // ---- The device (runs on miniaudio's thread: touch only the engine and atomics) ----
+    static void on_data(ma_device* d, void* out, const void*, ma_uint32 frames) {
+        auto* self = static_cast<Impl*>(d->pUserData);
+        ma_engine_read_pcm_frames(&self->engine, out, frames, nullptr);
+        self->frames_out.fetch_add(frames, std::memory_order_relaxed);
+    }
+    static void on_notification(const ma_device_notification* n) {
+        static_cast<Impl*>(n->pDevice->pUserData)->notification.store(static_cast<int>(n->type));
+    }
+
+    // Opens the system's default output and starts pulling the mix.
+    bool open_device() {
+        auto* raw = new ma_device{};
+        ma_device_config config = ma_device_config_init(ma_device_type_playback);
+        config.playback.format = ma_format_f32;
+        config.playback.channels = 2;
+        config.sampleRate = options.sample_rate;
+        config.dataCallback = &Impl::on_data;
+        config.notificationCallback = &Impl::on_notification;
+        config.pUserData = this;
+        if (ma_device_init(nullptr, &config, raw) != MA_SUCCESS) {
+            delete raw;
+            return false;
+        }
+        Device opened(raw);
+        if (ma_device_start(raw) != MA_SUCCESS) return false;
+        device = std::move(opened);
+        frames_seen = frames_out.load(std::memory_order_relaxed);
+        last_progress = Clock::now();
+        return true;
+    }
+
+    // Called every frame (main thread). miniaudio follows default-device changes by itself, but when
+    // that fails (Bluetooth earbuds reconnect in stages; the endpoint isn't ready yet) the device
+    // just stays stopped. So: a device that hasn't asked for audio for a while is rebuilt; with no
+    // device, try again now and then, mixing silently meanwhile.
+    void maintain_device() {
+        if (!want_device || !engine_ok) return;
+        if (const int n = notification.exchange(-1); n >= 0 && n != ma_device_notification_type_started)
+            NOOR_LOG_INFO("Audio", "Sound device {}", notification_name(n));
+        const auto now = Clock::now();
+        if (device) {
+            const auto frames = frames_out.load(std::memory_order_relaxed);
+            if (frames != frames_seen) {
+                frames_seen = frames;
+                last_progress = now;
+                return;
+            }
+            if (now - last_progress < std::chrono::duration<double>(options.device_stall_seconds)) return;
+            NOOR_LOG_WARN("Audio", "The sound device went quiet (unplugged or switched?); reconnecting");
+            device.reset();
+            next_retry = now;
+            retry_delay = 1.0;
+        }
+        if (now < next_retry) return;
+        if (open_device()) {
+            NOOR_LOG_INFO("Audio", "Sound device connected");
+            ++reconnects;
+            missing_reported = false;
+            retry_delay = 1.0;
+            return;
+        }
+        if (!missing_reported) NOOR_LOG_WARN("Audio", "No sound device right now; sounds play silently until one appears");
+        missing_reported = true;
+        next_retry = now + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(retry_delay));
+        retry_delay = std::min(retry_delay * 2.0, 5.0);
     }
 
     ma_sound_group* bus(std::string_view name) {
@@ -158,7 +258,15 @@ struct AudioSystem::Impl {
 AudioSystem::AudioSystem(Options options) : impl_(std::make_unique<Impl>(std::move(options))) {}
 AudioSystem::~AudioSystem() = default;
 
-bool AudioSystem::device_open() const noexcept { return impl_->device; }
+bool AudioSystem::device_open() const noexcept { return impl_->device != nullptr; }
+
+void AudioSystem::maintain_device() { impl_->maintain_device(); }
+
+std::size_t AudioSystem::device_reconnects() const noexcept { return impl_->reconnects; }
+
+void AudioSystem::debug_stall_device() {
+    if (impl_->device) ma_device_stop(impl_->device.get());
+}
 
 void AudioSystem::entity_started(runtime::World& world, scene::Entity& entity) {
     const auto c = entity.components.find("audio_source");
@@ -210,6 +318,7 @@ void AudioSystem::late_update(runtime::World& world, double dt) {
         if (!src.spatial) continue;
         if (const auto p = api::world_position(world, id)) d.place(src.sound.get(), *p);
     }
+    d.maintain_device();
     if (!d.device && d.options.advance_without_device && dt > 0) {
         (void)d.mix(static_cast<std::uint32_t>(std::min(dt, 0.25) * d.options.sample_rate));
     }

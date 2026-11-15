@@ -15,6 +15,10 @@
 // Without a sound device (Options::use_device = false, the environment variable
 // NOOR_AUDIO_DEVICE=none, or no device available) the engine still mixes, into memory: sounds
 // play, end and report "playing" exactly as with speakers, and tests can measure the result.
+//
+// The device is the system's default output. If it goes away or stops (earbuds back in their case,
+// a headset unplugged, a failed switch) it is rebuilt, retrying every few seconds while there's
+// none; meanwhile sounds keep playing silently, so they're in the right place when it's back.
 
 #include "noor/runtime/world.h"
 
@@ -34,6 +38,8 @@ public:
         // Without a device: advance (mix and discard) as much audio as game time passes, so sounds
         // end on time. Tests that measure the mix themselves with mix() turn this off.
         bool advance_without_device = true;
+        // A device that hasn't asked for audio for this long is considered lost and rebuilt.
+        double device_stall_seconds = 1.0;
         // A clip reference (an asset id, or a project-relative path like "Assets/Audio/step.wav") to
         // a file on disk.
         std::function<std::optional<std::filesystem::path>(std::string_view clip)> resolve_clip;
@@ -61,6 +67,9 @@ public:
 
     // ---- State, tests ----
     [[nodiscard]] bool device_open() const noexcept;      // speakers in use
+    void maintain_device();                                // late_update does this every frame
+    [[nodiscard]] std::size_t device_reconnects() const noexcept;
+    void debug_stall_device();                             // tests: stop the device as Windows would
     [[nodiscard]] std::size_t playing_count() const;       // sources + one-shots currently sounding
     // Without a device: mixes `frames` stereo frames and returns the loudest sample (0..1).
     [[nodiscard]] float mix(std::uint32_t frames);

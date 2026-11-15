@@ -62,7 +62,7 @@ TEST_CASE("runtime: the fixed step accumulates time and caps runaway frames") {
     CHECK(w.time() == doctest::Approx(0.12));
 }
 
-TEST_CASE("runtime: spawned entities start next frame; destroy removes whole subtrees at frame end") {
+TEST_CASE("runtime: spawned entities start next frame, destroy removes whole subtrees at frame end") {
     scene::Scene s;
     auto parent = entity("parent");
     auto child = entity("child", parent.id);
@@ -101,7 +101,7 @@ TEST_CASE("runtime input: actions report down, pressed and released edges") {
     CHECK_FALSE(input.down("no such action"));
 }
 
-TEST_CASE("runtime input: axes combine keys; look axes are mouse movement") {
+TEST_CASE("runtime input: axes combine keys, look axes are mouse movement") {
     Input input;
     InputState s;
     s.set(Key::D);

@@ -26,7 +26,10 @@ target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_C
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
 noor_set_target_options(noor_unit_tests)
 set_target_properties(noor_unit_tests PROPERTIES FOLDER "Tests")
-doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit")
+# A ctest entry that matched no test case must fail, not pass. (A ';' in a TEST_CASE name splits
+# it into two entries that match nothing: CMake lists use ';'. That hid 15 tests until 2026-11-16.)
+set(NOOR_NOTHING_RAN "test cases: +0 ")  # no pipe character here: it breaks cmd quoting in the discovery step
+doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit" FAIL_REGULAR_EXPRESSION "${NOOR_NOTHING_RAN}")
 
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
@@ -40,7 +43,7 @@ if(WIN32)
     set_target_properties(noor_editor_api_tests PROPERTIES FOLDER "Tests")
     add_custom_command(TARGET noor_editor_api_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:noor_editor_api> $<TARGET_FILE_DIR:noor_editor_api_tests>)
-    doctest_discover_tests(noor_editor_api_tests TEST_PREFIX "api: " PROPERTIES LABELS "api")
+    doctest_discover_tests(noor_editor_api_tests TEST_PREFIX "api: " PROPERTIES LABELS "api" FAIL_REGULAR_EXPRESSION "${NOOR_NOTHING_RAN}")
 endif()
 
 # ---- CLI tests (headless, run in CI) ---------------------------------------
