@@ -1,0 +1,11 @@
+noor_add_module(platform
+    SOURCES
+        src/platform.cpp
+        src/window.cpp
+        src/vulkan_bridge.cpp
+    PUBLIC_DEPS
+        noor::foundation
+        Vulkan::Headers
+    PRIVATE_DEPS
+        SDL3::SDL3-static
+)

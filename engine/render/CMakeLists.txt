@@ -1,0 +1,9 @@
+noor_add_module(render
+    SOURCES
+        src/vulkan_renderer.cpp
+    PUBLIC_DEPS
+        noor::foundation
+        noor::platform
+    PRIVATE_DEPS
+        Vulkan::Vulkan
+)
