@@ -4,6 +4,9 @@
 
 > We are building our own engine. We have excellent reasons. They remain classified.
 
+**Website:** [badsadcode.github.io/NoorEngine](https://badsadcode.github.io/NoorEngine/), the devlog and
+this status table, generated from `docs/` (source in [`website/`](website/)).
+
 ## Honest status
 
 **Milestone 0: foundation.** What exists today:
