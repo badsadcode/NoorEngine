@@ -1,6 +1,6 @@
-# Noor Interchange v0.2
+# Noor Interchange v0.3
 
-**Status:** Draft (v0.2, 2026-11-15). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
+**Status:** Draft (v0.3, 2026-11-15). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
 Changes since v0.1: [section 8](#8-changes).
 
 The shared rules for everything a Noor tool **exports** (NoorMD benches, Noor generators such as
@@ -123,7 +123,7 @@ Small, human-readable JSON next to the GLB. It lets an engine or a gallery under
 
 ```json
 {
-  "noor_interchange": "0.2",
+  "noor_interchange": "0.3",
   "id": "4c1f7b2e-9a3d-4e51-8c0b-2f6d1e9a7b33",
   "name": "Pine_Tall_01",
   "kind": "vegetation.tree",
@@ -146,7 +146,7 @@ Small, human-readable JSON next to the GLB. It lets an engine or a gallery under
   "collision": "capsule",
   "markers": { "spawn.enemy": 0 },
   "tags": ["conifer", "pine", "forest"],
-  "license": { "spdx": "MIT", "author": "Bad Ideas Works" },
+  "license": { "spdx": "MIT", "author": "Bad Ideas Works", "attribution": "" },
   "validation": { "gltf_validator": "pass", "errors": 0, "warnings": 0 }
 }
 ```
@@ -164,6 +164,16 @@ Field rules (full detail in the schema):
   `terrain`, `character`. Add new kinds to this list before using them.
 - **`generator.version`**: the tool's real version; `commit` if known.
 - **`recipe.seed`** + `recipe.sha256`: same tool version + same recipe ⇒ same asset (determinism).
+  Seeds are **unsigned 64-bit** integers (0 … 18,446,744,073,709,551,615); readers must not parse
+  them as signed or as floating point (a seed above 2^63 would silently change).
+- **`generator.determinism`** (optional): how far "same recipe ⇒ same asset" holds:
+  `cross_platform` (bit-identical on any OS/CPU, see section 5), `same_platform` (same OS/CPU family)
+  or `none`. Unspecified means `same_platform`.
+- **`license.attribution`**: the credit line this asset requires, word for word, e.g.
+  `"© OpenStreetMap contributors"` for assets built from OSM data (with `"spdx": "ODbL-1.0"` when the
+  asset is itself a derived database). Empty or missing means no credit is required. **Engines and
+  games collect these lines into their credits automatically**, so nobody has to remember which
+  building came from where. If an asset combines several sources, separate lines with `"; "`.
 - **`markers`**: counts per marker type, for galleries and quick checks.
 - **`provenance`** (optional): which values were measured vs guessed, e.g.
   `{ "osm": ["levels"], "inferred": ["roof"] }` as NoorArchitect/BadBuilding already does.
@@ -176,6 +186,13 @@ Field rules (full detail in the schema):
    wired in, it writes `"gltf_validator": "not_run"` (honest beats green).
 2. The manifest validates against `noor.asset.schema.json`.
 3. Same tool version + recipe + seed ⇒ same geometry (byte-identical GLB is the goal).
+   **Cross-machine determinism** (needed for multiplayer, CI and checksums that match on another
+   computer) requires avoiding the platform maths library in generation code: `sin`, `cos`, `tan`,
+   `exp`, `log`, `pow`, `atan2` and friends can differ in the last bit between operating systems and
+   CPUs. Use only `+ − × ÷`, `sqrt`, `floor`/`ceil`, integer maths and your own polynomial
+   approximations (the approach proven in Thornwake, decision D5), and never let the compiler fuse
+   multiply-adds differently per platform. Tools that follow this may declare
+   `"determinism": "cross_platform"`.
 4. Exporter tests open the result in at least one other program in CI where practical (NoorForm
    already imports trees into headless Godot).
 
@@ -199,6 +216,13 @@ Field rules (full detail in the schema):
 *The mapping is a proposal; final names are Tom's call.*
 
 ## 8. Changes
+
+### v0.3 (2026-11-15)
+- **Seeds** are unsigned 64-bit (a real BadBuilding seed is 13,795,972,169,680,155,491, above 2^63).
+- **`license.attribution`**: the exact credit line an asset needs, for automatic credits screens
+  (Baltic Drive's OSM and GUGiK credits are the motivating case).
+- **`generator.determinism`** and section 5's rules for cross-machine determinism (from Thornwake D5).
+- All additions are optional: v0.2 files remain valid v0.3 files.
 
 ### v0.2 (2026-11-15), from the first real exporter (BadBuilding, commit 6d59174)
 - **Collision:** `extras.noor.collision` is the authoritative rule and importers must never render

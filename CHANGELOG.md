@@ -4,6 +4,11 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 2 in progress
 
+### 2026-11-15 — Noor Interchange v0.3
+- Seeds are unsigned 64-bit; `license.attribution` for automatic credits; `generator.determinism`
+  plus cross-machine determinism rules (Thornwake D5). All optional: v0.2 files stay valid.
+- Schema updated; the real BadBuilding manifest in `tests/data` validates against it.
+
 ### 2026-11-15 — Milestone 2, first increment: projects, asset registry, GLB import, scenes, CLI
 **Added**
 - ADR-004 (scene model), ADR-005 (project serialization), ADR-006 (asset registry).

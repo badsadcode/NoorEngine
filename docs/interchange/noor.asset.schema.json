@@ -67,6 +67,13 @@
         },
         "commit": {
           "type": "string"
+        },
+        "determinism": {
+          "enum": [
+            "cross_platform",
+            "same_platform",
+            "none"
+          ]
         }
       }
     },
@@ -81,7 +88,10 @@
           "type": "string"
         },
         "seed": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615,
+          "description": "Unsigned 64-bit seed. Do not parse as signed or floating point."
         },
         "sha256": {
           "type": "string"
@@ -246,6 +256,10 @@
         },
         "author": {
           "type": "string"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "Exact credit line required by this asset's sources (empty = none). Collected into credits screens."
         }
       }
     },
