@@ -1,20 +1,66 @@
 {
-  "noor_interchange": "0.1",
+  "noor_interchange": "0.2",
   "id": "9d2a51c0-3b7e-4f18-a6d4-0c8e2b71f5a9",
   "name": "Courtyard_Blockout_07",
   "kind": "level",
-  "generator": { "tool": "NoorLevel", "version": "0.9.0" },
-  "recipe": { "file": "courtyard_blockout_07.recipe.json", "seed": 7 },
+  "generator": {
+    "tool": "NoorLevel",
+    "version": "0.9.0"
+  },
+  "recipe": {
+    "file": "courtyard_blockout_07.recipe.json",
+    "seed": 7
+  },
   "created": "2026-11-15T16:25:00Z",
-  "space": { "up": "+Y", "forward": "+Z", "handedness": "right", "units": "meters" },
-  "bounds": { "min": [0.0, -4.0, 0.0], "max": [96.0, 18.0, 72.0] },
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      0.0,
+      -4.0,
+      0.0
+    ],
+    "max": [
+      96.0,
+      18.0,
+      72.0
+    ]
+  },
   "files": [
-    { "path": "courtyard_blockout_07.glb", "role": "model" },
-    { "path": "courtyard_blockout_07.recipe.json", "role": "recipe" },
-    { "path": "courtyard_blockout_07.validation.json", "role": "validation" }
+    {
+      "path": "courtyard_blockout_07.glb",
+      "role": "model"
+    },
+    {
+      "path": "courtyard_blockout_07.recipe.json",
+      "role": "recipe"
+    },
+    {
+      "path": "courtyard_blockout_07.validation.json",
+      "role": "validation"
+    }
   ],
   "collision": "mesh",
-  "markers": { "spawn.player": 1, "spawn.enemy": 14, "pickup": 9, "door": 4, "light": 22, "trigger": 1 },
-  "tags": ["fps", "blockout", "multi-storey"],
-  "validation": { "gltf_validator": "pass", "errors": 0, "warnings": 2 }
+  "markers": {
+    "spawn.player": 1,
+    "spawn.enemy": 14,
+    "pickup": 9,
+    "door": 4,
+    "light": 22,
+    "trigger": 1
+  },
+  "tags": [
+    "fps",
+    "blockout",
+    "multi-storey"
+  ],
+  "validation": {
+    "gltf_validator": "pass",
+    "errors": 0,
+    "warnings": 2
+  }
 }

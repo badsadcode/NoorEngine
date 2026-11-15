@@ -4,6 +4,17 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 1 in progress
 
+### 2026-11-15 — Noor Interchange v0.2
+Feedback from the first real exporter (BadBuilding 6d59174):
+- Collision: `extras.noor.collision` is authoritative and never rendered; suffix `-colonly` /
+  `-convcolonly` replaces `-col` (Godot draws `-col` meshes).
+- LODs: one file per level (`<name>.lod<n>.glb`, schema role `lod` + `lod` number); wrapper
+  nodes still allowed.
+- Markers: new `passage`; `entrance` (place to get in) vs `door` (openable object) clarified;
+  more `entrance` kinds; `door.opens`.
+- Ids may be UUID v5 from a natural key; tool-specific manifest blocks; `not_run` validation allowed.
+- Schema re-validated: examples pass, v0.1 manifests still accepted, LOD files without a level rejected.
+
 ### 2026-11-15 — Milestone 1, second increment: input, fly camera, GPU timing, stress test
 **Added**
 - `platform/input.h`: keyboard (physical scancodes) and mouse state with pressed/released edges,

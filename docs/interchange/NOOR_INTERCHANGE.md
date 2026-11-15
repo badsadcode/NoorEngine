@@ -1,6 +1,7 @@
-# Noor Interchange v0.1
+# Noor Interchange v0.2
 
-**Status:** Draft (2026-11-15). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
+**Status:** Draft (v0.2, 2026-11-15). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
+Changes since v0.1: [section 8](#8-changes).
 
 The shared rules for everything a Noor tool **exports** (NoorMD benches, Noor generators such as
 NoorShip, NoorLevel, NoorArchitect, NoorVegetation, NoorRoads, NoorBridges) and everything
@@ -20,7 +21,8 @@ Every exported asset is a small set of files sharing one base name:
 
 | File | Required | What |
 |---|---|---|
-| `<name>.glb` | ✅ | Geometry, PBR materials, textures (embedded), lights, markers |
+| `<name>.glb` | ✅ | Geometry (LOD0), PBR materials, textures (embedded), lights, markers, collision |
+| `<name>.lod<n>.glb` | optional | Lower levels of detail, one file per level (section 3.5) |
 | `<name>.noor.json` | ✅ | **Manifest**: metadata about the asset (section 4). Schema: [`noor.asset.schema.json`](noor.asset.schema.json) |
 | `<name>.recipe.json` | ✅ for generated assets | Everything needed to regenerate it: tool-specific format, but must contain `seed` and a `version` |
 | `<name>.validation.json` | optional | The tool's own checks and the Khronos glTF validator report |
@@ -75,8 +77,9 @@ Its forward direction is the node's +Z.
 | `spawn.enemy` | Enemy spawn | `class`, `difficulty`, `group` |
 | `spawn.npc` | Non-hostile character | `class`, `role` |
 | `pickup` | Item, ammo, health, key | `class`, `amount` |
-| `door` | Door or gate (opening is a separate mesh) | `locked_by`, `width`, `height` |
-| `entrance` | Way into a building/ship/area | `kind` (`main`, `service`, `gate`, `hatch`) |
+| `entrance` | A place where you get **into** a building/ship/area: semantic, for navigation, AI, addresses and spawning. Usually sits in a doorway | `kind` (`main`, `service`, `courtyard`, `shop`, `gate`, `wicket`, `hatch`, `roof`) |
+| `door` | The **physical, openable thing** (door leaf, gate wing, hatch cover) that an engine can animate, lock or break. A shop door is both: an `entrance` (kind `shop`) and, if the tool models the leaf, a `door` | `locked_by`, `width`, `height`, `opens` (`in`, `out`, `slide`, `up`) |
+| `passage` | One **end** of a walkable way through something (a gate passage through a ground floor, a tunnel, an arcade). Ends come in pairs | `pair` (the other end's `id`), `kind` (`gate`, `tunnel`, `arcade`, `corridor`), `width`, `height` |
 | `trigger` | Volume that fires an event | `size` [x,y,z], `event` |
 | `waypoint` | Path / patrol point | `path`, `index` |
 | `socket` | Attachment point for other assets | `accepts` (asset `kind`s) |
@@ -93,15 +96,24 @@ table first (one PR), then use them. Never invent a marker silently.
 - **Semantic parts:** mesh nodes may carry `"noor": {"v": 1, "part": "wall"}`. Vocabulary:
   `wall`, `floor`, `ceiling`, `roof`, `window`, `door`, `stairs`, `railing`, `pillar`, `trunk`,
   `branch`, `leaves`, `hull`, `deck`, `detail`, `terrain`.
-- **LODs:** sibling nodes named `<base>_LOD0`, `<base>_LOD1`, … with `"noor": {"v": 1, "lod": 0}`.
-  LOD0 is the most detailed.
-- **Collision:** separate mesh nodes with `"noor": {"v": 1, "collision": "mesh"}` (or `convex`,
-  `box`, `sphere`, `capsule`) **and** the name suffix `-col` (Godot's native convention), not
-  rendered. If an asset has no collision node, engines may generate one.
+- **LODs: one file per level.** `<name>.glb` holds LOD0 (plus markers and collision);
+  `<name>.lod1.glb`, `<name>.lod2.glb`, … hold the lower levels, each listed in the manifest with
+  role `lod` and its `lod` number. Why files and not nodes: Blender, Godot and most viewers show
+  every node, so LODs packed in one GLB appear stacked on top of each other; separate files open
+  cleanly everywhere and let an engine load only the levels it needs.
+  *Allowed alternative* (for tools that need one file): top-level wrapper nodes `<base>_LOD0`,
+  `<base>_LOD1`, … each with `"noor": {"v": 1, "lod": n}`. Noor importers accept both.
+- **Collision: the `extras` flag is the rule; the name is the hint.** Collision nodes carry
+  `"noor": {"v": 1, "collision": "mesh"}` (or `convex`, `box`, `sphere`, `capsule`).
+  **Importers must never render a node that has `extras.noor.collision`.** For engines that only
+  read names, collision nodes are also named with Godot's *collision-only* suffixes:
+  `-colonly` (for `mesh`, `box`, `sphere`, `capsule`) or `-convcolonly` (for `convex`), which
+  Godot turns into a physics body without drawing the mesh. Do **not** use plain `-col`: Godot
+  keeps that mesh visible. If an asset has no collision node, engines may generate one.
 
 ### 3.6 Names
 Node names are readable and stable across regenerations with the same recipe:
-`Marker_SpawnEnemy_e07`, `Light_Spot_03`, `Wall_North_LOD0`, `Hull-col`. They are the fallback for
+`Marker_SpawnEnemy_e07`, `Light_Spot_03`, `Wall_North`, `Hull-colonly`. They are the fallback for
 engines that ignore `extras`.
 
 ## 4. The manifest (`<name>.noor.json`)
@@ -111,7 +123,7 @@ Small, human-readable JSON next to the GLB. It lets an engine or a gallery under
 
 ```json
 {
-  "noor_interchange": "0.1",
+  "noor_interchange": "0.2",
   "id": "4c1f7b2e-9a3d-4e51-8c0b-2f6d1e9a7b33",
   "name": "Pine_Tall_01",
   "kind": "vegetation.tree",
@@ -122,6 +134,8 @@ Small, human-readable JSON next to the GLB. It lets an engine or a gallery under
   "bounds": { "min": [-2.1, 0.0, -2.0], "max": [2.2, 14.8, 2.1] },
   "files": [
     { "path": "pine_tall_01.glb", "role": "model", "sha256": "…" },
+    { "path": "pine_tall_01.lod1.glb", "role": "lod", "lod": 1 },
+    { "path": "pine_tall_01.lod2.glb", "role": "lod", "lod": 2 },
     { "path": "pine_tall_01.preview.png", "role": "preview" }
   ],
   "lods": [
@@ -138,8 +152,13 @@ Small, human-readable JSON next to the GLB. It lets an engine or a gallery under
 ```
 
 Field rules (full detail in the schema):
-- **`id`**: a UUID created when the asset is first generated and **stored in the recipe**, so
-  regenerating keeps the same identity. Engines use it to keep references when files move.
+- **`id`**: a UUID that stays the same when the asset is regenerated. Engines use it to keep
+  references when files move. Two ways to get one, both fine:
+  - *derived* (preferred when the asset has a natural key): a **UUID v5** of that key, e.g. an
+    OSM id `osm:w123456`, under a namespace UUID that is fixed per tool and written in the tool's
+    docs. Same input, same id, on any machine, with nothing to store;
+  - *stored*: a random UUID v4 created on first generation and **kept in the recipe**.
+  A request or an existing recipe that already names an id always wins.
 - **`kind`**: dotted category: `building`, `ship`, `vehicle`, `level`, `prop`, `rock`,
   `vegetation.tree`, `vegetation.plant`, `vegetation.scatter`, `road`, `bridge`, `material`,
   `terrain`, `character`. Add new kinds to this list before using them.
@@ -148,10 +167,13 @@ Field rules (full detail in the schema):
 - **`markers`**: counts per marker type, for galleries and quick checks.
 - **`provenance`** (optional): which values were measured vs guessed, e.g.
   `{ "osm": ["levels"], "inferred": ["roof"] }` as NoorArchitect/BadBuilding already does.
-- **Unknown fields are allowed** (tools may add their own); readers ignore what they don't know.
+- **Tool-specific data** goes in one top-level block named after the tool in lower case, e.g.
+  `"noorarchitect": { … }` (or `"badbuilding"` until the rename). Readers ignore blocks they don't know.
+- **Unknown fields are allowed**; readers ignore what they don't know.
 
 ## 5. Quality bar for every exporter
-1. The GLB passes the **Khronos glTF Validator** with zero errors.
+1. The GLB passes the **Khronos glTF Validator** with zero errors. Until a tool has the validator
+   wired in, it writes `"gltf_validator": "not_run"` (honest beats green).
 2. The manifest validates against `noor.asset.schema.json`.
 3. Same tool version + recipe + seed ⇒ same geometry (byte-identical GLB is the goal).
 4. Exporter tests open the result in at least one other program in CI where practical (NoorForm
@@ -175,3 +197,22 @@ Field rules (full detail in the schema):
 | NoorMD benches | NoorForm, NoorMaterial, NoorMesh, NoorForge… | trees/rocks, materials, models |
 
 *The mapping is a proposal; final names are Tom's call.*
+
+## 8. Changes
+
+### v0.2 (2026-11-15), from the first real exporter (BadBuilding, commit 6d59174)
+- **Collision:** `extras.noor.collision` is the authoritative rule and importers must never render
+  such nodes. The name suffix changes from `-col` to Godot's collision-only `-colonly` /
+  `-convcolonly`, because `-col` keeps the mesh visible in Godot.
+- **LODs:** one file per level (`<name>.lod<n>.glb`, manifest role `lod` with a `lod` number) is the
+  canonical form; LOD wrapper nodes in one GLB remain allowed.
+- **Markers:** new `passage` (paired ends of a walkway through something); `entrance` vs `door`
+  clarified (place to get in vs. physical openable object); `entrance` kinds gain `courtyard`,
+  `shop`, `wicket`, `roof`; `door` gains `opens`.
+- **Asset id:** a UUID v5 derived from a natural key (per-tool namespace) is allowed alongside a
+  stored UUID v4.
+- **Tool-specific manifest block** named after the tool, lower case.
+- Validation may be `not_run` until a tool wires in the Khronos validator.
+
+v0.1 files stay readable: the only breaking change is the collision suffix, and importers rely on
+the `extras` flag, which v0.1 already required.

@@ -47,7 +47,12 @@ the repository is public. It can move to a studio-level repository later without
 ## Evidence
 Two example manifests validate against the schema; the schema rejects wrong units, Z-up, unknown
 kinds, paths escaping the folder and missing ids (checked with `jsonschema`, Draft 2020-12).
-No tool exports it yet.
+
+**First exporter:** BadBuilding (commit 6d59174, its decision D14) exports v0.1. Its feedback
+produced v0.2: collision is decided by `extras.noor.collision` with Godot's `-colonly` suffix
+(plain `-col` stayed visible in Godot), LODs as one file per level, new `passage` marker and a
+clearer `entrance`/`door` split, derived UUID v5 ids, tool-specific manifest blocks.
+NoorEngine does not import it yet, so the status stays Proposed.
 
 ## Reviewed by
 Sage. Tom chose GLB as the common format and asked for consistent metadata across all tools.

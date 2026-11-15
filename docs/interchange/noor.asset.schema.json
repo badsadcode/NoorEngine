@@ -4,7 +4,16 @@
   "title": "Noor Interchange asset manifest (<name>.noor.json)",
   "description": "Metadata sidecar for an asset exported by a Noor tool. See NOOR_INTERCHANGE.md. Unknown fields are allowed and must be ignored by readers.",
   "type": "object",
-  "required": ["noor_interchange", "id", "name", "kind", "generator", "created", "space", "files"],
+  "required": [
+    "noor_interchange",
+    "id",
+    "name",
+    "kind",
+    "generator",
+    "created",
+    "space",
+    "files"
+  ],
   "properties": {
     "noor_interchange": {
       "description": "Version of the Noor Interchange spec this manifest follows.",
@@ -16,51 +25,109 @@
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
-    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
     "kind": {
       "description": "Dotted category. Add new kinds to NOOR_INTERCHANGE.md before using them.",
       "type": "string",
       "enum": [
-        "building", "ship", "vehicle", "level", "prop", "rock",
-        "vegetation.tree", "vegetation.plant", "vegetation.scatter",
-        "road", "bridge", "material", "terrain", "character"
+        "building",
+        "ship",
+        "vehicle",
+        "level",
+        "prop",
+        "rock",
+        "vegetation.tree",
+        "vegetation.plant",
+        "vegetation.scatter",
+        "road",
+        "bridge",
+        "material",
+        "terrain",
+        "character"
       ]
     },
     "generator": {
       "type": "object",
-      "required": ["tool", "version"],
+      "required": [
+        "tool",
+        "version"
+      ],
       "properties": {
-        "tool": { "type": "string", "pattern": "^Noor[A-Za-z]+$|^Bad[A-Za-z]+$" },
-        "version": { "type": "string", "minLength": 1 },
-        "commit": { "type": "string" }
+        "tool": {
+          "type": "string",
+          "pattern": "^Noor[A-Za-z]+$|^Bad[A-Za-z]+$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string"
+        }
       }
     },
     "recipe": {
       "type": "object",
-      "required": ["file", "seed"],
+      "required": [
+        "file",
+        "seed"
+      ],
       "properties": {
-        "file": { "type": "string" },
-        "seed": { "type": "integer" },
-        "sha256": { "type": "string" }
+        "file": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string"
+        }
       }
     },
-    "created": { "type": "string", "format": "date-time" },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
     "space": {
       "type": "object",
-      "required": ["up", "forward", "handedness", "units"],
+      "required": [
+        "up",
+        "forward",
+        "handedness",
+        "units"
+      ],
       "properties": {
-        "up": { "const": "+Y" },
-        "forward": { "const": "+Z" },
-        "handedness": { "const": "right" },
-        "units": { "const": "meters" }
+        "up": {
+          "const": "+Y"
+        },
+        "forward": {
+          "const": "+Z"
+        },
+        "handedness": {
+          "const": "right"
+        },
+        "units": {
+          "const": "meters"
+        }
       }
     },
     "bounds": {
       "type": "object",
-      "required": ["min", "max"],
+      "required": [
+        "min",
+        "max"
+      ],
       "properties": {
-        "min": { "$ref": "#/$defs/vec3" },
-        "max": { "$ref": "#/$defs/vec3" }
+        "min": {
+          "$ref": "#/$defs/vec3"
+        },
+        "max": {
+          "$ref": "#/$defs/vec3"
+        }
       }
     },
     "files": {
@@ -68,54 +135,149 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["path", "role"],
+        "required": [
+          "path",
+          "role"
+        ],
         "properties": {
-          "path": { "type": "string", "pattern": "^[^/\\\\:]+$", "description": "File name next to the manifest (no folders, no absolute paths)." },
-          "role": { "enum": ["model", "recipe", "validation", "preview", "texture", "other"] },
-          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
-        }
+          "path": {
+            "type": "string",
+            "pattern": "^[^/\\\\:]+$",
+            "description": "File name next to the manifest (no folders, no absolute paths)."
+          },
+          "role": {
+            "enum": [
+              "model",
+              "lod",
+              "recipe",
+              "validation",
+              "preview",
+              "texture",
+              "other"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "lod": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Level of detail held by a role 'lod' file (LOD0 is the model file)."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "role": {
+                  "const": "lod"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "lod"
+              ]
+            }
+          }
+        ]
       }
     },
     "lods": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["level"],
+        "required": [
+          "level"
+        ],
         "properties": {
-          "level": { "type": "integer", "minimum": 0 },
-          "triangles": { "type": "integer", "minimum": 0 }
+          "level": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "triangles": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       }
     },
-    "collision": { "enum": ["none", "mesh", "convex", "box", "sphere", "capsule", "generated"] },
+    "collision": {
+      "enum": [
+        "none",
+        "mesh",
+        "convex",
+        "box",
+        "sphere",
+        "capsule",
+        "generated"
+      ]
+    },
     "markers": {
       "description": "Count of marker nodes per marker type.",
       "type": "object",
-      "additionalProperties": { "type": "integer", "minimum": 0 }
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
     },
-    "tags": { "type": "array", "items": { "type": "string" } },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "provenance": {
       "description": "Which attributes were measured vs. requested vs. guessed (e.g. osm / request / inferred).",
       "type": "object",
-      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
     },
     "license": {
       "type": "object",
       "properties": {
-        "spdx": { "type": "string" },
-        "author": { "type": "string" }
+        "spdx": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        }
       }
     },
     "validation": {
       "type": "object",
       "properties": {
-        "gltf_validator": { "enum": ["pass", "fail", "not_run"] },
-        "errors": { "type": "integer", "minimum": 0 },
-        "warnings": { "type": "integer", "minimum": 0 }
+        "gltf_validator": {
+          "enum": [
+            "pass",
+            "fail",
+            "not_run"
+          ]
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     }
   },
   "$defs": {
-    "vec3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    }
   }
 }
