@@ -1,5 +1,7 @@
 # NoorEngine
 
+[![CI](https://github.com/badsadcode/NoorEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/badsadcode/NoorEngine/actions/workflows/ci.yml)
+
 **Bad Ideas Works** · an independent, open-source (MIT) game engine, editor and toolset.
 
 > We are building our own engine. We have excellent reasons. They remain classified.
@@ -46,6 +48,9 @@ Options: `--frames N` (exit after N frames), `--no-validation`, `--verify-render
 `--screenshot <file.bmp>`, `--log <file>`.
 
 Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug -LE gpu`.
+CI (GitHub Actions) builds Debug and Release on every push and pull request and runs everything
+except the `gpu` tests, because GitHub's runners have no GPU. Run those locally before pushing
+renderer changes. CI uses the `windows-ninja` preset (Ninja + whatever MSVC the runner has).
 
 ## Repository map
 

@@ -4,6 +4,20 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 1 in progress
 
+### 2026-11-15 — Continuous integration
+**Added**
+- `.github/workflows/ci.yml`: Windows, Debug + RelWithDebInfo builds, all tests except `gpu`-labelled
+  ones (runners have no GPU), Avalonia spike build. Vulkan SDK from LunarG's installer, cached.
+  Actions pinned to commit SHAs.
+- `windows-ninja` CMake preset: CI finds the newest MSVC with `vswhere` and builds with Ninja, so
+  it doesn't break when runner images change Visual Studio versions (the first run failed exactly
+  that way: `windows-latest` has no VS 2022). Verified locally too: 27/27 tests with the Ninja preset.
+- CI badge in the README.
+
+**Known limitations**
+- GPU tests run only on developer machines. A software Vulkan driver (e.g. lavapipe) could bring
+  the render pixel test to CI later.
+
 ### 2026-11-15 — Noor Interchange v0.1 (draft)
 **Added**
 - `docs/interchange/NOOR_INTERCHANGE.md`: shared export rules for all Noor tools (NoorMD benches,
