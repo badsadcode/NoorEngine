@@ -56,10 +56,43 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         if (input) input->left_down.store(false);
         return 0;
     case WM_RBUTTONDOWN:
+        SetCapture(hwnd);
+        SetFocus(hwnd);
         if (input) input->right_down.store(true);
         return 0;
     case WM_RBUTTONUP:
+        ReleaseCapture();
         if (input) input->right_down.store(false);
+        return 0;
+    case WM_MBUTTONDOWN:
+        SetCapture(hwnd);
+        SetFocus(hwnd);
+        if (input) input->middle_down.store(true);
+        return 0;
+    case WM_MBUTTONUP:
+        ReleaseCapture();
+        if (input) input->middle_down.store(false);
+        return 0;
+    case WM_MOUSEWHEEL:
+        if (input) input->wheel.fetch_add(GET_WHEEL_DELTA_WPARAM(wparam));
+        return 0;
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+        // The viewport has no keyboard handling of its own yet. Forward keys to the top-level
+        // window so the host's shortcuts (undo, save, frame...) work while the viewport has focus.
+        if (HWND root = GetAncestor(hwnd, GA_ROOT); root && root != hwnd) {
+            PostMessageW(root, msg, wparam, lparam);
+            return 0;
+        }
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
+    case WM_CAPTURECHANGED:  // capture lost (e.g. Alt+Tab while dragging): release everything
+        if (input) {
+            input->left_down.store(false);
+            input->right_down.store(false);
+            input->middle_down.store(false);
+        }
         return 0;
     default:
         return DefWindowProcW(hwnd, msg, wparam, lparam);
@@ -114,7 +147,11 @@ NativeChildWindow::~NativeChildWindow() {
 
 PointerState NativeChildWindow::pointer_state() const noexcept {
     return {input_->x.load(), input_->y.load(), input_->inside.load(), input_->left_down.load(),
-            input_->right_down.load()};
+            input_->right_down.load(), input_->middle_down.load()};
+}
+
+float NativeChildWindow::take_wheel() noexcept {
+    return static_cast<float>(input_->wheel.exchange(0)) / static_cast<float>(WHEEL_DELTA);
 }
 
 PixelSize NativeChildWindow::pixel_size() const {

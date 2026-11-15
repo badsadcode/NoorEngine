@@ -22,6 +22,18 @@ noor_set_target_options(noor_unit_tests)
 set_target_properties(noor_unit_tests PROPERTIES FOLDER "Tests")
 doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit")
 
+# ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
+if(WIN32)
+    add_executable(noor_editor_api_tests api/test_document_api.cpp)
+    target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene doctest::doctest)
+    target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    noor_set_target_options(noor_editor_api_tests)
+    set_target_properties(noor_editor_api_tests PROPERTIES FOLDER "Tests")
+    add_custom_command(TARGET noor_editor_api_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:noor_editor_api> $<TARGET_FILE_DIR:noor_editor_api_tests>)
+    doctest_discover_tests(noor_editor_api_tests TEST_PREFIX "api: " PROPERTIES LABELS "api")
+endif()
+
 # ---- CLI tests (headless, run in CI) ---------------------------------------
 # Full project workflow through noor_cli: new -> copy building -> scan -> add-model -> validate.
 add_test(NAME cli.project_workflow
@@ -63,3 +75,19 @@ set_tests_properties(render.glb_building PROPERTIES LABELS "gpu;render" TIMEOUT 
 add_test(NAME lifecycle.window
     COMMAND noor_diag --lifecycle-test --log ${CMAKE_CURRENT_BINARY_DIR}/lifecycle_window.log)
 set_tests_properties(lifecycle.window PROPERTIES LABELS "gpu;lifecycle" TIMEOUT 60)
+
+# NoorEditor end to end: builds the C# editor against this build's noor_editor_api.dll and runs
+# its --smoke self-test (project, add model, inspector edits, undo/redo, save, float viewport).
+find_program(NOOR_DOTNET dotnet)
+if(WIN32 AND NOOR_DOTNET)
+    add_test(NAME editor.smoke
+        COMMAND ${CMAKE_COMMAND}
+            -DDOTNET=${NOOR_DOTNET}
+            -DPROJECT=${PROJECT_SOURCE_DIR}/editor/NoorEditor/NoorEditor.csproj
+            -DNATIVE_DIR=$<TARGET_FILE_DIR:noor_editor_api>
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/editor_smoke/$<CONFIG>
+            -DDATA=${CMAKE_CURRENT_SOURCE_DIR}/data
+            -DCONFIG=$<CONFIG>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/editor_smoke.cmake)
+    set_tests_properties(editor.smoke PROPERTIES LABELS "gpu;editor" TIMEOUT 300)
+endif()

@@ -2,7 +2,36 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 2 complete, Milestone 3 next
+## [Unreleased] — Milestone 3 in progress (NoorEditor)
+
+### 2026-11-15 — Milestone 3, part 1: NoorEditor exists
+**Added**
+- ADR-025: the engine owns the document (project, registry, scene, undo history, prefabs); the
+  editor reads JSON snapshots and changes things only with commands. Editor API **v1**:
+  `noor_doc_*` (open/create project, assets, scenes, open/new/save scene, scene snapshot,
+  `execute` with `set_transform`/`rename`/`set_component`/`remove`/`reparent`/`add_asset`/
+  `begin`/`end`, undo, redo, revision) and `noor_viewport_set_document` / `noor_viewport_frame`.
+- Viewports render the document's scene (prefabs expanded, models cached by path) from immutable
+  snapshots published by the document; orbit camera (right-drag orbit, middle-drag pan, wheel
+  zoom, framing). Native child window: middle button, wheel, capture loss; keys are forwarded to
+  the host window so editor shortcuts work while the viewport has focus.
+- `editor/NoorEditor`: project hub (recent projects, new, open), docked Viewport / Scene /
+  Inspector / Content Browser / Console, menus, status bar, Ctrl+S/Z/Y, F, Delete, unsaved-changes
+  prompts, window size remembered. Inspector edits are one undo step each; rotation shown as Euler
+  degrees (yaw about +Y); comma decimals accepted.
+- Tests: `noor_editor_api_tests` (document API through the DLL, no GPU, runs in CI) and
+  `editor.smoke` (builds the editor and runs `--smoke`: 27 checks incl. inspector edits,
+  undo/redo, save file contents, delete/undo, floating the viewport, zero validation/engine
+  errors). 85/85 locally. CI now builds NoorEditor.
+
+**Fixed**
+- Prefab expansion: a non-string entry in an instance's `removed` list was read through a
+  default-constructed `Result<Guid>` (which counts as success) and skipped the nil id. Now ignored.
+
+**Not yet:** gizmos, viewport picking, selection highlight, component editors, play mode, layout
+persistence (window size only), several viewports on one document sharing a GPU device.
+
+## Milestone 2 complete
 
 ### 2026-11-15 — Milestone 2 complete: prefabs, scene rendering, review
 **Added**

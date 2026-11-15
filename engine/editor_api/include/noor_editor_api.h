@@ -28,7 +28,8 @@
 extern "C" {
 #endif
 
-#define NOOR_EDITOR_API_VERSION 0u
+/* 1: documents (ADR-025), viewports render documents. */
+#define NOOR_EDITOR_API_VERSION 1u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -75,6 +76,44 @@ NOOR_API void* noor_viewport_native_handle(noor_viewport* viewport);
 NOOR_API void noor_viewport_get_stats(noor_viewport* viewport, noor_viewport_stats* out_stats);
 /* Stops the render thread, releases GPU objects and destroys the child window. */
 NOOR_API void noor_viewport_destroy(noor_viewport* viewport);
+
+/* ---- Documents (ADR-025) ----------------------------------------------------
+ * A document is an open project with at most one open scene, its undo history and
+ * asset registry. The engine owns all of it; the editor reads JSON snapshots and
+ * changes things only through noor_doc_execute(), so every edit is undoable.
+ * Functions returning int return 1 on success and 0 on failure (see noor_last_error).
+ * Returned strings are UTF-8 JSON owned by the DLL, valid until the next call on the
+ * same thread. Use a document from one thread (the UI thread). */
+typedef struct noor_doc noor_doc;
+
+NOOR_API noor_doc* noor_doc_open_project(const char* project_path);
+NOOR_API noor_doc* noor_doc_create_project(const char* folder, const char* name);
+NOOR_API void noor_doc_close(noor_doc* doc);
+
+NOOR_API const char* noor_doc_project_info(noor_doc* doc);           /* {id, name, root, engine} */
+NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan); /* [{guid, path, importer, name}] or NULL */
+NOOR_API const char* noor_doc_scenes(noor_doc* doc);                 /* ["Scenes/Main.noorscene", ...] */
+
+NOOR_API int32_t noor_doc_open_scene(noor_doc* doc, const char* relative_path);
+NOOR_API int32_t noor_doc_new_scene(noor_doc* doc, const char* relative_path, const char* name);
+NOOR_API int32_t noor_doc_save_scene(noor_doc* doc);
+/* {open, path, name, modified, can_undo, undo_label, can_redo, redo_label, revision,
+ *  entities: [{id, name, parent, layer, tags, transform, components, from_prefab, instance?}], issues} */
+NOOR_API const char* noor_doc_scene(noor_doc* doc);
+
+/* Command JSON: {"op": "set_transform" | "rename" | "set_component" | "remove" | "reparent" |
+ * "add_asset" | "begin" | "end", ...}. See ADR-025. */
+NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json);
+NOOR_API int32_t noor_doc_undo(noor_doc* doc);
+NOOR_API int32_t noor_doc_redo(noor_doc* doc);
+NOOR_API uint64_t noor_doc_revision(noor_doc* doc);
+
+/* Viewports showing documents. Passing NULL detaches. The viewport keeps working if the
+ * document is closed first (it keeps showing the last published scene). */
+NOOR_API void noor_viewport_set_document(noor_viewport* viewport, noor_doc* doc);
+/* Moves the viewport camera to show everything (NULL or "[]") or the given entities
+ * (JSON array of ids; include descendants to frame a whole subtree). */
+NOOR_API void noor_viewport_frame(noor_viewport* viewport, const char* entity_ids_json);
 
 #ifdef __cplusplus
 }

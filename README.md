@@ -21,12 +21,12 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `platform`: input (keyboard, mouse, relative mouse mode) | Works; used by the fly camera |
 | `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel, 2,500-cube stress and window lifecycle tests with validation; debug labels for RenderDoc. Device loss reported, not recovered; high-DPI >100% untested |
 | `noor_diag`: diagnostics app (fly camera, `--cubes N` stress grid, timings, `--verify-render`, `--screenshot`) | Works |
-| `editor_api`: C API DLL hosting engine viewports in a foreign window (v0) | Works in the Avalonia spike; API not stable |
-| Editor GUI stack: Avalonia + Dock ([ADR-003](docs/decisions/ADR-003-editor-gui-framework.md)) | **Spike only**, decision accepted; NoorEditor itself not started |
+| `editor_api`: C API DLL (v1): engine viewports in a foreign window + editable documents ([ADR-025](docs/decisions/ADR-025-editor-engine-boundary.md)) | Works; API tests run in CI. Not a stable plugin ABI yet (ADR-007) |
+| **NoorEditor** ([editor/NoorEditor](editor/NoorEditor)): project hub, docked viewport, scene tree, inspector (name/transform), content browser, console, undo/redo, save | **Milestone 3, part 1.** Works; end-to-end smoke test (GPU, local). No gizmos, viewport picking or component editors yet |
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
 | `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
 | `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
-| Editor UI, textures, scripting, physics, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
+| Textures, scripting, physics, audio, play mode, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
 `docs/devlog/img` are real captures of the engine and the editor spike.
@@ -64,7 +64,8 @@ renderer changes. CI uses the `windows-ninja` preset (Ninja + whatever MSVC the 
 | `engine/foundation` | Logging, errors, asserts, IDs. Depends on nothing. |
 | `engine/platform` | OS layer (windows, events) on SDL3. |
 | `engine/render` | Vulkan backend. |
-| `engine/editor_api` | C ABI DLL the C# editor uses to host engine viewports. |
+| `engine/editor_api` | C ABI DLL the C# editor uses: viewports and documents. |
+| `editor/NoorEditor` | The editor (C#, Avalonia). |
 | `engine/asset`, `engine/scene` | Projects, asset registry, GLB import; scene documents. |
 | `tools/noor_diag` | Diagnostics app; permanent developer utility. |
 | `tools/noor_cli` | Headless project tool. |

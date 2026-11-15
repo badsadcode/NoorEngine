@@ -100,7 +100,8 @@ struct Expander {
         std::unordered_set<Guid> skipped;
         if (comp.contains("removed") && comp["removed"].is_array()) {
             for (const auto& r : comp["removed"]) {
-                if (auto id = r.is_string() ? Guid::parse(r.get<std::string>()) : Result<Guid>{}; id) skipped.insert(*id);
+                if (!r.is_string()) continue;
+                if (auto id = Guid::parse(r.get<std::string>())) skipped.insert(*id);
             }
         }
         const Json overrides = comp.value("overrides", Json::object());

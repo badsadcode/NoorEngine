@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    NoorEditor: the Avalonia editor (ADR-003) on top of noor_editor_api.dll (ADR-025).
+    Build the engine first so the DLL exists. The DLL is taken from the Ninja build
+    (build/ninja) if present, else from the Visual Studio build (build/windows).
+    Override with -p:NoorNativeDir=<folder containing noor_editor_api.dll>.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>NoorEditor</AssemblyName>
+    <RootNamespace>NoorEditor</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PlatformTarget>x64</PlatformTarget>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <NoorNativeConfig Condition="'$(NoorNativeConfig)' == ''">Debug</NoorNativeConfig>
+    <NoorRepo>$(MSBuildThisFileDirectory)..\..\</NoorRepo>
+    <NoorNativeDir Condition="'$(NoorNativeDir)' == '' And Exists('$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\noor_editor_api.dll')">$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
+    <NoorNativeDir Condition="'$(NoorNativeDir)' == ''">$(NoorRepo)build\windows\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <PackageReference Include="Dock.Avalonia" Version="12.1.0.13" />
+    <PackageReference Include="Dock.Model.Mvvm" Version="12.1.0.13" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(NoorNativeDir)noor_editor_api.dll" Link="noor_editor_api.dll"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.dll')" />
+    <None Include="$(NoorNativeDir)noor_editor_api.pdb" Link="noor_editor_api.pdb"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.pdb')" />
+  </ItemGroup>
+
+  <Target Name="NoorCheckNative" BeforeTargets="Build">
+    <Warning Condition="!Exists('$(NoorNativeDir)noor_editor_api.dll')"
+             Text="noor_editor_api.dll not found in $(NoorNativeDir). Build the engine first (cmake --build --preset ninja-debug)." />
+  </Target>
+</Project>

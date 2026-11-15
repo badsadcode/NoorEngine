@@ -1,6 +1,12 @@
 #pragma once
 
+#include <memory>
 #include <string>
+
+struct noor_doc;
+namespace noor::editor {
+class SnapshotChannel;
+}
 
 namespace noor::editor_api {
 
@@ -8,3 +14,6 @@ namespace noor::editor_api {
 void set_last_error(std::string message);
 
 } // namespace noor::editor_api
+
+// The render-snapshot channel a document publishes to (document_api.cpp), for viewports.
+std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_channel(noor_doc* doc);

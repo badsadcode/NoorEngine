@@ -2,12 +2,12 @@ using System.Runtime.InteropServices;
 
 namespace NoorEditorSpike;
 
-/// <summary>P/Invoke surface for engine/editor_api/include/noor_editor_api.h (API v0).</summary>
+/// <summary>P/Invoke surface for engine/editor_api/include/noor_editor_api.h (API v1, viewport subset).</summary>
 public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 0;
+    public const uint ExpectedApiVersion = 1;  // v1 kept the v0 viewport functions unchanged
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();

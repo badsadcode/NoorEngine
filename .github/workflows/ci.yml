@@ -98,5 +98,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The editor's smoke test needs a GPU (ctest label "editor"), so CI only builds it.
+      - name: Build NoorEditor
+        run: dotnet build editor/NoorEditor -c Debug
+
       - name: Build Avalonia spike
         run: dotnet build spikes/avalonia_viewport -c Debug

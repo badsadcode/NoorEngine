@@ -1,0 +1,310 @@
+#include "document.h"
+
+#include "noor/asset/gltf_import.h"
+#include "noor/foundation/log.h"
+
+#include <format>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace noor::editor {
+namespace {
+using asset::Json;
+namespace stdfs = std::filesystem;
+
+bool read_vec(const Json& j, std::size_t n, float* out) {
+    if (!j.is_array() || j.size() != n) return false;
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!j[i].is_number()) return false;
+        out[i] = j[i].get<float>();
+    }
+    return true;
+}
+
+Result<Guid> entity_field(const Json& command, const char* key = "entity") {
+    if (auto g = asset::guid_field(command, key)) return *g;
+    return fail(ErrorCode::InvalidArgument, std::format("command needs a valid \"{}\" id", key));
+}
+
+Json transform_json(const scene::Transform& t) {
+    return {{"position", {t.position.x, t.position.y, t.position.z}},
+            {"rotation", {t.rotation.x, t.rotation.y, t.rotation.z, t.rotation.w}},
+            {"scale", {t.scale.x, t.scale.y, t.scale.z}}};
+}
+
+} // namespace
+
+Document::Document(asset::Project project) : project_(std::move(project)), prefabs_(project_, registry_) {}
+
+Result<std::unique_ptr<Document>> Document::open(const stdfs::path& project) {
+    auto p = asset::Project::open(project);
+    if (!p) return std::unexpected(p.error());
+    std::unique_ptr<Document> doc(new Document(std::move(*p)));
+    if (auto r = doc->registry_.scan(doc->project_); !r) return std::unexpected(r.error());
+    NOOR_LOG_INFO("Editor", "Opened project '{}' ({} assets)", doc->project_.info().name, doc->registry_.assets().size());
+    return doc;
+}
+
+Result<std::unique_ptr<Document>> Document::create(const stdfs::path& folder, std::string_view name) {
+    auto p = asset::Project::create(folder, name);
+    if (!p) return std::unexpected(p.error());
+    std::unique_ptr<Document> doc(new Document(std::move(*p)));
+    if (auto r = doc->registry_.scan(doc->project_); !r) return std::unexpected(r.error());
+    return doc;
+}
+
+Json Document::project_info() const {
+    return {{"id", project_.info().id.to_string()},
+            {"name", project_.info().name},
+            {"root", project_.root().generic_string()},
+            {"engine", project_.info().engine_version}};
+}
+
+Result<Json> Document::assets(bool rescan) {
+    if (rescan) {
+        auto r = registry_.scan(project_);
+        if (!r) return std::unexpected(r.error());
+        prefabs_.clear();
+        if (r->moved > 0 || r->content_changed > 0) changed();
+    }
+    Json list = Json::array();
+    for (const auto& a : registry_.assets()) {
+        list.push_back({{"guid", a.guid.to_string()},
+                        {"path", a.path},
+                        {"importer", a.importer},
+                        {"name", stdfs::path(a.path).stem().string()},
+                        {"from_interchange", a.from_interchange}});
+    }
+    return list;
+}
+
+Json Document::scenes() const {
+    Json list = Json::array();
+    std::error_code ec;
+    std::vector<std::string> found;
+    for (auto it = stdfs::recursive_directory_iterator(project_.scenes_dir(), ec);
+         !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
+        if (it->path().extension() == ".noorscene") {
+            if (auto rel = project_.relative(it->path())) found.push_back(*rel);
+        }
+    }
+    std::ranges::sort(found);
+    for (auto& f : found) list.push_back(std::move(f));
+    return list;
+}
+
+Status Document::open_scene(std::string_view relative) {
+    auto path = project_.resolve(relative);
+    if (!path) return std::unexpected(path.error());
+    auto s = scene::Scene::load(*path);
+    if (!s) return std::unexpected(s.error());
+    for (const auto& m : s->migrations_applied) NOOR_LOG_INFO("Editor", "Scene upgraded on open: {}", m);
+    scene_ = std::move(*s);
+    scene_file_ = *path;
+    history_.clear();
+    // A scene that was just upgraded differs from its file: it should save as modified.
+    if (scene_->migrations_applied.empty()) history_.mark_saved();
+    changed();
+    return {};
+}
+
+Status Document::new_scene(std::string_view relative, std::string_view name) {
+    auto path = project_.resolve(relative);
+    if (!path) return std::unexpected(path.error());
+    if (path->extension() != ".noorscene") return fail(ErrorCode::InvalidArgument, "Scene files end in .noorscene");
+    if (stdfs::exists(*path)) return fail(ErrorCode::AlreadyExists, std::format("'{}' already exists", relative));
+    scene::Scene s;
+    s.name = std::string(name);
+    if (auto saved = s.save(*path); !saved) return saved;
+    return open_scene(relative);
+}
+
+Status Document::save_scene() {
+    if (auto s = require_scene(); !s) return s;
+    if (auto s = scene_->save(scene_file_); !s) return s;
+    scene_->migrations_applied.clear();
+    history_.mark_saved();
+    ++revision_;  // "modified" changed
+    NOOR_LOG_INFO("Editor", "Saved {}", scene_file_.filename().generic_string());
+    return {};
+}
+
+Status Document::require_scene() const {
+    if (!scene_) return fail(ErrorCode::InvalidArgument, "No scene is open");
+    return {};
+}
+
+Json Document::scene_snapshot() const {
+    Json snap;
+    snap["revision"] = revision_;
+    if (!scene_) {
+        snap["open"] = false;
+        return snap;
+    }
+    auto rel = project_.relative(scene_file_);
+    snap["open"] = true;
+    snap["path"] = rel ? *rel : scene_file_.generic_string();
+    snap["name"] = scene_->name;
+    snap["modified"] = history_.modified() || !scene_->migrations_applied.empty();
+    snap["can_undo"] = history_.can_undo();
+    snap["can_redo"] = history_.can_redo();
+    snap["undo_label"] = history_.undo_label().value_or("");
+    snap["redo_label"] = history_.redo_label().value_or("");
+
+    // List the scene as it will run (prefabs expanded); entities that come from a prefab are
+    // marked read-only with the instance they belong to.
+    const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
+    std::unordered_set<Guid> authored;
+    for (const auto& e : scene_->entities) authored.insert(e.id);
+    std::unordered_map<Guid, Guid> instance_of;  // expanded id -> owning instance (authored) id
+    Json list = Json::array();
+    for (const auto& e : expanded.scene.entities) {
+        const bool from_prefab = !authored.contains(e.id);
+        Json j;
+        j["id"] = e.id.to_string();
+        j["name"] = e.name;
+        j["parent"] = e.parent ? Json(e.parent->to_string()) : Json(nullptr);
+        j["layer"] = e.layer;
+        j["tags"] = e.tags;
+        j["transform"] = transform_json(e.transform);
+        j["components"] = e.components;
+        j["from_prefab"] = from_prefab;
+        if (from_prefab && e.parent) {
+            const Guid owner = authored.contains(*e.parent) ? *e.parent : instance_of[*e.parent];
+            instance_of[e.id] = owner;
+            j["instance"] = owner.to_string();
+        }
+        list.push_back(std::move(j));
+    }
+    snap["entities"] = std::move(list);
+    Json issues = Json::array();
+    for (const auto& i : expanded.issues) issues.push_back({{"entity", i.entity}, {"message", i.message}, {"error", i.error}});
+    snap["issues"] = std::move(issues);
+    return snap;
+}
+
+Status Document::execute(const Json& command) {
+    if (auto s = require_scene(); !s) return s;
+    if (!command.is_object() || !command.contains("op") || !command["op"].is_string()) {
+        return fail(ErrorCode::InvalidArgument, "command needs an \"op\"");
+    }
+    const std::string op = command["op"];
+    bool applied = false;
+
+    if (op == "begin") {
+        history_.begin_transaction(command.value("label", std::string("Edit")));
+        return {};
+    }
+    if (op == "end") {
+        history_.end_transaction();
+        changed();
+        return {};
+    }
+    if (op == "add_asset") return add_asset(command);
+
+    auto id = entity_field(command);
+    if (!id) return std::unexpected(id.error());
+    const scene::Entity* target = scene_->find(*id);
+    if (!target) {
+        return fail(ErrorCode::NotFound, std::format("Entity {} is not editable here (missing, or part of a prefab "
+                                                     "instance: edit the prefab or add an override)", id->to_string()));
+    }
+
+    if (op == "set_transform") {
+        scene::Transform t = target->transform;
+        const Json tj = command.value("transform", Json::object());
+        float v[4];
+        if (tj.contains("position") && read_vec(tj["position"], 3, v)) t.position = {v[0], v[1], v[2]};
+        if (tj.contains("rotation") && read_vec(tj["rotation"], 4, v)) t.rotation = {v[0], v[1], v[2], v[3]};
+        if (tj.contains("scale") && read_vec(tj["scale"], 3, v)) t.scale = {v[0], v[1], v[2]};
+        applied = history_.execute(*scene_, scene::set_transform(*id, t));
+    } else if (op == "rename") {
+        applied = history_.execute(*scene_, scene::rename(*id, command.value("name", std::string{})));
+    } else if (op == "set_component") {
+        if (!command.contains("type") || !command["type"].is_string()) return fail(ErrorCode::InvalidArgument, "set_component needs \"type\"");
+        applied = history_.execute(*scene_, scene::set_component(*id, command["type"], command.value("value", Json())));
+    } else if (op == "remove") {
+        applied = history_.execute(*scene_, scene::remove_entity(*id));
+    } else if (op == "reparent") {
+        std::optional<Guid> parent;
+        if (command.contains("parent") && !command["parent"].is_null()) {
+            auto p = entity_field(command, "parent");
+            if (!p) return std::unexpected(p.error());
+            parent = *p;
+        }
+        applied = history_.execute(*scene_, scene::reparent(*id, parent));
+    } else {
+        return fail(ErrorCode::InvalidArgument, std::format("unknown command \"{}\"", op));
+    }
+    if (!applied) return fail(ErrorCode::InvalidArgument, std::format("\"{}\" could not be applied", op));
+    changed();
+    return {};
+}
+
+Status Document::add_asset(const Json& command) {
+    auto guid = entity_field(command, "asset");
+    if (!guid) return std::unexpected(guid.error());
+    const asset::AssetRecord* rec = registry_.find(*guid);
+    if (!rec) return fail(ErrorCode::NotFound, std::format("Unknown asset {}", guid->to_string()));
+    scene::Transform placement;
+    float v[3];
+    if (command.contains("position") && read_vec(command["position"], 3, v)) placement.position = {v[0], v[1], v[2]};
+    const std::string name = command.value("name", stdfs::path(rec->path).stem().string());
+
+    // Build the new entities in a scratch scene, then add them through the history so the whole
+    // insertion is one undo step.
+    scene::Scene scratch;
+    if (rec->importer == "prefab") {
+        scratch.entities.push_back(scene::make_instance(rec->guid, name, placement));
+    } else {
+        auto source = project_.resolve(rec->path);
+        if (!source) return std::unexpected(source.error());
+        auto model = asset::import_gltf(*source);
+        if (!model) return std::unexpected(model.error());
+        scene::instantiate_model(scratch, rec->guid, *model, name, placement);
+    }
+    history_.begin_transaction("Add " + name);
+    bool ok = true;
+    for (auto& e : scratch.entities) ok = history_.execute(*scene_, scene::add_entity(std::move(e))) && ok;
+    history_.end_transaction();
+    changed();
+    if (!ok) return fail(ErrorCode::Unknown, "some entities could not be added");
+    return {};
+}
+
+bool Document::undo() {
+    if (!scene_ || !history_.undo(*scene_)) return false;
+    changed();
+    return true;
+}
+
+bool Document::redo() {
+    if (!scene_ || !history_.redo(*scene_)) return false;
+    changed();
+    return true;
+}
+
+void Document::changed() {
+    ++revision_;
+    auto snap = std::make_shared<RenderSnapshot>();
+    snap->revision = revision_;
+    if (scene_) {
+        const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
+        const auto& entities = expanded.scene.entities;
+        for (std::size_t i = 0; i < entities.size(); ++i) {
+            const auto& e = entities[i];
+            if (e.has("marker")) snap->markers.push_back(expanded.scene.world_matrix(i));
+            if (!e.has("mesh")) continue;
+            const auto& mesh = e.components["mesh"];
+            const auto guid = asset::guid_field(mesh, "asset");
+            const auto* rec = guid ? registry_.find(*guid) : nullptr;
+            if (!rec) continue;
+            auto path = project_.resolve(rec->path);
+            if (!path) continue;
+            snap->meshes.push_back({path->generic_string(), mesh.value("mesh_index", -1), expanded.scene.world_matrix(i), e.id});
+        }
+    }
+    channel_->publish(std::move(snap));
+}
+
+} // namespace noor::editor

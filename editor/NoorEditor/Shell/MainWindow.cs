@@ -1,0 +1,408 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Dock.Avalonia.Controls;
+using Dock.Model;
+using Dock.Model.Controls;
+using Dock.Model.Core;
+using Dock.Model.Mvvm;
+using NoorEditor.Interop;
+using NoorEditor.Model;
+using NoorEditor.Panels;
+using DockOrientation = Dock.Model.Core.Orientation;
+using LayoutOrientation = Avalonia.Layout.Orientation;
+
+namespace NoorEditor.Shell;
+
+/// <summary>The editor window for one open project.</summary>
+public sealed class MainWindow : Window
+{
+    public EditorDocument Doc { get; }
+    public Factory DockFactory { get; } = new();
+    public PanelDocument ViewportDockable { get; }
+
+    // The live panel views (Dock may recreate them, e.g. when a panel is floated).
+    public InspectorPanel? Inspector { get; private set; }
+    public HierarchyPanel? Hierarchy { get; private set; }
+    public ContentPanel? ContentBrowser { get; private set; }
+    public ViewportPanel? ViewportView { get; private set; }
+
+    private readonly EditorSettings _settings;
+    private readonly TextBlock _statusLeft = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _statusRight = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Classes = { "muted" } };
+    private readonly MenuItem _undo = new() { InputGesture = KeyGesture.Parse("Ctrl+Z") };
+    private readonly MenuItem _redo = new() { InputGesture = KeyGesture.Parse("Ctrl+Y") };
+    private readonly MenuItem _save = new() { Header = "_Save Scene", InputGesture = KeyGesture.Parse("Ctrl+S") };
+    private readonly MenuItem _openScene = new() { Header = "_Open Scene" };
+    private bool _closeConfirmed;
+
+    /// <summary>Set when the user picked File ▸ Close Project (the app shows the hub again).</summary>
+    public bool ReturnToHub { get; private set; }
+
+    public MainWindow(EditorDocument doc, EditorSettings settings)
+    {
+        Doc = doc;
+        _settings = settings;
+        Width = settings.WindowWidth;
+        Height = settings.WindowHeight;
+        if (settings.WindowMaximized) WindowState = WindowState.Maximized;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Background = NoorTheme.Brush(NoorTheme.Background);
+
+        ViewportDockable = new PanelDocument
+        {
+            Id = "Viewport", Title = "Viewport", CanClose = false,
+            CreateView = () => ViewportView = new ViewportPanel(Doc),
+        };
+
+        var root = new DockPanel();
+        var menu = MenuBar();
+        DockPanel.SetDock(menu, Avalonia.Controls.Dock.Top);
+        var status = StatusBar();
+        DockPanel.SetDock(status, Avalonia.Controls.Dock.Bottom);
+        root.Children.Add(menu);
+        root.Children.Add(status);
+        root.Children.Add(new DockControl { Factory = DockFactory, Layout = BuildLayout() });
+        Content = root;
+
+        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        Doc.SceneChanged += OnSceneChanged;
+        Doc.AssetsChanged += RebuildOpenSceneMenu;
+        OnSceneChanged();
+        RebuildOpenSceneMenu();
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += (_, _) => UpdateStatusRight();
+        timer.Start();
+
+        Closing += OnClosing;
+        Closed += (_, _) =>
+        {
+            timer.Stop();
+            Doc.SceneChanged -= OnSceneChanged;
+            Doc.AssetsChanged -= RebuildOpenSceneMenu;
+            // Viewports keep working on a closed document (they keep the last snapshot), and Avalonia
+            // destroys them with the window. Close the document last.
+            ViewportView?.Viewport.Detach();
+            Doc.Dispose();
+        };
+    }
+
+    // ---- Layout ----
+
+    private IRootDock BuildLayout()
+    {
+        var hierarchy = new PanelTool
+        {
+            Id = "Hierarchy", Title = "Scene", CanClose = false,
+            CreateView = () =>
+            {
+                Hierarchy = new HierarchyPanel(Doc);
+                Hierarchy.FrameRequested += FrameEntity;
+                return Hierarchy;
+            },
+        };
+        var inspector = new PanelTool
+        {
+            Id = "Inspector", Title = "Inspector", CanClose = false,
+            CreateView = () =>
+            {
+                Inspector = new InspectorPanel(Doc);
+                Inspector.FrameRequested += FrameEntity;
+                return Inspector;
+            },
+        };
+        var content = new PanelTool
+        {
+            Id = "Content", Title = "Content Browser", CanClose = false,
+            CreateView = () =>
+            {
+                ContentBrowser = new ContentPanel(Doc);
+                ContentBrowser.AddRequested += a => AddAsset(a);
+                ContentBrowser.OpenSceneRequested += s => _ = OpenScene(s);
+                return ContentBrowser;
+            },
+        };
+        var console = new PanelTool { Id = "Console", Title = "Console", CanClose = false, CreateView = () => new ConsolePanel() };
+
+        DockFactory
+            .DocumentDock(out var documents, d => d.WithId("Documents").WithIsCollapsable(false))
+            .ToolDock(out var left, Alignment.Left, t => t.WithId("Left").WithProportion(0.18))
+            .ToolDock(out var right, Alignment.Right, t => t.WithId("Right").WithProportion(0.22))
+            .ToolDock(out var bottom, Alignment.Bottom, t => t.WithId("Bottom").WithProportion(0.28))
+            .ProportionalDockSplitter(out var splitV)
+            .ProportionalDockSplitter(out var splitL)
+            .ProportionalDockSplitter(out var splitR)
+            .ProportionalDock(out var center, DockOrientation.Vertical, d => d.WithId("Center").Add(documents, splitV, bottom))
+            .ProportionalDock(out var main, DockOrientation.Horizontal, d => d.WithId("Main").Add(left, splitL, center, splitR, right))
+            .RootDock(out var rootDock, r => r.WithId("Root").Add(main).WithDefaultDockable(main).WithActiveDockable(main));
+
+        // Dock 12.1.0.13: AppendTool/AppendDocument in the fluent builder left docks empty (see the
+        // ADR-003 spike), so panels are added explicitly.
+        void Fill(IDock dock, params IDockable[] items)
+        {
+            foreach (var item in items) DockFactory.AddDockable(dock, item);
+            dock.ActiveDockable = items[0];
+        }
+        Fill(documents, ViewportDockable);
+        Fill(left, hierarchy);
+        Fill(right, inspector);
+        Fill(bottom, content, console);
+
+        DockFactory.DefaultHostWindowLocator = () => new HostWindow();
+        DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };
+        DockFactory.InitLayout(rootDock);
+        return rootDock;
+    }
+
+    private Control MenuBar()
+    {
+        var newScene = new MenuItem { Header = "_New Scene…" };
+        newScene.Click += async (_, _) => await NewScene();
+        _save.Click += (_, _) => Save();
+        var rescan = new MenuItem { Header = "_Rescan Assets" };
+        rescan.Click += (_, _) => Doc.RefreshAssets(rescan: true);
+        var closeProject = new MenuItem { Header = "_Close Project" };
+        closeProject.Click += async (_, _) =>
+        {
+            if (!await ConfirmDiscard()) return;
+            ReturnToHub = true;
+            _closeConfirmed = true;
+            Close();
+        };
+        var exit = new MenuItem { Header = "E_xit", InputGesture = KeyGesture.Parse("Alt+F4") };
+        exit.Click += (_, _) => Close();
+
+        _undo.Click += (_, _) => Doc.Undo();
+        _redo.Click += (_, _) => Doc.Redo();
+        var delete = new MenuItem { Header = "_Delete", InputGesture = KeyGesture.Parse("Delete") };
+        delete.Click += (_, _) => DeleteSelected();
+        var frame = new MenuItem { Header = "_Frame Selected", InputGesture = KeyGesture.Parse("F") };
+        frame.Click += (_, _) => FrameSelectedOrAll();
+
+        var about = new MenuItem { Header = "_About NoorEditor" };
+        about.Click += async (_, _) => await Dialogs.Ask(this, "About NoorEditor",
+            $"NoorEditor (Milestone 3 preview)\nEngine API v{Native.noor_editor_api_version()} · MIT licence\nBad Ideas Works", "OK");
+
+        var menu = new Menu
+        {
+            FontSize = 12,
+            Items =
+            {
+                new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), closeProject, exit } },
+                new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame } },
+                new MenuItem { Header = "_Help", Items = { about } },
+            },
+        };
+
+        var logo = new TextBlock
+        {
+            Text = "N", FontWeight = FontWeight.Bold, FontSize = 18, Margin = new Thickness(12, 0, 6, 0),
+            Foreground = NoorTheme.Brush(NoorTheme.Accent), VerticalAlignment = VerticalAlignment.Center,
+        };
+        var bar = new DockPanel { Height = 34, Background = NoorTheme.Brush(NoorTheme.Panel) };
+        DockPanel.SetDock(logo, Avalonia.Controls.Dock.Left);
+        bar.Children.Add(logo);
+        bar.Children.Add(menu);
+        return new Border { Child = bar, BorderBrush = NoorTheme.Brush(NoorTheme.Border), BorderThickness = new Thickness(0, 0, 0, 1) };
+    }
+
+    private Control StatusBar()
+    {
+        var bar = new DockPanel();
+        DockPanel.SetDock(_statusRight, Avalonia.Controls.Dock.Right);
+        bar.Children.Add(_statusRight);
+        bar.Children.Add(_statusLeft);
+        return new Border
+        {
+            Height = 26,
+            Background = NoorTheme.Brush(NoorTheme.Panel),
+            BorderBrush = NoorTheme.Brush(NoorTheme.Border),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(12, 0),
+            Child = bar,
+        };
+    }
+
+    // ---- Document state → chrome ----
+
+    private void OnSceneChanged()
+    {
+        var s = Doc.Scene;
+        var scene = s.Open ? $"{s.Name}{(s.Modified ? " •" : "")}" : "no scene";
+        Title = $"NoorEditor — {Doc.ProjectName} — {scene}";
+        _undo.Header = s.CanUndo ? $"_Undo {s.UndoLabel}" : "_Undo";
+        _undo.IsEnabled = s.CanUndo;
+        _redo.Header = s.CanRedo ? $"_Redo {s.RedoLabel}" : "_Redo";
+        _redo.IsEnabled = s.CanRedo;
+        _save.IsEnabled = s.Open;
+        var issues = s.Issues.Count > 0 ? $"   ·   ⚠ {s.Issues.Count} issue(s)" : "";
+        _statusLeft.Text = s.Open
+            ? $"{Doc.ProjectName}   ·   {s.Path}{(s.Modified ? " (modified)" : "")}   ·   {s.Entities.Count} entities{issues}"
+            : $"{Doc.ProjectName}   ·   no scene open";
+        _statusLeft.Foreground = NoorTheme.Brush(s.Issues.Count > 0 ? NoorTheme.Warn : NoorTheme.Text);
+    }
+
+    private void RebuildOpenSceneMenu()
+    {
+        _openScene.Items.Clear();
+        foreach (var path in Doc.SceneFiles)
+        {
+            var item = new MenuItem { Header = path };
+            item.Click += async (_, _) => await OpenScene(path);
+            _openScene.Items.Add(item);
+        }
+        _openScene.IsEnabled = Doc.SceneFiles.Count > 0;
+    }
+
+    private void UpdateStatusRight()
+    {
+        var s = ViewportView?.Viewport.Stats;
+        var fps = s is { State: Native.ViewportState.Running } st ? $"{st.FramesPerSecond:0} FPS   ·   {st.GpuName}" : "viewport not running";
+        _statusRight.Text = $"{fps}   ·   RAM {Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)} MB";
+    }
+
+    // ---- Commands ----
+
+    /// <summary>Closes without the unsaved-changes prompt (automated tests).</summary>
+    public void CloseWithoutPrompt()
+    {
+        _closeConfirmed = true;
+        Close();
+    }
+
+    public void Save()
+    {
+        if (Doc.Scene.Open) Doc.Save();
+    }
+
+    public void AddAsset(AssetInfo asset)
+    {
+        if (!Doc.Scene.Open)
+        {
+            _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
+            return;
+        }
+        if (Doc.AddAsset(asset, new Vec3(0, 0, 0)) && Doc.SelectedId is { } id) FrameEntity(id);
+    }
+
+    public async Task<bool> OpenScene(string path)
+    {
+        if (path == Doc.Scene.Path || !await ConfirmDiscard()) return false;
+        var ok = Doc.OpenScene(path);
+        if (ok) ViewportView?.Viewport.Frame(null);
+        return ok;
+    }
+
+    private async Task NewScene()
+    {
+        if (!await ConfirmDiscard()) return;
+        var name = await Dialogs.Prompt(this, "New Scene", "Scene name (saved in Scenes/)", "Main");
+        if (name == null) return;
+        var safe = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || c == '/' ? '_' : c));
+        var path = $"Scenes/{safe}.noorscene";
+        if (Doc.SceneFiles.Contains(path))
+        {
+            await Dialogs.Ask(this, "Scene exists", $"{path} already exists. Open it from File ▸ Open Scene.", "OK");
+            return;
+        }
+        if (Doc.NewScene(path, name)) Doc.Save();
+    }
+
+    private void DeleteSelected()
+    {
+        if (Doc.Selected is { FromPrefab: false } e) Doc.Remove(e.Id);
+    }
+
+    private void FrameEntity(string id) => ViewportView?.Viewport.Frame(Doc.Subtree(id));
+
+    private void FrameSelectedOrAll()
+    {
+        if (Doc.SelectedId is { } id) FrameEntity(id);
+        else ViewportView?.Viewport.Frame(null);
+    }
+
+    /// <summary>True if it is fine to drop the open scene (saved, or the user chose not to save).</summary>
+    private async Task<bool> ConfirmDiscard()
+    {
+        if (!Doc.Scene.Modified) return true;
+        var answer = await Dialogs.Ask(this, "Unsaved changes", $"Save changes to {Doc.Scene.Path}?", "Save", "Don't save", "Cancel");
+        return answer switch
+        {
+            "Save" => Doc.Save(),
+            "Don't save" => true,
+            _ => false,
+        };
+    }
+
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_closeConfirmed || !Doc.Scene.Modified)
+        {
+            RememberWindow();
+            return;
+        }
+        e.Cancel = true;
+        if (!await ConfirmDiscard()) return;
+        _closeConfirmed = true;
+        Close();
+    }
+
+    private void RememberWindow()
+    {
+        _settings.WindowMaximized = WindowState == WindowState.Maximized;
+        if (WindowState == WindowState.Normal)
+        {
+            _settings.WindowWidth = Width;
+            _settings.WindowHeight = Height;
+        }
+        _settings.Save();
+    }
+
+    // ---- Keyboard ----
+    // Keys pressed while the engine viewport has focus arrive here too: the viewport's child window
+    // forwards them to this window. Text boxes keep their own Ctrl+Z/Y and letters.
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        var inText = !ViewportHasFocus() && FocusManager?.GetFocusedElement() is TextBox;
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        switch (e.Key)
+        {
+            case Key.S when ctrl:
+                Save();
+                break;
+            case Key.Z when ctrl && !shift && !inText:
+                Doc.Undo();
+                break;
+            case Key.Y when ctrl && !inText:
+            case Key.Z when ctrl && shift && !inText:
+                Doc.Redo();
+                break;
+            case Key.F when e.KeyModifiers == KeyModifiers.None && !inText:
+                FrameSelectedOrAll();
+                break;
+            case Key.Delete when !inText && ViewportHasFocus():
+                DeleteSelected();
+                break;
+            default:
+                return;
+        }
+        e.Handled = true;
+    }
+
+    private bool ViewportHasFocus()
+    {
+        var hwnd = ViewportView?.Viewport.NativeWindow ?? IntPtr.Zero;
+        return hwnd != IntPtr.Zero && GetFocus() == hwnd;
+    }
+
+    [DllImport("user32.dll")] private static extern IntPtr GetFocus();
+}

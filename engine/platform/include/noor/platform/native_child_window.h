@@ -23,6 +23,7 @@ struct PointerState {
     bool inside = false;
     bool left_down = false;
     bool right_down = false;
+    bool middle_down = false;
 };
 
 class NativeChildWindow final : public PresentationTarget {
@@ -36,6 +37,8 @@ public:
 
     [[nodiscard]] void* native_handle() const noexcept { return hwnd_; }
     [[nodiscard]] PointerState pointer_state() const noexcept;
+    // Wheel movement since the last call, in notches (positive = away from the user).
+    [[nodiscard]] float take_wheel() noexcept;
 
     [[nodiscard]] PixelSize pixel_size() const override;
     [[nodiscard]] Result<std::vector<const char*>> vulkan_instance_extensions() const override;
@@ -49,6 +52,8 @@ public:
         std::atomic<bool> inside{false};
         std::atomic<bool> left_down{false};
         std::atomic<bool> right_down{false};
+        std::atomic<bool> middle_down{false};
+        std::atomic<std::int32_t> wheel{0};  // raw WHEEL_DELTA units
     };
 
 private:
