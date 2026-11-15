@@ -114,7 +114,7 @@ public sealed class HierarchyPanel : DockPanel
 
     private TreeViewItem Item(EntityInfo e, Dictionary<string, List<EntityInfo>>? children)
     {
-        var icon = e.Kind switch { "Prefab instance" => "◆", "Mesh" => "▲", "Marker" => "✚", "Model" => "▣", _ => "○" };
+        var icon = e.Kind switch { "Prefab instance" => "◆", "Mesh" => "▲", "Marker" => "✚", "Model" => "▣", "Shape" => "■", _ => "○" };
         var header = new StackPanel
         {
             Orientation = Orientation.Horizontal,

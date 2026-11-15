@@ -163,6 +163,21 @@ public sealed class EditorDocument : IDisposable
         return ok;
     }
 
+    /// <summary>Creates an entity (one undo step) and selects it. Returns its id, or null.</summary>
+    public string? Create(string name, JsonObject components, Vec3 position, string? parent = null)
+    {
+        var id = Guid.NewGuid().ToString();
+        var cmd = new JsonObject
+        {
+            ["op"] = "create", ["id"] = id, ["name"] = name, ["components"] = components,
+            ["transform"] = new JsonObject { ["position"] = position.ToJson() },
+        };
+        if (parent != null) cmd["parent"] = parent;
+        if (!Execute(cmd)) return null;
+        Select(id);
+        return id;
+    }
+
     public bool AddAsset(AssetInfo asset, Vec3 position)
     {
         var ok = Execute(new JsonObject { ["op"] = "add_asset", ["asset"] = asset.Guid, ["position"] = position.ToJson() });

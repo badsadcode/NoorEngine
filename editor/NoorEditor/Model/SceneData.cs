@@ -98,6 +98,7 @@ public sealed record EntityInfo(
     /// <summary>Short description of what this entity is, for the hierarchy and inspector.</summary>
     public string Kind =>
         Components.ContainsKey("prefab") ? "Prefab instance" :
+        Components.ContainsKey("primitive") ? "Shape" :
         Components.ContainsKey("mesh") ? "Mesh" :
         Components.ContainsKey("marker") ? "Marker" :
         Components.ContainsKey("model") ? "Model" : "Entity";

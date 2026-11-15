@@ -21,14 +21,15 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `platform`: input (keyboard, mouse, relative mouse mode) | Works; used by the fly camera |
 | `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel, 2,500-cube stress and window lifecycle tests with validation; debug labels for RenderDoc. Device loss reported, not recovered; high-DPI >100% untested |
 | `noor_diag`: diagnostics app (fly camera, `--cubes N` stress grid, timings, `--verify-render`, `--screenshot`) | Works |
-| `editor_api`: C API DLL (v5): engine viewports in a foreign window + editable documents ([ADR-025](docs/decisions/ADR-025-editor-engine-boundary.md)) | Works; API tests run in CI. Not a stable plugin ABI yet (ADR-007) |
+| `editor_api`: C API DLL (v6): engine viewports in a foreign window + editable documents ([ADR-025](docs/decisions/ADR-025-editor-engine-boundary.md)) | Works; API tests run in CI. Not a stable plugin ABI yet (ADR-007) |
 | **NoorEditor** ([editor/NoorEditor](editor/NoorEditor)): project hub, docked viewport (click to select, fly camera, move/rotate/scale gizmos with snapping, highlight), scene tree, inspector (name/transform/components), content browser with live reload, console, preferences, play/stop, undo/redo, save, remembered layout | **Milestone 3 complete.** Works; 61-check end-to-end smoke test drives real clicks, drags and keys (GPU, local). HiDPI checked by hand at 150%; no multi-select |
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
 | `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
 | `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
 | `runtime`: game world, frame order, fixed 60 Hz step, input actions/axes, built-in behaviours; the editor's play mode runs it with keyboard input from the viewport | **Milestone 4, part 1.** Works, unit-tested; physics and audio plug in next |
 | `scripting`: **Lua (Luau) scripts**, sandboxed, with entities, transforms, input, components and logging ([API](docs/scripting/LUA_API.md)) | **Milestone 4, part 2.** Works; unit-tested and driven from the editor. C# next (part 4) |
-| Textures, C# scripting, physics, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
+| `physics`: **Jolt** rigid bodies, colliders (box, sphere, capsule, mesh from GLBs), raycasts, forces, collision/trigger events for scripts; primitive shapes | **Milestone 4, part 3a.** Works; unit-tested and played in the editor. Character controller next |
+| Textures, C# scripting, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
 `docs/devlog/img` are real captures of the engine and the editor spike.
@@ -70,6 +71,7 @@ renderer changes. CI uses the `windows-ninja` preset (Ninja + whatever MSVC the 
 | `editor/NoorEditor` | The editor (C#, Avalonia). |
 | `engine/asset`, `engine/scene` | Projects, asset registry, GLB import; scene documents. |
 | `engine/runtime` | The running game: world, systems, input, the scripting API. |
+| `engine/physics` | Jolt physics as a runtime system. |
 | `engine/scripting` | Script languages as runtime systems (Lua via Luau). |
 | `tools/noor_diag` | Diagnostics app; permanent developer utility. |
 | `tools/noor_cli` | Headless project tool. |

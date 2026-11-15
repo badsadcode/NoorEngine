@@ -112,6 +112,16 @@
       "linkage": "static",
       "shipped": true,
       "purpose": "Lua scripting: compiler and sandboxed VM (engine/scripting, ADR-009)"
+    },
+    {
+      "name": "Jolt Physics",
+      "version": "5.6.0",
+      "source": "https://github.com/jrouwe/JoltPhysics",
+      "commit": "e77f175595e64cb44218cc9d9d56fc365ad0e36a",
+      "license": "MIT",
+      "linkage": "static",
+      "shipped": true,
+      "purpose": "Physics: rigid bodies, colliders, queries, character controller (engine/physics, ADR-010)"
     }
   ]
 }

@@ -32,8 +32,9 @@ extern "C" {
  * 2: viewport selection highlight, gizmos and events (picking, gizmo edits).
  * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size).
  * 4: play mode, asset files watched for changes (live reload).
- * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport. */
-#define NOOR_EDITOR_API_VERSION 5u
+ * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport.
+ * 6: "create" command; physics (ADR-010) and Lua (ADR-009) run in play mode; primitive shapes. */
+#define NOOR_EDITOR_API_VERSION 6u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -106,7 +107,8 @@ NOOR_API int32_t noor_doc_save_scene(noor_doc* doc);
 NOOR_API const char* noor_doc_scene(noor_doc* doc);
 
 /* Command JSON: {"op": "set_transform" | "rename" | "set_component" | "remove" | "reparent" |
- * "add_asset" | "begin" | "end", ...}. See ADR-025. */
+ * "add_asset" | "create" | "begin" | "end", ...}. See ADR-025.
+ * create: {"op": "create", "name", "id"?, "parent"?, "transform"?, "components"?}, one undo step. */
 NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json);
 NOOR_API int32_t noor_doc_undo(noor_doc* doc);
 NOOR_API int32_t noor_doc_redo(noor_doc* doc);

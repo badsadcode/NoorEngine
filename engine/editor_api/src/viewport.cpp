@@ -31,6 +31,7 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -210,6 +211,41 @@ Geometry make_ring(float radius, float tube) {
     return g;
 }
 
+// A sphere of radius 0.5 (primitives), or a capsule along Y (total height h, radius r) when h > 2r.
+Geometry make_round(float radius, float height) {
+    constexpr int kRings = 16, kSegments = 24;
+    const float half = std::max(0.0f, height * 0.5f - radius);  // cylinder half length
+    Geometry g;
+    // Rings from the top pole to the bottom pole; the upper hemisphere is shifted up by `half`.
+    for (int i = 0; i <= kRings; ++i) {
+        const float v = static_cast<float>(i) / kRings;
+        const float phi = v * noor::math::kPi;
+        const float y = std::cos(phi) * radius;
+        const float r = std::sin(phi) * radius;
+        const float shift = i <= kRings / 2 ? half : -half;
+        for (int j = 0; j <= kSegments; ++j) {
+            const float theta = 2.0f * noor::math::kPi * static_cast<float>(j) / kSegments;
+            const Vec3 n{std::sin(phi) * std::cos(theta), std::cos(phi), std::sin(phi) * std::sin(theta)};
+            g.first.push_back({{r * std::cos(theta), y + shift, r * std::sin(theta)}, n, {1, 1, 1}});
+        }
+        if (i == kRings / 2 && half > 0) {  // duplicate the equator ring for the lower hemisphere
+            for (int j = 0; j <= kSegments; ++j) {
+                const float theta = 2.0f * noor::math::kPi * static_cast<float>(j) / kSegments;
+                g.first.push_back({{radius * std::cos(theta), -half, radius * std::sin(theta)}, {std::cos(theta), 0, std::sin(theta)}, {1, 1, 1}});
+            }
+        }
+    }
+    const int rows = static_cast<int>(g.first.size()) / (kSegments + 1);
+    for (int i = 0; i + 1 < rows; ++i) {
+        for (int j = 0; j < kSegments; ++j) {
+            const auto a = static_cast<std::uint32_t>(i * (kSegments + 1) + j);
+            const auto b = a + kSegments + 1;
+            for (const std::uint32_t k : {a, a + 1, b, b, a + 1, b + 1}) g.second.push_back(k);
+        }
+    }
+    return g;
+}
+
 // Maps the gizmo's +Y-built parts onto an axis.
 Mat4 axis_frame(ed::Handle h) {
     const Vec3 a = ed::handle_axis(h);
@@ -297,6 +333,20 @@ void render_thread_main(noor_viewport* vp) {
     const float cube = ed::kScaleAllRadius * 0.8f;
     const auto scale_all = upload(make_box({1, 1, 1}, {-cube, -cube, -cube}, {cube, cube, cube}), "Gizmo uniform scale");
 
+    // Primitive shapes (`primitive` components), with CPU copies for picking.
+    auto make_loaded = [&](const Geometry& g, std::string_view name) {
+        LoadedMesh lm{upload(g, name), {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, {}, {}};
+        for (const auto& v : g.first) {
+            lm.positions.push_back(v.position);
+            grow(lm.lo, lm.hi, v.position);
+        }
+        lm.indices = g.second;
+        return lm;
+    };
+    const LoadedMesh prim_box = make_loaded(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
+    const LoadedMesh prim_sphere = make_loaded(make_round(0.5f, 1.0f), "Primitive sphere");
+    std::map<std::pair<int, int>, LoadedMesh> prim_capsules;  // by (radius, height) in millimetres
+
     // Loaded models by absolute path. A model is reloaded when the snapshot carries a newer
     // version of it (the document saw the file change on disk).
     struct CachedAsset {
@@ -312,6 +362,7 @@ void render_thread_main(noor_viewport* vp) {
         noor::render::DrawItem item;
         Guid entity;
         const LoadedMesh* mesh = nullptr;  // null for markers
+        bool colored = false;              // primitives: item.tint is their color
     };
     std::vector<SceneDraw> scene_draws;
     std::unordered_map<Guid, const ed::RenderSnapshot::Entity*> entity_by_id;
@@ -448,6 +499,26 @@ void render_thread_main(noor_viewport* vp) {
                 if (marker.valid()) {
                     for (const auto& mk : snap->markers)
                         scene_draws.push_back({{marker, mk.world * noor::math::scale({0.25f, 0.25f, 0.25f})}, mk.entity, nullptr});
+                }
+                for (const auto& prim : snap->primitives) {
+                    const LoadedMesh* lm = &prim_box;
+                    if (prim.shape == ed::RenderSnapshot::Primitive::Shape::Sphere) {
+                        lm = &prim_sphere;
+                    } else if (prim.shape == ed::RenderSnapshot::Primitive::Shape::Capsule) {
+                        const std::pair<int, int> key{static_cast<int>(prim.radius * 1000), static_cast<int>(prim.height * 1000)};
+                        auto it = prim_capsules.find(key);
+                        if (it == prim_capsules.end())
+                            it = prim_capsules.emplace(key, make_loaded(make_round(prim.radius, std::max(prim.height, prim.radius * 2)), "Primitive capsule")).first;
+                        lm = &it->second;
+                    }
+                    if (!lm->handle.valid()) continue;
+                    noor::render::DrawItem item{lm->handle, prim.world};
+                    item.tint = {prim.color.x, prim.color.y, prim.color.z, 1.0f};
+                    scene_draws.push_back({item, prim.entity, lm, true});
+                    for (int c = 0; c < 8; ++c) {
+                        grow(lo, hi, prim.world.transform_point({c & 1 ? lm->hi.x : lm->lo.x, c & 2 ? lm->hi.y : lm->lo.y, c & 4 ? lm->hi.z : lm->lo.z}));
+                        any = true;
+                    }
                 }
             }
             if (any) {
@@ -690,7 +761,12 @@ void render_thread_main(noor_viewport* vp) {
             for (std::size_t i = 0; i < scene_draws.size(); ++i) {
                 noor::render::DrawItem item = scene_draws[i].item;
                 if (preview && i < draw_in_gizmo_subtree.size() && draw_in_gizmo_subtree[i]) item.world_from_object = preview->delta * item.world_from_object;
-                if (i < draw_selected.size() && draw_selected[i]) item.tint = highlight;
+                if (i < draw_selected.size() && draw_selected[i]) {
+                    item.tint = scene_draws[i].colored
+                                    ? Vec4{item.tint.x * 0.55f + highlight.x * 0.45f, item.tint.y * 0.55f + highlight.y * 0.45f,
+                                           item.tint.z * 0.55f + highlight.z * 0.45f, 1.0f}
+                                    : highlight;
+                }
                 frame_draws.push_back(item);
             }
             if (ground.valid()) {

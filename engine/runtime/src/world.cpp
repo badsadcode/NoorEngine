@@ -80,6 +80,7 @@ void World::frame(double dt, const InputState& input) {
     if (steps == max_fixed_steps && accumulator_ >= fixed_dt) accumulator_ = 0.0;  // too slow: drop, don't spiral
 
     for (auto& s : systems_) s->late_update(*this, dt);
+    events_.clear();
     flush_destroyed();
     time_ += dt;
     ++frames_;

@@ -33,6 +33,10 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   and attaches it; **Open** edits it in your editor; **+ Param** adds values the script reads as
   `self.params`. Press Play to run it (changes are picked up on the next Play). API:
   [docs/scripting/LUA_API.md](../../docs/scripting/LUA_API.md).
+- **Create** menu: empty, box, sphere, capsule, floor, physics crate, physics ball.
+- **Physics**: Inspector ▸ **Add component ▸ Physics** (rigidbody, box/sphere/capsule/mesh
+  collider). Press Play and things fall, bounce and collide (Jolt). A mesh collider on a GLB model
+  makes the whole building solid.
 - **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
   a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.

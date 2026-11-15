@@ -51,6 +51,15 @@ struct RenderSnapshot {
         Guid entity;
     };
     std::vector<Marker> markers;
+    // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
+    struct Primitive {
+        enum class Shape : std::uint8_t { Box, Sphere, Capsule } shape;
+        math::Mat4 world;  // box: +-0.5 cube scaled to size; sphere: radius 0.5 scaled; capsule: unscaled
+        float radius = 0.5f, height = 2.0f;  // capsule only
+        math::Vec3 color;  // linear
+        Guid entity;
+    };
+    std::vector<Primitive> primitives;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.
@@ -111,6 +120,7 @@ private:
     explicit Document(asset::Project project);
     [[nodiscard]] Status require_scene() const;
     [[nodiscard]] Status add_asset(const asset::Json& command);
+    [[nodiscard]] Status create(const asset::Json& command);
     void changed();  // bumps the revision and republishes the render snapshot
     void publish(const scene::Scene& expanded, const std::unordered_set<Guid>& authored);
     void watch_assets();

@@ -101,6 +101,30 @@ std::optional<math::Vec3> world_position(World& w, const Guid& e) {
     return std::nullopt;
 }
 
+std::optional<math::Mat4> world_matrix(World& w, const Guid& e) {
+    if (auto* x = w.find(e)) return world_matrix(w, *x);
+    return std::nullopt;
+}
+
+std::optional<math::Quat> world_rotation(World& w, const Guid& e) {
+    if (auto* x = w.find(e)) return world_rotation(w, *x);
+    return std::nullopt;
+}
+
+void set_world_pose(World& w, const Guid& e, math::Vec3 position, math::Quat rotation) {
+    auto* x = w.find(e);
+    if (!x) return;
+    if (!x->parent || !w.find(*x->parent)) {
+        x->transform.position = position;
+        x->transform.rotation = math::normalize_quat(rotation);
+        return;
+    }
+    const scene::Entity& p = *w.find(*x->parent);
+    const math::Mat4 parent_inv = math::inverse(world_matrix(w, p));
+    x->transform.position = parent_inv.transform_point(position);
+    x->transform.rotation = math::normalize_quat(math::conjugate(world_rotation(w, p)) * rotation);
+}
+
 std::optional<math::Vec3> forward(World& w, const Guid& e) {
     if (auto* x = w.find(e)) return math::rotate(world_rotation(w, *x), {0, 0, -1});
     return std::nullopt;

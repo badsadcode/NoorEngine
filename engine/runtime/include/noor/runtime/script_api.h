@@ -33,6 +33,12 @@ void rotate(World& w, const Guid& e, math::Vec3 axis, float degrees);  // about 
 [[nodiscard]] std::optional<math::Vec3> scale(World& w, const Guid& e);
 void set_scale(World& w, const Guid& e, math::Vec3 s);
 
+// ---- World space ----
+[[nodiscard]] std::optional<math::Mat4> world_matrix(World& w, const Guid& e);
+[[nodiscard]] std::optional<math::Quat> world_rotation(World& w, const Guid& e);
+// Sets the entity's local transform so that its world position/rotation become these.
+void set_world_pose(World& w, const Guid& e, math::Vec3 position, math::Quat rotation);
+
 // ---- Directions (world space) ----
 [[nodiscard]] std::optional<math::Vec3> world_position(World& w, const Guid& e);
 [[nodiscard]] std::optional<math::Vec3> forward(World& w, const Guid& e);  // the entity's -Z

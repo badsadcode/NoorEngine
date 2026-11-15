@@ -4,6 +4,40 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-15 — Milestone 4, part 3a: physics (Jolt)
+**Added**
+- Jolt Physics 5.6.0 (MIT) pinned, built for a portable SSE4.2 baseline (no AVX2), without its GPU
+  compute, debug renderer or profiler.
+- `engine/physics`: `PhysicsSystem`, a runtime system. `collider` (box, sphere, capsule, mesh;
+  offset; trigger) and `rigidbody` (dynamic, kinematic, static; mass, friction, restitution,
+  damping, gravity scale) components; sizes follow the entity's world scale; dynamic bodies move
+  their entities (also as children of moved parents), kinematic bodies follow them; fixed 60 Hz
+  step after the scripts' fixed update; raycasts; velocity, impulses, forces; collision and trigger
+  enter/exit events. Mesh colliders use the model's own triangles, or a referenced collision mesh
+  (Noor Interchange collision nodes).
+- Sleeping bodies don't fake "exit" events: Jolt drops a resting body's contacts when it sleeps;
+  those pairs are parked and only reported if the body wakes up and really leaves.
+- `runtime::World` events (cleared each frame); `api::world_matrix`, `world_rotation`,
+  `set_world_pose`.
+- Lua: `noor.raycast`, `velocity`/`set_velocity`/`add_impulse`/`add_force`, hooks
+  `on_collision_enter/exit`, `on_trigger_enter/exit`.
+- Primitive shapes (`primitive` component: box, sphere, capsule, plane, color) rendered and pickable
+  in the viewport. Editor API **v6**: `create` command (one undo step). NoorEditor: **Create** menu
+  (empty, box, sphere, capsule, floor, physics crate, physics ball), **Add component ▸ Physics /
+  Shape** presets.
+
+**Fixed**
+- Keys typed into the viewport could reach whichever editor control last had focus: Space "clicked"
+  a focused button (found when a play-mode test's Space press sometimes did nothing). Viewport keys
+  are now never delivered to editor controls.
+
+**Tests:** 8 physics tests (falling and resting, one enter and no fake exit when asleep, wake-up
+exit/enter, raycasts, bounce, impulse, trigger, kinematic pushing, mesh collider, refused dynamic
+mesh, parented bodies, Lua hooks/raycast/impulse); the editor smoke test builds a floor and crate
+from the Create menu and drops a ball on the BadBuilding roof through a GLB mesh collider (81 checks).
+Its play-mode input checks now test direction, not speed: under load the editor's play timer
+advances less game time (speed itself is unit-tested). 134/134 Debug, 128/128 Release without GPU.
+
 ### 2026-11-15 — Milestone 4, part 2: Lua scripts (Luau)
 **Decided:** ADR-009 accepted: Luau (project owner confirmed). Pinned Luau 0.745 (MIT).
 

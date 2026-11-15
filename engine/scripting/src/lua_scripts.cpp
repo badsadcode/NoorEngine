@@ -2,6 +2,7 @@
 
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
+#include "noor/physics/physics.h"
 #include "noor/runtime/script_api.h"
 
 #include <lua.h>
@@ -46,6 +47,7 @@ struct LuaScriptSystem::Impl {
     }
 
     static Impl* of(lua_State* L) { return static_cast<Impl*>(lua_callbacks(L)->userdata); }
+    static physics::PhysicsSystem* physics_of(lua_State* L) { return world_of(L).system<physics::PhysicsSystem>(); }
     static runtime::World& world_of(lua_State* L) {
         Impl* self = of(L);
         if (!self->world) luaL_errorL(L, "the world is not running");
@@ -221,6 +223,23 @@ struct LuaScriptSystem::Impl {
                  api::destroy(world_of(L), check_entity(L, 1));
                  return 0;
              }},
+            // ---- Physics (needs a collider + rigidbody) ----
+            {"velocity", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 return push_vec(L, p ? p->velocity(check_entity(L, 1)) : std::nullopt);
+             }},
+            {"set_velocity", [](lua_State* L) {
+                 if (auto* p = physics_of(L)) p->set_velocity(check_entity(L, 1), check_vec(L, 2));
+                 return 0;
+             }},
+            {"add_impulse", [](lua_State* L) {
+                 if (auto* p = physics_of(L)) p->add_impulse(check_entity(L, 1), check_vec(L, 2));
+                 return 0;
+             }},
+            {"add_force", [](lua_State* L) {
+                 if (auto* p = physics_of(L)) p->add_force(check_entity(L, 1), check_vec(L, 2));
+                 return 0;
+             }},
             {nullptr, nullptr},
         };
         luaL_newmetatable(L, kEntityMeta);
@@ -270,6 +289,30 @@ struct LuaScriptSystem::Impl {
             {"find", [](lua_State* L) {
                  if (auto e = api::find(world_of(L), luaL_checkstring(L, 1))) push_entity(L, *e);
                  else lua_pushnil(L);
+                 return 1;
+             }},
+            // noor.raycast(origin, direction, max_distance [, ignore_entity]) -> hit table or nil
+            {"raycast", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const math::Vec3 origin = check_vec(L, 1);
+                 const math::Vec3 dir = check_vec(L, 2);
+                 const float max = static_cast<float>(luaL_optnumber(L, 3, 1000.0));
+                 std::optional<Guid> ignore;
+                 if (lua_gettop(L) >= 4 && !lua_isnil(L, 4)) ignore = check_entity(L, 4);
+                 const auto hit = p ? p->raycast(origin, dir, max, ignore) : std::nullopt;
+                 if (!hit) {
+                     lua_pushnil(L);
+                     return 1;
+                 }
+                 lua_createtable(L, 0, 4);
+                 push_entity(L, hit->entity);
+                 lua_setfield(L, -2, "entity");
+                 lua_pushvector(L, hit->point.x, hit->point.y, hit->point.z);
+                 lua_setfield(L, -2, "point");
+                 lua_pushvector(L, hit->normal.x, hit->normal.y, hit->normal.z);
+                 lua_setfield(L, -2, "normal");
+                 lua_pushnumber(L, hit->distance);
+                 lua_setfield(L, -2, "distance");
                  return 1;
              }},
             {nullptr, nullptr},
@@ -470,8 +513,20 @@ void LuaScriptSystem::fixed_update(runtime::World& world, double dt) {
 }
 
 void LuaScriptSystem::late_update(runtime::World& world, double dt) {
-    impl_->world = &world;
-    impl_->each("on_late_update", dt);
+    auto& d = *impl_;
+    d.world = &world;
+    // Physics events from this frame's fixed steps, then the late update.
+    for (const auto& e : world.events()) {
+        if (!d.instances.contains(e.entity)) continue;
+        using K = runtime::Event::Kind;
+        const char* hook = e.kind == K::CollisionEnter ? "on_collision_enter"
+                         : e.kind == K::CollisionExit  ? "on_collision_exit"
+                         : e.kind == K::TriggerEnter   ? "on_trigger_enter"
+                                                       : "on_trigger_exit";
+        Impl::push_entity(d.L, e.other);
+        d.call(e.entity, hook, 1);
+    }
+    d.each("on_late_update", dt);
 }
 
 void LuaScriptSystem::entity_destroyed(runtime::World& world, const scene::Entity& entity) {

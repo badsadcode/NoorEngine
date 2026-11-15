@@ -286,6 +286,7 @@ public sealed class MainWindow : Window
                                                          Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
                                                          Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
                                                          new Separator(), preferences } },
+                CreateMenu(),
                 new MenuItem { Header = "_Window", Items = { resetLayout } },
                 new MenuItem { Header = "_Help", Items = { about } },
             },
@@ -306,6 +307,30 @@ public sealed class MainWindow : Window
         bar.Children.Add(right);
         bar.Children.Add(menu);
         return new Border { Child = bar, BorderBrush = NoorTheme.Brush(NoorTheme.Border), BorderThickness = new Thickness(0, 0, 0, 1) };
+    }
+
+    private MenuItem CreateMenu()
+    {
+        var menu = new MenuItem { Header = "_Create" };
+        foreach (var t in EntityTemplates.All)
+        {
+            var item = new MenuItem { Header = t.Name };
+            item.Click += (_, _) => CreateEntity(t);
+            menu.Items.Add(item);
+        }
+        return menu;
+    }
+
+    /// <summary>Create ▸ template: added to the open scene and selected.</summary>
+    public string? CreateEntity(EntityTemplates.Template t)
+    {
+        if (!Doc.Scene.Open)
+        {
+            _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
+            return null;
+        }
+        if (Doc.Playing) return null;
+        return Doc.Create(t.Name, t.Components(), t.Position);
     }
 
     private Control StatusBar()
@@ -515,7 +540,11 @@ public sealed class MainWindow : Window
         var inText = !ViewportHasFocus() && FocusManager?.GetFocusedElement() is TextBox;
         // While playing, keys typed into the viewport belong to the game: only Ctrl shortcuts
         // (Ctrl+P stop, Ctrl+S save) reach the editor.
-        if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            e.Handled = true;  // the game's key: must not reach a focused editor button (Space would click it)
+            return;
+        }
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         switch (e.Key)
@@ -552,6 +581,9 @@ public sealed class MainWindow : Window
                 DeleteSelected();
                 break;
             default:
+                // Keys typed into the viewport are never meant for whichever editor control last had
+                // Avalonia focus (Space/Enter would click a button).
+                if (ViewportHasFocus()) e.Handled = true;
                 return;
         }
         e.Handled = true;

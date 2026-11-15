@@ -2,9 +2,11 @@
 
 #include "noor/asset/gltf_import.h"
 #include "noor/runtime/behaviours.h"
+#include "noor/physics/physics.h"
 #include "noor/scripting/lua_scripts.h"
 #include "noor/foundation/log.h"
 
+#include <cmath>
 #include <format>
 #include <unordered_map>
 #include <unordered_set>
@@ -99,6 +101,29 @@ Status Document::play() {
     if (!input_map) return std::unexpected(input_map.error());
     world_ = std::make_unique<runtime::World>(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, std::move(*input_map));
     world_->add_system(std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{project_.root()}));
+    physics::PhysicsSystem::Options physics_options;
+    // Mesh colliders read triangles from the project's GLB files (cached per file for this play).
+    auto cache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<asset::ImportedModel>>>();
+    physics_options.mesh_triangles = [this, cache](const Json& ref) -> std::optional<physics::Triangles> {
+        const auto guid = asset::guid_field(ref, "asset");
+        const auto* rec = guid ? registry_.find(*guid) : nullptr;
+        if (!rec) return std::nullopt;
+        auto path = project_.resolve(rec->path);
+        if (!path) return std::nullopt;
+        auto& model = (*cache)[path->generic_string()];
+        if (!model) {
+            auto imported = asset::import_gltf(*path);
+            if (!imported) return std::nullopt;
+            model = std::make_shared<asset::ImportedModel>(std::move(*imported));
+        }
+        const int index = ref.value("mesh_index", -1);
+        if (index < 0 || index >= static_cast<int>(model->meshes.size())) return std::nullopt;
+        physics::Triangles t;
+        for (const auto& v : model->meshes[static_cast<std::size_t>(index)].vertices) t.positions.push_back(v.position);
+        t.indices = model->meshes[static_cast<std::size_t>(index)].indices;
+        return t;
+    };
+    world_->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
     world_->add_system(std::make_unique<runtime::BehavioursSystem>());
     NOOR_LOG_INFO("Editor", "Play");
     ++revision_;
@@ -279,6 +304,7 @@ Status Document::execute(const Json& command) {
         return {};
     }
     if (op == "add_asset") return add_asset(command);
+    if (op == "create") return create(command);
 
     auto id = entity_field(command);
     if (!id) return std::unexpected(id.error());
@@ -322,6 +348,42 @@ Status Document::execute(const Json& command) {
         return fail(ErrorCode::InvalidArgument, std::format("unknown command \"{}\"", op));
     }
     if (!applied) return fail(ErrorCode::InvalidArgument, std::format("\"{}\" could not be applied", op));
+    changed();
+    return {};
+}
+
+// {"op": "create", "name": "Crate", "id"?: "...", "parent"?: id, "transform"?: {...}, "components"?: {...}}
+Status Document::create(const Json& command) {
+    scene::Entity e;
+    if (command.contains("id")) {
+        auto id = entity_field(command, "id");
+        if (!id) return std::unexpected(id.error());
+        if (scene_->find(*id)) return fail(ErrorCode::AlreadyExists, std::format("entity {} already exists", id->to_string()));
+        e.id = *id;
+    } else {
+        e.id = Guid::generate();
+    }
+    e.name = command.value("name", std::string("Entity"));
+    if (command.contains("parent") && !command["parent"].is_null()) {
+        auto p = entity_field(command, "parent");
+        if (!p) return std::unexpected(p.error());
+        if (!scene_->find(*p)) return fail(ErrorCode::NotFound, "the parent is not an editable entity");
+        e.parent = *p;
+    }
+    const Json tj = command.value("transform", Json::object());
+    float v[4];
+    if (tj.contains("position") && read_vec(tj["position"], 3, v)) e.transform.position = {v[0], v[1], v[2]};
+    if (tj.contains("rotation") && read_vec(tj["rotation"], 4, v)) e.transform.rotation = {v[0], v[1], v[2], v[3]};
+    if (tj.contains("scale") && read_vec(tj["scale"], 3, v)) e.transform.scale = {v[0], v[1], v[2]};
+    if (command.contains("components")) {
+        if (!command["components"].is_object()) return fail(ErrorCode::InvalidArgument, "\"components\" must be an object");
+        e.components = command["components"];
+    }
+    const std::string label = "Create " + e.name;
+    history_.begin_transaction(label);
+    const bool ok = history_.execute(*scene_, scene::add_entity(std::move(e)));
+    history_.end_transaction();
+    if (!ok) return fail(ErrorCode::InvalidArgument, "the entity could not be created");
     changed();
     return {};
 }
@@ -405,6 +467,44 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         const math::Mat4 world = expanded.world_matrix(i);
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id});
+        if (e.has("primitive") && e.components["primitive"].is_object()) {
+            const auto& p = e.components["primitive"];
+            auto num = [&](const char* k, float d) { return p.contains(k) && p[k].is_number() ? p[k].get<float>() : d; };
+            math::Vec3 color{0.55f, 0.52f, 0.62f};
+            if (p.contains("color") && p["color"].is_string()) {
+                const std::string hex = p["color"].get<std::string>();
+                if (hex.size() == 7 && hex[0] == '#') {
+                    const auto channel = [&](int i) {
+                        const float c = static_cast<float>(std::stoi(hex.substr(static_cast<std::size_t>(1 + 2 * i), 2), nullptr, 16)) / 255.0f;
+                        return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+                    };
+                    try {
+                        color = {channel(0), channel(1), channel(2)};
+                    } catch (const std::exception&) {
+                    }
+                }
+            }
+            const std::string shape = p.value("shape", std::string("box"));
+            RenderSnapshot::Primitive prim{RenderSnapshot::Primitive::Shape::Box, world, 0.5f, 2.0f, color, e.id};
+            if (shape == "sphere") {
+                prim.shape = RenderSnapshot::Primitive::Shape::Sphere;
+                const float r = num("radius", 0.5f);
+                prim.world = world * math::scale({r * 2, r * 2, r * 2});
+            } else if (shape == "capsule") {
+                prim.shape = RenderSnapshot::Primitive::Shape::Capsule;
+                prim.radius = num("radius", 0.3f);
+                prim.height = num("height", 1.8f);
+            } else {
+                math::Vec3 size{1, 1, 1};
+                if (p.contains("size") && p["size"].is_array() && p["size"].size() == 3) {
+                    if (p["size"][0].is_number() && p["size"][1].is_number() && p["size"][2].is_number())
+                        size = {p["size"][0].get<float>(), p["size"][1].get<float>(), p["size"][2].get<float>()};
+                }
+                if (shape == "plane") size.y = 0.02f;
+                prim.world = world * math::scale(size);
+            }
+            snap->primitives.push_back(prim);
+        }
         if (!e.has("mesh")) continue;
         const auto& mesh = e.components["mesh"];
         const auto guid = asset::guid_field(mesh, "asset");

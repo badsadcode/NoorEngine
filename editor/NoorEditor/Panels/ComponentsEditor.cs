@@ -291,7 +291,15 @@ public sealed class ComponentsEditor : StackPanel
             }
             AddLuaScript(name);
         };
-        button.Flyout = new MenuFlyout { Items = { lua, marker, custom } };
+        var physics = new MenuItem { Header = "Physics" };
+        var shapes = new MenuItem { Header = "Shape" };
+        foreach (var (type, label, value) in EntityTemplates.ComponentPresets)
+        {
+            var item = new MenuItem { Header = label, IsEnabled = _entity?.Components.ContainsKey(type) == false };
+            item.Click += (_, _) => SetComponent(type, value());
+            (type == "primitive" ? shapes : physics).Items.Add(item);
+        }
+        button.Flyout = new MenuFlyout { Items = { lua, physics, shapes, marker, custom } };
         return button;
     }
 

@@ -12,7 +12,9 @@
 //   function Spinner:on_update(dt) self.entity:rotate(vector.create(0, 1, 0), self.params.speed * dt) end
 //   return Spinner
 //
-// Hooks: on_start, on_update(dt), on_fixed_update(dt), on_late_update(dt), on_destroy.
+// Hooks: on_start, on_update(dt), on_fixed_update(dt), on_late_update(dt), on_destroy, and with
+// physics on_collision_enter(other), on_collision_exit(other), on_trigger_enter(other),
+// on_trigger_exit(other) (called before on_late_update in the frame they happen).
 // Sandbox: Luau's safe library set (no file, OS or process access; globals and built-in libraries
 // read-only; each file gets its own globals). A hook that runs longer than the call budget is
 // stopped. A script that errors is reported (file, line, stack) and switched off for that entity;

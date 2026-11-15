@@ -22,6 +22,15 @@ namespace noor::runtime {
 
 class World;
 
+// Something that happened this frame, for scripts (collisions and triggers from physics, ...).
+// Events are cleared at the end of each frame, after late_update.
+struct Event {
+    enum class Kind : std::uint8_t { CollisionEnter, CollisionExit, TriggerEnter, TriggerExit };
+    Kind kind;
+    Guid entity;  // the entity the event is for
+    Guid other;   // the other entity involved
+};
+
 class System {
 public:
     virtual ~System() = default;
@@ -69,6 +78,10 @@ public:
     int max_fixed_steps = 5;
     double max_dt = 0.1;
 
+    // ---- Events ----
+    void post(const Event& event) { events_.push_back(event); }
+    [[nodiscard]] const std::vector<Event>& events() const noexcept { return events_; }
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -87,6 +100,7 @@ private:
     std::unordered_map<Guid, std::size_t> index_;
     std::unordered_set<Guid> started_;
     std::vector<Guid> destroy_queue_;
+    std::vector<Event> events_;
     double time_ = 0.0;
     double accumulator_ = 0.0;
     std::uint64_t frames_ = 0;

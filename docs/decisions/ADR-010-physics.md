@@ -17,8 +17,9 @@ solver rather than an untested physics engine from first principles."
 - **C. Bullet 3** (zlib). Familiar but largely unmaintained for games.
 
 ## Decision
-**A, Jolt Physics**, pinned by commit (ADR-021), built from source with CMake, as the
-`physics` runtime system:
+**A, Jolt Physics**, pinned by commit (ADR-021; v5.6.0 at adoption), built from source with
+CMake for a portable x64 baseline (SSE4.2, no AVX2: builds must run on older PCs; Jolt is fast
+enough without it), as the `physics` runtime system:
 - Components: `rigidbody` (`static` | `dynamic` | `kinematic`, mass, friction, restitution, layer),
   `collider` (`box`, `sphere`, `capsule`, `mesh` for static geometry). Static mesh colliders cook
   from the GLB meshes, and Noor Interchange `-colonly` collision nodes are used when present.
