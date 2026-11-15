@@ -78,7 +78,6 @@ std::optional<float> ray_plane(const Ray& r, Vec3 point, Vec3 normal) {
 // ---- EditorCamera ----
 
 namespace {
-constexpr float kTurn = 0.006f;  // radians per pixel
 constexpr float kMaxPitch = 1.55f;
 
 Vec3 direction(float yaw, float pitch) {
@@ -104,8 +103,8 @@ void EditorCamera::frame(Vec3 lo, Vec3 hi) {
 }
 
 void EditorCamera::orbit(float dx, float dy) {
-    yaw -= dx * kTurn;
-    pitch = std::clamp(pitch + dy * kTurn, -kMaxPitch, kMaxPitch);
+    yaw -= dx * turn_speed;
+    pitch = std::clamp(pitch + dy * turn_speed, -kMaxPitch, kMaxPitch);
 }
 
 void EditorCamera::look(float dx, float dy) {
@@ -133,17 +132,33 @@ void EditorCamera::change_fly_speed(float notches) { fly_speed = std::clamp(fly_
 
 // ---- Gizmos ----
 
-Vec3 handle_axis(Handle h) {
+int axis_index(Handle h) {
     switch (h) {
     case Handle::MoveX:
-    case Handle::RotateX: return {1, 0, 0};
+    case Handle::RotateX:
+    case Handle::ScaleX: return 0;
+    case Handle::MoveY:
+    case Handle::RotateY:
+    case Handle::ScaleY: return 1;
     case Handle::MoveZ:
-    case Handle::RotateZ: return {0, 0, 1};
+    case Handle::RotateZ:
+    case Handle::ScaleZ: return 2;
+    default: return -1;
+    }
+}
+
+Vec3 handle_axis(Handle h) {
+    switch (axis_index(h)) {
+    case 0: return {1, 0, 0};
+    case 2: return {0, 0, 1};
     default: return {0, 1, 0};
     }
 }
 
 bool is_rotate(Handle h) { return h == Handle::RotateX || h == Handle::RotateY || h == Handle::RotateZ; }
+bool is_scale(Handle h) { return h == Handle::ScaleX || h == Handle::ScaleY || h == Handle::ScaleZ || h == Handle::ScaleAll; }
+
+float snap(float v, float step) { return step > 0.0f ? std::round(v / step) * step : v; }
 
 namespace {
 
@@ -169,7 +184,7 @@ std::pair<Vec3, Vec3> plane_basis(Vec3 n) {
 
 } // namespace
 
-Handle pick_handle(const Ray& ray, GizmoMode mode, Vec3 center, float size) {
+Handle pick_handle(const Ray& ray, GizmoMode mode, Vec3 center, float size, math::Quat orientation) {
     Handle best = Handle::None;
     float best_t = std::numeric_limits<float>::max();
     const float tolerance = size * 0.09f;
@@ -193,6 +208,18 @@ Handle pick_handle(const Ray& ray, GizmoMode mode, Vec3 center, float size) {
                 best_t = *t;
             }
         }
+    } else if (mode == GizmoMode::Scale) {
+        for (Handle h : {Handle::ScaleX, Handle::ScaleY, Handle::ScaleZ}) {
+            const auto [d2, t] = ray_segment(ray, center, center + math::rotate(orientation, handle_axis(h)) * size);
+            consider(h, d2, t);
+        }
+        // The centre cube wins near the middle, where all three axes meet.
+        const float s = std::max(0.0f, dot(center - ray.origin, ray.dir) / dot(ray.dir, ray.dir));
+        const Vec3 off = ray.origin + ray.dir * s - center;
+        if (dot(off, off) <= (kScaleAllRadius * size) * (kScaleAllRadius * size)) {
+            best = Handle::ScaleAll;
+            best_t = s;
+        }
     } else if (mode == GizmoMode::Rotate) {
         // Rings: closest approach to the circle, sampled (robust when a ring is seen edge-on).
         constexpr int kSamples = 72;
@@ -211,13 +238,20 @@ Handle pick_handle(const Ray& ray, GizmoMode mode, Vec3 center, float size) {
     return best;
 }
 
-std::optional<GizmoDrag> GizmoDrag::begin(Handle handle, const Ray& ray, Vec3 center, Vec3 view_dir) {
+std::optional<GizmoDrag> GizmoDrag::begin(Handle handle, const Ray& ray, Vec3 center, Vec3 view_dir, float size,
+                                          math::Quat orientation) {
     if (handle == Handle::None) return std::nullopt;
     GizmoDrag d;
     d.handle_ = handle;
     d.center_ = center;
-    const Vec3 axis = handle_axis(handle);
-    if (is_rotate(handle) || handle == Handle::MoveXZ) {
+    d.size_ = std::max(size, 1e-4f);
+    const Vec3 axis = is_scale(handle) ? math::rotate(orientation, handle_axis(handle)) : handle_axis(handle);
+    d.axis_ = axis;
+    if (handle == Handle::ScaleAll) {
+        d.plane_normal_ = -normalize(view_dir);
+        const Vec3 right = normalize(cross(view_dir, {0, 1, 0}));
+        d.diagonal_ = normalize(right + cross(right, view_dir));
+    } else if (is_rotate(handle) || handle == Handle::MoveXZ) {
         d.plane_normal_ = axis;
     } else {
         // A plane that contains the axis and faces the camera as much as possible.
@@ -249,8 +283,22 @@ Vec3 GizmoDrag::translation(const Ray& ray) const {
     if (!p) return {};
     const Vec3 delta = *p - start_;
     if (handle_ == Handle::MoveXZ) return {delta.x, 0.0f, delta.z};
-    const Vec3 axis = handle_axis(handle_);
-    return axis * dot(delta, axis);
+    return axis_ * dot(delta, axis_);
+}
+
+Vec3 GizmoDrag::scale(const Ray& ray) const {
+    const auto p = hit(ray);
+    if (!p) return {1, 1, 1};
+    if (handle_ == Handle::ScaleAll) {
+        const float f = std::max(0.01f, 1.0f + dot(*p - start_, diagonal_) / size_);
+        return {f, f, f};
+    }
+    const float from = dot(start_ - center_, axis_);
+    if (std::fabs(from) < 1e-4f) return {1, 1, 1};
+    const float f = std::max(0.01f, dot(*p - center_, axis_) / from);
+    Vec3 r{1, 1, 1};
+    (axis_index(handle_) == 0 ? r.x : axis_index(handle_) == 1 ? r.y : r.z) = f;
+    return r;
 }
 
 float GizmoDrag::angle(const Ray& ray) {

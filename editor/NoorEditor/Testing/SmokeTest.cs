@@ -155,6 +155,7 @@ internal static class SmokeTest
 
         // 7. Viewport interaction with real (posted) mouse input on the engine's child window.
         await ViewportInteraction(window, id, Check, Shot);
+        await ScaleSnapAndComponents(window, settings, id, Check, Shot);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -353,6 +354,93 @@ internal static class SmokeTest
         check(looked is { } l && l.X < sx0 - 20 && Math.Abs(l.Distance - d1) < 0.01,
               "fly: mouse-look turns the view without moving the camera");
         doc.SetTool(EditorTool.Move);
+    }
+
+    private static Vec3 Rotate(Quat q, Vec3 v)
+    {
+        // v' = q v q*, expanded
+        var (x, y, z, w) = (q.X, q.Y, q.Z, q.W);
+        var tx = 2 * (y * v.Z - z * v.Y);
+        var ty = 2 * (z * v.X - x * v.Z);
+        var tz = 2 * (x * v.Y - y * v.X);
+        return new Vec3(v.X + w * tx + (y * tz - z * ty), v.Y + w * ty + (z * tx - x * tz), v.Z + w * tz + (x * ty - y * tx));
+    }
+
+    private static async Task ScaleSnapAndComponents(MainWindow window, EditorSettings settings, string rootId,
+                                                     Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var panel = window.ViewportView!;
+        var vp = panel.Viewport;
+        var hwnd = vp.NativeWindow;
+        async Task Settle()
+        {
+            await Task.Delay(250);
+            panel.DrainEvents();
+        }
+        doc.Select(rootId);
+        var t0 = doc.Selected!.Transform;
+        var p0 = t0.Position;
+        vp.Frame(doc.Subtree(rootId));
+        await Task.Delay(300);
+
+        // Scale gizmo: the X handle follows the building's rotation; pull its tip from 0.95 to 1.9.
+        doc.SetTool(EditorTool.Scale);
+        await Task.Delay(300);
+        shot(window, "editor_7_scale_gizmo.png");
+        var size = Native.GizmoScreenScale * (vp.WorldToScreen(p0)?.Distance ?? 0);
+        var axis = Rotate(t0.Rotation, new Vec3(1, 0, 0));
+        var path = new List<(float X, float Y)>();
+        for (var i = 0; i <= 6; i++)
+        {
+            var along = size * (0.95 + 0.95 * i / 6.0);
+            if (vp.WorldToScreen(new Vec3(p0.X + axis.X * along, p0.Y + axis.Y * along, p0.Z + axis.Z * along)) is { } s) path.Add((s.X, s.Y));
+        }
+        await Drag(hwnd, path);
+        await Settle();
+        var scaled = doc.Selected!.Transform.Scale;
+        check(Math.Abs(scaled.X - 2.0) < 0.1 && Math.Abs(scaled.Y - 1) < 1e-6 && Math.Abs(scaled.Z - 1) < 1e-6,
+              $"scale gizmo stretches along the building's own X (scale {Num.Format(scaled.X)}, expected 2)");
+        check(doc.Scene.UndoLabel == "Scale" && doc.Undo() && doc.Selected!.Transform.Scale == t0.Scale, "undo gizmo scale");
+
+        // Snapping: with a 1 m grid, a 2.37 m drag along X lands on a whole metre.
+        var prefs = settings.Preferences.Copy();
+        prefs.Snap = true;
+        prefs.MoveStep = 1.0;
+        settings.SetPreferences(prefs);
+        doc.SetTool(EditorTool.Move);
+        await Task.Delay(300);
+        path.Clear();
+        for (var i = 0; i <= 5; i++)
+        {
+            var along = 0.6 * size + 2.37 * i / 5.0;
+            if (vp.WorldToScreen(p0 with { X = p0.X + along }) is { } s) path.Add((s.X, s.Y));
+        }
+        await Drag(hwnd, path);
+        await Settle();
+        var snappedX = doc.Selected!.Transform.Position.X;
+        check(Math.Abs(snappedX - Math.Round(snappedX)) < 1e-4 && Math.Abs(snappedX - (p0.X + 2.37)) < 0.75,
+              $"snapping lands moves on the 1 m grid (x = {Num.Format(snappedX)}, from {Num.Format(p0.X)})");
+        check(doc.Undo(), "undo snapped move");
+        prefs = settings.Preferences.Copy();
+        prefs.Snap = false;
+        prefs.FlySpeed = 20;
+        settings.SetPreferences(prefs);
+        var saved = File.ReadAllText(EditorSettings.FilePath);
+        check(saved.Contains("\"FlySpeed\": 20") && saved.Contains("\"Snap\": false"), "preferences are saved");
+
+        // Components: add, edit a field, undo, remove, undo (the Inspector's own code path).
+        var comps = window.Inspector!.Components;
+        check(comps.SetComponent("smoke_test", new System.Text.Json.Nodes.JsonObject { ["speed"] = 1.0, ["label"] = "hi" }),
+              "add a custom component");
+        check(comps.SetField("smoke_test", "speed", System.Text.Json.Nodes.JsonValue.Create(2.5)) &&
+              doc.Selected!.Components["smoke_test"]?["speed"]?.GetValue<double>() == 2.5, "edit a component field");
+        check(doc.Undo() && doc.Selected!.Components["smoke_test"]?["speed"]?.GetValue<double>() == 1.0, "undo a field edit");
+        await Task.Delay(200);
+        shot(window, "editor_8_components.png");
+        check(comps.SetComponent("smoke_test", null) && !doc.Selected!.Components.ContainsKey("smoke_test"), "remove a component");
+        check(doc.Undo() && doc.Selected!.Components.ContainsKey("smoke_test"), "undo the removal");
+        check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("smoke_test"), "undo back to no component");
     }
 
     private static async Task<T?> WaitFor<T>(Func<T?> read, Func<T?, bool> done, double seconds) where T : struct

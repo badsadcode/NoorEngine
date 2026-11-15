@@ -12,8 +12,8 @@ namespace NoorEditor.Panels;
 
 /// <summary>
 /// Shows the selected entity. Name and transform are editable; each committed field (Enter or
-/// leaving the box) becomes one engine command, so it is one undo step. Components are shown
-/// read-only for now (component editors come with the component registry).
+/// leaving the box) becomes one engine command, so it is one undo step. Components are edited
+/// by <see cref="ComponentsEditor"/>.
 /// </summary>
 public sealed class InspectorPanel : ScrollViewer
 {
@@ -28,11 +28,10 @@ public sealed class InspectorPanel : ScrollViewer
     private readonly TextBlock _prefabNote = new() { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = NoorTheme.Brush(NoorTheme.Warn) };
     private readonly TextBox[,] _fields = new TextBox[3, 3];
     private readonly TextBlock _details = new() { FontSize = 11, TextWrapping = TextWrapping.Wrap, Classes = { "muted" } };
-    private readonly TextBlock _components = new()
-    {
-        FontSize = 11, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
-        Foreground = NoorTheme.Brush(NoorTheme.TextMuted),
-    };
+    private readonly ComponentsEditor _components;
+
+    /// <summary>The component list (smoke test access).</summary>
+    public ComponentsEditor Components => _components;
     private bool _loading;
 
     public event Action<string>? FrameRequested;
@@ -40,6 +39,7 @@ public sealed class InspectorPanel : ScrollViewer
     public InspectorPanel(EditorDocument doc)
     {
         _doc = doc;
+        _components = new ComponentsEditor(doc);
         Content = _body;
         _body.Children.Add(_placeholder);
         _body.Children.Add(_content);
@@ -84,7 +84,7 @@ public sealed class InspectorPanel : ScrollViewer
 
         _content.Children.Add(new TextBlock { Text = "Entity", Classes = { "section" }, Margin = new Thickness(0, 8, 0, 0) });
         _content.Children.Add(_details);
-        _content.Children.Add(new TextBlock { Text = "Components (read-only)", Classes = { "section" }, Margin = new Thickness(0, 8, 0, 0) });
+        _content.Children.Add(new TextBlock { Text = "Components", Classes = { "section" }, Margin = new Thickness(0, 8, 0, 0) });
         _content.Children.Add(_components);
 
     }
@@ -162,9 +162,7 @@ public sealed class InspectorPanel : ScrollViewer
             var tags = e.Tags.Count > 0 ? string.Join(", ", e.Tags) : "none";
             _details.Text = $"Id  {e.Id}\nLayer  {(e.Layer.Length > 0 ? e.Layer : "default")}\nTags  {tags}" +
                             (e.Instance != null ? $"\nInstance  {e.Instance}" : "");
-            _components.Text = e.Components.Count == 0
-                ? "none"
-                : string.Join("\n\n", e.Components.Select(kv => $"{kv.Key}\n{kv.Value?.ToJsonString(new JsonSerializerOptions { WriteIndented = true })}"));
+            _components.Show(e);
         }
         finally
         {

@@ -60,7 +60,7 @@ public sealed class MainWindow : Window
         ViewportDockable = new PanelDocument
         {
             Id = "Viewport", Title = "Viewport", CanClose = false,
-            CreateView = () => ViewportView = new ViewportPanel(Doc),
+            CreateView = () => ViewportView = new ViewportPanel(Doc, _settings),
         };
 
         var root = new DockPanel();
@@ -246,6 +246,8 @@ public sealed class MainWindow : Window
         var frame = new MenuItem { Header = "_Frame Selected", InputGesture = KeyGesture.Parse("F") };
         frame.Click += (_, _) => FrameSelectedOrAll();
 
+        var preferences = new MenuItem { Header = "_Preferences…" };
+        preferences.Click += async (_, _) => await ShowPreferences();
         var resetLayout = new MenuItem { Header = "_Reset Layout" };
         resetLayout.Click += (_, _) => ResetLayout();
         MenuItem Tool(string header, string key, EditorTool tool)
@@ -267,7 +269,8 @@ public sealed class MainWindow : Window
                 new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), closeProject, exit } },
                 new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, new Separator(),
                                                          Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
-                                                         Tool("_Rotate tool", "E", EditorTool.Rotate) } },
+                                                         Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
+                                                         new Separator(), preferences } },
                 new MenuItem { Header = "_Window", Items = { resetLayout } },
                 new MenuItem { Header = "_Help", Items = { about } },
             },
@@ -341,6 +344,13 @@ public sealed class MainWindow : Window
     }
 
     // ---- Commands ----
+
+    public async Task ShowPreferences()
+    {
+        var dialog = new PreferencesWindow(_settings.Preferences);
+        await dialog.ShowDialog(this);
+        if (dialog.Result != null) _settings.SetPreferences(dialog.Result);
+    }
 
     /// <summary>Closes without the unsaved-changes prompt (automated tests).</summary>
     public void CloseWithoutPrompt()
@@ -470,6 +480,9 @@ public sealed class MainWindow : Window
                 break;
             case Key.E when e.KeyModifiers == KeyModifiers.None && !inText:
                 Doc.SetTool(EditorTool.Rotate);
+                break;
+            case Key.R when e.KeyModifiers == KeyModifiers.None && !inText:
+                Doc.SetTool(EditorTool.Scale);
                 break;
             case Key.Delete when !inText && ViewportHasFocus():
                 DeleteSelected();

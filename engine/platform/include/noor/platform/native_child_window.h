@@ -24,7 +24,8 @@ struct PointerState {
     bool left_down = false;
     bool right_down = false;
     bool middle_down = false;
-    bool alt = false;  // Alt held at the last mouse message
+    bool alt = false;   // Alt held at the last mouse message
+    bool ctrl = false;  // Ctrl held at the last mouse message
 };
 
 // Keys the viewport itself uses (fly camera), as bits of NativeChildWindow::keys().
@@ -69,6 +70,7 @@ public:
         std::atomic<bool> middle_down{false};
         std::atomic<std::int32_t> wheel{0};  // raw WHEEL_DELTA units
         std::atomic<bool> alt{false};
+        std::atomic<bool> ctrl{false};
         std::atomic<std::uint32_t> keys{0};
     };
 

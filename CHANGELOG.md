@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 3 in progress (NoorEditor)
 
+### 2026-11-15 — Milestone 3, part 3: scale gizmo, snapping, preferences, component editing
+**Added**
+- Editor API **v3**: `NOOR_GIZMO_SCALE` (handles along the entity's own axes + a uniform centre
+  cube) and `noor_viewport_set_options` (snap on/off and steps, fly speed, look sensitivity,
+  gizmo size). Snapping: moves land on a world grid, rotations on angle steps, scales on scale
+  steps; holding Ctrl while dragging inverts snapping. Each drag's result is computed once per
+  frame and used both for the preview and the final command, so what you see is what you get.
+- NoorEditor: **R** = scale tool; **Snap** toggle in the viewport toolbar; **Edit ▸ Preferences**
+  (camera and gizmo settings, saved per user); the **Inspector edits components**: numbers, text,
+  true/false and short number lists, add/remove fields, add (marker or custom) and remove
+  components, each change one undo step. Engine-managed components (model, mesh, prefab) stay
+  read-only.
+- Tests: snap and scale-handle unit tests (one caught a divide-by-zero in the centre-cube pick);
+  the editor smoke test drags the scale handle (2.01x), makes a snapped move (lands on x = 15),
+  saves preferences and edits/removes/undoes a component. 101/101 Debug.
+
 ### 2026-11-15 — Fly mode
 Requested after the first hands-on try of the gizmos on the street demo ("no fly mode?").
 - Viewport camera: **hold the right button** to look around and fly (WASD, Q/E down/up, Shift x4,

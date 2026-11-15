@@ -49,6 +49,14 @@ public sealed class VulkanViewport : NativeControlHost
     private string _selectionJson = "[]";
     private string? _gizmoEntity;
     private int _gizmoMode;
+    private string? _optionsJson;
+
+    /// <summary>Viewport preferences (noor_viewport_set_options JSON).</summary>
+    public void SetOptions(string json)
+    {
+        _optionsJson = json;
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_options(_viewport, json);
+    }
 
     /// <summary>Highlights these entities (pass a whole subtree to highlight an object).</summary>
     public void SetSelection(IReadOnlyList<string> ids)
@@ -95,6 +103,7 @@ public sealed class VulkanViewport : NativeControlHost
         if (_doc.Handle != IntPtr.Zero) Native.noor_viewport_set_document(_viewport, _doc.Handle);
         Native.noor_viewport_set_selection(_viewport, _selectionJson);
         Native.noor_viewport_set_gizmo(_viewport, _gizmoEntity, _gizmoMode);
+        if (_optionsJson != null) Native.noor_viewport_set_options(_viewport, _optionsJson);
         CreatedCount++;
         Active = this;
         return new PlatformHandle(Native.noor_viewport_native_handle(_viewport), "HWND");

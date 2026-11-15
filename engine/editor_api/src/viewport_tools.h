@@ -56,7 +56,8 @@ struct EditorCamera {
     float pitch = 0.45f;
     float distance = 30.0f;
     float fov_y = math::radians(50.0f);
-    float fly_speed = 8.0f;  // metres per second (Shift: x4)
+    float fly_speed = 8.0f;     // metres per second (Shift: x4)
+    float turn_speed = 0.006f;  // radians per pixel (look and orbit)
 
     [[nodiscard]] math::Vec3 eye() const;
     [[nodiscard]] math::Mat4 view() const;
@@ -72,26 +73,35 @@ struct EditorCamera {
     void change_fly_speed(float notches);        // wheel while flying
 };
 
-// ---- Gizmos (world-aligned, centered on the entity's origin, `size` = arrow length in metres) ----
+// ---- Gizmos (centered on the entity's origin, `size` = arrow length in metres) ----
+// Move and rotate gizmos are world-aligned; the scale gizmo follows the entity's rotation
+// (`orientation`), because scale is applied along the entity's own axes.
 
-enum class GizmoMode { None = 0, Move = 1, Rotate = 2 };
-enum class Handle { None, MoveX, MoveY, MoveZ, MoveXZ, RotateX, RotateY, RotateZ };
+enum class GizmoMode { None = 0, Move = 1, Rotate = 2, Scale = 3 };
+enum class Handle { None, MoveX, MoveY, MoveZ, MoveXZ, RotateX, RotateY, RotateZ, ScaleX, ScaleY, ScaleZ, ScaleAll };
 
-[[nodiscard]] math::Vec3 handle_axis(Handle h);  // unit world axis (Y for MoveXZ)
+[[nodiscard]] math::Vec3 handle_axis(Handle h);  // unit axis in gizmo space (Y for MoveXZ/ScaleAll)
 [[nodiscard]] bool is_rotate(Handle h);
+[[nodiscard]] bool is_scale(Handle h);
+[[nodiscard]] int axis_index(Handle h);  // 0/1/2 for X/Y/Z handles, -1 otherwise
+
+// Rounds v to the nearest multiple of step (step <= 0: unchanged).
+[[nodiscard]] float snap(float v, float step);
 
 // Ring radius and the move-plane square, relative to `size`.
 inline constexpr float kRingRadius = 0.85f;
 inline constexpr float kPlaneMin = 0.2f;
 inline constexpr float kPlaneMax = 0.45f;
+inline constexpr float kScaleAllRadius = 0.12f;  // the uniform-scale cube at the centre
 
 // Which handle the ray points at (the nearest one within a tolerance), or None.
-[[nodiscard]] Handle pick_handle(const Ray& ray, GizmoMode mode, math::Vec3 center, float size);
+[[nodiscard]] Handle pick_handle(const Ray& ray, GizmoMode mode, math::Vec3 center, float size, math::Quat orientation = {});
 
 // An ongoing drag. Start with begin_drag, then call translation()/angle() with each new ray.
 class GizmoDrag {
 public:
-    [[nodiscard]] static std::optional<GizmoDrag> begin(Handle handle, const Ray& ray, math::Vec3 center, math::Vec3 view_dir);
+    [[nodiscard]] static std::optional<GizmoDrag> begin(Handle handle, const Ray& ray, math::Vec3 center, math::Vec3 view_dir,
+                                                        float size = 1.0f, math::Quat orientation = {});
 
     [[nodiscard]] Handle handle() const noexcept { return handle_; }
     // Move handles: world translation since the drag started (along the axis or in the XZ plane).
@@ -99,6 +109,10 @@ public:
     // Rotate handles: radians about the handle axis since the drag started (right-hand rule),
     // accumulated across frames so it can exceed ±180°.
     [[nodiscard]] float angle(const Ray& ray);
+    // Scale handles: factor per gizmo axis since the drag started (1 = unchanged, never below 0.01).
+    // An axis handle scales by how far the grab point moved along its axis, relative to where it
+    // was grabbed; the centre cube scales uniformly as the pointer moves up/right.
+    [[nodiscard]] math::Vec3 scale(const Ray& ray) const;
 
 private:
     [[nodiscard]] std::optional<math::Vec3> hit(const Ray& ray) const;
@@ -106,7 +120,10 @@ private:
 
     Handle handle_ = Handle::None;
     math::Vec3 center_;
+    math::Vec3 axis_;          // the handle's axis in world space
     math::Vec3 plane_normal_;
+    math::Vec3 diagonal_;      // ScaleAll: screen up-right direction in world space
+    float size_ = 1.0f;
     math::Vec3 start_;  // first hit on the drag plane
     float last_raw_ = 0.0f;
     float total_ = 0.0f;

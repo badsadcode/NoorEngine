@@ -21,18 +21,21 @@ namespace NoorEditor.Panels;
 public sealed class ViewportPanel : DockPanel
 {
     private readonly EditorDocument _doc;
+    private readonly EditorSettings _settings;
+    private readonly ToggleButton _snap = new() { Content = "Snap", Classes = { "tool" } };
     private readonly DispatcherTimer _events = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
 
     public VulkanViewport Viewport { get; }
 
-    public ViewportPanel(EditorDocument doc)
+    public ViewportPanel(EditorDocument doc, EditorSettings settings)
     {
         _doc = doc;
+        _settings = settings;
         Viewport = new VulkanViewport(doc);
 
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(6, 3) };
-        foreach (var (tool, label, key) in new[] { (EditorTool.Select, "Select", "Q"), (EditorTool.Move, "Move", "W"), (EditorTool.Rotate, "Rotate", "E") })
+        foreach (var (tool, label, key) in new[] { (EditorTool.Select, "Select", "Q"), (EditorTool.Move, "Move", "W"), (EditorTool.Rotate, "Rotate", "E"), (EditorTool.Scale, "Scale", "R") })
         {
             var button = new ToggleButton { Content = label, Classes = { "tool" } };
             ToolTip.SetTip(button, $"{label} ({key})");
@@ -40,6 +43,14 @@ public sealed class ViewportPanel : DockPanel
             _toolButtons[tool] = button;
             toolbar.Children.Add(button);
         }
+        ToolTip.SetTip(_snap, "Snap gizmo drags to steps (hold Ctrl while dragging to invert). Steps: Edit ▸ Preferences");
+        _snap.Click += (_, _) =>
+        {
+            var p = _settings.Preferences.Copy();
+            p.Snap = _snap.IsChecked == true;
+            _settings.SetPreferences(p);
+        };
+        toolbar.Children.Add(_snap);
         toolbar.Children.Add(new Border { Width = 1, Background = NoorTheme.Brush(NoorTheme.Border), Margin = new Thickness(6, 4) });
         var frameAll = new Button { Content = "Frame all", Classes = { "tool" } };
         frameAll.Click += (_, _) => Viewport.Frame(null);
@@ -49,7 +60,7 @@ public sealed class ViewportPanel : DockPanel
         toolbar.Children.Add(frameSel);
         toolbar.Children.Add(new TextBlock
         {
-            Text = "Click select · Hold right: look + WASD/QE fly (Shift fast, wheel speed) · Alt+drag orbit · Middle pan · Wheel zoom · F frame",
+            Text = "Click select · Hold right: look + WASD/QE fly · Alt+drag orbit · Middle pan · Wheel zoom · F frame",
             FontSize = 11, Classes = { "muted" }, Margin = new Thickness(12, 0, 0, 0),
         });
         foreach (var c in toolbar.Children) c.VerticalAlignment = VerticalAlignment.Center;
@@ -68,6 +79,8 @@ public sealed class ViewportPanel : DockPanel
         _doc.SelectionChanged += SyncViewport;
         _doc.SceneChanged += SyncViewport;
         _doc.ToolChanged += OnToolChanged;
+        _settings.PreferencesChanged += ApplyPreferences;
+        ApplyPreferences();
         SyncToolButtons();
         SyncViewport();
         _events.Start();
@@ -80,6 +93,13 @@ public sealed class ViewportPanel : DockPanel
         _doc.SelectionChanged -= SyncViewport;
         _doc.SceneChanged -= SyncViewport;
         _doc.ToolChanged -= OnToolChanged;
+        _settings.PreferencesChanged -= ApplyPreferences;
+    }
+
+    private void ApplyPreferences()
+    {
+        _snap.IsChecked = _settings.Preferences.Snap;
+        Viewport.SetOptions(_settings.Preferences.ToViewportJson());
     }
 
     private void OnToolChanged()

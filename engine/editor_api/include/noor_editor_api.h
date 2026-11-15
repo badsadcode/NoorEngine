@@ -29,8 +29,9 @@ extern "C" {
 #endif
 
 /* 1: documents (ADR-025), viewports render documents.
- * 2: viewport selection highlight, gizmos and events (picking, gizmo edits). */
-#define NOOR_EDITOR_API_VERSION 2u
+ * 2: viewport selection highlight, gizmos and events (picking, gizmo edits).
+ * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size). */
+#define NOOR_EDITOR_API_VERSION 3u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -123,8 +124,16 @@ NOOR_API void noor_viewport_set_selection(noor_viewport* viewport, const char* e
 typedef enum noor_gizmo_mode {
     NOOR_GIZMO_NONE = 0,
     NOOR_GIZMO_MOVE = 1,   /* world-axis arrows + an XZ plane handle */
-    NOOR_GIZMO_ROTATE = 2  /* world-axis rings, around the entity's origin */
+    NOOR_GIZMO_ROTATE = 2, /* world-axis rings, around the entity's origin */
+    NOOR_GIZMO_SCALE = 3   /* entity-axis handles + a uniform centre cube */
 } noor_gizmo_mode;
+
+/* Viewport preferences as JSON; missing keys keep their value. Defaults:
+ *   {"snap": false, "move_step": 1.0, "rotate_step": 15.0, "scale_step": 0.1,
+ *    "fly_speed": 8.0, "look_sensitivity": 1.0, "gizmo_scale": 1.0}
+ * Snapping: moves land on a world grid of move_step metres, rotations on multiples of
+ * rotate_step degrees, scales on multiples of scale_step. Holding Ctrl while dragging inverts "snap". */
+NOOR_API void noor_viewport_set_options(noor_viewport* viewport, const char* options_json);
 
 /* Shows a transform gizmo on one entity (its id as a string; NULL hides it). Dragging it
  * previews the change in the viewport and, on release, reports a "transform" event: the
@@ -141,7 +150,7 @@ NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport);
 /* Projects a world point with the camera of the last drawn frame: out = {x, y, distance},
  * x/y in the viewport's physical pixels (origin top-left). Returns 0 if the point is behind
  * the camera or nothing was drawn yet. Gizmo arrows are NOOR_GIZMO_SCREEN_SCALE x their
- * distance from the camera long. */
+ * distance from the camera long (times the "gizmo_scale" option). */
 NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]);
 #define NOOR_GIZMO_SCREEN_SCALE 0.16f
 

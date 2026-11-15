@@ -141,3 +141,28 @@ TEST_CASE("editor camera: fly moves at fly_speed, Shift is faster, a stalled fra
     cam.change_fly_speed(1);
     CHECK(cam.fly_speed == doctest::Approx(12.5f));
 }
+
+TEST_CASE("viewport tools: snap rounds to the step") {
+    CHECK(snap(1.26f, 0.25f) == doctest::Approx(1.25f));
+    CHECK(snap(-0.8f, 1.0f) == doctest::Approx(-1.0f));
+    CHECK(snap(0.37f, 0.0f) == doctest::Approx(0.37f));  // step 0: off
+}
+
+TEST_CASE("viewport tools: scale handles follow the entity's rotation and scale by grab distance") {
+    const Vec3 c{0, 0, 0};
+    // Turned 90 degrees about Y: the entity's X axis points along world -Z.
+    const auto turned = noor::math::Quat::from_axis_angle({0, 1, 0}, noor::math::kPi / 2);
+    CHECK(pick_handle({{0, 10, -0.6f}, {0, -1, 0}}, GizmoMode::Scale, c, 1.0f, turned) == Handle::ScaleX);
+    CHECK(pick_handle({{0.6f, 10, 0}, {0, -1, 0}}, GizmoMode::Scale, c, 1.0f, turned) != Handle::ScaleX);
+    CHECK(pick_handle({{0.02f, 0.03f, 10}, {0, 0, -1}}, GizmoMode::Scale, c, 1.0f) == Handle::ScaleAll);
+
+    // Grab the X handle at 0.9 m and pull it to 1.8 m: twice as wide.
+    const Vec3 eye{0.9f, 5, 8};
+    auto drag = GizmoDrag::begin(Handle::ScaleX, {eye, noor::math::normalize(Vec3{0.9f, 0, 0} - eye)}, c,
+                                 noor::math::normalize(Vec3{0, -5, -8}), 1.0f);
+    REQUIRE(drag);
+    const Vec3 f = drag->scale({eye, noor::math::normalize(Vec3{1.8f, 0, 0} - eye)});
+    CHECK(f.x == doctest::Approx(2.0f).epsilon(1e-3));
+    CHECK(f.y == doctest::Approx(1.0f));
+    CHECK(f.z == doctest::Approx(1.0f));
+}

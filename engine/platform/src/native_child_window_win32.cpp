@@ -37,7 +37,10 @@ NativeChildWindow::Input* input_of(HWND hwnd) {
 
 LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     NativeChildWindow::Input* input = input_of(hwnd);
-    if (input && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) input->alt.store(GetKeyState(VK_MENU) < 0);
+    if (input && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+        input->alt.store(GetKeyState(VK_MENU) < 0);
+        input->ctrl.store((wparam & MK_CONTROL) != 0);
+    }
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;  // Vulkan owns every pixel; erasing would flicker
@@ -173,7 +176,7 @@ NativeChildWindow::~NativeChildWindow() {
 
 PointerState NativeChildWindow::pointer_state() const noexcept {
     return {input_->x.load(), input_->y.load(), input_->inside.load(), input_->left_down.load(),
-            input_->right_down.load(), input_->middle_down.load(), input_->alt.load()};
+            input_->right_down.load(), input_->middle_down.load(), input_->alt.load(), input_->ctrl.load()};
 }
 
 std::uint32_t NativeChildWindow::keys() const noexcept { return input_->keys.load(); }

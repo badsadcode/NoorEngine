@@ -9,7 +9,7 @@ namespace NoorEditor.Model;
 /// latest JSON snapshots, tracks the selection (an editor concern) and raises change events.
 /// UI thread only.
 /// </summary>
-public enum EditorTool { Select = 0, Move = 1, Rotate = 2 }
+public enum EditorTool { Select = 0, Move = 1, Rotate = 2, Scale = 3 }  // values match noor_gizmo_mode
 
 public sealed class EditorDocument : IDisposable
 {

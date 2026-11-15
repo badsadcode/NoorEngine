@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 2;
+    public const uint ExpectedApiVersion = 3;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -53,6 +53,7 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_viewport_set_selection(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_gizmo(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityId, int mode);
     [DllImport(Dll)] private static extern IntPtr noor_viewport_poll_events(IntPtr viewport);
+    [DllImport(Dll)] public static extern void noor_viewport_set_options(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string optionsJson);
     [DllImport(Dll)] public static extern int noor_viewport_world_to_screen(IntPtr viewport, float[] world, float[] output);
 
     /// <summary>Gizmo arrow length relative to its distance from the camera (NOOR_GIZMO_SCREEN_SCALE).</summary>

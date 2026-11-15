@@ -67,6 +67,12 @@ struct noor_viewport {
     std::optional<Guid> gizmo_entity;
     ed::GizmoMode gizmo_mode = ed::GizmoMode::None;
     std::uint64_t selection_version = 0;
+    struct Options {
+        bool snap = false;
+        float move_step = 1.0f, rotate_step = 15.0f, scale_step = 0.1f;
+        float fly_speed = 8.0f, look_sensitivity = 1.0f, gizmo_scale = 1.0f;
+    } options;
+    std::uint64_t options_version = 0;
 
     // The camera of the last drawn frame (for noor_viewport_world_to_screen).
     std::mutex camera_mutex;
@@ -164,6 +170,16 @@ Geometry make_arrow() {
     return g;
 }
 
+// Scale handle along +Y: a thin shaft with a cube at the tip.
+Geometry make_scale_handle() {
+    Geometry g = make_box({1, 1, 1}, {-0.012f, 0.0f, -0.012f}, {0.012f, 0.9f, 0.012f});
+    const Geometry tip = make_box({1, 1, 1}, {-0.05f, 0.9f, -0.05f}, {0.05f, 1.0f, 0.05f});
+    const auto base = static_cast<std::uint32_t>(g.first.size());
+    g.first.insert(g.first.end(), tip.first.begin(), tip.first.end());
+    for (const auto i : tip.second) g.second.push_back(base + i);
+    return g;
+}
+
 // Gizmo ring around the Y axis.
 Geometry make_ring(float radius, float tube) {
     constexpr int kMajor = 72, kMinor = 8;
@@ -200,10 +216,13 @@ Mat4 axis_frame(ed::Handle h) {
 std::uint32_t handle_color(ed::Handle h) {
     switch (h) {
     case ed::Handle::MoveX:
-    case ed::Handle::RotateX: return 0xF06A6A;
+    case ed::Handle::RotateX:
+    case ed::Handle::ScaleX: return 0xF06A6A;
     case ed::Handle::MoveZ:
-    case ed::Handle::RotateZ: return 0x6AA8F0;
+    case ed::Handle::RotateZ:
+    case ed::Handle::ScaleZ: return 0x6AA8F0;
     case ed::Handle::MoveXZ: return 0xFBBF24;
+    case ed::Handle::ScaleAll: return 0xE7E3F2;
     default: return 0x7BD88F;
     }
 }
@@ -269,6 +288,9 @@ void render_thread_main(noor_viewport* vp) {
     const auto ring = upload(make_ring(ed::kRingRadius, 0.012f), "Gizmo ring");
     const auto plane = upload(make_box({1, 1, 1}, {ed::kPlaneMin, -0.004f, ed::kPlaneMin}, {ed::kPlaneMax, 0.004f, ed::kPlaneMax}), "Gizmo plane");
     const auto hub = upload(make_box({1, 1, 1}, {-0.04f, -0.04f, -0.04f}, {0.04f, 0.04f, 0.04f}), "Gizmo center");
+    const auto scale_handle = upload(make_scale_handle(), "Gizmo scale handle");
+    const float cube = ed::kScaleAllRadius * 0.8f;
+    const auto scale_all = upload(make_box({1, 1, 1}, {-cube, -cube, -cube}, {cube, cube, cube}), "Gizmo uniform scale");
 
     std::unordered_map<std::string, std::optional<std::vector<LoadedMesh>>> assets;  // by absolute path
     std::shared_ptr<const ed::RenderSnapshot> shown;
@@ -293,11 +315,21 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<Guid> gizmo_entity;
     ed::GizmoMode gizmo_mode = ed::GizmoMode::None;
     std::uint64_t seen_selection_version = ~0ull;
+    std::uint64_t seen_options_version = ~0ull;
+    noor_viewport::Options options;
     std::vector<char> draw_selected, draw_in_gizmo_subtree;
     bool flags_dirty = true;
 
     // Pointer interaction.
     std::optional<ed::GizmoDrag> drag;
+    Vec3 drag_center{};  // gizmo centre when the drag started (snapping is relative to it)
+    // The result of the drag so far: recomputed every frame, used for the preview and on release.
+    struct DragResult {
+        Mat4 delta = Mat4::identity();
+        noor::scene::Transform local;
+        bool changed = false;
+        const char* label = "Move";
+    } drag_result;
     std::optional<Preview> preview;
     ed::Handle hovered = ed::Handle::None;
     bool click_pending = false;
@@ -330,6 +362,12 @@ void render_thread_main(noor_viewport* vp) {
             std::scoped_lock lock(vp->doc_mutex);
             channel = vp->channel;
             frame_request = std::exchange(vp->frame_request, std::nullopt);
+            if (vp->options_version != seen_options_version) {
+                seen_options_version = vp->options_version;
+                options = vp->options;
+                camera.fly_speed = options.fly_speed;
+                camera.turn_speed = 0.006f * options.look_sensitivity;
+            }
             if (vp->selection_version != seen_selection_version) {
                 seen_selection_version = vp->selection_version;
                 selection = vp->selection;
@@ -498,59 +536,87 @@ void render_thread_main(noor_viewport* vp) {
         if (target) {
             const Mat4 world = preview ? preview->delta * target->world : target->world;
             gizmo_center = world.transform_point({0, 0, 0});
-            gizmo_size = std::max(0.05f, noor::math::length(gizmo_center - basis.eye) * ed::kGizmoScreenScale);
+            gizmo_size = std::max(0.05f, noor::math::length(gizmo_center - basis.eye) * ed::kGizmoScreenScale * options.gizmo_scale);
         }
+        // Scale handles follow the entity's own axes; move and rotate are world-aligned.
+        const Quat gizmo_orientation = target && gizmo_mode == ed::GizmoMode::Scale ? target->world_rotation : Quat{};
 
         const bool pressed = pointer.left_down && !last_pointer.left_down;
         const bool released = !pointer.left_down && last_pointer.left_down;
-        if (!drag) hovered = target && pointer.inside ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
+        if (!drag) hovered = target && pointer.inside ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size, gizmo_orientation) : ed::Handle::None;
 
         if (pressed && alt_orbit) {
             click_pending = false;
         } else if (pressed) {
             // Hit-test at the press itself (hover tracking may not have run, e.g. a click that
             // arrives without a preceding move).
-            const ed::Handle grabbed = target ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size) : ed::Handle::None;
+            const ed::Handle grabbed = target ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size, gizmo_orientation) : ed::Handle::None;
             if (grabbed != ed::Handle::None) {
                 hovered = grabbed;
-                drag = ed::GizmoDrag::begin(grabbed, ray, gizmo_center, basis.forward);
+                drag = ed::GizmoDrag::begin(grabbed, ray, gizmo_center, basis.forward, gizmo_size, gizmo_orientation);
+                drag_center = gizmo_center;
                 if (drag) preview = Preview{target->id};
             }
             click_pending = !drag;
             press = pointer;
         }
         if (drag && preview && target) {
-            if (ed::is_rotate(drag->handle())) {
-                const float angle = drag->angle(ray);
-                preview->delta = noor::math::translation(gizmo_center) * noor::math::rotation(ed::handle_axis(drag->handle()), angle) *
-                                 noor::math::translation(-gizmo_center);
+            // The drag so far, snapped if snapping is on (Ctrl inverts it), as a world-space delta for
+            // the preview and as the entity's new local transform for the event on release.
+            const bool snapping = options.snap != pointer.ctrl;
+            const ed::Handle h = drag->handle();
+            const Vec3 c = drag_center;
+            DragResult res;
+            res.local = target->local;
+            const auto parent = target->parent ? entity_by_id.find(*target->parent) : entity_by_id.end();
+            const Mat4 parent_world = parent != entity_by_id.end() ? parent->second->world : Mat4::identity();
+            const Quat parent_rot = parent != entity_by_id.end() ? parent->second->world_rotation : Quat{};
+            if (ed::is_rotate(h)) {
+                float angle = drag->angle(ray);
+                if (snapping) angle = ed::snap(angle, noor::math::radians(options.rotate_step));
+                const Vec3 axis = ed::handle_axis(h);
+                res.delta = noor::math::translation(c) * noor::math::rotation(axis, angle) * noor::math::translation(-c);
+                res.local.rotation = noor::math::normalize_quat(noor::math::conjugate(parent_rot) * Quat::from_axis_angle(axis, angle) *
+                                                                parent_rot * res.local.rotation);
+                res.changed = std::fabs(angle) > 1e-5f;
+                res.label = "Rotate";
+            } else if (ed::is_scale(h)) {
+                Vec3 f = drag->scale(ray);
+                if (snapping) {
+                    auto snap_factor = [&](float factor, float current) {
+                        if (std::fabs(current) < 1e-6f) return factor;
+                        float target_scale = ed::snap(current * factor, options.scale_step);
+                        if (target_scale <= 0.0f) target_scale = options.scale_step > 0 ? options.scale_step : 0.01f;
+                        return target_scale / current;
+                    };
+                    f = {snap_factor(f.x, res.local.scale.x), snap_factor(f.y, res.local.scale.y), snap_factor(f.z, res.local.scale.z)};
+                }
+                const Mat4 rot = noor::math::to_mat4(target->world_rotation);
+                const Mat4 inv_rot = noor::math::to_mat4(noor::math::conjugate(target->world_rotation));
+                res.delta = noor::math::translation(c) * rot * noor::math::scale(f) * inv_rot * noor::math::translation(-c);
+                res.local.scale = {res.local.scale.x * f.x, res.local.scale.y * f.y, res.local.scale.z * f.z};
+                res.changed = noor::math::length(f - Vec3{1, 1, 1}) > 1e-5f;
+                res.label = "Scale";
             } else {
-                preview->delta = noor::math::translation(drag->translation(ray));
+                Vec3 d = drag->translation(ray);
+                if (snapping) {  // land on the world grid, on the axes being moved
+                    const bool all = h == ed::Handle::MoveXZ;
+                    if (h == ed::Handle::MoveX || all) d.x = ed::snap(c.x + d.x, options.move_step) - c.x;
+                    if (h == ed::Handle::MoveY) d.y = ed::snap(c.y + d.y, options.move_step) - c.y;
+                    if (h == ed::Handle::MoveZ || all) d.z = ed::snap(c.z + d.z, options.move_step) - c.z;
+                }
+                res.delta = noor::math::translation(d);
+                res.local.position = res.local.position + noor::math::transform_vector(noor::math::inverse(parent_world), d);
+                res.changed = noor::math::length(d) > 1e-6f;
             }
+            drag_result = res;
+            preview->delta = res.delta;
         }
         if (released) {
             if (drag && preview && target) {
-                // Turn the world-space change into the entity's new local transform.
-                noor::scene::Transform local = target->local;
-                const Mat4 parent_world = target->parent && entity_by_id.contains(*target->parent)
-                                              ? entity_by_id[*target->parent]->world : Mat4::identity();
-                const Quat parent_rot = target->parent && entity_by_id.contains(*target->parent)
-                                            ? entity_by_id[*target->parent]->world_rotation : Quat{};
-                const bool rotating = ed::is_rotate(drag->handle());
-                bool changed = false;
-                if (rotating) {
-                    const float angle = drag->angle(ray);
-                    const Quat world_delta = Quat::from_axis_angle(ed::handle_axis(drag->handle()), angle);
-                    local.rotation = noor::math::normalize_quat(noor::math::conjugate(parent_rot) * world_delta * parent_rot * local.rotation);
-                    changed = std::fabs(angle) > 1e-5f;
-                } else {
-                    const Vec3 d = drag->translation(ray);
-                    local.position = local.position + noor::math::transform_vector(noor::math::inverse(parent_world), d);
-                    changed = noor::math::length(d) > 1e-6f;
-                }
-                if (changed) {
-                    push_event(vp, {{"type", "transform"}, {"entity", target->id.to_string()}, {"label", rotating ? "Rotate" : "Move"},
-                                    {"transform", transform_json(local)}});
+                if (drag_result.changed) {
+                    push_event(vp, {{"type", "transform"}, {"entity", target->id.to_string()}, {"label", drag_result.label},
+                                    {"transform", transform_json(drag_result.local)}});
                     preview->shown_at_release = shown.get();
                     preview->released = std::chrono::steady_clock::now();
                 } else {
@@ -625,8 +691,12 @@ void render_thread_main(noor_viewport* vp) {
                     for (ed::Handle h : {ed::Handle::MoveX, ed::Handle::MoveY, ed::Handle::MoveZ}) gizmo(arrow, h, axis_frame(h));
                     gizmo(plane, ed::Handle::MoveXZ, Mat4::identity());
                     frame_draws.push_back({hub, place * sized, tint(0xE7E3F2, 1.0f), true});
-                } else {
+                } else if (gizmo_mode == ed::GizmoMode::Rotate) {
                     for (ed::Handle h : {ed::Handle::RotateX, ed::Handle::RotateY, ed::Handle::RotateZ}) gizmo(ring, h, axis_frame(h));
+                } else {
+                    const Mat4 orient = noor::math::to_mat4(gizmo_orientation);
+                    for (ed::Handle h : {ed::Handle::ScaleX, ed::Handle::ScaleY, ed::Handle::ScaleZ}) gizmo(scale_handle, h, orient * axis_frame(h));
+                    gizmo(scale_all, ed::Handle::ScaleAll, orient);
                 }
             }
             frame.camera.view = camera.view();
@@ -761,8 +831,34 @@ NOOR_API void noor_viewport_set_gizmo(noor_viewport* viewport, const char* entit
     }
     std::scoped_lock lock(viewport->doc_mutex);
     viewport->gizmo_entity = id;
-    viewport->gizmo_mode = mode == NOOR_GIZMO_MOVE ? ed::GizmoMode::Move : mode == NOOR_GIZMO_ROTATE ? ed::GizmoMode::Rotate : ed::GizmoMode::None;
+    viewport->gizmo_mode = mode == NOOR_GIZMO_MOVE     ? ed::GizmoMode::Move
+                           : mode == NOOR_GIZMO_ROTATE ? ed::GizmoMode::Rotate
+                           : mode == NOOR_GIZMO_SCALE  ? ed::GizmoMode::Scale
+                                                       : ed::GizmoMode::None;
     ++viewport->selection_version;
+}
+
+NOOR_API void noor_viewport_set_options(noor_viewport* viewport, const char* options_json) {
+    if (!viewport || !options_json) return;
+    auto parsed = noor::asset::parse_json(options_json, "viewport options");
+    if (!parsed || !parsed->is_object()) {
+        NOOR_LOG_WARN("Viewport", "Ignoring viewport options: not a JSON object");
+        return;
+    }
+    const auto& j = *parsed;
+    std::scoped_lock lock(viewport->doc_mutex);
+    auto& o = viewport->options;
+    auto num = [&](const char* key, float& out, float lo, float hi) {
+        if (j.contains(key) && j[key].is_number()) out = std::clamp(j[key].get<float>(), lo, hi);
+    };
+    if (j.contains("snap") && j["snap"].is_boolean()) o.snap = j["snap"].get<bool>();
+    num("move_step", o.move_step, 0.001f, 1000.0f);
+    num("rotate_step", o.rotate_step, 0.1f, 180.0f);
+    num("scale_step", o.scale_step, 0.001f, 100.0f);
+    num("fly_speed", o.fly_speed, 0.25f, 2000.0f);
+    num("look_sensitivity", o.look_sensitivity, 0.1f, 5.0f);
+    num("gizmo_scale", o.gizmo_scale, 0.3f, 3.0f);
+    ++viewport->options_version;
 }
 
 NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]) {
