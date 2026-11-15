@@ -30,8 +30,8 @@ scene, and plays it with a C# script (looping emitter + one-shot), silently.
 **Fixed:** Create ▸ … and Add to scene did nothing while playing (only a Console warning); they now
 ask to stop the game first.
 
-**Not yet:** pause, fades, voice limits, device switching, `.ogg`, occlusion/reverb. Speaker output
-was not checked by ear in automated tests (they run without a device).
+**Not yet:** pause, fades, voice limits, device switching, `.ogg`, occlusion/reverb. Automated tests run
+without a device; speaker output was checked by ear by Tom (music box emitter, walking around it).
 
 ### 2026-11-15 — Milestone 4, part 4: C# scripts
 **Added**
