@@ -47,7 +47,8 @@ the GPU or the engine complained even once. 27 checks, about 15 seconds.
 
 Sage wrote a tidy little `Transform` type for positions and rotations. The compiler pointed out
 that Avalonia, the UI library, *also* has a `Transform`, and asked which one we meant. In fairness,
-the other one rotates buttons. Ours rotates apartment blocks. They now have separate names.
+the other one rotates buttons. Ours rotates apartment blocks. The inspector now says which one
+it means, by its full name.
 
 ## Not yet (honestly)
 
