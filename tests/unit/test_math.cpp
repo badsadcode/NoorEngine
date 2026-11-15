@@ -58,3 +58,25 @@ TEST_CASE("math: projection flips Y for Vulkan (world up is screen up)") {
     CHECK(proj.transform_point({0, 1, -1}).y < 0.0f);
     CHECK(proj.transform_point({1, 0, -1}).x > 0.0f);
 }
+
+TEST_CASE("math: quaternion rotation matches axis-angle rotation") {
+    const auto axis = Vec3{0.3f, 1.0f, 0.2f};
+    const float angle = 1.1f;
+    const Mat4 from_quat = to_mat4(Quat::from_axis_angle(axis, angle));
+    const Mat4 direct = rotation(axis, angle);
+    for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c) CHECK(near(from_quat.at(r, c), direct.at(r, c)));
+}
+
+TEST_CASE("math: quaternion product applies the right operand first") {
+    const Quat yaw = Quat::from_axis_angle({0, 1, 0}, kPi / 2);   // +X -> -Z
+    const Quat roll = Quat::from_axis_angle({0, 0, 1}, kPi / 2);  // +X -> +Y
+    // (yaw * roll): roll first (+X -> +Y), then yaw leaves +Y alone.
+    CHECK(near(to_mat4(yaw * roll).transform_point({1, 0, 0}), {0, 1, 0}));
+}
+
+TEST_CASE("math: compose is translate * rotate * scale (glTF TRS order)") {
+    const Mat4 m = compose({10, 0, 0}, Quat::from_axis_angle({0, 1, 0}, kPi / 2), {2, 2, 2});
+    // (1,0,0) -> scaled (2,0,0) -> rotated (0,0,-2) -> translated (10,0,-2)
+    CHECK(near(m.transform_point({1, 0, 0}), {10, 0, -2}));
+}

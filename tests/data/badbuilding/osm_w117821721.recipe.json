@@ -1,0 +1,39 @@
+{
+  "id": "4529993a-ec0c-5a66-bc58-462a7823fbc6",
+  "seed": 13795972169680155491,
+  "version": "0.1.0",
+  "noor_interchange": "0.2",
+  "generator": "BadBuilding",
+  "generator_version": "0.1.0",
+  "request": {
+    "id": "osm:w117821721",
+    "seed": 13795972169680155491,
+    "type": "apartments",
+    "levels": 6,
+    "house_number": "28",
+    "from_osm": true,
+    "stage_seeds": {}
+  },
+  "resolved": {
+    "style": "prl_block",
+    "levels": {
+      "value": 6,
+      "source": "osm"
+    },
+    "height": {
+      "value": 18.3,
+      "source": "inferred"
+    },
+    "roof": {
+      "value": "flat",
+      "source": "inferred"
+    },
+    "palette": {
+      "value": "concrete",
+      "source": "inferred"
+    },
+    "storey_height": 2.8,
+    "datum": 0.9,
+    "ground_low": 0
+  }
+}

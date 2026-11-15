@@ -1,0 +1,12 @@
+noor_add_module(asset
+    SOURCES
+        src/json.cpp
+        src/project.cpp
+        src/registry.cpp
+        src/gltf_import.cpp
+    PUBLIC_DEPS
+        noor::foundation
+        nlohmann_json::nlohmann_json
+    PRIVATE_DEPS
+        cgltf::cgltf
+)

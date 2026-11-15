@@ -106,6 +106,43 @@ struct Mat4 {
     return r;
 }
 
+// Unit quaternion rotation, stored [x, y, z, w] like glTF.
+struct Quat {
+    float x = 0, y = 0, z = 0, w = 1;
+
+    [[nodiscard]] static Quat from_axis_angle(Vec3 axis, float angle) noexcept {
+        const Vec3 a = normalize(axis);
+        const float s = std::sin(angle * 0.5f);
+        return {a.x * s, a.y * s, a.z * s, std::cos(angle * 0.5f)};
+    }
+    // Hamilton product: (a * b) applies b first, then a.
+    [[nodiscard]] constexpr Quat operator*(const Quat& b) const noexcept {
+        return {w * b.x + x * b.w + y * b.z - z * b.y, w * b.y - x * b.z + y * b.w + z * b.x,
+                w * b.z + x * b.y - y * b.x + z * b.w, w * b.w - x * b.x - y * b.y - z * b.z};
+    }
+    constexpr bool operator==(const Quat&) const = default;
+};
+
+[[nodiscard]] inline Mat4 to_mat4(Quat q) noexcept {
+    const float len = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+    if (len > 0.0f) {
+        q = {q.x / len, q.y / len, q.z / len, q.w / len};
+    }
+    const float xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
+    const float xy = q.x * q.y, xz = q.x * q.z, yz = q.y * q.z;
+    const float wx = q.w * q.x, wy = q.w * q.y, wz = q.w * q.z;
+    Mat4 r;
+    r.m[0] = {1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy), 0};
+    r.m[1] = {2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx), 0};
+    r.m[2] = {2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy), 0};
+    return r;
+}
+
+// Translation * Rotation * Scale (ADR-022 transform order).
+[[nodiscard]] inline Mat4 compose(Vec3 t, Quat r, Vec3 s) noexcept {
+    return translation(t) * to_mat4(r) * scale(s);
+}
+
 // View matrix for a camera at `eye` looking at `target` (right-handed: camera looks down −Z).
 [[nodiscard]] inline Mat4 look_at(Vec3 eye, Vec3 target, Vec3 up) noexcept {
     const Vec3 f = normalize(target - eye);

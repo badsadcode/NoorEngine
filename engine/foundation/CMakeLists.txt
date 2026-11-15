@@ -4,4 +4,6 @@ noor_add_module(foundation
         src/assert.cpp
         src/error.cpp
         src/guid.cpp
+        src/file_io.cpp
+        src/sha256.cpp
 )

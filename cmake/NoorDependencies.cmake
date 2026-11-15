@@ -28,6 +28,26 @@ FetchContent_Declare(VulkanMemoryAllocator
     SYSTEM)
 FetchContent_MakeAvailable(VulkanMemoryAllocator)
 
+# --- nlohmann/json (MIT): projects, scenes, metas (ADR-005) ------------------
+FetchContent_Declare(nlohmann_json
+    URL      https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nlohmann_json)
+
+# --- cgltf (MIT, single header): glTF/GLB loading ------------------------------
+FetchContent_Declare(cgltf
+    URL      https://raw.githubusercontent.com/jkuhlmann/cgltf/360db1a95480fe102ae9c69b27c5d101167ff5ba/cgltf.h
+    URL_HASH SHA256=e378a21c084bf1f288bb799de827bb26906efb024255f1ecf1705ea13f11c6ec
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME cgltf.h)
+FetchContent_MakeAvailable(cgltf)
+add_library(noor_third_party_cgltf INTERFACE)
+target_include_directories(noor_third_party_cgltf SYSTEM INTERFACE ${cgltf_SOURCE_DIR})
+add_library(cgltf::cgltf ALIAS noor_third_party_cgltf)
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

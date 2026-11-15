@@ -2,7 +2,30 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 1 complete, Milestone 2 next
+## [Unreleased] — Milestone 2 in progress
+
+### 2026-11-15 — Milestone 2, first increment: projects, asset registry, GLB import, scenes, CLI
+**Added**
+- ADR-004 (scene model), ADR-005 (project serialization), ADR-006 (asset registry).
+- Dependencies: nlohmann/json 3.12 and cgltf 1.15 (MIT, pinned by hash).
+- `foundation`: `fs::read_file` (size-limited), `fs::write_file_atomic` (tmp + replace + `.bak`),
+  SHA-256 (FIPS vectors tested), `math::Quat` / `to_mat4` / `compose`.
+- `noor::asset`: `Project` (create/open, version check, path-escape protection), deterministic
+  JSON helpers, `AssetRegistry` (`.noormeta` sidecars; GUID from the Noor Interchange manifest
+  when present; re-attaches metas of files moved outside the engine by content hash; duplicate-id
+  and orphan handling; in-engine `move_asset`), `import_gltf` (geometry, base colors, TRS
+  hierarchy, `extras.noor`, untrusted-input checks).
+- `noor::scene`: entities/components document, byte-stable save/load, unknown components kept,
+  `instantiate_model` (markers → `marker`, collision → `collider`, never `mesh`), validation.
+- `noor_cli`: `new`, `scan`, `info`, `add-model`, `validate` (headless; runs in CI).
+- `noor_diag --glb <file>`: renders an imported model with markers.
+- Test data: one real BadBuilding block (`tests/data/badbuilding`, 557 KB GLB + manifest + recipe).
+- Tests: 22 new unit tests (incl. the M2 rename/move gate), `cli.project_workflow`,
+  `render.glb_building`. 59/59 pass (Debug), 54/54 non-GPU (Release).
+
+**Known limitations**
+- Base colors only (no textures); LOD1+ files not loaded; `move_asset` doesn't move Noor
+  Interchange side files; no undo/redo, prefabs, hot reload or migrations yet.
 
 ### 2026-11-15 — Milestone 1 complete: lifecycle test, live redraw, GPU labels
 **Added**

@@ -21,6 +21,7 @@
 #include "noor/foundation/math.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
+#include "noor/asset/gltf_import.h"
 #include "noor/render/fly_camera.h"
 #include "noor/render/renderer.h"
 
@@ -48,6 +49,7 @@ struct Options {
     bool verify_render = false;
     bool lifecycle_test = false;
     std::string screenshot_path;  // non-empty: save frame 90 as a 24-bit BMP
+    std::string glb_path;         // non-empty: show this GLB model instead of the cube scene
     std::string log_path = "noor_diag.log";
 };
 
@@ -73,6 +75,8 @@ bool parse_options(int argc, char** argv, Options& out) {
             out.lifecycle_test = true;
         } else if (arg == "--log" && i + 1 < argc) {
             out.log_path = argv[++i];
+        } else if (arg == "--glb" && i + 1 < argc) {
+            out.glb_path = argv[++i];
         } else if (arg == "--screenshot" && i + 1 < argc) {
             out.screenshot_path = argv[++i];
         } else {
@@ -374,9 +378,60 @@ int run(const Options& options) {
         std::vector<noor::render::DrawItem> draws;
         draws.reserve(options.cubes + 2);
 
+        // --glb: a model (e.g. a BadBuilding building) instead of the hero cube. Collision nodes are
+        // not drawn (Noor Interchange 3.5); Noor markers show as small cyan cubes.
+        std::vector<noor::render::DrawItem> model_draws;
+        Vec3 model_min{1e30f, 1e30f, 1e30f}, model_max{-1e30f, -1e30f, -1e30f};
+        if (!options.glb_path.empty() && exit_code == 0) {
+            auto model = noor::asset::import_gltf(options.glb_path);
+            if (!model) {
+                NOOR_LOG_FATAL("Diag", "{}", model.error().describe());
+                exit_code = 1;
+            } else {
+                static_assert(sizeof(noor::asset::MeshVertex) == sizeof(noor::render::Vertex));
+                std::vector<noor::render::MeshHandle> handles;
+                for (const auto& m : model->meshes) {
+                    auto h = (*renderer)->create_mesh(
+                        {{reinterpret_cast<const noor::render::Vertex*>(m.vertices.data()), m.vertices.size()},
+                         m.indices, m.name});
+                    handles.push_back(h ? *h : noor::render::MeshHandle{});
+                }
+                std::array<std::uint32_t, 6> cyan{};
+                cyan.fill(0x22D3EE);
+                const CubeMesh marker_data = make_cube(cyan);
+                auto marker = (*renderer)->create_mesh({marker_data.vertices, marker_data.indices, "Marker"});
+                for (std::size_t i = 0; i < model->nodes.size(); ++i) {
+                    const auto& n = model->nodes[i];
+                    const auto world = model->world_matrix(i);
+                    if (n.mesh >= 0 && !n.is_collision() && handles[static_cast<std::size_t>(n.mesh)].valid()) {
+                        model_draws.push_back({handles[static_cast<std::size_t>(n.mesh)], world});
+                        for (const auto& v : model->meshes[static_cast<std::size_t>(n.mesh)].vertices) {
+                            const Vec3 p = world.transform_point(v.position);
+                            model_min = {std::min(model_min.x, p.x), std::min(model_min.y, p.y), std::min(model_min.z, p.z)};
+                            model_max = {std::max(model_max.x, p.x), std::max(model_max.y, p.y), std::max(model_max.z, p.z)};
+                        }
+                    }
+                    if (n.is_marker() && marker) {
+                        model_draws.push_back({*marker, world * scale({0.25f, 0.25f, 0.25f})});
+                    }
+                }
+                NOOR_LOG_INFO("Diag", "Model '{}': {} nodes, {} meshes, {} render triangles, {} draws",
+                              options.glb_path, model->nodes.size(), model->meshes.size(), model->render_triangles(),
+                              model_draws.size());
+            }
+        }
+        const bool show_model = !model_draws.empty();
+
         noor::render::FlyCamera fly;
         fly.position = options.cubes > 0 ? Vec3{0.0f, 2.0f + grid_half * 0.5f, grid_half + 8.0f} : Vec3{0.0f, 1.8f, 5.0f};
         fly.look_at(options.cubes > 0 ? Vec3{0.0f, 0.0f, grid_center_z} : Vec3{0, 0, 0});
+        if (show_model) {  // a three-quarter view from the street side (+Z)
+            const Vec3 c = (model_min + model_max) * 0.5f;
+            const float size = std::max({model_max.x - model_min.x, model_max.y - model_min.y, model_max.z - model_min.z});
+            fly.position = {c.x + size * 0.75f, c.y + size * 0.35f, c.z + size * 1.1f};
+            fly.look_at(c);
+            fly.speed = std::max(5.0f, size * 0.25f);
+        }
         bool mouse_captured = false;
         if (!options.verify_render && options.max_frames == 0) {
             NOOR_LOG_INFO("Diag", "Controls: hold right mouse = look, WASD = move, Q/E = down/up, Shift = faster, "
@@ -460,8 +515,14 @@ int run(const Options& options) {
             // are deterministic.
             const auto t = static_cast<float>(now - start);
             draws.clear();
-            draws.push_back({*cube, rotation({0.2f, 1.0f, 0.1f}, options.verify_render ? 0.0f : t * 0.8f)});
-            if (!options.verify_render) {
+            if (show_model) {
+                draws.insert(draws.end(), model_draws.begin(), model_draws.end());
+                const float half = std::max({40.0f, model_max.x - model_min.x, model_max.z - model_min.z});
+                draws.push_back({*ground, translation({0.0f, -0.1f, 0.0f}) * scale({half, 0.1f, half})});
+            } else {
+                draws.push_back({*cube, rotation({0.2f, 1.0f, 0.1f}, options.verify_render ? 0.0f : t * 0.8f)});
+            }
+            if (!options.verify_render && !show_model) {
                 draws.push_back({*ground, translation({0.0f, -1.6f, grid_center_z * 0.5f}) *
                                               scale({ground_half, 0.1f, ground_half - grid_center_z * 0.5f})});
                 for (std::uint32_t i = 0; i < options.cubes; ++i) {

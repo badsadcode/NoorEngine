@@ -1,0 +1,114 @@
+{
+  "noor_interchange": "0.2",
+  "id": "4529993a-ec0c-5a66-bc58-462a7823fbc6",
+  "name": "osm_w117821721",
+  "kind": "building",
+  "generator": {
+    "tool": "BadBuilding",
+    "version": "0.1.0"
+  },
+  "recipe": {
+    "file": "osm_w117821721.recipe.json",
+    "seed": 13795972169680155491,
+    "sha256": "5a2db2be21394837c510b323447a29919500ef8f037456a8417d0a3e9c1b5afd"
+  },
+  "created": "2026-11-15T17:18:11Z",
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      -23.249,
+      -0.5,
+      -16.204
+    ],
+    "max": [
+      23.249,
+      20.3,
+      16.204
+    ]
+  },
+  "files": [
+    {
+      "path": "osm_w117821721.glb",
+      "role": "model",
+      "sha256": "4a4aaf30430f9f507e730a3da6b798bff808da8553fa7d40c826b045f757c078"
+    },
+    {
+      "path": "osm_w117821721.recipe.json",
+      "role": "recipe",
+      "sha256": "5a2db2be21394837c510b323447a29919500ef8f037456a8417d0a3e9c1b5afd"
+    },
+    {
+      "path": "osm_w117821721.validation.json",
+      "role": "validation",
+      "sha256": "790ea5253845854be62059dc1416233de438fcc7843cd2781f44722b73a69ad8"
+    },
+    {
+      "path": "osm_w117821721.lod1.glb",
+      "role": "lod",
+      "sha256": "2f006a0ddc0f0334d5f49e4b6f71fb6cac306d4908fe30470f8260986f36a811",
+      "lod": 1
+    },
+    {
+      "path": "osm_w117821721.lod2.glb",
+      "role": "lod",
+      "sha256": "404d055a2fedca61e8945e3645cc3d0e517c0bf8c554c22d077bdc83173201c8",
+      "lod": 2
+    },
+    {
+      "path": "osm_w117821721.metadata.json",
+      "role": "other"
+    }
+  ],
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 7432
+    },
+    {
+      "level": 1,
+      "triangles": 6580
+    },
+    {
+      "level": 2,
+      "triangles": 28
+    }
+  ],
+  "collision": "mesh",
+  "markers": {
+    "entrance": 4
+  },
+  "tags": [
+    "prl_block",
+    "roof.flat",
+    "osm.apartments"
+  ],
+  "provenance": {
+    "inferred": [
+      "height",
+      "roof",
+      "palette",
+      "style"
+    ],
+    "osm": [
+      "levels"
+    ]
+  },
+  "validation": {
+    "gltf_validator": "not_run"
+  },
+  "badbuilding": {
+    "building_id": "osm:w117821721",
+    "id_namespace": "6f1d6a52-2c1e-4b8e-9a43-5b0d2e7c9f10",
+    "pivot_in_building_space": [
+      3.91,
+      0,
+      1.775
+    ],
+    "status": "pass"
+  }
+}

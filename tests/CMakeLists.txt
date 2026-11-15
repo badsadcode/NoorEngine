@@ -9,13 +9,26 @@ add_executable(noor_unit_tests
     unit/test_guid.cpp
     unit/test_math.cpp
     unit/test_fly_camera.cpp
+    unit/test_files_hash.cpp
+    unit/test_assets_scenes.cpp
 )
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation doctest::doctest)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::asset noor::scene doctest::doctest)
+target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
 noor_set_target_options(noor_unit_tests)
 set_target_properties(noor_unit_tests PROPERTIES FOLDER "Tests")
 doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit")
+
+# ---- CLI tests (headless, run in CI) ---------------------------------------
+# Full project workflow through noor_cli: new -> copy building -> scan -> add-model -> validate.
+add_test(NAME cli.project_workflow
+    COMMAND ${CMAKE_COMMAND}
+        -DCLI=$<TARGET_FILE:noor_cli>
+        -DDATA=${CMAKE_CURRENT_SOURCE_DIR}/data
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli_workflow
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_workflow.cmake)
+set_tests_properties(cli.project_workflow PROPERTIES LABELS "cli" TIMEOUT 60)
 
 # ---- GPU tests ---------------------------------------------------------------
 # Need a Vulkan 1.3 GPU and a desktop. Validation layers on; any validation error fails.
@@ -36,6 +49,12 @@ set_tests_properties(render.cube_pixels PROPERTIES LABELS "gpu;render" TIMEOUT 6
 add_test(NAME stress.cubes_2500
     COMMAND noor_diag --frames 120 --cubes 2500 --log ${CMAKE_CURRENT_BINARY_DIR}/stress_cubes_2500.log)
 set_tests_properties(stress.cubes_2500 PROPERTIES LABELS "gpu;stress" TIMEOUT 120)
+
+# A real BadBuilding block (Noor Interchange v0.2) imported and rendered with validation on.
+add_test(NAME render.glb_building
+    COMMAND noor_diag --frames 60 --glb ${CMAKE_CURRENT_SOURCE_DIR}/data/badbuilding/osm_w117821721.glb
+            --log ${CMAKE_CURRENT_BINARY_DIR}/render_glb_building.log)
+set_tests_properties(render.glb_building PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 
 # Window lifecycle: minimize, restore, resize (and a monitor move when 2+ displays exist),
 # checking that rendering pauses/resumes and the swapchain follows the window.
