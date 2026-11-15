@@ -60,8 +60,9 @@ the mouse. Our test floated the panel with code, not by dragging. That, plus hig
 is next on the checklist.
 
 ## Known limitations
-- Not yet tested: high-DPI (125%+), drag-and-drop docking with the mouse, live drag-resize,
-  keyboard focus, and the hover/click demo with a real human hand.
+- **Update:** a real human hand (Tom's) has now tested it. The hue follows the mouse, clicking
+  flashes it brighter, and dragging panels around to dock them works.
+- Not yet tested: high-DPI (125%+), live drag-resize, and keyboard focus.
 - Every viewport creates its own GPU device, so floating takes ~360 ms. The real editor will
   share one device.
 - The floating window's tab is Windows-blue instead of Noor-purple. A crime, soon corrected.

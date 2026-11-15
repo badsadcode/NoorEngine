@@ -23,9 +23,12 @@ after 363 ms; 0 validation errors; 0.74% machine CPU; 247 MB working set. Detail
 - Spike screenshots first used a screen BitBlt, which captured another application overlapping the
   window. Deleted immediately; capture now uses `PrintWindow`, which only renders our own window.
 
+**Tested by hand** (Tom): hover/click input reaches the viewport (hue follows the mouse, click
+brightens); drag-and-drop docking with the mouse works.
+
 **Known limitations**
-- Untested: high-DPI >100%, mouse drag-and-drop docking (airspace), live drag-resize, keyboard
-  focus, hover/click input by a human, Release numbers.
+- Untested: high-DPI >100%, dock drop indicators over the viewport itself (airspace), live
+  drag-resize, keyboard focus, Release numbers.
 - One Vulkan instance + device per viewport (floating costs ~360 ms); needs a shared device.
 - Floating Dock windows show the default blue accent instead of the theme purple.
 - `renderer.h` now includes `vulkan.h` indirectly through `presentation_target.h`, weakening

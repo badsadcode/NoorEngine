@@ -48,18 +48,18 @@ Architecture proven: the engine owns a native child window and a **dedicated ren
 so rendering is independent of the UI thread. Floating a panel re-parents the native control;
 Avalonia destroys and re-creates it, and the engine viewport follows.
 
+## Manual verification (Tom, 2026-11-15)
+- ✅ **Hover/click input** reaches the viewport: the hue follows the mouse, and clicking flashes
+  the current color brighter.
+- ✅ **Drag-and-drop docking by mouse** works with the viewport visible.
+
 ## Open verification items (not yet tested)
 1. **High-DPI** at 125%/150%/200% and moving between monitors with different scales.
-2. **Drag-and-drop docking by mouse** with the native viewport visible ("airspace": a native
-   child window always draws above Avalonia content, so dock drop indicators could be hidden
-   behind the viewport). The automated test floated the panel programmatically.
+2. **Airspace detail:** whether Dock's drop-target indicators stay visible when dragged over the
+   native viewport itself (docking worked by hand, but this specific case wasn't checked).
+   Mitigation if needed: hide the native viewport during dock drags and show a snapshot.
 3. **Live window drag-resize** smoothness and **keyboard focus** moving in/out of the viewport.
-4. **Hover/click input** reaching the viewport (demo exists: hue follows pointer, click brightens;
-   needs a human).
-5. Release-build CPU/memory numbers.
-
-If (2) turns out unfixable, mitigation is to hide the native viewport during dock drags and
-show a snapshot, which is a common technique, before considering Qt.
+4. Release-build CPU/memory numbers.
 
 ## Consequences
 - Editor code is C#; contributors need the .NET 10 SDK.
