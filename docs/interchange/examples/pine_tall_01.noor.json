@@ -1,0 +1,25 @@
+{
+  "noor_interchange": "0.1",
+  "id": "4c1f7b2e-9a3d-4e51-8c0b-2f6d1e9a7b33",
+  "name": "Pine_Tall_01",
+  "kind": "vegetation.tree",
+  "generator": { "tool": "NoorForm", "version": "2.0.0-preview.161", "commit": "a1b2c3d" },
+  "recipe": { "file": "pine_tall_01.recipe.json", "seed": 42 },
+  "created": "2026-11-15T16:20:00Z",
+  "space": { "up": "+Y", "forward": "+Z", "handedness": "right", "units": "meters" },
+  "bounds": { "min": [-2.1, 0.0, -2.0], "max": [2.2, 14.8, 2.1] },
+  "files": [
+    { "path": "pine_tall_01.glb", "role": "model" },
+    { "path": "pine_tall_01.recipe.json", "role": "recipe" },
+    { "path": "pine_tall_01.preview.png", "role": "preview" }
+  ],
+  "lods": [
+    { "level": 0, "triangles": 18432 },
+    { "level": 1, "triangles": 4210 },
+    { "level": 2, "triangles": 512 }
+  ],
+  "collision": "capsule",
+  "tags": ["conifer", "pine", "forest"],
+  "license": { "spdx": "MIT", "author": "Bad Ideas Works" },
+  "validation": { "gltf_validator": "pass", "errors": 0, "warnings": 0 }
+}

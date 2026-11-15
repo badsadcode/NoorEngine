@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/badsadcode/NoorEngine/blob/main/docs/interchange/noor.asset.schema.json",
+  "title": "Noor Interchange asset manifest (<name>.noor.json)",
+  "description": "Metadata sidecar for an asset exported by a Noor tool. See NOOR_INTERCHANGE.md. Unknown fields are allowed and must be ignored by readers.",
+  "type": "object",
+  "required": ["noor_interchange", "id", "name", "kind", "generator", "created", "space", "files"],
+  "properties": {
+    "noor_interchange": {
+      "description": "Version of the Noor Interchange spec this manifest follows.",
+      "type": "string",
+      "pattern": "^0\\.[0-9]+$"
+    },
+    "id": {
+      "description": "Stable asset identity (UUID). Created on first generation and stored in the recipe so regeneration keeps it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "kind": {
+      "description": "Dotted category. Add new kinds to NOOR_INTERCHANGE.md before using them.",
+      "type": "string",
+      "enum": [
+        "building", "ship", "vehicle", "level", "prop", "rock",
+        "vegetation.tree", "vegetation.plant", "vegetation.scatter",
+        "road", "bridge", "material", "terrain", "character"
+      ]
+    },
+    "generator": {
+      "type": "object",
+      "required": ["tool", "version"],
+      "properties": {
+        "tool": { "type": "string", "pattern": "^Noor[A-Za-z]+$|^Bad[A-Za-z]+$" },
+        "version": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string" }
+      }
+    },
+    "recipe": {
+      "type": "object",
+      "required": ["file", "seed"],
+      "properties": {
+        "file": { "type": "string" },
+        "seed": { "type": "integer" },
+        "sha256": { "type": "string" }
+      }
+    },
+    "created": { "type": "string", "format": "date-time" },
+    "space": {
+      "type": "object",
+      "required": ["up", "forward", "handedness", "units"],
+      "properties": {
+        "up": { "const": "+Y" },
+        "forward": { "const": "+Z" },
+        "handedness": { "const": "right" },
+        "units": { "const": "meters" }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "required": ["min", "max"],
+      "properties": {
+        "min": { "$ref": "#/$defs/vec3" },
+        "max": { "$ref": "#/$defs/vec3" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "role"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^[^/\\\\:]+$", "description": "File name next to the manifest (no folders, no absolute paths)." },
+          "role": { "enum": ["model", "recipe", "validation", "preview", "texture", "other"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "lods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level"],
+        "properties": {
+          "level": { "type": "integer", "minimum": 0 },
+          "triangles": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "collision": { "enum": ["none", "mesh", "convex", "box", "sphere", "capsule", "generated"] },
+    "markers": {
+      "description": "Count of marker nodes per marker type.",
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "description": "Which attributes were measured vs. requested vs. guessed (e.g. osm / request / inferred).",
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string" } }
+    },
+    "license": {
+      "type": "object",
+      "properties": {
+        "spdx": { "type": "string" },
+        "author": { "type": "string" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "gltf_validator": { "enum": ["pass", "fail", "not_run"] },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "vec3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+  }
+}

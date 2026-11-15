@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 1 in progress
 
+### 2026-11-15 — Noor Interchange v0.1 (draft)
+**Added**
+- `docs/interchange/NOOR_INTERCHANGE.md`: shared export rules for all Noor tools (NoorMD benches,
+  NoorShip, NoorLevel, NoorArchitect, ...): GLB + `<name>.noor.json` manifest + recipe; markers,
+  parts, LODs and collision in `extras.noor`; ADR-022 space conventions.
+- `docs/interchange/noor.asset.schema.json` (JSON Schema 2020-12) and two example manifests.
+  Examples validate; wrong units, Z-up, unknown kinds, escaping paths and missing ids are rejected.
+- ADR-023 (Proposed).
+
+**Known limitations**
+- Draft: no tool exports it yet and NoorEngine has no importer yet (Milestone 2).
+
 ### 2026-11-15 — Milestone 1, first increment: meshes, camera, depth, GPU pixel tests
 **Added**
 - `noor/foundation/math.h`: Vec3/Vec4/Mat4, rotation, look_at, reverse-Z infinite perspective;

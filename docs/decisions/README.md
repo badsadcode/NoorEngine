@@ -11,6 +11,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [019](ADR-019-licensing.md) | MIT license | Accepted |
 | [021](ADR-021-platform-layer-and-dependencies.md) | SDL3 platform layer, pinned-dependency policy | Accepted |
 | [022](ADR-022-math-and-coordinate-conventions.md) | Right-handed, +Y up, meters, column-major, reverse-Z | Accepted |
+| [023](ADR-023-noor-interchange.md) | Noor Interchange: GLB + `extras.noor` markers + `.noor.json` manifest for all Noor tools | Proposed (v0.1) |
 
 Still open from the register: 004 scene model, 005 serialization, 006 asset registry,
 007 plugin ABI, 008 .NET hosting, 009 Lua, 010 physics (Jolt is the front-runner),
