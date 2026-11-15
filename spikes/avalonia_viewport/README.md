@@ -5,7 +5,7 @@ Verdict and measurements: [ADR-003](../../docs/decisions/ADR-003-editor-gui-fram
 Ideas that survive move to `editor/`; this folder is not the editor.
 
 > **Superseded** by [`editor/NoorEditor`](../../editor/NoorEditor) in Milestone 3. Kept as the
-> record of the ADR-003 measurements; it still builds and runs against API v3.
+> record of the ADR-003 measurements; it still builds and runs against API v4.
 
 What it shows: a themed editor shell (menu, workspace tabs, docked Scene / Inspector /
 Console / Content panels, status bar) with a **real NoorEngine Vulkan viewport** in the

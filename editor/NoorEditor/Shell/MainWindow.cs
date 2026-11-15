@@ -41,6 +41,11 @@ public sealed class MainWindow : Window
     private readonly MenuItem _save = new() { Header = "_Save Scene", InputGesture = KeyGesture.Parse("Ctrl+S") };
     private readonly MenuItem _openScene = new() { Header = "_Open Scene" };
     private bool _closeConfirmed;
+    private readonly Button _play = new() { Content = "▶  Play", Classes = { "primary" }, VerticalAlignment = VerticalAlignment.Center };
+    private readonly DispatcherTimer _playTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private readonly DispatcherTimer _fileTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private readonly Stopwatch _playClock = new();
+    private TimeSpan _lastTick, _lastPanelRefresh;
     private readonly DockControl _dockControl;
     private IRootDock _rootDock;
 
@@ -83,12 +88,17 @@ public sealed class MainWindow : Window
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => UpdateStatusRight();
+        _playTimer.Tick += (_, _) => PlayTick();
+        _fileTimer.Tick += (_, _) => Doc.PollFiles();  // the engine logs and reloads what changed
+        _fileTimer.Start();
         timer.Start();
 
         Closing += OnClosing;
         Closed += (_, _) =>
         {
             timer.Stop();
+            _playTimer.Stop();
+            _fileTimer.Stop();
             Doc.SceneChanged -= OnSceneChanged;
             Doc.AssetsChanged -= RebuildOpenSceneMenu;
             // Viewports keep working on a closed document (they keep the last snapshot), and Avalonia
@@ -218,6 +228,10 @@ public sealed class MainWindow : Window
         _dockControl.Layout = _rootDock;
     }
 
+    /// <summary>The panel (dockable) with this id in the current layout (tests).</summary>
+    public IDockable? FindDockable(string id) =>
+        Docks(_rootDock).SelectMany(d => d.VisibleDockables ?? []).FirstOrDefault(d => d.Id == id);
+
     /// <summary>The dock with this id in the current layout (tests).</summary>
     public IDock? FindDock(string id) => Docks(_rootDock).FirstOrDefault(d => d.Id == id);
 
@@ -231,6 +245,7 @@ public sealed class MainWindow : Window
         var closeProject = new MenuItem { Header = "_Close Project" };
         closeProject.Click += async (_, _) =>
         {
+            if (Doc.Playing) TogglePlay();
             if (!await ConfirmDiscard()) return;
             ReturnToHub = true;
             _closeConfirmed = true;
@@ -284,6 +299,11 @@ public sealed class MainWindow : Window
         var bar = new DockPanel { Height = 34, Background = NoorTheme.Brush(NoorTheme.Panel) };
         DockPanel.SetDock(logo, Avalonia.Controls.Dock.Left);
         bar.Children.Add(logo);
+        ToolTip.SetTip(_play, "Play / Stop (Ctrl+P). Runs a copy of the scene; Stop throws it away.");
+        _play.Click += (_, _) => TogglePlay();
+        var right = new StackPanel { Orientation = LayoutOrientation.Horizontal, Margin = new Thickness(0, 0, 12, 0), Children = { _play } };
+        DockPanel.SetDock(right, Avalonia.Controls.Dock.Right);
+        bar.Children.Add(right);
         bar.Children.Add(menu);
         return new Border { Child = bar, BorderBrush = NoorTheme.Brush(NoorTheme.Border), BorderThickness = new Thickness(0, 0, 0, 1) };
     }
@@ -311,7 +331,9 @@ public sealed class MainWindow : Window
     {
         var s = Doc.Scene;
         var scene = s.Open ? $"{s.Name}{(s.Modified ? " •" : "")}" : "no scene";
-        Title = $"NoorEditor — {Doc.ProjectName} — {scene}";
+        Title = $"NoorEditor — {Doc.ProjectName} — {scene}{(s.Playing ? "  ▶ Playing" : "")}";
+        _play.Content = s.Playing ? "■  Stop" : "▶  Play";
+        _play.IsEnabled = s.Open;
         _undo.Header = s.CanUndo ? $"_Undo {s.UndoLabel}" : "_Undo";
         _undo.IsEnabled = s.CanUndo;
         _redo.Header = s.CanRedo ? $"_Redo {s.RedoLabel}" : "_Redo";
@@ -322,6 +344,11 @@ public sealed class MainWindow : Window
             ? $"{Doc.ProjectName}   ·   {s.Path}{(s.Modified ? " (modified)" : "")}   ·   {s.Entities.Count} entities{issues}"
             : $"{Doc.ProjectName}   ·   no scene open";
         _statusLeft.Foreground = NoorTheme.Brush(s.Issues.Count > 0 ? NoorTheme.Warn : NoorTheme.Text);
+        if (s.Playing)
+        {
+            _statusLeft.Text = $"▶ Playing {s.PlaySeconds:0.0} s   ·   edits are off while playing; Stop (Ctrl+P) to edit again   ·   {s.Entities.Count} entities";
+            _statusLeft.Foreground = NoorTheme.Brush(NoorTheme.Cyan);
+        }
     }
 
     private void RebuildOpenSceneMenu()
@@ -344,6 +371,34 @@ public sealed class MainWindow : Window
     }
 
     // ---- Commands ----
+
+    /// <summary>Play ▸ Stop ▸ Play. While playing the engine runs a copy of the scene.</summary>
+    public void TogglePlay()
+    {
+        if (Doc.Playing)
+        {
+            _playTimer.Stop();
+            Doc.Stop();
+            return;
+        }
+        if (!Doc.Play()) return;  // the selection stays: the running copy keeps every entity's id
+        _playClock.Restart();
+        _lastTick = _lastPanelRefresh = TimeSpan.Zero;
+        _playTimer.Start();
+    }
+
+    private void PlayTick()
+    {
+        var now = _playClock.Elapsed;
+        Doc.Tick((now - _lastTick).TotalSeconds);
+        _lastTick = now;
+        // Panels follow the running scene a few times per second, not every frame.
+        if (now - _lastPanelRefresh > TimeSpan.FromMilliseconds(200))
+        {
+            _lastPanelRefresh = now;
+            Doc.Refresh();
+        }
+    }
 
     public async Task ShowPreferences()
     {
@@ -376,6 +431,7 @@ public sealed class MainWindow : Window
 
     public async Task<bool> OpenScene(string path)
     {
+        if (Doc.Playing) TogglePlay();
         if (path == Doc.Scene.Path || !await ConfirmDiscard()) return false;
         var ok = Doc.OpenScene(path);
         if (ok) ViewportView?.Viewport.Frame(null);
@@ -384,6 +440,7 @@ public sealed class MainWindow : Window
 
     private async Task NewScene()
     {
+        if (Doc.Playing) TogglePlay();
         if (!await ConfirmDiscard()) return;
         var name = await Dialogs.Prompt(this, "New Scene", "Scene name (saved in Scenes/)", "Main");
         if (name == null) return;
@@ -425,6 +482,7 @@ public sealed class MainWindow : Window
 
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        if (Doc.Playing) TogglePlay();
         if (_closeConfirmed || !Doc.Scene.Modified)
         {
             RememberWindow();
@@ -459,6 +517,9 @@ public sealed class MainWindow : Window
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         switch (e.Key)
         {
+            case Key.P when ctrl:
+                TogglePlay();
+                break;
             case Key.S when ctrl:
                 Save();
                 break;

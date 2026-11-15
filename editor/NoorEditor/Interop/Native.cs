@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 3;
+    public const uint ExpectedApiVersion = 4;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -76,10 +76,15 @@ public static class Native
     [DllImport(Dll)] public static extern int noor_doc_undo(IntPtr doc);
     [DllImport(Dll)] public static extern int noor_doc_redo(IntPtr doc);
     [DllImport(Dll)] public static extern ulong noor_doc_revision(IntPtr doc);
+    [DllImport(Dll)] public static extern int noor_doc_play(IntPtr doc);
+    [DllImport(Dll)] public static extern void noor_doc_stop(IntPtr doc);
+    [DllImport(Dll)] public static extern void noor_doc_tick(IntPtr doc, double seconds);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_poll_files(IntPtr doc);
 
     private static string? Str(IntPtr p) => p == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(p);
     public static string? ProjectInfo(IntPtr doc) => Str(noor_doc_project_info(doc));
     public static string? Assets(IntPtr doc, bool rescan) => Str(noor_doc_assets(doc, rescan ? 1 : 0));
     public static string? Scenes(IntPtr doc) => Str(noor_doc_scenes(doc));
     public static string? Scene(IntPtr doc) => Str(noor_doc_scene(doc));
+    public static string PollFiles(IntPtr doc) => Str(noor_doc_poll_files(doc)) ?? "[]";
 }

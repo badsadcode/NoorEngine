@@ -35,7 +35,7 @@ public sealed class ComponentsEditor : StackPanel
     {
         _entity = entity;
         Children.Clear();
-        var editable = !entity.FromPrefab;
+        var editable = !entity.FromPrefab && !_doc.Playing;
         foreach (var (type, value) in entity.Components)
             Children.Add(Card(type, value, editable && !SystemComponents.Contains(type)));
         if (entity.Components.Count == 0)

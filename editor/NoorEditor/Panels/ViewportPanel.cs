@@ -118,7 +118,7 @@ public sealed class ViewportPanel : DockPanel
     {
         var selected = _doc.Selected;
         Viewport.SetSelection(selected == null ? [] : _doc.Subtree(selected.Id));
-        var mode = selected is { FromPrefab: false } ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
+        var mode = selected is { FromPrefab: false } && !_doc.Playing ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
     }
 

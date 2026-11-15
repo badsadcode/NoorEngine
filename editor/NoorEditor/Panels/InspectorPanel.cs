@@ -144,9 +144,11 @@ public sealed class InspectorPanel : ScrollViewer
 
             _name.Text = e.Name;
             _kind.Text = e.Kind;
-            _prefabNote.IsVisible = e.FromPrefab;
-            _prefabNote.Text = "Part of a prefab instance: read-only here. Edit the prefab file, or select the instance root.";
-            var editable = !e.FromPrefab;
+            _prefabNote.IsVisible = e.FromPrefab || _doc.Playing;
+            _prefabNote.Text = _doc.Playing
+                ? "Playing: these are the running values. Stop (Ctrl+P) to edit."
+                : "Part of a prefab instance: read-only here. Edit the prefab file, or select the instance root.";
+            var editable = !e.FromPrefab && !_doc.Playing;
             _name.IsEnabled = editable;
 
             var t = e.Transform;

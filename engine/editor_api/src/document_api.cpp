@@ -140,6 +140,35 @@ NOOR_API int32_t noor_doc_redo(noor_doc* doc) {
 
 NOOR_API uint64_t noor_doc_revision(noor_doc* doc) { return doc ? doc->doc->revision() : 0; }
 
+NOOR_API int32_t noor_doc_play(noor_doc* doc) {
+    if (!doc) return 0;
+    return guarded<>(int32_t{0}, [&]() -> int32_t {
+        auto s = doc->doc->play();
+        return s ? 1 : fail_with(s.error());
+    });
+}
+
+NOOR_API void noor_doc_stop(noor_doc* doc) {
+    if (!doc) return;
+    guarded<>(0, [&] {
+        doc->doc->stop();
+        return 0;
+    });
+}
+
+NOOR_API void noor_doc_tick(noor_doc* doc, double seconds) {
+    if (!doc) return;
+    guarded<>(0, [&] {
+        doc->doc->tick(seconds);
+        return 0;
+    });
+}
+
+NOOR_API const char* noor_doc_poll_files(noor_doc* doc) {
+    if (!doc) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&] { return give(doc->doc->poll_files()); });
+}
+
 } // extern "C"
 
 // For viewport.cpp: the channel a document publishes to.

@@ -105,7 +105,7 @@ public sealed record EntityInfo(
 
 public sealed record SceneSnapshot(
     bool Open, string Path, string Name, bool Modified, bool CanUndo, string UndoLabel, bool CanRedo, string RedoLabel,
-    ulong Revision, IReadOnlyList<EntityInfo> Entities, IReadOnlyList<string> Issues)
+    ulong Revision, IReadOnlyList<EntityInfo> Entities, IReadOnlyList<string> Issues, bool Playing = false, double PlaySeconds = 0)
 {
     public static readonly SceneSnapshot Empty = new(false, "", "", false, false, "", false, "", 0, [], []);
 
@@ -124,7 +124,9 @@ public sealed record SceneSnapshot(
             j["redo_label"]?.GetValue<string>() ?? "",
             j["revision"]?.GetValue<ulong>() ?? 0,
             (j["entities"] as JsonArray ?? []).Select(e => EntityInfo.FromJson(e!)).ToList(),
-            (j["issues"] as JsonArray ?? []).Select(i => i?["message"]?.GetValue<string>() ?? "").ToList());
+            (j["issues"] as JsonArray ?? []).Select(i => i?["message"]?.GetValue<string>() ?? "").ToList(),
+            j["playing"]?.GetValue<bool>() ?? false,
+            j["play_seconds"]?.GetValue<double>() ?? 0);
     }
 }
 

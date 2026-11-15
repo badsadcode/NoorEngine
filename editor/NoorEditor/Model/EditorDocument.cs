@@ -100,8 +100,32 @@ public sealed class EditorDocument : IDisposable
 
     public bool Execute(JsonObject command) => Run(Native.noor_doc_execute(_handle, command.ToJsonString()), $"{command["op"]}");
 
-    public bool Undo() => Scene.CanUndo && Run(Native.noor_doc_undo(_handle), "Undo");
-    public bool Redo() => Scene.CanRedo && Run(Native.noor_doc_redo(_handle), "Redo");
+    public bool Undo() => !Scene.Playing && Scene.CanUndo && Run(Native.noor_doc_undo(_handle), "Undo");
+    public bool Redo() => !Scene.Playing && Scene.CanRedo && Run(Native.noor_doc_redo(_handle), "Redo");
+
+    // ---- Play mode (ADR-026): the engine runs a copy of the scene; Stop discards it ----
+
+    public bool Playing => Scene.Playing;
+
+    public bool Play() => Scene.Open && Run(Native.noor_doc_play(_handle), "Play");
+
+    public void Stop()
+    {
+        if (!Scene.Playing) return;
+        Native.noor_doc_stop(_handle);
+        Refresh();
+    }
+
+    /// <summary>Advances the running copy. Doesn't refresh the panels (call Refresh at a lower rate).</summary>
+    public void Tick(double seconds) => Native.noor_doc_tick(_handle, seconds);
+
+    /// <summary>Asks the engine which asset files changed on disk (it reloads them); returns their paths.</summary>
+    public IReadOnlyList<string> PollFiles()
+    {
+        var changed = (JsonNode.Parse(Native.PollFiles(_handle)) as JsonArray ?? []).Select(n => n!.GetValue<string>()).ToList();
+        if (changed.Count > 0) Refresh();
+        return changed;
+    }
 
     public bool SetTransform(string id, Transform t, string? label = null)
     {

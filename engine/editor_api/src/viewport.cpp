@@ -29,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -292,7 +293,14 @@ void render_thread_main(noor_viewport* vp) {
     const float cube = ed::kScaleAllRadius * 0.8f;
     const auto scale_all = upload(make_box({1, 1, 1}, {-cube, -cube, -cube}, {cube, cube, cube}), "Gizmo uniform scale");
 
-    std::unordered_map<std::string, std::optional<std::vector<LoadedMesh>>> assets;  // by absolute path
+    // Loaded models by absolute path. A model is reloaded when the snapshot carries a newer
+    // version of it (the document saw the file change on disk).
+    struct CachedAsset {
+        bool loaded = false;
+        std::uint64_t version = 0;
+        std::optional<std::vector<LoadedMesh>> meshes;  // nullopt: failed to load
+    };
+    std::unordered_map<std::string, CachedAsset> assets;
     std::shared_ptr<const ed::RenderSnapshot> shown;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
@@ -394,8 +402,15 @@ void render_thread_main(noor_viewport* vp) {
                     if (e.parent) children[*e.parent].push_back(e.id);
                 }
                 for (const auto& m : snap->meshes) {
-                    auto [it, fresh] = assets.try_emplace(m.asset_path);
-                    if (fresh) {
+                    auto it = assets.try_emplace(m.asset_path).first;
+                    CachedAsset& cached = it->second;
+                    if (!cached.loaded || cached.version != m.asset_version) {
+                        const bool reload = cached.loaded;
+                        if (cached.meshes) {
+                            for (const auto& old : *cached.meshes)
+                                if (old.handle.valid()) r.destroy_mesh(old.handle);
+                        }
+                        cached = {true, m.asset_version, std::nullopt};
                         if (auto model = noor::asset::import_gltf(m.asset_path)) {
                             std::vector<LoadedMesh> loaded;
                             for (const auto& mesh : model->meshes) {
@@ -411,13 +426,14 @@ void render_thread_main(noor_viewport* vp) {
                                 lm.indices.assign(mesh.indices.begin(), mesh.indices.end());
                                 loaded.push_back(std::move(lm));
                             }
-                            it->second = std::move(loaded);
+                            cached.meshes = std::move(loaded);
+                            if (reload) NOOR_LOG_INFO("Viewport", "Reloaded {}", std::filesystem::path(m.asset_path).filename().string());
                         } else {
                             NOOR_LOG_WARN("Viewport", "{}", model.error().describe());
                         }
                     }
-                    if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->size())) continue;
-                    const LoadedMesh& lm = (*it->second)[static_cast<std::size_t>(m.mesh_index)];
+                    if (!cached.meshes || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(cached.meshes->size())) continue;
+                    const LoadedMesh& lm = (*cached.meshes)[static_cast<std::size_t>(m.mesh_index)];
                     if (!lm.handle.valid()) continue;
                     scene_draws.push_back({{lm.handle, m.world}, m.entity, &lm});
                     for (int c = 0; c < 8; ++c) {

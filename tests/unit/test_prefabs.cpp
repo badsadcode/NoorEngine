@@ -5,6 +5,7 @@
 #include "noor/asset/registry.h"
 #include "noor/foundation/file_io.h"
 #include "noor/scene/history.h"
+#include "noor/scene/behaviours.h"
 #include "noor/scene/prefab.h"
 
 #include <filesystem>
@@ -298,4 +299,27 @@ TEST_CASE("registry: a .noorprefab file is an asset whose GUID is the prefab's o
     CHECK(library.get(Guid::generate()) == nullptr);
     std::error_code ec;
     stdfs::remove_all(dir, ec);
+}
+
+TEST_CASE("behaviours: a rotator turns its entity at the given rate; others are untouched") {
+    noor::scene::Scene scene;
+    noor::scene::Entity spinner;
+    spinner.id = noor::Guid::generate();
+    spinner.components["rotator"] = {{"axis", {0, 1, 0}}, {"degrees_per_second", 90}};
+    noor::scene::Entity still;
+    still.id = noor::Guid::generate();
+    scene.entities = {spinner, still};
+
+    CHECK(noor::scene::update_behaviours(scene, 1.0) == 1);
+    // +90 degrees about Y takes +X to -Z.
+    const auto x = noor::math::rotate(scene.entities[0].transform.rotation, {1, 0, 0});
+    CHECK(x.x == doctest::Approx(0.0f).epsilon(1e-5));
+    CHECK(x.z == doctest::Approx(-1.0f).epsilon(1e-5));
+    CHECK(scene.entities[1].transform.rotation == noor::math::Quat{});
+
+    // Defaults: +Y at 45 degrees per second.
+    scene.entities[1].components["rotator"] = noor::asset::Json::object();
+    noor::scene::update_behaviours(scene, 2.0);
+    const auto y = noor::math::rotate(scene.entities[1].transform.rotation, {1, 0, 0});
+    CHECK(y.x == doctest::Approx(0.0f).epsilon(1e-5));
 }

@@ -1,6 +1,7 @@
 #include "document.h"
 
 #include "noor/asset/gltf_import.h"
+#include "noor/scene/behaviours.h"
 #include "noor/foundation/log.h"
 
 #include <format>
@@ -41,6 +42,7 @@ Result<std::unique_ptr<Document>> Document::open(const stdfs::path& project) {
     if (!p) return std::unexpected(p.error());
     std::unique_ptr<Document> doc(new Document(std::move(*p)));
     if (auto r = doc->registry_.scan(doc->project_); !r) return std::unexpected(r.error());
+    doc->watch_assets();
     NOOR_LOG_INFO("Editor", "Opened project '{}' ({} assets)", doc->project_.info().name, doc->registry_.assets().size());
     return doc;
 }
@@ -50,7 +52,74 @@ Result<std::unique_ptr<Document>> Document::create(const stdfs::path& folder, st
     if (!p) return std::unexpected(p.error());
     std::unique_ptr<Document> doc(new Document(std::move(*p)));
     if (auto r = doc->registry_.scan(doc->project_); !r) return std::unexpected(r.error());
+    doc->watch_assets();
     return doc;
+}
+
+void Document::watch_assets() {
+    watcher_ = asset::FileWatcher{};
+    for (const auto& a : registry_.assets()) {
+        if (auto path = project_.resolve(a.path)) watcher_.watch(*path);
+    }
+}
+
+asset::Json Document::poll_files() {
+    Json changed_list = Json::array();
+    bool prefab_changed = false;
+    for (const auto& path : watcher_.poll()) {
+        ++asset_versions_[path.generic_string()];
+        if (path.extension() == ".noorprefab") prefab_changed = true;
+        auto rel = project_.relative(path);
+        changed_list.push_back(rel ? *rel : path.generic_string());
+        NOOR_LOG_INFO("Editor", "'{}' changed on disk: reloading", rel ? *rel : path.generic_string());
+    }
+    if (!changed_list.empty()) {
+        if (prefab_changed) prefabs_.clear();
+        if (runtime_) {
+            // Keep playing on the old runtime copy; the new content shows after Stop.
+            NOOR_LOG_INFO("Editor", "Changes apply when play mode stops");
+        } else {
+            changed();
+        }
+    }
+    return changed_list;
+}
+
+Status Document::require_editable() const {
+    if (auto s = require_scene(); !s) return s;
+    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode to edit the scene");
+    return {};
+}
+
+Status Document::play() {
+    if (auto s = require_scene(); !s) return s;
+    if (runtime_) return {};
+    runtime_ = scene::expand_prefabs(*scene_, prefabs_.resolver()).scene;
+    play_seconds_ = 0.0;
+    NOOR_LOG_INFO("Editor", "Play");
+    ++revision_;
+    std::unordered_set<Guid> authored;
+    for (const auto& e : scene_->entities) authored.insert(e.id);
+    publish(*runtime_, authored);
+    return {};
+}
+
+void Document::stop() {
+    if (!runtime_) return;
+    runtime_.reset();
+    NOOR_LOG_INFO("Editor", "Stop after {:.1f} s", play_seconds_);
+    changed();
+}
+
+void Document::tick(double seconds) {
+    if (!runtime_ || seconds <= 0.0) return;
+    seconds = std::min(seconds, 0.1);  // a stalled frame doesn't jump the simulation
+    play_seconds_ += seconds;
+    scene::update_behaviours(*runtime_, seconds);
+    ++revision_;
+    std::unordered_set<Guid> authored;
+    for (const auto& e : scene_->entities) authored.insert(e.id);
+    publish(*runtime_, authored);
 }
 
 Json Document::project_info() const {
@@ -65,7 +134,8 @@ Result<Json> Document::assets(bool rescan) {
         auto r = registry_.scan(project_);
         if (!r) return std::unexpected(r.error());
         prefabs_.clear();
-        if (r->moved > 0 || r->content_changed > 0) changed();
+        watch_assets();
+        if ((r->moved > 0 || r->content_changed > 0) && !runtime_) changed();
     }
     Json list = Json::array();
     for (const auto& a : registry_.assets()) {
@@ -94,6 +164,7 @@ Json Document::scenes() const {
 }
 
 Status Document::open_scene(std::string_view relative) {
+    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode before opening another scene");
     auto path = project_.resolve(relative);
     if (!path) return std::unexpected(path.error());
     auto s = scene::Scene::load(*path);
@@ -109,6 +180,7 @@ Status Document::open_scene(std::string_view relative) {
 }
 
 Status Document::new_scene(std::string_view relative, std::string_view name) {
+    if (runtime_) return fail(ErrorCode::InvalidArgument, "Stop play mode before creating a scene");
     auto path = project_.resolve(relative);
     if (!path) return std::unexpected(path.error());
     if (path->extension() != ".noorscene") return fail(ErrorCode::InvalidArgument, "Scene files end in .noorscene");
@@ -150,15 +222,19 @@ Json Document::scene_snapshot() const {
     snap["can_redo"] = history_.can_redo();
     snap["undo_label"] = history_.undo_label().value_or("");
     snap["redo_label"] = history_.redo_label().value_or("");
+    snap["playing"] = runtime_.has_value();
+    snap["play_seconds"] = play_seconds_;
 
     // List the scene as it will run (prefabs expanded); entities that come from a prefab are
     // marked read-only with the instance they belong to.
+    // While playing, the runtime copy is shown (values change as behaviours run).
     const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
+    const scene::Scene& shown = runtime_ ? *runtime_ : expanded.scene;
     std::unordered_set<Guid> authored;
     for (const auto& e : scene_->entities) authored.insert(e.id);
     std::unordered_map<Guid, Guid> instance_of;  // expanded id -> owning instance (authored) id
     Json list = Json::array();
-    for (const auto& e : expanded.scene.entities) {
+    for (const auto& e : shown.entities) {
         const bool from_prefab = !authored.contains(e.id);
         Json j;
         j["id"] = e.id.to_string();
@@ -184,7 +260,7 @@ Json Document::scene_snapshot() const {
 }
 
 Status Document::execute(const Json& command) {
-    if (auto s = require_scene(); !s) return s;
+    if (auto s = require_editable(); !s) return s;
     if (!command.is_object() || !command.contains("op") || !command["op"].is_string()) {
         return fail(ErrorCode::InvalidArgument, "command needs an \"op\"");
     }
@@ -280,56 +356,63 @@ Status Document::add_asset(const Json& command) {
 }
 
 bool Document::undo() {
-    if (!scene_ || !history_.undo(*scene_)) return false;
+    if (!scene_ || runtime_ || !history_.undo(*scene_)) return false;
     changed();
     return true;
 }
 
 bool Document::redo() {
-    if (!scene_ || !history_.redo(*scene_)) return false;
+    if (!scene_ || runtime_ || !history_.redo(*scene_)) return false;
     changed();
     return true;
 }
 
 void Document::changed() {
     ++revision_;
+    if (!scene_) {
+        auto snap = std::make_shared<RenderSnapshot>();
+        snap->revision = revision_;
+        channel_->publish(std::move(snap));
+        return;
+    }
+    std::unordered_set<Guid> authored;
+    for (const auto& e : scene_->entities) authored.insert(e.id);
+    publish(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, authored);
+}
+
+void Document::publish(const scene::Scene& expanded, const std::unordered_set<Guid>& authored) {
     auto snap = std::make_shared<RenderSnapshot>();
     snap->revision = revision_;
-    if (scene_) {
-        const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
-        const auto& entities = expanded.scene.entities;
-        std::unordered_set<Guid> authored;
-        for (const auto& e : scene_->entities) authored.insert(e.id);
-        std::unordered_map<Guid, std::size_t> index;
-        for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
-        auto world_rotation = [&](std::size_t i) {
-            math::Quat q = entities[i].transform.rotation;
-            std::optional<Guid> p = entities[i].parent;
-            for (int depth = 0; p && depth < 256; ++depth) {  // depth guard: cycles are reported elsewhere
-                const auto it = index.find(*p);
-                if (it == index.end()) break;
-                q = entities[it->second].transform.rotation * q;
-                p = entities[it->second].parent;
-            }
-            return math::normalize_quat(q);
-        };
-        snap->entities.reserve(entities.size());
-        for (std::size_t i = 0; i < entities.size(); ++i) {
-            const auto& e = entities[i];
-            snap->entities.push_back({e.id, e.parent, expanded.scene.world_matrix(i), world_rotation(i), e.transform, authored.contains(e.id)});
+    const auto& entities = expanded.entities;
+    std::unordered_map<Guid, std::size_t> index;
+    for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
+    auto world_rotation = [&](std::size_t i) {
+        math::Quat q = entities[i].transform.rotation;
+        std::optional<Guid> p = entities[i].parent;
+        for (int depth = 0; p && depth < 256; ++depth) {  // depth guard: cycles are reported elsewhere
+            const auto it = index.find(*p);
+            if (it == index.end()) break;
+            q = entities[it->second].transform.rotation * q;
+            p = entities[it->second].parent;
         }
-        for (std::size_t i = 0; i < entities.size(); ++i) {
-            const auto& e = entities[i];
-            if (e.has("marker")) snap->markers.push_back({expanded.scene.world_matrix(i), e.id});
-            if (!e.has("mesh")) continue;
-            const auto& mesh = e.components["mesh"];
-            const auto guid = asset::guid_field(mesh, "asset");
-            const auto* rec = guid ? registry_.find(*guid) : nullptr;
-            if (!rec) continue;
-            auto path = project_.resolve(rec->path);
-            if (!path) continue;
-            snap->meshes.push_back({path->generic_string(), mesh.value("mesh_index", -1), expanded.scene.world_matrix(i), e.id});
-        }
+        return math::normalize_quat(q);
+    };
+    snap->entities.reserve(entities.size());
+    for (std::size_t i = 0; i < entities.size(); ++i) {
+        const auto& e = entities[i];
+        const math::Mat4 world = expanded.world_matrix(i);
+        snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !runtime_ && authored.contains(e.id)});
+        if (e.has("marker")) snap->markers.push_back({world, e.id});
+        if (!e.has("mesh")) continue;
+        const auto& mesh = e.components["mesh"];
+        const auto guid = asset::guid_field(mesh, "asset");
+        const auto* rec = guid ? registry_.find(*guid) : nullptr;
+        if (!rec) continue;
+        auto path = project_.resolve(rec->path);
+        if (!path) continue;
+        std::string key = path->generic_string();
+        const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
+        snap->meshes.push_back({std::move(key), mesh.value("mesh_index", -1), world, e.id, version});
     }
     channel_->publish(std::move(snap));
 }

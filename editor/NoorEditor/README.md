@@ -5,7 +5,7 @@ The NoorEngine editor: Avalonia + Dock (ADR-003) on top of the engine's C API,
 registry; the editor shows JSON snapshots of them and changes things only through engine
 commands, so every edit is undoable and the editor holds no second copy of the scene.
 
-## What works (Milestone 3, parts 1–3)
+## What works (Milestone 3)
 
 - **Project hub**: recent projects, New Project (creates the folder and an empty `Scenes/Main.noorscene`), Open Project.
 - **Viewport**: the engine renders the open scene (GLB models, prefab instances, markers) on its
@@ -24,6 +24,11 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 - **Snapping**: the **Snap** toggle in the viewport toolbar (or hold **Ctrl** while dragging to
   flip it). Moves land on a world grid, rotations on angle steps, scales on scale steps.
 - **Preferences** (Edit ▸ Preferences): fly speed, look sensitivity, gizmo size, snap steps.
+- **Play / Stop** (Ctrl+P): runs a copy of the scene (ADR-026). Before scripting, the only
+  behaviour is `rotator` (add a component named `rotator` with `degrees_per_second`). Edits are
+  off while playing; Stop brings back the scene as you left it.
+- **Live reload**: when a model or prefab in the project changes on disk (BadBuilding regenerates
+  a building, say), the viewport reloads it within a second. New files need **Rescan**.
 - **Scene** panel: the entity tree, with a filter. Prefab contents are shown dimmed and read-only.
   Double-click frames an entity, **Delete** removes it with its children.
 - **Inspector**: name, position, rotation (Euler degrees, yaw about +Y) and scale. Each value you
@@ -38,7 +43,7 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   Unsaved changes are confirmed on close, scene switch and Close Project.
 - **Layout**: panel sizes and active tabs are remembered (per user); **Window ▸ Reset Layout**.
 
-Not yet: play mode, local-space move/rotate, multi-select, typed component editors,
+Not yet: scripts, local-space move/rotate, multi-select, typed component editors,
 remembering panels moved to another dock or floated, multiple viewports per document.
 
 ## Run
@@ -62,6 +67,7 @@ dotnet run --project editor/NoorEditor -- --project build/street
 model from the content browser, edits it through the inspector, undoes/redoes, saves and checks
 the file, deletes and restores, then clicks and drags in the real viewport (mouse and key messages
 posted to its own child window: pick, drill down, a 3 m move along X, a 40° turn, a 2x scale, a snapped
-move, flying with W, mouse-look), edits components, saves preferences, checks layout
+move, flying with W, mouse-look), edits components, saves preferences, live-reloads a model,
+edits through a floating Inspector, plays and stops, checks swapchain size against render scaling, checks layout
 save/restore, floats the viewport, and requires zero validation and engine errors. Results (`editor_results.json`) and screenshots of the editor's own windows land in
 `build/ninja/tests/editor_smoke/<config>/`. It needs a GPU, so CI only builds the editor.

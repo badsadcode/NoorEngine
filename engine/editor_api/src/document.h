@@ -2,6 +2,7 @@
 // Internal to noor_editor_api: an editor document (ADR-025). Owns an open project, its asset
 // registry, one open scene with its undo history, and publishes render snapshots for viewports.
 
+#include "noor/asset/file_watcher.h"
 #include "noor/asset/json.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
@@ -17,6 +18,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace noor::editor {
@@ -28,6 +31,7 @@ struct RenderSnapshot {
         int mesh_index = -1;
         math::Mat4 world;
         Guid entity;             // expanded entity id
+        std::uint64_t asset_version = 0;  // bumps when the file changes on disk: reload it
     };
     // Every entity of the expanded scene, for picking, highlighting and gizmos.
     struct Entity {
@@ -87,6 +91,18 @@ public:
     bool undo();
     bool redo();
 
+    // Play mode (ADR-026): a runtime copy of the expanded scene that behaviours update. Edits are
+    // refused while playing; Stop throws the runtime copy away.
+    [[nodiscard]] Status play();
+    void stop();
+    [[nodiscard]] bool playing() const noexcept { return runtime_.has_value(); }
+    void tick(double seconds);
+
+    // Checks watched asset files (models, prefabs) for changes on disk. Changed files get a new
+    // version in the render snapshot (viewports reload them) and prefabs are re-read.
+    // Returns the project-relative paths that changed.
+    [[nodiscard]] asset::Json poll_files();
+
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
     [[nodiscard]] std::shared_ptr<SnapshotChannel> channel() const noexcept { return channel_; }
 
@@ -95,6 +111,9 @@ private:
     [[nodiscard]] Status require_scene() const;
     [[nodiscard]] Status add_asset(const asset::Json& command);
     void changed();  // bumps the revision and republishes the render snapshot
+    void publish(const scene::Scene& expanded, const std::unordered_set<Guid>& authored);
+    void watch_assets();
+    [[nodiscard]] Status require_editable() const;
 
     asset::Project project_;
     asset::AssetRegistry registry_;
@@ -103,6 +122,10 @@ private:
     std::filesystem::path scene_file_;
     scene::History history_;
     std::uint64_t revision_ = 0;
+    std::optional<scene::Scene> runtime_;  // play mode
+    double play_seconds_ = 0.0;
+    asset::FileWatcher watcher_;
+    std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version
     std::shared_ptr<SnapshotChannel> channel_ = std::make_shared<SnapshotChannel>();
 };
 

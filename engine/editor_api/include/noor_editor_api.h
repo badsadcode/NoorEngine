@@ -30,8 +30,9 @@ extern "C" {
 
 /* 1: documents (ADR-025), viewports render documents.
  * 2: viewport selection highlight, gizmos and events (picking, gizmo edits).
- * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size). */
-#define NOOR_EDITOR_API_VERSION 3u
+ * 3: scale gizmo, viewport options (snapping, camera speed, gizmo size).
+ * 4: play mode, asset files watched for changes (live reload). */
+#define NOOR_EDITOR_API_VERSION 4u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -109,6 +110,17 @@ NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json);
 NOOR_API int32_t noor_doc_undo(noor_doc* doc);
 NOOR_API int32_t noor_doc_redo(noor_doc* doc);
 NOOR_API uint64_t noor_doc_revision(noor_doc* doc);
+
+/* Play mode (ADR-026): runs a copy of the scene; Stop discards it. While playing,
+ * noor_doc_scene shows the running copy ("playing": true) and edits/undo are refused.
+ * The host calls noor_doc_tick with the elapsed seconds (e.g. every UI frame). */
+NOOR_API int32_t noor_doc_play(noor_doc* doc);
+NOOR_API void noor_doc_stop(noor_doc* doc);
+NOOR_API void noor_doc_tick(noor_doc* doc, double seconds);
+
+/* Checks the project's asset files for changes on disk (call every ~0.5 s). Changed models are
+ * reloaded by viewports and prefabs re-read. Returns a JSON array of the changed relative paths. */
+NOOR_API const char* noor_doc_poll_files(noor_doc* doc);
 
 /* Viewports showing documents. Passing NULL detaches. The viewport keeps working if the
  * document is closed first (it keeps showing the last published scene). */

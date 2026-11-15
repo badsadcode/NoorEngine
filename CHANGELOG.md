@@ -2,7 +2,24 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 3 in progress (NoorEditor)
+## [Unreleased] — Milestone 3 complete, Milestone 4 next
+
+### 2026-11-15 — Milestone 3 complete: play mode, live reload, gate review
+**Added**
+- ADR-026 (play mode). Editor API **v4**: `noor_doc_play` / `stop` / `tick` (a runtime copy of
+  the expanded scene; edits, undo and scene switches refused while playing; Stop restores) and
+  `noor_doc_poll_files` (watched asset files: changed models get a new version in the render
+  snapshot and viewports reload them; changed prefabs are re-read).
+- `scene::update_behaviours`: the first built-in behaviour, `rotator` (axis, degrees per second).
+- NoorEditor: **▶ Play / ■ Stop** (Ctrl+P), running values shown in the panels a few times per
+  second, gizmos hidden and Inspector read-only while playing; asset files polled twice a second;
+  the hierarchy only rebuilds when its structure changes.
+- `docs/milestones/M3_REVIEW.md`: gate review (complete with 6 exceptions; a HiDPI run on a real
+  scaled display is outstanding).
+- Tests: rotator unit test; document tests for play/stop, live prefab reload, undo edge cases
+  (after save, redo branch, transactions, scene switch); the editor smoke test plays, live-reloads
+  a model, edits through a floating Inspector and asserts swapchain = control × render scaling
+  (61 checks). 108/108 Debug, 102/102 Release without GPU.
 
 ### 2026-11-15 — Milestone 3, part 3: scale gizmo, snapping, preferences, component editing
 **Added**

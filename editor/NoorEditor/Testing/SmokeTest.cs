@@ -156,6 +156,7 @@ internal static class SmokeTest
         // 7. Viewport interaction with real (posted) mouse input on the engine's child window.
         await ViewportInteraction(window, id, Check, Shot);
         await ScaleSnapAndComponents(window, settings, id, Check, Shot);
+        await PlayReloadAndWindows(window, id, results, Check, Shot);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -441,6 +442,68 @@ internal static class SmokeTest
         check(comps.SetComponent("smoke_test", null) && !doc.Selected!.Components.ContainsKey("smoke_test"), "remove a component");
         check(doc.Undo() && doc.Selected!.Components.ContainsKey("smoke_test"), "undo the removal");
         check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("smoke_test"), "undo back to no component");
+    }
+
+    private static async Task PlayReloadAndWindows(MainWindow window, string rootId, Dictionary<string, object> results,
+                                                   Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        doc.Select(rootId);
+
+        // HiDPI: the swapchain must match the viewport control in physical pixels at any scaling.
+        var vp = window.ViewportView!.Viewport;
+        var scaling = window.RenderScaling;
+        var stats = vp.Stats!.Value;
+        results["render_scaling"] = scaling;
+        var expectW = vp.Bounds.Width * scaling;
+        var expectH = vp.Bounds.Height * scaling;
+        check(Math.Abs(stats.Width - expectW) <= 2 && Math.Abs(stats.Height - expectH) <= 2,
+              $"HiDPI: swapchain {stats.Width}x{stats.Height} matches the control at scale {scaling:0.##} ({expectW:0}x{expectH:0})");
+
+        // Live reload: the model file is rewritten on disk (as a generator would); the viewport reloads it.
+        var glb = Path.Combine(doc.ProjectRoot, "Assets", "Buildings", BuildingGlb + ".glb");
+        File.Copy(Path.Combine(Program.Options.TestData!, "badbuilding", BuildingGlb + ".glb"), glb, overwrite: true);
+        File.SetLastWriteTimeUtc(glb, DateTime.UtcNow.AddSeconds(2));
+        var reloaded = false;
+        for (var i = 0; i < 40 && !reloaded; i++)
+        {
+            await Task.Delay(100);
+            reloaded = EngineLog.Lines.Any(l => l.Category == "Viewport" && l.Message.Contains($"Reloaded {BuildingGlb}.glb"));
+        }
+        check(reloaded, "live reload: a model changed on disk is reloaded in the viewport");
+
+        // Several windows: float the Inspector and edit through it.
+        if (window.FindDockable("Inspector") is { } inspectorPanel)
+        {
+            window.DockFactory.FloatDockable(inspectorPanel);
+            await Task.Delay(800);
+            var floating = window.Inspector!;
+            check(TopLevel.GetTopLevel(floating) != window, "the Inspector floats in its own window");
+            floating.TypeName("Floating edit");
+            check(doc.Selected?.Name == "Floating edit", "editing through the floating Inspector");
+            check(doc.Undo() && doc.Selected?.Name != "Floating edit", "undo works across windows");
+        }
+        else
+        {
+            check(false, "Inspector panel found");
+        }
+
+        // Play: a rotator turns the building while playing; Stop restores the edit-time scene.
+        var yaw0 = doc.Selected!.Transform.Rotation.ToEulerDegrees().Y;
+        check(window.Inspector!.Components.SetComponent("rotator", new System.Text.Json.Nodes.JsonObject { ["degrees_per_second"] = 30.0 }),
+              "add a rotator");
+        window.TogglePlay();
+        await Task.Delay(1000);
+        doc.Refresh();
+        var running = doc.Selected?.Transform.Rotation.ToEulerDegrees().Y ?? yaw0;
+        var turned = Math.Abs(running - yaw0);
+        check(doc.Playing && turned is > 15 and < 60, $"play: the rotator turns the building ({turned:0} degrees in about 1 s at 30/s)");
+        check(!doc.Rename(rootId, "nope"), "play: edits are refused while playing");
+        shot(window, "editor_9_playing.png");
+        window.TogglePlay();
+        check(!doc.Playing && Math.Abs(doc.Selected!.Transform.Rotation.ToEulerDegrees().Y - yaw0) < 1e-3,
+              "stop: the scene is back as it was edited");
+        check(doc.Undo() && !doc.Selected!.Components.ContainsKey("rotator"), "undo the rotator");
     }
 
     private static async Task<T?> WaitFor<T>(Func<T?> read, Func<T?, bool> done, double seconds) where T : struct

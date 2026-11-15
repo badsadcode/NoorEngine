@@ -21,6 +21,7 @@ public sealed class HierarchyPanel : DockPanel
     private readonly Dictionary<string, TreeViewItem> _items = new();
     private readonly HashSet<string> _expanded = new();
     private bool _syncing;
+    private string _structure = "";  // ids, parents and names last shown
 
     /// <summary>Raised on double-click: frame this entity in the viewport.</summary>
     public event Action<string>? FrameRequested;
@@ -83,6 +84,13 @@ public sealed class HierarchyPanel : DockPanel
             : "No scene open. Use File ▸ New Scene, or double-click a scene in the Content Browser.";
 
         var filter = _filter.Text?.Trim() ?? "";
+        var structure = filter + "|" + string.Join(";", scene.Entities.Select(e => $"{e.Id},{e.Parent},{e.Name}"));
+        if (structure == _structure && _items.Count > 0)
+        {
+            SyncSelection();
+            return;
+        }
+        _structure = structure;
         var children = scene.Entities.GroupBy(e => e.Parent ?? "").ToDictionary(g => g.Key, g => g.ToList());
         _items.Clear();
 
