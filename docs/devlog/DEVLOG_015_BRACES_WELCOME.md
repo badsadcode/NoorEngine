@@ -61,12 +61,23 @@ Tom's game Thornwake, where all of this started: he was already walking its worl
 default character before NoorEngine existed. Tom and Noor decided he should be the first citizen
 of NoorEngine too.
 
+![Alden Wayfarer concept sheet: a blocky explorer with a teal tunic, a backpack and a walking staff, his poses, and his statue on a mountain](img/devlog015_alden_concept.webp)
+
+*Concept art. Below: the real Alden, in Thornwake, in front of a volcano and a debug HUD.*
+
+![Alden in Thornwake: a blocky figure standing on a plain in front of a smoking volcano](img/devlog015_alden_thornwake.webp)
+
 He's a blocky, cheerful explorer: teal tunic, a belt with a gold buckle, a big backpack with a
 bedroll, and a walking staff. In the concept art he has a statue on a mountain top that says
 *"He went first because somebody had to."* Next to it, a stone tablet reads
 **"Explore · Test · Break · Repeat"**, which, frankly, is also how this engine gets built.
 
 He'll star in the sample games once he has a proper 3D model.
+
+**A new tradition:** at every major NoorEngine milestone, Alden discovers something new: the
+thing the engine just learned to do. Put together, his adventures will be a picture history of
+the engine. He started as a legend inside a world we were making; now he's the first inhabitant
+of the technology for making many more.
 
 ## Next engineering target
 **Part 5: sound.** Footsteps, one-shots and music, in 3D.

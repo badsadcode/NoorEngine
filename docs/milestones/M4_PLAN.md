@@ -32,3 +32,8 @@ ADR-010 (physics: Jolt), ADR-011 (audio: miniaudio).
    and kerbs) (part 3).
 4. **Build packaging**: what a build contains, and the .NET runtime requirement (part 6).
 5. **Scope**: the FPS sample can swallow the milestone; it uses only public APIs and stays "lite".
+
+## Milestone tradition: Alden discovers something
+Every major milestone, Alden Wayfarer (the mascot, devlog #015) discovers what the engine just
+learned. For Milestone 4 the review proposes a line like *"Alden discovers that the world now
+answers back: things fall, scripts think, and he can walk."*; Tom and Noor make the picture.
