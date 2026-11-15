@@ -160,6 +160,8 @@ NOOR_API void noor_doc_tick(noor_doc* doc, double seconds, noor_viewport* input_
     if (!doc) return;
     guarded<>(0, [&] {
         doc->doc->tick(seconds, noor_viewport_game_input(input_viewport));
+        if (const auto want = doc->doc->take_mouse_capture_request(); want && input_viewport)
+            noor_viewport_set_mouse_capture(input_viewport, *want ? 1 : 0);
         return 0;
     });
 }

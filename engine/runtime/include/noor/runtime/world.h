@@ -13,7 +13,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -78,6 +80,12 @@ public:
     int max_fixed_steps = 5;
     double max_dt = 0.1;
 
+    // ---- Mouse capture (FPS look) ----
+    // Scripts ask; the host decides (it captures on the next frame, and always releases on Escape,
+    // focus loss and Stop). input().state().mouse_captured tells what actually happened.
+    void request_mouse_capture(bool capture) { mouse_capture_request_ = capture; }
+    [[nodiscard]] std::optional<bool> take_mouse_capture_request() { return std::exchange(mouse_capture_request_, std::nullopt); }
+
     // ---- Events ----
     void post(const Event& event) { events_.push_back(event); }
     [[nodiscard]] const std::vector<Event>& events() const noexcept { return events_; }
@@ -101,6 +109,7 @@ private:
     std::unordered_set<Guid> started_;
     std::vector<Guid> destroy_queue_;
     std::vector<Event> events_;
+    std::optional<bool> mouse_capture_request_;
     double time_ = 0.0;
     double accumulator_ = 0.0;
     std::uint64_t frames_ = 0;

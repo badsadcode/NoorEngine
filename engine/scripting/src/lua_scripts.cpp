@@ -173,6 +173,11 @@ struct LuaScriptSystem::Impl {
                  else lua_pushnil(L);
                  return 1;
              }},
+            {"child", [](lua_State* L) {
+                 if (auto ch = api::child(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2))) push_entity(L, *ch);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
             {"parent", [](lua_State* L) {
                  if (auto p = api::parent(world_of(L), check_entity(L, 1))) push_entity(L, *p);
                  else lua_pushnil(L);
@@ -239,6 +244,20 @@ struct LuaScriptSystem::Impl {
             {"add_force", [](lua_State* L) {
                  if (auto* p = physics_of(L)) p->add_force(check_entity(L, 1), check_vec(L, 2));
                  return 0;
+             }},
+            // ---- Character controller (needs a character component) ----
+            {"character_move", [](lua_State* L) {
+                 if (auto* p = physics_of(L)) p->character_move(check_entity(L, 1), check_vec(L, 2));
+                 return 0;
+             }},
+            {"character_jump", [](lua_State* L) {
+                 if (auto* p = physics_of(L)) p->character_jump(check_entity(L, 1), static_cast<float>(luaL_optnumber(L, 2, 5.0)));
+                 return 0;
+             }},
+            {"is_grounded", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
+                 return 1;
              }},
             {nullptr, nullptr},
         };
@@ -332,6 +351,14 @@ struct LuaScriptSystem::Impl {
              }},
             {"axis", [](lua_State* L) {
                  lua_pushnumber(L, api::input_axis(world_of(L), luaL_checkstring(L, 1)));
+                 return 1;
+             }},
+            {"capture_mouse", [](lua_State* L) {
+                 api::capture_mouse(world_of(L), lua_isnoneornil(L, 1) ? true : lua_toboolean(L, 1) != 0);
+                 return 0;
+             }},
+            {"mouse_captured", [](lua_State* L) {
+                 lua_pushboolean(L, api::mouse_captured(world_of(L)));
                  return 1;
              }},
             {nullptr, nullptr},

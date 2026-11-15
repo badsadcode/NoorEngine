@@ -28,7 +28,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
 | `runtime`: game world, frame order, fixed 60 Hz step, input actions/axes, built-in behaviours; the editor's play mode runs it with keyboard input from the viewport | **Milestone 4, part 1.** Works, unit-tested; physics and audio plug in next |
 | `scripting`: **Lua (Luau) scripts**, sandboxed, with entities, transforms, input, components and logging ([API](docs/scripting/LUA_API.md)) | **Milestone 4, part 2.** Works; unit-tested and driven from the editor. C# next (part 4) |
-| `physics`: **Jolt** rigid bodies, colliders (box, sphere, capsule, mesh from GLBs), raycasts, forces, collision/trigger events for scripts; primitive shapes | **Milestone 4, part 3a.** Works; unit-tested and played in the editor. Character controller next |
+| `physics`: **Jolt** rigid bodies, colliders (box, sphere, capsule, mesh from GLBs), raycasts, forces, collision/trigger events; **character controller**; game camera; mouse capture; primitive shapes | **Milestone 4, part 3.** Works; unit-tested; a first-person player walks and jumps in the editor |
 | Textures, C# scripting, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in

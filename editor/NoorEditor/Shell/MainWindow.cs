@@ -318,7 +318,37 @@ public sealed class MainWindow : Window
             item.Click += (_, _) => CreateEntity(t);
             menu.Items.Add(item);
         }
+        menu.Items.Add(new Separator());
+        var player = new MenuItem { Header = EntityTemplates.PlayerTemplateName };
+        player.Click += (_, _) => CreatePlayer(new Vec3(0, 0.05, 0));
+        menu.Items.Add(player);
         return menu;
+    }
+
+    /// <summary>
+    /// Create ▸ Player (first person): the player entity, its body and camera, and
+    /// Scripts/PlayerController.luau (written from the template if the project doesn't have it yet).
+    /// One undo step.
+    /// </summary>
+    public string? CreatePlayer(Vec3 feet)
+    {
+        if (!Doc.Scene.Open || Doc.Playing) return null;
+        var script = Path.Combine(Doc.ProjectRoot, EntityTemplates.PlayerScriptPath);
+        if (!File.Exists(script))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(script)!);
+            File.WriteAllText(script, EntityTemplates.PlayerScript);
+        }
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "begin", ["label"] = "Create Player" });
+        var id = Doc.Create("Player", EntityTemplates.PlayerComponents(), feet);
+        if (id != null)
+        {
+            Doc.Create("Body", EntityTemplates.PlayerBody(), new Vec3(0, 0.9, 0), id);
+            Doc.Create("Camera", EntityTemplates.PlayerCamera(), new Vec3(0, 1.6, 0), id);
+        }
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "end" });
+        if (id != null) Doc.Select(id);
+        return id;
     }
 
     /// <summary>Create ▸ template: added to the open scene and selected.</summary>
@@ -403,6 +433,7 @@ public sealed class MainWindow : Window
         if (Doc.Playing)
         {
             _playTimer.Stop();
+            if (ViewportView?.Viewport.EngineHandle is { } vp && vp != IntPtr.Zero) Native.noor_viewport_set_mouse_capture(vp, 0);  // the mouse always comes back on Stop
             Doc.Stop();
             return;
         }
@@ -591,9 +622,8 @@ public sealed class MainWindow : Window
 
     public bool ViewportHasFocus()
     {
-        var hwnd = ViewportView?.Viewport.NativeWindow ?? IntPtr.Zero;
-        return hwnd != IntPtr.Zero && GetFocus() == hwnd;
+        var vp = ViewportView?.Viewport.EngineHandle ?? IntPtr.Zero;
+        return vp != IntPtr.Zero && Native.noor_viewport_has_focus(vp) == 1;
     }
 
-    [DllImport("user32.dll")] private static extern IntPtr GetFocus();
 }

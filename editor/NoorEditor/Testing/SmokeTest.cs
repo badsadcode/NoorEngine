@@ -158,6 +158,7 @@ internal static class SmokeTest
         await ScaleSnapAndComponents(window, settings, id, Check, Shot);
         await PlayReloadAndWindows(window, id, results, Check, Shot);
         await PhysicsChecks(window, id, results, Check, Shot);
+        await PlayerChecks(window, results, Check, Shot);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -519,6 +520,10 @@ internal static class SmokeTest
         check(window.Inspector!.Components.SetComponent("input_mover", new System.Text.Json.Nodes.JsonObject { ["speed"] = 5.0 }),
               "add an input_mover");
         doc.SetTool(EditorTool.Rotate);
+        var gameView = window.ViewportView!.Viewport;
+        var gameStats = gameView.Stats!.Value;
+        // Test mode: the viewport counts as focused, whatever window Windows puts in front.
+        Native.noor_viewport_test_pointer(gameView.EngineHandle, 1, (int)gameStats.Width / 2, (int)gameStats.Height / 2, 0);
         window.TogglePlay();
         var hwnd = window.ViewportView!.Viewport.NativeWindow;
         // Keys go to the focused window; another window (or app) may be active right now.
@@ -599,11 +604,91 @@ internal static class SmokeTest
         window.TogglePlay();
         check(doc.Selected!.Transform.Position == start, "stop: the scripted building is back");
         check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("script"), "undo the script component");
+        Native.noor_viewport_test_pointer(gameView.EngineHandle, 0, 0, 0, 0);
         doc.SetTool(EditorTool.Move);
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr hwnd);
+
+    // Milestone 4, part 3b: a first-person player on the physics floor.
+    private static async Task PlayerChecks(MainWindow window, Dictionary<string, object> results,
+                                           Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var player = window.CreatePlayer(new Vec3(-25, 0.05, 3));  // on the floor made by PhysicsChecks
+        var kids = doc.Scene.Entities.Where(e => e.Parent == player).Select(e => e.Name).ToHashSet();
+        check(player != null && kids.SetEquals(["Body", "Camera"]) && File.Exists(Path.Combine(doc.ProjectRoot, EntityTemplates.PlayerScriptPath)),
+              "Create > Player: player, body, camera and Scripts/PlayerController.luau");
+        check(doc.Scene.UndoLabel == "Create Player", "Create > Player is one undo step");
+        if (player == null) return;
+
+        var vp = window.ViewportView!.Viewport;
+        var hwnd = vp.NativeWindow;
+        var stats = vp.Stats!.Value;
+        _testViewport = vp.EngineHandle;
+        await Pointer(stats.Width / 2.0, stats.Height / 2.0, 0);  // test mode: counts as focused
+        window.TogglePlay();
+        for (var attempt = 0; attempt < 5 && !window.ViewportHasFocus(); attempt++)
+        {
+            window.Activate();
+            await Task.Delay(50);
+            SetFocus(hwnd);
+            await Task.Delay(50);
+        }
+        await Task.Delay(400);  // settle on the floor
+        doc.Refresh();
+        Vec3 P() => doc.Scene.Entities.First(e => e.Id == player).Transform.Position;
+        var p0 = P();
+        check(Math.Abs(p0.Y) < 0.05, $"player stands on the floor (feet at y = {p0.Y:0.000})");
+
+        // The viewport now looks through the player's camera: a point straight ahead is mid-screen.
+        var ahead = vp.WorldToScreen(new Vec3(p0.X, p0.Y + 1.6, p0.Z - 6));
+        check(ahead is { } a && Math.Abs(a.X - stats.Width / 2.0) < stats.Width * 0.03 && Math.Abs(a.Y - stats.Height / 2.0) < stats.Height * 0.03,
+              "play: the viewport looks through the player's camera");
+
+        PostMessageW(hwnd, WmKeyDown, 'W', 1);
+        await Task.Delay(800);
+        PostMessageW(hwnd, WmKeyUp, 'W', unchecked((IntPtr)0xC0000001));
+        await Task.Delay(150);
+        doc.Refresh();
+        var p1 = P();
+        results["player_walk_m"] = Math.Round(p0.Z - p1.Z, 2);
+        check(p1.Z < p0.Z - 0.5 && Math.Abs(p1.Y - p0.Y) < 0.05 && Math.Abs(p1.X - p0.X) < 0.05,
+              $"W walks the player forward along -Z (moved {p0.Z - p1.Z:0.00} m, stayed on the floor)");
+
+        PostMessageW(hwnd, WmKeyDown, 0x20, 1);  // Space: jump
+        await Task.Delay(80);
+        PostMessageW(hwnd, WmKeyUp, 0x20, unchecked((IntPtr)0xC0000001));
+        var peak = 0.0;
+        for (var i = 0; i < 10; i++)
+        {
+            await Task.Delay(40);
+            doc.Refresh();
+            peak = Math.Max(peak, P().Y);
+        }
+        results["player_jump_peak_m"] = Math.Round(peak, 2);
+        check(peak > 0.3, $"Space jumps (peak {peak:0.00} m)");
+
+        // Mouse capture: a click asks for it (the script), Escape gives it back. The test pointer
+        // stands in for the mouse, so this never takes the real cursor.
+        await Pointer(stats.Width / 2.0, stats.Height / 2.0, 1);
+        await Pointer(stats.Width / 2.0, stats.Height / 2.0, 0);
+        await Task.Delay(100);
+        check(Native.noor_viewport_mouse_captured(vp.EngineHandle) == 1, "a click in the game view captures the mouse (script request)");
+        shot(window, "editor_12_player_view.png");
+        PostMessageW(hwnd, WmKeyDown, 0x1B, 1);  // Escape
+        await Task.Delay(80);
+        PostMessageW(hwnd, WmKeyUp, 0x1B, unchecked((IntPtr)0xC0000001));
+        await Task.Delay(80);
+        check(Native.noor_viewport_mouse_captured(vp.EngineHandle) == 0, "Escape releases the mouse");
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);
+
+        window.TogglePlay();
+        doc.Refresh();
+        check(P().Z == 3 && !doc.Playing, "stop: the player is back at the start");
+        check(EngineLog.Lines.All(l => l.Category != "Script" || l.Level < 4), "the PlayerController template runs without script errors");
+    }
 
     // Milestone 4, part 3: physics in play mode.
     private static async Task PhysicsChecks(MainWindow window, string buildingId, Dictionary<string, object> results,

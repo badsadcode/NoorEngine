@@ -4,6 +4,34 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-15 — Milestone 4, part 3b: a walking first-person player
+**Added**
+- `character` component on Jolt `CharacterVirtual`: capsule with feet at the entity origin, slides
+  along walls, walks up steps (`step_height`) and slopes (`max_slope`), sticks to the floor going
+  down, jumps only from the ground; an inner body so raycasts and triggers see the player.
+  `character_move` (per frame), `character_jump`, `is_grounded` in C++ and Lua.
+- `camera` component: while playing, the viewport looks through the first camera entity
+  (picking, gizmos and `world_to_screen` use the same camera).
+- Mouse capture for look: scripts ask (`noor.input.capture_mouse`), the host captures only a
+  focused game view (cursor hidden and clipped, raw mouse movement as `look_x`/`look_y`); Escape,
+  focus loss and Stop always release it. Tests never take the real mouse (test pointer mode).
+  Editor API: `noor_viewport_set_mouse_capture`, `noor_viewport_mouse_captured`.
+- `e:child(name)` in the script API.
+- NoorEditor: **Create ▸ Player (first person)** (player with character + script, a capsule body and
+  an eye-height camera; one undo step) and the `Scripts/PlayerController.luau` template (WASD, Shift
+  sprint, Space jump, mouse look after a click, Esc to release).
+
+**Tests:** 5 character tests (standing/walking/stopping, jump only from the ground, 0.3 m kerb up and
+2 m wall stop, raycast and trigger see the player, a Lua script steering and asking for the mouse);
+the editor smoke test creates the player, plays, checks the view is the player's camera, walks
+(3.1 m), jumps (1.23 m peak; 1.27 predicted), captures and releases the mouse (91 checks).
+
+**Fixed (tests)**
+- Under ctest the editor is launched from a background process and Windows may not let it take
+  the foreground, so keyboard focus (and held keys) came and went. The viewport's test mode now
+  counts as focused, and the editor asks the engine (`noor_viewport_has_focus`) instead of Windows
+  whether the viewport has focus. 139/139 Debug, 133/133 Release without GPU.
+
 ### 2026-11-15 — Milestone 4, part 3a: physics (Jolt)
 **Added**
 - Jolt Physics 5.6.0 (MIT) pinned, built for a portable SSE4.2 baseline (no AVX2), without its GPU

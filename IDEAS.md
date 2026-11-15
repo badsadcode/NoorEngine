@@ -18,7 +18,7 @@ This file makes sure **no idea is lost** and **no idea derails the current miles
 
 | Idea | From | Date |
 |---|---|---|
-| *(empty — this will not last)* | | |
+| **Alden Wayfarer is NoorEngine's mascot**, the "first citizen" and first explorer of Bad Ideas Works worlds, carried over from Thornwake where it all started. Possible uses: hero of the sample games (NoorFPS-lite, third-person sample), default name of Create ▸ Player, devlog/website art, splash screen. Needs: his look and story from Tom and Noor. | Tom & Noor | 2026-11-15 |
 
 ## Triaged
 

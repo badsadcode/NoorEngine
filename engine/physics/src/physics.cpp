@@ -10,6 +10,7 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
@@ -133,6 +134,13 @@ struct PhysicsSystem::Impl {
         bool sensor;
     };
     std::unordered_map<Guid, Body> bodies;
+    struct Character {
+        JPH::Ref<JPH::CharacterVirtual> controller;
+        float step_height = 0.4f;
+        math::Vec3 wanted{0, 0, 0};  // horizontal velocity this frame
+        float jump = 0.0f;           // pending jump speed
+    };
+    std::unordered_map<Guid, Character> characters;
     std::vector<Guid> entity_of;  // body user data - 1 -> entity
     // Jolt drops the contacts of bodies that fall asleep and re-adds them when they wake. To
     // scripts the resting crate never left the floor: such pairs are parked here, not reported.
@@ -176,6 +184,7 @@ struct PhysicsSystem::Impl {
     }
 
     ~Impl() {
+        characters.clear();  // removes their inner bodies
         auto& bi = system.GetBodyInterface();
         for (auto& [entity, body] : bodies) {
             bi.RemoveBody(body.id);
@@ -294,6 +303,32 @@ PhysicsSystem::PhysicsSystem(Options options) : impl_(std::make_unique<Impl>(std
 PhysicsSystem::~PhysicsSystem() = default;
 
 void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity) {
+    if (const auto ch = entity.components.find("character"); ch != entity.components.end() && ch->is_object()) {
+        auto& d = *impl_;
+        const float radius = std::max(0.05f, number(*ch, "radius", 0.3f));
+        const float height = std::max(radius * 2.0f + 0.01f, number(*ch, "height", 1.8f));
+        const float half_cylinder = height * 0.5f - radius;
+        // Feet at the entity's origin: the capsule sits on top of it.
+        auto capsule = JPH::RotatedTranslatedShapeSettings(JPH::Vec3(0, height * 0.5f, 0), JPH::Quat::sIdentity(),
+                                                           new JPH::CapsuleShape(half_cylinder, radius)).Create();
+        if (capsule.HasError()) {
+            NOOR_LOG_ERROR("Physics", "'{}': character not created: {}", entity.name, capsule.GetError().c_str());
+            return;
+        }
+        JPH::CharacterVirtualSettings s;
+        s.mShape = capsule.Get();
+        s.mInnerBodyShape = capsule.Get();
+        s.mInnerBodyLayer = layers::kMoving;
+        s.mMaxSlopeAngle = JPH::DegreesToRadians(number(*ch, "max_slope", 50.0f));
+        s.mMass = std::max(1.0f, number(*ch, "mass", 70.0f));
+        s.mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -radius);  // contacts below the lower sphere's centre carry it
+        const auto pos = runtime::api::world_position(world, entity.id);
+        d.entity_of.push_back(entity.id);
+        Impl::Character c;
+        c.controller = new JPH::CharacterVirtual(&s, to_j(pos.value_or(math::Vec3{})), JPH::Quat::sIdentity(), d.entity_of.size(), &d.system);
+        c.step_height = std::max(0.0f, number(*ch, "step_height", 0.4f));
+        d.characters[entity.id] = std::move(c);
+    }
     const auto c = entity.components.find("collider");
     if (c == entity.components.end() || !c->is_object()) return;
     auto& d = *impl_;
@@ -339,6 +374,7 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
 
 void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entity) {
     auto& d = *impl_;
+    d.characters.erase(entity.id);
     const auto it = d.bodies.find(entity.id);
     if (it == d.bodies.end()) return;
     auto& bi = d.system.GetBodyInterface();
@@ -357,7 +393,36 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         const auto r = runtime::api::world_rotation(world, entity);
         if (m && r) bi.MoveKinematic(body.id, to_j(m->transform_point({0, 0, 0})), to_j(*r), static_cast<float>(dt));
     }
-    d.system.Update(static_cast<float>(dt), 1, d.temp.get(), d.jobs.get());
+    // Characters move first (Jolt's recommended order), then the rigid bodies.
+    const JPH::Vec3 gravity = d.system.GetGravity();
+    const float step = static_cast<float>(dt);
+    for (auto& [entity, c] : d.characters) {
+        auto& ch = *c.controller;
+        ch.UpdateGroundVelocity();
+        const JPH::Vec3 ground = ch.GetGroundVelocity();
+        const JPH::Vec3 vertical(0, ch.GetLinearVelocity().GetY(), 0);
+        JPH::Vec3 v;
+        if (ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && vertical.GetY() - ground.GetY() < 0.1f) {
+            v = ground;  // standing: move with what we stand on
+            if (c.jump > 0) v += JPH::Vec3(0, c.jump, 0);
+        } else {
+            v = vertical;  // in the air: keep falling (or rising)
+        }
+        c.jump = 0.0f;
+        v += gravity * step + JPH::Vec3(c.wanted.x, 0, c.wanted.z);
+        ch.SetLinearVelocity(v);
+        JPH::CharacterVirtual::ExtendedUpdateSettings settings;
+        settings.mWalkStairsStepUp = JPH::Vec3(0, c.step_height, 0);
+        const JPH::IgnoreSingleBodyFilter self(ch.GetInnerBodyID());
+        ch.ExtendedUpdate(step, gravity, settings, d.system.GetDefaultBroadPhaseLayerFilter(layers::kMoving),
+                          d.system.GetDefaultLayerFilter(layers::kMoving), self, {}, *d.temp);
+        if (auto* e = world.find(entity)) {
+            const auto r = runtime::api::world_rotation(world, entity).value_or(math::Quat{});
+            runtime::api::set_world_pose(world, entity, from_j(ch.GetPosition()), r);
+            (void)e;
+        }
+    }
+    d.system.Update(step, 1, d.temp.get(), d.jobs.get());
     // Dynamic bodies move their entities.
     for (const auto& [entity, body] : d.bodies) {
         if (body.type != Impl::Type::Dynamic || !bi.IsActive(body.id)) continue;
@@ -469,5 +534,24 @@ void PhysicsSystem::add_force(const Guid& entity, math::Vec3 force) {
 }
 
 std::size_t PhysicsSystem::body_count() const { return impl_->bodies.size(); }
+
+bool PhysicsSystem::has_character(const Guid& entity) const { return impl_->characters.contains(entity); }
+
+void PhysicsSystem::character_move(const Guid& entity, math::Vec3 velocity) {
+    if (const auto it = impl_->characters.find(entity); it != impl_->characters.end()) it->second.wanted = {velocity.x, 0, velocity.z};
+}
+
+void PhysicsSystem::character_jump(const Guid& entity, float speed) {
+    if (const auto it = impl_->characters.find(entity); it != impl_->characters.end()) it->second.jump = std::max(it->second.jump, speed);
+}
+
+bool PhysicsSystem::is_grounded(const Guid& entity) const {
+    const auto it = impl_->characters.find(entity);
+    return it != impl_->characters.end() && it->second.controller->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+}
+
+void PhysicsSystem::late_update(runtime::World&, double) {
+    for (auto& [entity, c] : impl_->characters) c.wanted = {0, 0, 0};  // scripts steer every frame
+}
 
 } // namespace noor::physics

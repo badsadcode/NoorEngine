@@ -12,6 +12,11 @@
 //                optional: "offset": [x, y, z], "trigger": true (detects, doesn't push)
 //   "rigidbody": {"type": "dynamic" | "kinematic" | "static", "mass": 1, "friction": 0.5,
 //                 "restitution": 0, "linear_damping": 0.05, "gravity_scale": 1}
+//   "character": {"radius": 0.3, "height": 1.8, "max_slope": 50, "step_height": 0.4, "mass": 70}
+//                A capsule character controller (Jolt CharacterVirtual) with its feet at the entity's
+//                origin: slides along walls, walks up steps and slopes, sticks to the floor going down,
+//                jumps. Scripts steer it each frame with character_move / character_jump. Raycasts and
+//                triggers see it (an inner body). It moves its entity; it doesn't need a collider.
 // An entity with a collider and no rigidbody is static. Sizes are multiplied by the entity's world
 // scale when play starts. Dynamic bodies move their entity; kinematic bodies follow it (scripts move
 // them); static bodies stay where they started.
@@ -66,6 +71,17 @@ public:
     void set_velocity(const Guid& entity, math::Vec3 v);
     void add_impulse(const Guid& entity, math::Vec3 impulse);  // kg·m/s, now
     void add_force(const Guid& entity, math::Vec3 force);      // newtons, during the next step
+
+    // ---- Characters ----
+    [[nodiscard]] bool has_character(const Guid& entity) const;
+    // Horizontal velocity (m/s, world) wanted this frame; the vertical part is ignored. Reset after
+    // each frame, so scripts call it every frame they want to move.
+    void character_move(const Guid& entity, math::Vec3 velocity);
+    // Jumps with this upward speed (m/s) at the next fixed step, if the character stands on ground.
+    void character_jump(const Guid& entity, float speed);
+    [[nodiscard]] bool is_grounded(const Guid& entity) const;
+
+    void late_update(runtime::World& world, double dt) override;
 
     [[nodiscard]] std::size_t body_count() const;
 

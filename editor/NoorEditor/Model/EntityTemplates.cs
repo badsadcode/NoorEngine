@@ -41,6 +41,73 @@ public static class EntityTemplates
         }, new Vec3(0, 3, 0)),
     ];
 
+    // ---- Player (first person): an entity with a character controller and a Lua script, a capsule
+    // body to see it by, and a camera at eye height. ----
+
+    public const string PlayerTemplateName = "Player (first person)";
+    public const string PlayerScriptPath = "Scripts/PlayerController.luau";
+
+    public static JsonObject PlayerComponents() => new()
+    {
+        ["character"] = new JsonObject { ["radius"] = 0.3, ["height"] = 1.8, ["step_height"] = 0.4, ["max_slope"] = 50 },
+        ["script"] = new JsonObject
+        {
+            ["file"] = PlayerScriptPath,
+            ["params"] = new JsonObject { ["speed"] = 5, ["sprint"] = 1.8, ["jump_speed"] = 5, ["look_sensitivity"] = 0.12 },
+        },
+    };
+
+    public static JsonObject PlayerBody() => new() { ["primitive"] = Capsule(color: "#7C4DFF") };
+    public static JsonObject PlayerCamera() => new() { ["camera"] = new JsonObject { ["fov"] = 75, ["near"] = 0.05 } };
+
+    public const string PlayerScript = """
+        -- PlayerController: first-person walking, looking and jumping (a NoorEngine template).
+        -- Click into the game view to capture the mouse for looking; Esc gives it back.
+        -- Params (Inspector): speed, sprint (multiplier), jump_speed, look_sensitivity.
+        -- API: docs/scripting/LUA_API.md
+
+        local Player = {}
+
+        function Player:on_start()
+            self.yaw = self.entity:euler().y
+            self.pitch = 0
+            self.camera = self.entity:child("Camera")
+        end
+
+        function Player:on_update(dt)
+            local p = self.params
+
+            -- Looking: only while the mouse is captured.
+            if noor.input.pressed("fire") and not noor.input.mouse_captured() then
+                noor.input.capture_mouse(true)
+            end
+            if noor.input.mouse_captured() then
+                local look = p.look_sensitivity or 0.12
+                self.yaw -= noor.input.axis("look_x") * look
+                self.pitch = math.clamp(self.pitch - noor.input.axis("look_y") * look, -85, 85)
+            end
+            self.entity:set_euler(vector.create(0, self.yaw, 0))
+            if self.camera then
+                self.camera:set_euler(vector.create(self.pitch, 0, 0))
+            end
+
+            -- Walking: W/S forward and back, A/D sideways, Shift to sprint.
+            local move = self.entity:forward() * noor.input.axis("move_y") + self.entity:right() * noor.input.axis("move_x")
+            if vector.magnitude(move) > 1 then
+                move = vector.normalize(move)
+            end
+            local speed = (p.speed or 5) * (if noor.input.down("sprint") then (p.sprint or 1.8) else 1)
+            self.entity:character_move(move * speed)
+
+            if noor.input.pressed("jump") then
+                self.entity:character_jump(p.jump_speed or 5)
+            end
+        end
+
+        return Player
+
+        """;
+
     /// <summary>Component presets for Inspector ▸ Add component (type, menu label, value).</summary>
     public static IReadOnlyList<(string Type, string Label, Func<JsonObject> Value)> ComponentPresets { get; } =
     [

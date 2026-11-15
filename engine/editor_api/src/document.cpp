@@ -6,6 +6,7 @@
 #include "noor/scripting/lua_scripts.h"
 #include "noor/foundation/log.h"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <unordered_map>
@@ -467,6 +468,12 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         const math::Mat4 world = expanded.world_matrix(i);
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id});
+        if (world_ && !snap->camera && e.has("camera") && e.components["camera"].is_object()) {
+            const auto& cam = e.components["camera"];
+            const float fov = cam.contains("fov") && cam["fov"].is_number() ? cam["fov"].get<float>() : 70.0f;
+            const float near_plane = cam.contains("near") && cam["near"].is_number() ? cam["near"].get<float>() : 0.05f;
+            snap->camera = RenderSnapshot::GameCamera{world, std::clamp(fov, 10.0f, 150.0f), std::max(0.001f, near_plane), e.id};
+        }
         if (e.has("primitive") && e.components["primitive"].is_object()) {
             const auto& p = e.components["primitive"];
             auto num = [&](const char* k, float d) { return p.contains(k) && p[k].is_number() ? p[k].get<float>() : d; };

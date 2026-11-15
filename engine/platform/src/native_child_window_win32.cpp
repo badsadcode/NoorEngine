@@ -35,6 +35,34 @@ NativeChildWindow::Input* input_of(HWND hwnd) {
     return reinterpret_cast<NativeChildWindow::Input*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 }
 
+void apply_capture(HWND hwnd, NativeChildWindow::Input* input, bool capture) {
+    if (!input) return;
+    const bool real = capture && !input->test_pointer.load();
+    if (input->capture_is_real.load() && !real) {  // release the real capture
+        ClipCursor(nullptr);
+        while (ShowCursor(TRUE) < 0) {
+        }
+        RAWINPUTDEVICE device{0x01, 0x02, RIDEV_REMOVE, nullptr};  // generic desktop, mouse
+        RegisterRawInputDevices(&device, 1, sizeof(device));
+        input->capture_is_real.store(false);
+    }
+    if (real && !input->capture_is_real.load()) {
+        RAWINPUTDEVICE device{0x01, 0x02, 0, hwnd};
+        RegisterRawInputDevices(&device, 1, sizeof(device));
+        RECT r{};
+        GetClientRect(hwnd, &r);
+        MapWindowPoints(hwnd, nullptr, reinterpret_cast<POINT*>(&r), 2);
+        ClipCursor(&r);
+        while (ShowCursor(FALSE) >= 0) {
+        }
+        SetFocus(hwnd);
+        input->capture_is_real.store(true);
+    }
+    input->captured.store(capture);
+    input->raw_dx.store(0);
+    input->raw_dy.store(0);
+}
+
 LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     NativeChildWindow::Input* input = input_of(hwnd);
     if (input && input->test_pointer.load() &&
@@ -46,6 +74,17 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         input->ctrl.store((wparam & MK_CONTROL) != 0);
     }
     switch (msg) {
+    case WM_INPUT:
+        if (input && input->captured.load()) {
+            RAWINPUT raw{};
+            UINT size = sizeof(raw);
+            if (GetRawInputData(reinterpret_cast<HRAWINPUT>(lparam), RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER)) != static_cast<UINT>(-1) &&
+                raw.header.dwType == RIM_TYPEMOUSE && !(raw.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
+                input->raw_dx.fetch_add(raw.data.mouse.lLastX);
+                input->raw_dy.fetch_add(raw.data.mouse.lLastY);
+            }
+        }
+        return DefWindowProcW(hwnd, msg, wparam, lparam);
     case WM_ERASEBKGND:
         return 1;  // Vulkan owns every pixel; erasing would flicker
     case WM_PAINT: {
@@ -101,6 +140,9 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
     case WM_KEYUP:
     case WM_SYSKEYDOWN:
     case WM_SYSKEYUP:
+        if (input && wparam == VK_ESCAPE && (msg == WM_KEYDOWN) && input->captured.load()) {
+            apply_capture(hwnd, input, false);  // Escape always gives the mouse back
+        }
         if (input) {
             const bool down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
             if (wparam < 256) {
@@ -122,10 +164,11 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
             return 0;
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
-    case WM_KILLFOCUS:  // keys released elsewhere would never reach us
-        if (input) {
+    case WM_KILLFOCUS:  // keys released elsewhere would never reach us; the mouse goes back too
+        if (input && !input->test_pointer.load()) {
             input->keys.store(0);
             for (auto& word : input->vk) word.store(0);
+            if (input->captured.load()) apply_capture(hwnd, input, false);
         }
         return 0;
     case WM_CAPTURECHANGED:  // capture lost (e.g. Alt+Tab while dragging): release everything
@@ -181,6 +224,7 @@ Result<std::unique_ptr<NativeChildWindow>> NativeChildWindow::create(void* paren
 
 NativeChildWindow::~NativeChildWindow() {
     if (hwnd_) {
+        apply_capture(static_cast<HWND>(hwnd_), input_.get(), false);
         SetWindowLongPtrW(static_cast<HWND>(hwnd_), GWLP_USERDATA, 0);
         DestroyWindow(static_cast<HWND>(hwnd_));
     }
@@ -198,7 +242,19 @@ bool NativeChildWindow::key_down(int vk) const noexcept {
     return (input_->vk[vk / 64].load() >> (vk % 64)) & 1u;
 }
 
-bool NativeChildWindow::has_focus() const noexcept { return GetFocus() == static_cast<HWND>(hwnd_); }
+bool NativeChildWindow::has_focus() const noexcept {
+    // Test mode stands in for the user: the window counts as focused (a test process launched in the
+    // background may not be allowed to take the foreground, which would make focus flaky).
+    return input_->test_pointer.load() || GetFocus() == static_cast<HWND>(hwnd_);
+}
+
+void NativeChildWindow::set_mouse_capture(bool capture) noexcept { apply_capture(static_cast<HWND>(hwnd_), input_.get(), capture); }
+
+bool NativeChildWindow::mouse_captured() const noexcept { return input_->captured.load(); }
+
+std::pair<std::int32_t, std::int32_t> NativeChildWindow::take_raw_motion() noexcept {
+    return {input_->raw_dx.exchange(0), input_->raw_dy.exchange(0)};
+}
 
 void NativeChildWindow::set_test_pointer(bool enabled, const PointerState& s) noexcept {
     input_->test_pointer.store(enabled);

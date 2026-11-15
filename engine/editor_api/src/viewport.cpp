@@ -613,7 +613,18 @@ void render_thread_main(noor_viewport* vp) {
             else camera.zoom(wheel);
         }
 
-        const auto basis = camera.basis();
+        // While playing with a camera entity, the viewport is the game view.
+        auto basis = camera.basis();
+        float view_near = std::max(0.05f, camera.distance * 0.002f);
+        if (shown && shown->camera) {
+            const Mat4& m = shown->camera->world;
+            const Vec3 eye = m.transform_point({0, 0, 0});
+            const Vec3 fwd = noor::math::normalize(noor::math::transform_vector(m, {0, 0, -1}));
+            Vec3 right = noor::math::cross(fwd, {0, 1, 0});
+            right = noor::math::length(right) < 1e-4f ? noor::math::normalize(noor::math::transform_vector(m, {1, 0, 0})) : noor::math::normalize(right);
+            basis = {eye, fwd, right, noor::math::cross(right, fwd), noor::math::radians(shown->camera->fov_degrees)};
+            view_near = shown->camera->near_plane;
+        }
         const ed::Ray ray = ed::screen_ray(basis, static_cast<float>(size.width), static_cast<float>(size.height),
                                            static_cast<float>(pointer.x), static_cast<float>(pointer.y));
 
@@ -795,9 +806,9 @@ void render_thread_main(noor_viewport* vp) {
                     gizmo(scale_all, ed::Handle::ScaleAll, orient);
                 }
             }
-            frame.camera.view = camera.view();
-            frame.camera.fov_y = camera.fov_y;
-            frame.camera.near_plane = std::max(0.05f, camera.distance * 0.002f);
+            frame.camera.view = noor::math::look_at(basis.eye, basis.eye + basis.forward, basis.up);
+            frame.camera.fov_y = basis.fov_y;
+            frame.camera.near_plane = view_near;
             frame.draws = frame_draws;
         } else {
             r.set_clear_color(demo_clear_color(pointer, size));
@@ -903,7 +914,11 @@ noor::runtime::InputState noor_viewport_game_input(noor_viewport* vp) {
         return in;
     }
     in.mouse = {static_cast<float>(pointer.x), static_cast<float>(pointer.y)};
-    if (vp->game_mouse_valid) {
+    in.mouse_captured = vp->window->mouse_captured();
+    if (in.mouse_captured) {
+        const auto [dx, dy] = vp->window->take_raw_motion();
+        in.mouse_delta = {static_cast<float>(dx), static_cast<float>(dy)};
+    } else if (vp->game_mouse_valid) {
         in.mouse_delta = {static_cast<float>(pointer.x - vp->last_game_mouse_x), static_cast<float>(pointer.y - vp->last_game_mouse_y)};
     }
     vp->last_game_mouse_x = pointer.x;
@@ -1030,6 +1045,21 @@ NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enable
     s.ctrl = (buttons & 8) != 0;
     s.alt = (buttons & 16) != 0;
     viewport->window->set_test_pointer(enabled != 0, s);
+}
+
+NOOR_API void noor_viewport_set_mouse_capture(noor_viewport* viewport, int32_t capture) {
+    if (!viewport || !viewport->window) return;
+    // Only a focused game view may take the mouse (the player clicked into it).
+    if (capture && !viewport->window->has_focus() && !viewport->window->mouse_captured()) return;
+    viewport->window->set_mouse_capture(capture != 0);
+}
+
+NOOR_API int32_t noor_viewport_has_focus(noor_viewport* viewport) {
+    return viewport && viewport->window && viewport->window->has_focus() ? 1 : 0;
+}
+
+NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport) {
+    return viewport && viewport->window && viewport->window->mouse_captured() ? 1 : 0;
 }
 
 NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport) {

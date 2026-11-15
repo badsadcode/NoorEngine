@@ -172,8 +172,19 @@ NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const fl
 #define NOOR_GIZMO_SCREEN_SCALE 0.16f
 
 /* For automated tests: while enabled, the viewport ignores the real mouse and uses this pointer
- * (physical pixels; buttons: 1 left, 2 right, 4 middle, 8 Ctrl, 16 Alt). Keyboard input is not
- * affected. Pass enabled = 0 to give the mouse back. */
+ * (physical pixels; buttons: 1 left, 2 right, 4 middle, 8 Ctrl, 16 Alt), and counts as having the
+ * keyboard focus (keys posted to its window are game input even if the app isn't in front).
+ * Pass enabled = 0 to give the mouse back. */
+/* Mouse capture for first-person look (UI thread): the cursor is hidden and kept in the viewport and
+ * raw movement becomes the game's look input. Capturing only works while the viewport has the
+ * keyboard focus; Escape, focus loss and capture = 0 release it. Play mode applies scripts'
+ * capture requests (noor.input.capture_mouse) through this. */
+NOOR_API void noor_viewport_set_mouse_capture(noor_viewport* viewport, int32_t capture);
+NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport);
+/* Whether the viewport has the keyboard focus (UI thread). Hosts use this to tell game keys from
+ * editor shortcuts; it also answers yes while a test pointer is active. */
+NOOR_API int32_t noor_viewport_has_focus(noor_viewport* viewport);
+
 NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enabled, int32_t x, int32_t y, int32_t buttons);
 
 #ifdef __cplusplus

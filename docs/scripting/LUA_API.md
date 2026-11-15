@@ -62,6 +62,8 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.input.released(action)` | Action went up this frame |
 | `noor.input.axis(name)` | `-1..1` for key axes; mouse movement in pixels for `look_x` / `look_y` |
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
+| `noor.input.capture_mouse(on)` | Ask to capture the mouse for looking (`true`) or release it. Works once the player has clicked into the game view; **Esc** always releases it |
+| `noor.input.mouse_captured()` | Whether the mouse is captured now (then `look_x` / `look_y` are raw mouse movement) |
 
 Default actions: `jump` (Space), `sprint` (Shift), `crouch` (Ctrl, C), `fire` (left mouse),
 `aim` (right mouse), `interact` (E), `pause` (Escape). Axes: `move_x` (A/D, ←/→), `move_y`
@@ -82,6 +84,7 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | Method | |
 |---|---|
 | `e:name()`, `e:id()`, `e:exists()`, `e:parent()` | Identity |
+| `e:child(name)` | The first direct child with that name, or `nil` |
 | `e:position()`, `e:set_position(v)` | Local position |
 | `e:translate(v)` | Move in the parent's axes |
 | `e:translate_local(v)` | Move along the entity's own axes |
@@ -96,6 +99,9 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:velocity()`, `e:set_velocity(v)` | Linear velocity of its physics body (m/s) |
 | `e:add_impulse(v)` | Instant push (kg·m/s), e.g. a jump or a hit |
 | `e:add_force(v)` | Push during the next physics step (newtons) |
+| `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |
+| `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground |
+| `e:is_grounded()` | Character controller: standing on walkable ground |
 
 ## Physics components
 
@@ -109,6 +115,16 @@ Add them in the Inspector (**Add component ▸ Physics**) or use **Create ▸ Ph
                "linear_damping": 0.05, "gravity_scale": 1 }  // type: dynamic | kinematic | static
 ```
 
+```json
+"character": { "radius": 0.3, "height": 1.8, "max_slope": 50, "step_height": 0.4, "mass": 70 }
+"camera":    { "fov": 70, "near": 0.05 }
+```
+
+A `character` is a capsule controller with its feet at the entity's origin: it slides along
+walls, walks up steps and slopes, stays on the ground going down, and jumps. While playing, the
+viewport looks through the first entity with a `camera`. **Create ▸ Player (first person)** sets
+up both, with `Scripts/PlayerController.luau` as a starting point.
+
 A collider without a rigidbody is static. Kinematic bodies follow their entity (move them from a
 script). Physics runs at 60 Hz, after `on_fixed_update`. BadBuilding models exported with
 collision meshes (Noor Interchange `-colonly`) get static colliders automatically.
@@ -116,5 +132,5 @@ collision meshes (Noor Interchange `-colonly`) get static colliders automaticall
 Entities compare with `==`; a destroyed entity's methods return `nil` and do nothing.
 
 ## Not yet
-The character controller and a game camera (next), audio, spawning prefabs, timers and
+Audio, spawning prefabs, timers and
 coroutines-based waits, and require-ing other script files arrive in later parts of Milestone 4.

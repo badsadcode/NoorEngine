@@ -33,7 +33,9 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   and attaches it; **Open** edits it in your editor; **+ Param** adds values the script reads as
   `self.params`. Press Play to run it (changes are picked up on the next Play). API:
   [docs/scripting/LUA_API.md](../../docs/scripting/LUA_API.md).
-- **Create** menu: empty, box, sphere, capsule, floor, physics crate, physics ball.
+- **Create** menu: empty, box, sphere, capsule, floor, physics crate, physics ball, and
+  **Player (first person)**: press Play, click into the view, then WASD to walk, the mouse to look,
+  Space to jump, Shift to sprint, Esc to get the mouse back.
 - **Physics**: Inspector ▸ **Add component ▸ Physics** (rigidbody, box/sphere/capsule/mesh
   collider). Press Play and things fall, bounce and collide (Jolt). A mesh collider on a GLB model
   makes the whole building solid.

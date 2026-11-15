@@ -38,6 +38,7 @@ struct InputState {
     math::Vec2 mouse{0, 0};        // pixels in the game view, origin top-left
     math::Vec2 mouse_delta{0, 0};  // pixels moved since the previous frame
     float wheel = 0;               // notches since the previous frame
+    bool mouse_captured = false;   // the host has captured the mouse (hidden; mouse_delta is raw movement)
 
     [[nodiscard]] bool down(Key k) const { return k != Key::None && keys.test(static_cast<std::size_t>(k)); }
     void set(Key k, bool on = true) {

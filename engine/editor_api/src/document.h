@@ -60,6 +60,14 @@ struct RenderSnapshot {
         Guid entity;
     };
     std::vector<Primitive> primitives;
+    // While playing: the first entity with a `camera` component ({"fov": 70, "near": 0.05}).
+    struct GameCamera {
+        math::Mat4 world;
+        float fov_degrees = 70.0f;
+        float near_plane = 0.05f;
+        Guid entity;
+    };
+    std::optional<GameCamera> camera;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.
@@ -107,6 +115,10 @@ public:
     void stop();
     [[nodiscard]] bool playing() const noexcept { return world_ != nullptr; }
     void tick(double seconds, const runtime::InputState& input = {});
+    // A script asked to capture (true) or release (false) the mouse this frame.
+    [[nodiscard]] std::optional<bool> take_mouse_capture_request() {
+        return world_ ? world_->take_mouse_capture_request() : std::nullopt;
+    }
 
     // Checks watched asset files (models, prefabs) for changes on disk. Changed files get a new
     // version in the render snapshot (viewports reload them) and prefabs are re-read.

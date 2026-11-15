@@ -21,6 +21,7 @@ namespace noor::runtime::api {
 [[nodiscard]] std::optional<std::string> name(World& w, const Guid& e);
 [[nodiscard]] std::optional<Guid> find(World& w, std::string_view name);  // first match
 [[nodiscard]] std::optional<Guid> parent(World& w, const Guid& e);
+[[nodiscard]] std::optional<Guid> child(World& w, const Guid& e, std::string_view name);  // first direct child
 void destroy(World& w, const Guid& e);  // at the end of the frame, with its children
 
 // ---- Transform (local) ----
@@ -55,6 +56,8 @@ void set_component(World& w, const Guid& e, std::string_view type, asset::Json v
 [[nodiscard]] bool input_released(World& w, std::string_view action);
 [[nodiscard]] float input_axis(World& w, std::string_view axis);
 [[nodiscard]] double time(World& w);
+void capture_mouse(World& w, bool capture);
+[[nodiscard]] bool mouse_captured(World& w);
 
 // ---- Euler helpers (shared with the editor's convention) ----
 [[nodiscard]] math::Quat quat_from_euler(math::Vec3 degrees);

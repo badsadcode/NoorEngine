@@ -54,6 +54,12 @@ std::optional<Guid> parent(World& w, const Guid& e) {
     return std::nullopt;
 }
 
+std::optional<Guid> child(World& w, const Guid& e, std::string_view n) {
+    for (const auto& x : w.scene().entities)
+        if (x.parent == e && x.name == n) return x.id;
+    return std::nullopt;
+}
+
 void destroy(World& w, const Guid& e) {
     if (w.find(e)) w.destroy(e);
 }
@@ -159,6 +165,8 @@ bool input_pressed(World& w, std::string_view a) { return w.input().pressed(a); 
 bool input_released(World& w, std::string_view a) { return w.input().released(a); }
 float input_axis(World& w, std::string_view a) { return w.input().axis(a); }
 double time(World& w) { return w.time(); }
+void capture_mouse(World& w, bool capture) { w.request_mouse_capture(capture); }
+bool mouse_captured(World& w) { return w.input().state().mouse_captured; }
 
 math::Quat quat_from_euler(math::Vec3 d) {
     const auto yaw = math::Quat::from_axis_angle({0, 1, 0}, static_cast<float>(d.y * kDegToRad));

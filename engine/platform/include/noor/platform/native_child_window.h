@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <utility>
 
 namespace noor::platform {
 
@@ -59,9 +60,17 @@ public:
     // True if this window has the keyboard focus (UI thread only).
     [[nodiscard]] bool has_focus() const noexcept;
     // Automated tests: while on, real mouse messages are ignored and the pointer is whatever the
-    // test sets. (Posted mouse messages are not enough: Windows also delivers the real cursor
+    // test sets, and the window counts as focused (focus changes don't drop held keys). (Posted mouse messages are not enough: Windows also delivers the real cursor
     // position, e.g. after SetCapture, so a test would depend on where the user left the mouse.)
     void set_test_pointer(bool enabled, const PointerState& state = {}) noexcept;
+
+    // Mouse capture for first-person look (UI thread): hides the cursor, keeps it inside the window
+    // and reports raw movement. Released by Escape, by losing focus, or by calling with false.
+    // While a test pointer is active only the flag changes (tests never take the user's mouse).
+    void set_mouse_capture(bool capture) noexcept;
+    [[nodiscard]] bool mouse_captured() const noexcept;
+    // Raw mouse movement since the last call, while captured (counts, roughly pixels).
+    [[nodiscard]] std::pair<std::int32_t, std::int32_t> take_raw_motion() noexcept;
 
     [[nodiscard]] PixelSize pixel_size() const override;
     [[nodiscard]] Result<std::vector<const char*>> vulkan_instance_extensions() const override;
@@ -82,6 +91,10 @@ public:
         std::atomic<std::uint32_t> keys{0};
         std::atomic<std::uint64_t> vk[4]{};  // 256 virtual-key bits
         std::atomic<bool> test_pointer{false};
+        std::atomic<bool> captured{false};
+        std::atomic<bool> capture_is_real{false};  // cursor hidden/clipped (not a test)
+        std::atomic<std::int32_t> raw_dx{0};
+        std::atomic<std::int32_t> raw_dy{0};
     };
 
 private:
