@@ -9,11 +9,24 @@
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/windows",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-ninja",
+      "displayName": "Windows (Ninja Multi-Config, MSVC from a VS developer shell; any VS version)",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     }
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "windows", "configuration": "Debug" },
-    { "name": "release", "configurePreset": "windows", "configuration": "RelWithDebInfo" }
+    { "name": "release", "configurePreset": "windows", "configuration": "RelWithDebInfo" },
+    { "name": "ninja-debug", "configurePreset": "windows-ninja", "configuration": "Debug" },
+    { "name": "ninja-release", "configurePreset": "windows-ninja", "configuration": "RelWithDebInfo" }
   ],
   "testPresets": [
     {
@@ -25,6 +38,18 @@
     {
       "name": "release",
       "configurePreset": "windows",
+      "configuration": "RelWithDebInfo",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-debug",
+      "configurePreset": "windows-ninja",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "windows-ninja",
       "configuration": "RelWithDebInfo",
       "output": { "outputOnFailure": true }
     }
