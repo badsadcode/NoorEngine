@@ -21,6 +21,7 @@
 #include "noor/foundation/math.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
+#include "noor/asset/file_watcher.h"
 #include "noor/asset/gltf_import.h"
 #include "noor/render/fly_camera.h"
 #include "noor/render/renderer.h"
@@ -381,43 +382,63 @@ int run(const Options& options) {
         // --glb: a model (e.g. a BadBuilding building) instead of the hero cube. Collision nodes are
         // not drawn (Noor Interchange 3.5); Noor markers show as small cyan cubes.
         std::vector<noor::render::DrawItem> model_draws;
+        std::vector<noor::render::MeshHandle> model_meshes;  // owned by the model; freed on reload
         Vec3 model_min{1e30f, 1e30f, 1e30f}, model_max{-1e30f, -1e30f, -1e30f};
-        if (!options.glb_path.empty() && exit_code == 0) {
+        std::array<std::uint32_t, 6> cyan{};
+        cyan.fill(0x22D3EE);
+        const CubeMesh marker_data = make_cube(cyan);
+        auto marker = (*renderer)->create_mesh({marker_data.vertices, marker_data.indices, "Marker"});
+
+        // (Re)loads the model. On failure the previous model stays on screen (hot reload must
+        // never leave you with nothing because a generator wrote a broken file).
+        const auto load_model = [&]() -> bool {
             auto model = noor::asset::import_gltf(options.glb_path);
             if (!model) {
-                NOOR_LOG_FATAL("Diag", "{}", model.error().describe());
-                exit_code = 1;
+                NOOR_LOG_ERROR("Diag", "{}", model.error().describe());
+                return false;
+            }
+            for (const auto h : model_meshes) (*renderer)->destroy_mesh(h);
+            model_meshes.clear();
+            model_draws.clear();
+            model_min = {1e30f, 1e30f, 1e30f};
+            model_max = {-1e30f, -1e30f, -1e30f};
+            static_assert(sizeof(noor::asset::MeshVertex) == sizeof(noor::render::Vertex));
+            for (const auto& m : model->meshes) {
+                auto h = (*renderer)->create_mesh(
+                    {{reinterpret_cast<const noor::render::Vertex*>(m.vertices.data()), m.vertices.size()},
+                     m.indices, m.name});
+                model_meshes.push_back(h ? *h : noor::render::MeshHandle{});
+            }
+            for (std::size_t i = 0; i < model->nodes.size(); ++i) {
+                const auto& n = model->nodes[i];
+                const auto world = model->world_matrix(i);
+                if (n.mesh >= 0 && !n.is_collision() && model_meshes[static_cast<std::size_t>(n.mesh)].valid()) {
+                    model_draws.push_back({model_meshes[static_cast<std::size_t>(n.mesh)], world});
+                    for (const auto& v : model->meshes[static_cast<std::size_t>(n.mesh)].vertices) {
+                        const Vec3 p = world.transform_point(v.position);
+                        model_min = {std::min(model_min.x, p.x), std::min(model_min.y, p.y), std::min(model_min.z, p.z)};
+                        model_max = {std::max(model_max.x, p.x), std::max(model_max.y, p.y), std::max(model_max.z, p.z)};
+                    }
+                }
+                if (n.is_marker() && marker) {
+                    model_draws.push_back({*marker, world * scale({0.25f, 0.25f, 0.25f})});
+                }
+            }
+            NOOR_LOG_INFO("Diag", "Model '{}': {} nodes, {} meshes, {} render triangles, {} draws",
+                          options.glb_path, model->nodes.size(), model->meshes.size(), model->render_triangles(),
+                          model_draws.size());
+            return true;
+        };
+
+        // Hot reload: when the GLB changes on disk (e.g. BadBuilding regenerates it), reload it.
+        noor::asset::FileWatcher watcher;
+        std::uint64_t model_reloads = 0;
+        double last_watch_poll = 0.0;
+        if (!options.glb_path.empty() && exit_code == 0) {
+            if (load_model()) {
+                watcher.watch(options.glb_path);
             } else {
-                static_assert(sizeof(noor::asset::MeshVertex) == sizeof(noor::render::Vertex));
-                std::vector<noor::render::MeshHandle> handles;
-                for (const auto& m : model->meshes) {
-                    auto h = (*renderer)->create_mesh(
-                        {{reinterpret_cast<const noor::render::Vertex*>(m.vertices.data()), m.vertices.size()},
-                         m.indices, m.name});
-                    handles.push_back(h ? *h : noor::render::MeshHandle{});
-                }
-                std::array<std::uint32_t, 6> cyan{};
-                cyan.fill(0x22D3EE);
-                const CubeMesh marker_data = make_cube(cyan);
-                auto marker = (*renderer)->create_mesh({marker_data.vertices, marker_data.indices, "Marker"});
-                for (std::size_t i = 0; i < model->nodes.size(); ++i) {
-                    const auto& n = model->nodes[i];
-                    const auto world = model->world_matrix(i);
-                    if (n.mesh >= 0 && !n.is_collision() && handles[static_cast<std::size_t>(n.mesh)].valid()) {
-                        model_draws.push_back({handles[static_cast<std::size_t>(n.mesh)], world});
-                        for (const auto& v : model->meshes[static_cast<std::size_t>(n.mesh)].vertices) {
-                            const Vec3 p = world.transform_point(v.position);
-                            model_min = {std::min(model_min.x, p.x), std::min(model_min.y, p.y), std::min(model_min.z, p.z)};
-                            model_max = {std::max(model_max.x, p.x), std::max(model_max.y, p.y), std::max(model_max.z, p.z)};
-                        }
-                    }
-                    if (n.is_marker() && marker) {
-                        model_draws.push_back({*marker, world * scale({0.25f, 0.25f, 0.25f})});
-                    }
-                }
-                NOOR_LOG_INFO("Diag", "Model '{}': {} nodes, {} meshes, {} render triangles, {} draws",
-                              options.glb_path, model->nodes.size(), model->meshes.size(), model->render_triangles(),
-                              model_draws.size());
+                exit_code = 1;
             }
         }
         const bool show_model = !model_draws.empty();
@@ -477,6 +498,13 @@ int run(const Options& options) {
             }
             if (lifecycle.enabled) {
                 if (lifecycle.step(**window, **renderer)) break;  // finished
+            }
+            if (show_model && noor::platform::time_seconds() - last_watch_poll > 0.25) {
+                last_watch_poll = noor::platform::time_seconds();
+                if (!watcher.poll().empty()) {
+                    NOOR_LOG_INFO("Diag", "'{}' changed on disk: reloading", options.glb_path);
+                    if (load_model()) ++model_reloads;
+                }
             }
 
             const double now = noor::platform::time_seconds();
@@ -601,6 +629,7 @@ int run(const Options& options) {
         }
 
         noor::platform::set_live_redraw_callback({});
+        if (model_reloads > 0) NOOR_LOG_INFO("Diag", "Model hot-reloaded {} time(s)", model_reloads);
         if (live_redraws > 0) {
             NOOR_LOG_INFO("Diag", "{} frame(s) drawn during live window resizing", live_redraws);
         }

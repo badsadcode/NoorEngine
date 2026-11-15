@@ -43,6 +43,30 @@ if(NOT LAST_OUT MATCHES "missing asset")
     message(FATAL_ERROR "validate did not report the missing asset")
 endif()
 
+# Format migration: an old (format 1) scene is reported, upgraded with a backup, then valid.
+file(WRITE "${WORK}/Game/Scenes/Old.noorscene" [=[{
+  "noor_scene": 1,
+  "id": "11111111-2222-4333-8444-555555555555",
+  "name": "Old",
+  "entities": [{"id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "name": "Box", "parent": null,
+                "transform": {"position": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]},
+                "components": {}}]
+}
+]=])
+run(0 migrate "${WORK}/Game" --dry-run)
+if(NOT LAST_OUT MATCHES "would upgrade Scenes/Old.noorscene")
+    message(FATAL_ERROR "migrate --dry-run did not report the old scene")
+endif()
+run(0 migrate "${WORK}/Game")
+if(NOT EXISTS "${WORK}/Game/Scenes/Old.noorscene.bak")
+    message(FATAL_ERROR "migrate did not keep a backup")
+endif()
+file(READ "${WORK}/Game/Scenes/Old.noorscene" upgraded)
+string(FIND "${upgraded}" "\"noor_scene\": 2" found)
+if(found EQUAL -1)
+    message(FATAL_ERROR "scene was not upgraded to format 2")
+endif()
+
 # Path escapes are refused.
 run(1 add-model "${WORK}/Game" ../outside.glb Scenes/Main.noorscene)
 message(STATUS "CLI workflow: all steps behaved as expected")

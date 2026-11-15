@@ -5,6 +5,7 @@
 //   noor_cli info <file.glb>                         summarize a GLB (nodes, meshes, markers)
 //   noor_cli add-model <project> <asset> <scene>     instantiate an asset into a scene (creates it)
 //   noor_cli validate <project>                      check every scene's references; exit 1 on problems
+//   noor_cli migrate <project> [--dry-run]           upgrade scenes to the current format (keeps .bak)
 //
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
 
@@ -31,7 +32,8 @@ int usage() {
                "  noor_cli scan <project>\n"
                "  noor_cli info <file.glb>\n"
                "  noor_cli add-model <project> <asset path> <scene path>\n"
-               "  noor_cli validate <project>\n",
+               "  noor_cli validate <project>\n"
+               "  noor_cli migrate <project> [--dry-run]\n",
                stderr);
     return 64;
 }
@@ -141,8 +143,9 @@ int cmd_validate(const std::vector<std::string>& a) {
             continue;
         }
         const auto issues = scene::validate(*scene, [&](const Guid& g) { return registry.find(g) != nullptr; });
-        std::printf("%s %s: %zu entities, %zu issue(s)\n", issues.empty() ? "OK  " : "FAIL",
-                    rel ? rel->c_str() : "?", scene->entities.size(), issues.size());
+        std::printf("%s %s: %zu entities, %zu issue(s)%s\n", issues.empty() ? "OK  " : "FAIL",
+                    rel ? rel->c_str() : "?", scene->entities.size(), issues.size(),
+                    scene->migrations_applied.empty() ? "" : "  (older format: run 'noor_cli migrate')");
         // Group identical messages (one missing building = many entities pointing at it).
         std::map<std::string, std::vector<std::string>> grouped;
         for (const auto& i : issues) grouped[i.message].push_back(i.entity);
@@ -160,6 +163,42 @@ int cmd_validate(const std::vector<std::string>& a) {
     return problems == 0 ? 0 : 1;
 }
 
+int cmd_migrate(const std::vector<std::string>& a) {
+    if (a.empty() || a.size() > 2 || (a.size() == 2 && a[1] != "--dry-run")) return usage();
+    const bool dry = a.size() == 2;
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    int upgraded = 0, failed = 0;
+    std::error_code ec;
+    for (auto it = stdfs::recursive_directory_iterator(p->scenes_dir(), ec);
+         !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
+        if (it->path().extension() != ".noorscene") continue;
+        auto rel = p->relative(it->path());
+        const char* name = rel ? rel->c_str() : "?";
+        auto scene = scene::Scene::load(it->path());
+        if (!scene) {
+            std::printf("FAIL %s: %s\n", name, scene.error().describe().c_str());
+            ++failed;
+            continue;
+        }
+        if (scene->migrations_applied.empty()) continue;
+        for (const auto& step : scene->migrations_applied) {
+            std::printf("%s %s: %s\n", dry ? "would upgrade" : "upgraded", name, step.c_str());
+        }
+        if (!dry) {
+            if (auto s = scene->save(it->path()); !s) {
+                std::printf("FAIL %s: %s\n", name, s.error().describe().c_str());
+                ++failed;
+                continue;
+            }
+        }
+        ++upgraded;
+    }
+    std::printf("%d scene(s) %s%s\n", upgraded, dry ? "need upgrading (dry run, nothing written)" : "upgraded",
+                dry || upgraded == 0 ? "" : "; previous versions kept as .bak");
+    return failed == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -173,5 +212,6 @@ int main(int argc, char** argv) {
     if (cmd == "info") return cmd_info(args);
     if (cmd == "add-model") return cmd_add_model(args);
     if (cmd == "validate") return cmd_validate(args);
+    if (cmd == "migrate") return cmd_migrate(args);
     return usage();
 }

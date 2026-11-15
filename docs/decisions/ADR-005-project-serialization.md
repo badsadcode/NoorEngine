@@ -28,6 +28,11 @@ section 8.4, 9.2).
 - Derived data (imported mesh caches, thumbnails) goes in `.noor/` and may be binary; it is never
   the source of truth and can always be rebuilt.
 
+- **Format changes** go through `asset::Migrations`: one step per version (N → N+1), applied in
+  memory on load; saving writes the current format and keeps the original as `.bak`. Every step
+  ships with a test that loads a file in the old format. `noor_cli migrate` upgrades a project.
+  (First real use: scene format 2 added entity layers and tags.)
+
 ## Consequences
 - Large worlds will need chunked scene files (one file per streaming cell) instead of one huge
   JSON; that's a later ADR (world/streaming).

@@ -4,6 +4,8 @@ noor_add_module(asset
         src/project.cpp
         src/registry.cpp
         src/gltf_import.cpp
+        src/migration.cpp
+        src/file_watcher.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json

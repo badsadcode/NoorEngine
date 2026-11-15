@@ -16,7 +16,8 @@
 
 namespace noor::scene {
 
-inline constexpr int kSceneFormat = 1;
+// Format history: 1 = initial; 2 = entities gain "layer" and "tags" (spec 9.1).
+inline constexpr int kSceneFormat = 2;
 
 struct Transform {
     math::Vec3 position{0, 0, 0};
@@ -31,6 +32,8 @@ struct Entity {
     Guid id;
     std::string name;
     std::optional<Guid> parent;
+    std::string layer = "default";
+    std::vector<std::string> tags;
     Transform transform;
     asset::Json components = asset::Json::object();
 
@@ -42,6 +45,10 @@ public:
     Guid id = Guid::generate();
     std::string name = "Untitled";
     std::vector<Entity> entities;  // parents before children
+
+    // Upgrades applied while loading (e.g. "1 -> 2: ..."). Not saved. Saving writes the current
+    // format and keeps the previous file as <file>.bak.
+    std::vector<std::string> migrations_applied;
 
     [[nodiscard]] static Result<Scene> load(const std::filesystem::path& path);
     [[nodiscard]] static Result<Scene> from_text(std::string_view text, std::string_view source);

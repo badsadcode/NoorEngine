@@ -1,5 +1,6 @@
 #include "noor/scene/scene.h"
 
+#include "noor/asset/migration.h"
 #include "noor/foundation/file_io.h"
 
 #include <format>
@@ -33,6 +34,14 @@ Result<Entity> entity_from_json(const Json& j, std::size_t index, std::string_vi
     if (!id) return where("missing or invalid \"id\"");
     e.id = *id;
     e.name = j.value("name", std::string{});
+    e.layer = j.value("layer", std::string("default"));
+    if (j.contains("tags")) {
+        if (!j["tags"].is_array()) return where("\"tags\" must be an array of strings");
+        for (const auto& t : j["tags"]) {
+            if (!t.is_string()) return where("\"tags\" must be an array of strings");
+            e.tags.push_back(t.get<std::string>());
+        }
+    }
     if (j.contains("parent") && !j["parent"].is_null()) {
         auto parent = asset::guid_field(j, "parent");
         if (!parent) return where("invalid \"parent\"");
@@ -65,6 +74,8 @@ Json entity_to_json(const Entity& e) {
     Json j;
     j["id"] = e.id.to_string();
     j["name"] = e.name;
+    j["layer"] = e.layer;
+    j["tags"] = e.tags;
     j["parent"] = e.parent ? Json(e.parent->to_string()) : Json(nullptr);
     j["transform"] = {{"position", vec3_json(e.transform.position)},
                       {"rotation", quat_json(e.transform.rotation)},
@@ -73,19 +84,47 @@ Json entity_to_json(const Entity& e) {
     return j;
 }
 
+// Every change to the scene file format gets a step here, plus a test with a file in the old format.
+const asset::Migrations& scene_migrations() {
+    static const asset::Migrations migrations = [] {
+        asset::Migrations m("noor_scene", kSceneFormat);
+        m.add(1, "entities gain \"layer\" (default) and \"tags\" (empty)", [](Json& doc) -> Status {
+            if (doc.contains("entities") && doc["entities"].is_array()) {
+                for (auto& e : doc["entities"]) {
+                    if (!e.is_object()) continue;
+                    // Rebuild to keep the v2 key order: id, name, parent, layer, tags, ...
+                    Json upgraded = Json::object();
+                    for (auto it = e.begin(); it != e.end(); ++it) {
+                        upgraded[it.key()] = it.value();
+                        if (it.key() == "parent") {
+                            upgraded["layer"] = "default";
+                            upgraded["tags"] = Json::array();
+                        }
+                    }
+                    if (!upgraded.contains("layer")) upgraded["layer"] = "default";
+                    if (!upgraded.contains("tags")) upgraded["tags"] = Json::array();
+                    e = std::move(upgraded);
+                }
+            }
+            return {};
+        });
+        return m;
+    }();
+    return migrations;
+}
+
 } // namespace
 
 Result<Scene> Scene::from_text(std::string_view text, std::string_view source) {
     auto json = asset::parse_json(text, source);
     if (!json) return std::unexpected(json.error());
-    const int format = json->value("noor_scene", 0);
-    if (format <= 0) return fail(ErrorCode::ParseError, std::format("{}: not a NoorEngine scene", source));
-    if (format > kSceneFormat) {
-        return fail(ErrorCode::VersionMismatch,
-                    std::format("{}: scene format {} needs a newer NoorEngine (this one reads up to {})", source,
-                                format, kSceneFormat));
+    if (json->value("noor_scene", 0) <= 0) {
+        return fail(ErrorCode::ParseError, std::format("{}: not a NoorEngine scene", source));
     }
+    auto applied = scene_migrations().upgrade(*json, source);
+    if (!applied) return std::unexpected(applied.error());
     Scene scene;
+    scene.migrations_applied = std::move(*applied);
     auto id = asset::guid_field(*json, "id");
     if (!id) return fail(ErrorCode::ParseError, std::format("{}: missing scene id", source));
     scene.id = *id;

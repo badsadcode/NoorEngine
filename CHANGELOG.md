@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 2 in progress
 
+### 2026-11-15 — Milestone 2, second increment: undo/redo, format migrations, hot reload
+**Added**
+- `scene::History` + commands (`set_transform`, `rename`, `set_component`, `add_entity`,
+  `remove_entity` with subtree, `reparent` with cycle check): transactions, labels, save tracking
+  (`modified()` is false again after undoing back to the saved state), step limit.
+- `asset::Migrations`: versioned document upgrades (N → N+1 steps, newer versions refused).
+- **Scene format 2**: entities gain `layer` and `tags` (spec 9.1). Format 1 files upgrade on load;
+  saving keeps the original as `.bak`.
+- `asset::FileWatcher`: polling watcher that reports a change once the file has settled.
+- `noor_diag --glb` hot-reloads the model when the file changes (keeps the old model if the new
+  file is broken).
+- `noor_cli migrate <project> [--dry-run]`; `validate` notes scenes in an older format.
+- Tests: 10 new unit tests incl. 25 random 40-edit sequences that must undo to the byte-identical
+  original and redo to the byte-identical result; CLI workflow covers migration. 69/69 pass (Debug),
+  64/64 non-GPU (Release). Hot reload verified end to end by overwriting a GLB while noor_diag ran.
+
+**Fixed**
+- File watcher counted one extra poll before reporting a settled change (found by its test).
+
+**Known limitations**
+- No prefabs yet; editor UI for undo/redo comes with NoorEditor.
+
 ### 2026-11-15 — Noor Interchange v0.3
 - Seeds are unsigned 64-bit; `license.attribution` for automatic credits; `generator.determinism`
   plus cross-machine determinism rules (Thornwake D5). All optional: v0.2 files stay valid.
