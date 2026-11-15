@@ -50,7 +50,8 @@ public:
     void write(const LogRecord& record) override;
 };
 
-// Appends formatted lines to a file. Flushes on Warn and above so crashes keep context.
+// Appends formatted lines to a file. Flushes Warn and above immediately (crashes keep context)
+// and everything else at least once per second (the file can be followed live).
 class FileLogSink final : public LogSink {
 public:
     explicit FileLogSink(const std::string& path);

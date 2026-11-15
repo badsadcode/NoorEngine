@@ -1,6 +1,10 @@
 #include "noor/foundation/log.h"
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <ostream>  // doctest stringifies std::string_view via operator<<
+#include <thread>
 #include <doctest/doctest.h>
 
 namespace {
@@ -70,4 +74,19 @@ TEST_CASE("log: removed sinks receive nothing") {
     noor::log::remove_sink(sink);
     NOOR_LOG_INFO("Test", "nobody hears this");
     CHECK(sink->records.empty());
+}
+
+TEST_CASE("log: the file sink writes routine lines to disk within about a second") {
+    const auto path = std::filesystem::temp_directory_path() / "noor_log_flush_test.log";
+    auto sink = std::make_shared<noor::FileLogSink>(path.string());
+    REQUIRE(sink->is_open());
+    noor::log::add_sink(sink);
+    NOOR_LOG_INFO("Test", "first line");
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    NOOR_LOG_INFO("Test", "second line");  // more than a second later: triggers the flush
+    std::ifstream in(path);
+    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(content.find("first line") != std::string::npos);
+    CHECK(content.find("second line") != std::string::npos);
+    noor::log::remove_sink(sink);
 }

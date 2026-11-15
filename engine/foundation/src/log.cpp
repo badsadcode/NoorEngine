@@ -74,6 +74,7 @@ void ConsoleLogSink::write(const LogRecord& record) {
 
 struct FileLogSink::Impl {
     std::ofstream file;
+    std::chrono::steady_clock::time_point last_flush = std::chrono::steady_clock::now();
 };
 
 FileLogSink::FileLogSink(const std::string& path) : impl_(std::make_unique<Impl>()) {
@@ -89,8 +90,12 @@ void FileLogSink::write(const LogRecord& record) {
         return;
     }
     impl_->file << format_log_line(record) << '\n';
-    if (record.level >= LogLevel::Warn) {
+    // Warnings and errors go to disk at once (crash context); everything else at least once per
+    // second, so the file can be watched live without paying for a flush on every line.
+    const auto now = std::chrono::steady_clock::now();
+    if (record.level >= LogLevel::Warn || now - impl_->last_flush >= std::chrono::seconds(1)) {
         impl_->file.flush();
+        impl_->last_flush = now;
     }
 }
 

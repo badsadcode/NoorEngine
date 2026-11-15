@@ -4,6 +4,12 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 2 in progress
 
+### 2026-11-15 — Log file follows live
+- `FileLogSink` flushes routine lines at least once per second (warnings and errors still at once).
+  Found during Tom's hot-reload demo: the log only showed the reloads after the window closed.
+- Hot reload demonstrated on Tom's machine: five BadBuilding buildings (panel block, kamienica,
+  courtyard block with gate passage, long PRL slab, house) swapped live into a running noor_diag.
+
 ### 2026-11-15 — Milestone 2, second increment: undo/redo, format migrations, hot reload
 **Added**
 - `scene::History` + commands (`set_transform`, `rename`, `set_component`, `add_entity`,
