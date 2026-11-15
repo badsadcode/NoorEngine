@@ -12,6 +12,7 @@ add_executable(noor_unit_tests
     unit/test_files_hash.cpp
     unit/test_assets_scenes.cpp
     unit/test_history_migration_reload.cpp
+    unit/test_prefabs.cpp
 )
 target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::asset noor::scene doctest::doctest)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

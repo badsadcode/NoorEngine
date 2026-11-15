@@ -11,7 +11,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 
 ## Honest status
 
-**Milestones 0 and 1 done** ([M1 review](docs/milestones/M1_REVIEW.md)); **Milestone 2 (projects, assets, scenes) in progress.** What exists today:
+**Milestones 0–2 done** ([M1 review](docs/milestones/M1_REVIEW.md), [M2 review](docs/milestones/M2_REVIEW.md)); **Milestone 3 (NoorEditor) next.** What exists today:
 
 | Piece | Status |
 |---|---|
@@ -24,9 +24,9 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `editor_api`: C API DLL hosting engine viewports in a foreign window (v0) | Works in the Avalonia spike; API not stable |
 | Editor GUI stack: Avalonia + Dock ([ADR-003](docs/decisions/ADR-003-editor-gui-framework.md)) | **Spike only**, decision accepted; NoorEditor itself not started |
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
-| `scene`: entities + components (layers, tags), deterministic save/load, format migrations, undo/redo, model instancing, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
-| `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `validate`, `migrate`) | Works; runs in CI |
-| Prefabs, textures, scripting, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
+| `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
+| `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
+| Editor UI, textures, scripting, physics, audio, everything else | **Not started.** See the [master spec](docs/NoorEngine_Design_Package/NOORENGINE_MASTER_SPEC.md) |
 
 Editor images in `docs/NoorEngine_Design_Package` are **concept art**. Screenshots in
 `docs/devlog/img` are real captures of the engine and the editor spike.
@@ -50,7 +50,7 @@ build/windows/tools/noor_diag/Debug/noor_diag.exe
 
 Controls: hold right mouse to look, WASD to move, Q/E down/up, Shift faster, wheel for speed, Esc quits.
 Options: `--frames N` (exit after N frames), `--cubes N`, `--no-validation`, `--verify-render`,
-`--lifecycle-test`, `--glb <file.glb>` (hot-reloads when the file changes), `--screenshot <file.bmp>`, `--log <file>`.
+`--lifecycle-test`, `--glb <file.glb>` or `--project <dir> --scene <Scenes/x.noorscene>` (both hot-reload), `--screenshot <file.bmp>`, `--log <file>`.
 
 Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug -LE gpu`.
 CI (GitHub Actions) builds Debug and Release on every push and pull request and runs everything

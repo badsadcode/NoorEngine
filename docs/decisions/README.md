@@ -15,6 +15,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [021](ADR-021-platform-layer-and-dependencies.md) | SDL3 platform layer, pinned-dependency policy | Accepted |
 | [022](ADR-022-math-and-coordinate-conventions.md) | Right-handed, +Y up, meters, column-major, reverse-Z | Accepted |
 | [023](ADR-023-noor-interchange.md) | Noor Interchange: GLB + `extras.noor` markers + `.noor.json` manifest for all Noor tools | Proposed (spec v0.3; BadBuilding exports v0.2) |
+| [024](ADR-024-prefabs.md) | Prefabs: instance + overrides stored, expanded on load with derived ids | Accepted |
 
 Still open from the register: 007 plugin ABI, 008 .NET hosting, 009 Lua, 010 physics (Jolt is the front-runner),
 011 audio, 012 PBR model, 013 world coordinates, 014–018, 020 branding.

@@ -31,6 +31,15 @@ endif()
 run(0 add-model "${WORK}/Game" Assets/Buildings/osm_w117821721.glb Scenes/Main.noorscene)
 run(0 validate "${WORK}/Game")
 
+# Prefabs: turn the placed building into a prefab, place two more copies, validate the expansion.
+run(0 make-prefab "${WORK}/Game" Scenes/Main.noorscene osm_w117821721 Assets/Prefabs/Block.noorprefab)
+run(0 add-prefab "${WORK}/Game" Assets/Prefabs/Block.noorprefab Scenes/Main.noorscene 60 0 0 90)
+run(0 add-prefab "${WORK}/Game" Assets/Prefabs/Block.noorprefab Scenes/Main.noorscene -60 0 0 -90)
+run(0 validate "${WORK}/Game")
+if(NOT LAST_OUT MATCHES "after expanding 3 prefab instance")
+    message(FATAL_ERROR "validate did not expand 3 prefab instances")
+endif()
+
 # Move the building behind the engine's back: validate must still pass (meta follows by content).
 file(MAKE_DIRECTORY "${WORK}/Game/Assets/Moved")
 file(RENAME "${WORK}/Game/Assets/Buildings/osm_w117821721.glb" "${WORK}/Game/Assets/Moved/block.glb")

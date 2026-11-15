@@ -1,5 +1,6 @@
 #include "noor/scene/scene.h"
 
+#include "entity_json.h"
 #include "noor/asset/migration.h"
 #include "noor/foundation/file_io.h"
 
@@ -114,6 +115,14 @@ const asset::Migrations& scene_migrations() {
 }
 
 } // namespace
+
+// Shared with prefab.cpp (entity_json.h): prefab files store entities in scene format.
+namespace detail {
+Result<Entity> parse_entity(const asset::Json& j, std::size_t index, std::string_view source) {
+    return entity_from_json(j, index, source);
+}
+asset::Json write_entity(const Entity& e) { return entity_to_json(e); }
+} // namespace detail
 
 Result<Scene> Scene::from_text(std::string_view text, std::string_view source) {
     auto json = asset::parse_json(text, source);

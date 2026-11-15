@@ -66,11 +66,28 @@ std::optional<Guid> interchange_guid(const stdfs::path& source) {
     return guid_field(*json, "id");
 }
 
+std::string lower_extension(const stdfs::path& path) {
+    std::string ext = path.extension().string();
+    std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext;
+}
+
+bool is_prefab(const stdfs::path& path) { return lower_extension(path) == ".noorprefab"; }
+
+// A prefab file carries its own id (ADR-024); the meta uses it so the two always agree.
+std::optional<Guid> prefab_guid(const stdfs::path& source) {
+    auto text = fs::read_file(source, 64ull << 20);
+    if (!text) return std::nullopt;
+    auto json = parse_json(*text, source.generic_string());
+    if (!json || !json->contains("noor_prefab")) return std::nullopt;
+    return guid_field(*json, "id");
+}
+
 } // namespace
 
 bool AssetRegistry::is_importable(const stdfs::path& path) {
-    std::string ext = path.extension().string();
-    std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (is_prefab(path)) return true;
+    const std::string ext = lower_extension(path);
     if (ext != ".glb" && ext != ".gltf") return false;
     static const std::regex lod(R"(\.lod[0-9]+$)", std::regex::icase);
     return !std::regex_search(path.stem().string(), lod);
@@ -164,11 +181,13 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                         "'{}' matches {} orphaned metas with identical content; not guessing, giving it a new id",
                         *rel, matches.size()));
                 }
-                const auto from_manifest = interchange_guid(source);
+                const bool prefab = is_prefab(source);
+                const auto from_manifest = prefab ? std::nullopt : interchange_guid(source);
+                const auto embedded = prefab ? prefab_guid(source) : from_manifest;
                 meta.json = Json::object();
                 meta.json["noor_meta"] = kMetaFormat;
-                meta.json["guid"] = (from_manifest ? *from_manifest : Guid::generate()).to_string();
-                meta.json["importer"] = "gltf";
+                meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
+                meta.json["importer"] = prefab ? "prefab" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
                 meta.json["settings"] = Json::object();

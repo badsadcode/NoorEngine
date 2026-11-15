@@ -6,6 +6,10 @@
 //   noor_cli add-model <project> <asset> <scene>     instantiate an asset into a scene (creates it)
 //   noor_cli validate <project>                      check every scene's references; exit 1 on problems
 //   noor_cli migrate <project> [--dry-run]           upgrade scenes to the current format (keeps .bak)
+//   noor_cli make-prefab <project> <scene> <entity name> <prefab path>
+//                                                    turn an entity's subtree into a prefab and an instance
+//   noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw°]]
+//                                                    place an instance of a prefab in a scene
 //
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
 
@@ -13,8 +17,10 @@
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
 #include "noor/foundation/log.h"
+#include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 
+#include <charconv>
 #include <cstdio>
 #include <filesystem>
 #include <map>
@@ -33,7 +39,9 @@ int usage() {
                "  noor_cli info <file.glb>\n"
                "  noor_cli add-model <project> <asset path> <scene path>\n"
                "  noor_cli validate <project>\n"
-               "  noor_cli migrate <project> [--dry-run]\n",
+               "  noor_cli migrate <project> [--dry-run]\n"
+               "  noor_cli make-prefab <project> <scene> <entity name> <prefab path>\n"
+               "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n",
                stderr);
     return 64;
 }
@@ -142,9 +150,21 @@ int cmd_validate(const std::vector<std::string>& a) {
             ++problems;
             continue;
         }
-        const auto issues = scene::validate(*scene, [&](const Guid& g) { return registry.find(g) != nullptr; });
-        std::printf("%s %s: %zu entities, %zu issue(s)%s\n", issues.empty() ? "OK  " : "FAIL",
-                    rel ? rel->c_str() : "?", scene->entities.size(), issues.size(),
+        // Validate the scene as it will run: with every prefab expanded.
+        scene::PrefabLibrary prefabs(*p, registry);
+        const auto expanded = scene::expand_prefabs(*scene, prefabs.resolver());
+        auto issues = scene::validate(expanded.scene, [&](const Guid& g) { return registry.find(g) != nullptr; });
+        for (const auto& e : expanded.issues) {
+            if (e.error) {
+                issues.push_back({e.entity, e.message});
+            } else {
+                std::printf("     warning: %s: %s\n", e.entity.c_str(), e.message.c_str());
+            }
+        }
+        for (const auto& e : prefabs.errors()) issues.push_back({"prefab file", e});
+        std::printf("%s %s: %zu entities (%zu after expanding %zu prefab instance(s)), %zu issue(s)%s\n",
+                    issues.empty() ? "OK  " : "FAIL", rel ? rel->c_str() : "?", scene->entities.size(),
+                    expanded.scene.entities.size(), expanded.instances, issues.size(),
                     scene->migrations_applied.empty() ? "" : "  (older format: run 'noor_cli migrate')");
         // Group identical messages (one missing building = many entities pointing at it).
         std::map<std::string, std::vector<std::string>> grouped;
@@ -161,6 +181,81 @@ int cmd_validate(const std::vector<std::string>& a) {
     std::printf("%s: %zu asset(s), %d scene(s), %d problem(s)\n", p->info().name.c_str(), registry.assets().size(),
                 scenes, problems);
     return problems == 0 ? 0 : 1;
+}
+
+int cmd_make_prefab(const std::vector<std::string>& a) {
+    if (a.size() != 4) return usage();
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    auto scene_path = p->resolve(a[1]);
+    auto prefab_path = p->resolve(a[3]);
+    if (!scene_path) return report(scene_path.error());
+    if (!prefab_path) return report(prefab_path.error());
+    if (prefab_path->extension() != scene::kPrefabExtension) {
+        NOOR_LOG_ERROR("CLI", "Prefab files end in {}", scene::kPrefabExtension);
+        return 1;
+    }
+    if (stdfs::exists(*prefab_path)) {
+        NOOR_LOG_ERROR("CLI", "'{}' already exists", a[3]);
+        return 1;
+    }
+    auto s = scene::Scene::load(*scene_path);
+    if (!s) return report(s.error());
+    const auto it = std::ranges::find_if(s->entities, [&](const scene::Entity& e) {
+        return e.name == a[2] || e.id.to_string() == a[2];
+    });
+    if (it == s->entities.end()) {
+        NOOR_LOG_ERROR("CLI", "No entity named '{}' in {}", a[2], a[1]);
+        return 1;
+    }
+    auto prefab = scene::make_prefab(*s, it->id, prefab_path->stem().string(), /*replace_with_instance=*/true);
+    if (!prefab) return report(prefab.error());
+    if (auto st = prefab->save(*prefab_path); !st) return report(st.error());
+    if (auto st = s->save(*scene_path); !st) return report(st.error());
+    asset::AssetRegistry registry;
+    if (auto r = registry.scan(*p); !r) return report(r.error());
+    std::printf("Created prefab %s (%zu entities, id %s); '%s' in %s is now an instance of it\n", a[3].c_str(),
+                prefab->entities.size(), prefab->id.to_string().c_str(), a[2].c_str(), a[1].c_str());
+    return 0;
+}
+
+int cmd_add_prefab(const std::vector<std::string>& a) {
+    if (a.size() != 3 && a.size() != 6 && a.size() != 7) return usage();
+    float v[4] = {0, 0, 0, 0};
+    for (std::size_t i = 3; i < a.size(); ++i) {
+        const auto r = std::from_chars(a[i].data(), a[i].data() + a[i].size(), v[i - 3]);
+        if (r.ec != std::errc{}) {
+            NOOR_LOG_ERROR("CLI", "'{}' is not a number", a[i]);
+            return 64;
+        }
+    }
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    asset::AssetRegistry registry;
+    if (auto r = registry.scan(*p); !r) return report(r.error());
+    const asset::AssetRecord* rec = registry.find_path(a[1]);
+    if (!rec || rec->importer != "prefab") {
+        NOOR_LOG_ERROR("CLI", "'{}' is not a prefab in this project", a[1]);
+        return 1;
+    }
+    auto scene_path = p->resolve(a[2]);
+    if (!scene_path) return report(scene_path.error());
+    scene::Scene s;
+    if (stdfs::exists(*scene_path)) {
+        auto loaded = scene::Scene::load(*scene_path);
+        if (!loaded) return report(loaded.error());
+        s = std::move(*loaded);
+    } else {
+        s.name = scene_path->stem().string();
+    }
+    scene::Transform placement;
+    placement.position = {v[0], v[1], v[2]};
+    placement.rotation = math::Quat::from_axis_angle({0, 1, 0}, math::radians(v[3]));
+    const std::string name = stdfs::path(rec->path).stem().string() + " " + std::to_string(s.entities.size() + 1);
+    s.entities.push_back(scene::make_instance(rec->guid, name, placement));
+    if (auto st = s.save(*scene_path); !st) return report(st.error());
+    std::printf("Placed '%s' as '%s' at (%g, %g, %g), yaw %g\n", a[1].c_str(), name.c_str(), v[0], v[1], v[2], v[3]);
+    return 0;
 }
 
 int cmd_migrate(const std::vector<std::string>& a) {
@@ -213,5 +308,7 @@ int main(int argc, char** argv) {
     if (cmd == "add-model") return cmd_add_model(args);
     if (cmd == "validate") return cmd_validate(args);
     if (cmd == "migrate") return cmd_migrate(args);
+    if (cmd == "make-prefab") return cmd_make_prefab(args);
+    if (cmd == "add-prefab") return cmd_add_prefab(args);
     return usage();
 }

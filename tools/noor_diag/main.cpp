@@ -22,6 +22,9 @@
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
 #include "noor/asset/file_watcher.h"
+#include "noor/asset/project.h"
+#include "noor/asset/registry.h"
+#include "noor/scene/prefab.h"
 #include "noor/asset/gltf_import.h"
 #include "noor/render/fly_camera.h"
 #include "noor/render/renderer.h"
@@ -37,6 +40,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -51,6 +55,8 @@ struct Options {
     bool lifecycle_test = false;
     std::string screenshot_path;  // non-empty: save frame 90 as a 24-bit BMP
     std::string glb_path;         // non-empty: show this GLB model instead of the cube scene
+    std::string project_path;     // with scene_path: show a project scene (prefabs expanded)
+    std::string scene_path;       // project-relative, e.g. Scenes/Main.noorscene
     std::string log_path = "noor_diag.log";
 };
 
@@ -76,6 +82,10 @@ bool parse_options(int argc, char** argv, Options& out) {
             out.lifecycle_test = true;
         } else if (arg == "--log" && i + 1 < argc) {
             out.log_path = argv[++i];
+        } else if (arg == "--project" && i + 1 < argc) {
+            out.project_path = argv[++i];
+        } else if (arg == "--scene" && i + 1 < argc) {
+            out.scene_path = argv[++i];
         } else if (arg == "--glb" && i + 1 < argc) {
             out.glb_path = argv[++i];
         } else if (arg == "--screenshot" && i + 1 < argc) {
@@ -391,34 +401,122 @@ int run(const Options& options) {
 
         // (Re)loads the model. On failure the previous model stays on screen (hot reload must
         // never leave you with nothing because a generator wrote a broken file).
-        const auto load_model = [&]() -> bool {
-            auto model = noor::asset::import_gltf(options.glb_path);
-            if (!model) {
-                NOOR_LOG_ERROR("Diag", "{}", model.error().describe());
-                return false;
+        const auto grow_bounds = [&](const noor::math::Mat4& world, const noor::asset::ImportedMesh& mesh) {
+            for (const auto& v : mesh.vertices) {
+                const Vec3 p = world.transform_point(v.position);
+                model_min = {std::min(model_min.x, p.x), std::min(model_min.y, p.y), std::min(model_min.z, p.z)};
+                model_max = {std::max(model_max.x, p.x), std::max(model_max.y, p.y), std::max(model_max.z, p.z)};
             }
+        };
+        const auto upload = [&](const noor::asset::ImportedModel& model) {
+            std::vector<noor::render::MeshHandle> handles;
+            for (const auto& m : model.meshes) {
+                auto h = (*renderer)->create_mesh(
+                    {{reinterpret_cast<const noor::render::Vertex*>(m.vertices.data()), m.vertices.size()}, m.indices, m.name});
+                handles.push_back(h ? *h : noor::render::MeshHandle{});
+                model_meshes.push_back(handles.back());
+            }
+            return handles;
+        };
+        const auto reset_view = [&] {
             for (const auto h : model_meshes) (*renderer)->destroy_mesh(h);
             model_meshes.clear();
             model_draws.clear();
             model_min = {1e30f, 1e30f, 1e30f};
             model_max = {-1e30f, -1e30f, -1e30f};
-            static_assert(sizeof(noor::asset::MeshVertex) == sizeof(noor::render::Vertex));
-            for (const auto& m : model->meshes) {
-                auto h = (*renderer)->create_mesh(
-                    {{reinterpret_cast<const noor::render::Vertex*>(m.vertices.data()), m.vertices.size()},
-                     m.indices, m.name});
-                model_meshes.push_back(h ? *h : noor::render::MeshHandle{});
+        };
+
+        // --project/--scene: the scene as it will run (prefabs expanded). Every mesh component is drawn
+        // with its entity's world matrix; markers as cyan cubes; colliders are not drawn.
+        std::vector<std::filesystem::path> scene_files;  // watched for hot reload
+        const auto load_scene = [&]() -> bool {
+            auto project = noor::asset::Project::open(options.project_path);
+            if (!project) {
+                NOOR_LOG_ERROR("Diag", "{}", project.error().describe());
+                return false;
             }
+            noor::asset::AssetRegistry registry;
+            if (auto r = registry.scan(*project); !r) {
+                NOOR_LOG_ERROR("Diag", "{}", r.error().describe());
+                return false;
+            }
+            auto scene_file = project->resolve(options.scene_path);
+            if (!scene_file) {
+                NOOR_LOG_ERROR("Diag", "{}", scene_file.error().describe());
+                return false;
+            }
+            auto authored = noor::scene::Scene::load(*scene_file);
+            if (!authored) {
+                NOOR_LOG_ERROR("Diag", "{}", authored.error().describe());
+                return false;
+            }
+            noor::scene::PrefabLibrary prefabs(*project, registry);
+            const auto expanded = noor::scene::expand_prefabs(*authored, prefabs.resolver());
+            for (const auto& issue : expanded.issues) NOOR_LOG_WARN("Diag", "{}: {}", issue.entity, issue.message);
+
+            reset_view();
+            scene_files = {*scene_file};
+            for (const auto& a : registry.assets()) {
+                if (auto path = project->resolve(a.path)) scene_files.push_back(*path);
+            }
+            struct LoadedModel {
+                noor::asset::ImportedModel model;
+                std::vector<noor::render::MeshHandle> handles;
+            };
+            std::unordered_map<noor::Guid, std::optional<LoadedModel>> models;
+            const auto& entities = expanded.scene.entities;
+            for (std::size_t i = 0; i < entities.size(); ++i) {
+                const auto& e = entities[i];
+                if (e.has("marker") && marker) {
+                    model_draws.push_back({*marker, expanded.scene.world_matrix(i) * scale({0.25f, 0.25f, 0.25f})});
+                }
+                if (!e.has("mesh")) continue;
+                const auto& mesh = e.components["mesh"];
+                const auto guid = noor::asset::guid_field(mesh, "asset");
+                const int index = mesh.value("mesh_index", -1);
+                if (!guid || index < 0) continue;
+                auto [it, fresh] = models.try_emplace(*guid);
+                if (fresh) {
+                    const auto* record = registry.find(*guid);
+                    if (record) {
+                        if (auto path = project->resolve(record->path)) {
+                            if (auto model = noor::asset::import_gltf(*path)) {
+                                auto handles = upload(*model);
+                                it->second = LoadedModel{std::move(*model), std::move(handles)};
+                            }
+                        }
+                    }
+                    if (!it->second) NOOR_LOG_WARN("Diag", "Asset {} could not be loaded", guid->to_string());
+                }
+                if (!it->second || index >= static_cast<int>(it->second->handles.size())) continue;
+                const auto handle = it->second->handles[static_cast<std::size_t>(index)];
+                if (!handle.valid()) continue;
+                const auto world = expanded.scene.world_matrix(i);
+                model_draws.push_back({handle, world});
+                grow_bounds(world, it->second->model.meshes[static_cast<std::size_t>(index)]);
+            }
+            NOOR_LOG_INFO("Diag", "Scene '{}': {} authored entities, {} after expanding {} prefab instance(s), {} draws",
+                          authored->name, authored->entities.size(), entities.size(), expanded.instances,
+                          model_draws.size());
+            return true;
+        };
+
+        const auto load_model = [&]() -> bool {
+            if (!options.scene_path.empty()) return load_scene();
+            auto model = noor::asset::import_gltf(options.glb_path);
+            if (!model) {
+                NOOR_LOG_ERROR("Diag", "{}", model.error().describe());
+                return false;
+            }
+            reset_view();
+            static_assert(sizeof(noor::asset::MeshVertex) == sizeof(noor::render::Vertex));
+            upload(*model);
             for (std::size_t i = 0; i < model->nodes.size(); ++i) {
                 const auto& n = model->nodes[i];
                 const auto world = model->world_matrix(i);
                 if (n.mesh >= 0 && !n.is_collision() && model_meshes[static_cast<std::size_t>(n.mesh)].valid()) {
                     model_draws.push_back({model_meshes[static_cast<std::size_t>(n.mesh)], world});
-                    for (const auto& v : model->meshes[static_cast<std::size_t>(n.mesh)].vertices) {
-                        const Vec3 p = world.transform_point(v.position);
-                        model_min = {std::min(model_min.x, p.x), std::min(model_min.y, p.y), std::min(model_min.z, p.z)};
-                        model_max = {std::max(model_max.x, p.x), std::max(model_max.y, p.y), std::max(model_max.z, p.z)};
-                    }
+                    grow_bounds(world, model->meshes[static_cast<std::size_t>(n.mesh)]);
                 }
                 if (n.is_marker() && marker) {
                     model_draws.push_back({*marker, world * scale({0.25f, 0.25f, 0.25f})});
@@ -434,9 +532,13 @@ int run(const Options& options) {
         noor::asset::FileWatcher watcher;
         std::uint64_t model_reloads = 0;
         double last_watch_poll = 0.0;
-        if (!options.glb_path.empty() && exit_code == 0) {
+        if ((!options.glb_path.empty() || !options.scene_path.empty()) && exit_code == 0) {
             if (load_model()) {
-                watcher.watch(options.glb_path);
+                if (options.scene_path.empty()) {
+                    watcher.watch(options.glb_path);
+                } else {
+                    for (const auto& f : scene_files) watcher.watch(f);
+                }
             } else {
                 exit_code = 1;
             }
@@ -449,7 +551,11 @@ int run(const Options& options) {
         if (show_model) {  // a three-quarter view from the street side (+Z)
             const Vec3 c = (model_min + model_max) * 0.5f;
             const float size = std::max({model_max.x - model_min.x, model_max.y - model_min.y, model_max.z - model_min.z});
-            fly.position = {c.x + size * 0.75f, c.y + size * 0.35f, c.z + size * 1.1f};
+            if (options.scene_path.empty()) {
+                fly.position = {c.x + size * 0.75f, c.y + size * 0.35f, c.z + size * 1.1f};
+            } else {  // a whole scene (e.g. a street): lower and closer, looking along it
+                fly.position = {c.x - size * 0.42f, c.y + size * 0.1f, c.z + size * 0.22f};
+            }
             fly.look_at(c);
             fly.speed = std::max(5.0f, size * 0.25f);
         }
@@ -502,8 +608,12 @@ int run(const Options& options) {
             if (show_model && noor::platform::time_seconds() - last_watch_poll > 0.25) {
                 last_watch_poll = noor::platform::time_seconds();
                 if (!watcher.poll().empty()) {
-                    NOOR_LOG_INFO("Diag", "'{}' changed on disk: reloading", options.glb_path);
-                    if (load_model()) ++model_reloads;
+                    NOOR_LOG_INFO("Diag", "'{}' changed on disk: reloading",
+                                  options.scene_path.empty() ? options.glb_path : options.scene_path);
+                    if (load_model()) {
+                        ++model_reloads;
+                        for (const auto& f : scene_files) watcher.watch(f);  // newly used assets, if any
+                    }
                 }
             }
 

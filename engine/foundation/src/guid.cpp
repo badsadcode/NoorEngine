@@ -1,5 +1,7 @@
 #include "noor/foundation/guid.h"
 
+#include "noor/foundation/sha256.h"
+
 #include <cstring>
 #include <format>
 #include <random>
@@ -31,6 +33,19 @@ Guid Guid::generate() {
     }
     guid.bytes[6] = static_cast<std::uint8_t>((guid.bytes[6] & 0x0F) | 0x40); // version 4
     guid.bytes[8] = static_cast<std::uint8_t>((guid.bytes[8] & 0x3F) | 0x80); // RFC variant
+    return guid;
+}
+
+Guid Guid::derive(const Guid& a, const Guid& b) {
+    Sha256 sha;
+    sha.update("noor.guid.derive.v1");  // domain separation
+    sha.update(std::string_view(reinterpret_cast<const char*>(a.bytes.data()), a.bytes.size()));
+    sha.update(std::string_view(reinterpret_cast<const char*>(b.bytes.data()), b.bytes.size()));
+    const auto digest = sha.finish();
+    Guid guid;
+    std::memcpy(guid.bytes.data(), digest.data(), guid.bytes.size());
+    guid.bytes[6] = static_cast<std::uint8_t>((guid.bytes[6] & 0x0F) | 0x80);  // version 8
+    guid.bytes[8] = static_cast<std::uint8_t>((guid.bytes[8] & 0x3F) | 0x80);  // RFC variant
     return guid;
 }
 

@@ -2,7 +2,25 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 2 in progress
+## [Unreleased] — Milestone 2 complete, Milestone 3 next
+
+### 2026-11-15 — Milestone 2 complete: prefabs, scene rendering, review
+**Added**
+- ADR-024 (prefabs). `Guid::derive` (RFC 9562 v8, SHA-256) for stable expanded ids.
+- `scene::Prefab` (`.noorprefab`, format 1), `expand_prefabs` (overrides: name/layer/tags/
+  transform parts/components; `removed` subtrees; nested prefabs and variants; cycle and depth
+  detection; unused overrides kept and reported), `make_prefab` (instance keeps the old root's id),
+  `make_instance`, `PrefabLibrary` (loads prefabs through the registry).
+- Registry: `.noorprefab` files are assets (importer `prefab`, GUID = the prefab's own id).
+- `noor_cli make-prefab`, `add-prefab`; `validate` checks the expanded scene.
+- `noor_diag --project <dir> --scene <file>`: renders a scene with prefabs expanded; hot-reloads
+  when the scene, a prefab or a model changes.
+- `docs/milestones/M2_REVIEW.md`: gate review (complete, 5 documented exceptions).
+- Tests: 10 prefab tests (incl. exact world-matrix equivalence after making a prefab), CLI workflow
+  makes and places prefabs. 80/80 (Debug), 75/75 non-GPU (Release).
+
+**Measured:** street demo, 12 instances of 4 BadBuilding prefabs → 412 entities, 334 draws,
+56,306 triangles; Debug + validation CPU 1.7 ms, GPU 0.02 ms.
 
 ### 2026-11-15 — Log file follows live
 - `FileLogSink` flushes routine lines at least once per second (warnings and errors still at once).

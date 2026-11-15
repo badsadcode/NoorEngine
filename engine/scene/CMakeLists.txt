@@ -2,6 +2,7 @@ noor_add_module(scene
     SOURCES
         src/scene.cpp
         src/history.cpp
+        src/prefab.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset
