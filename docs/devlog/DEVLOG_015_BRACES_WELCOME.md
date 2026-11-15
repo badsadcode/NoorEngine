@@ -54,6 +54,20 @@ messages only expected one. Then, while fixing it, an over-helpful shell turned 
 that same invisible character *inside the source code*. Fixed by writing the fix to a file first
 and running that instead.
 
+## Meet Alden Wayfarer
+
+NoorEngine has a mascot. **Alden Wayfarer**, *the first explorer of Thornwake*, comes from
+Tom's game Thornwake, where all of this started: he was already walking its worlds as the
+default character before NoorEngine existed. Tom and Noor decided he should be the first citizen
+of NoorEngine too.
+
+He's a blocky, cheerful explorer: teal tunic, a belt with a gold buckle, a big backpack with a
+bedroll, and a walking staff. In the concept art he has a statue on a mountain top that says
+*"He went first because somebody had to."* Next to it, a stone tablet reads
+**"Explore · Test · Break · Repeat"**, which, frankly, is also how this engine gets built.
+
+He'll star in the sample games once he has a proper 3D model.
+
 ## Next engineering target
 **Part 5: sound.** Footsteps, one-shots and music, in 3D.
 
