@@ -107,7 +107,10 @@ EventSummary pump_events() {
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: summary.window_resized = true; break;
         case SDL_EVENT_WINDOW_MINIMIZED: summary.window_minimized = true; break;
         case SDL_EVENT_WINDOW_RESTORED: summary.window_restored = true; break;
-        case SDL_EVENT_WINDOW_FOCUS_LOST: g_input.release_all(); break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            g_input.release_all();
+            summary.focus_lost = true;
+            break;
 
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP: {

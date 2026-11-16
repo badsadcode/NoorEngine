@@ -277,6 +277,7 @@ int run(const Options& o) {
                 noor::game::SceneRenderer scene_renderer(**renderer);
                 const auto asset_path = noor::game::registry_asset_path(*project, registry);
                 bool captured = false;
+                int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
                 bool warned_no_camera = false;
                 std::optional<noor::render::CapturedFrame> last_capture;
                 double last = noor::platform::time_seconds();
@@ -286,21 +287,31 @@ int run(const Options& o) {
                     if (events.window_resized || events.window_restored) (*renderer)->notify_resized();
                     const auto& in = noor::platform::input();
 
-                    // The mouse: scripts ask for it (noor.input.capture_mouse), Esc always gives it back.
-                    if (in.pressed(noor::platform::Key::Escape) && captured) {
+                    // The mouse: scripts ask for it (noor.input.capture_mouse); Esc and switching to
+                    // another window always give it back.
+                    if (captured && (in.pressed(noor::platform::Key::Escape) || events.focus_lost)) {
                         noor::platform::set_relative_mouse(**window, false);
                         captured = false;
+                        ignore_motion = 2;
                     }
                     if (const auto want = (*world)->take_mouse_capture_request(); want && *want != captured) {
                         noor::platform::set_relative_mouse(**window, *want);
                         captured = *want;
+                        // Entering relative mode moves the hidden cursor to the window's centre, and that
+                        // jump arrives as movement: without this the view lurches on the capturing click.
+                        ignore_motion = 2;
                     }
 
                     const double now = noor::platform::time_seconds();
                     // Fixed steps in test runs (--frames) so results don't depend on how busy the machine is.
                     const double dt = o.frames ? 1.0 / 60.0 : now - last;
                     last = now;
-                    (*world)->frame(dt, game_input(in, captured));
+                    auto game_in = game_input(in, captured);
+                    if (ignore_motion > 0) {
+                        --ignore_motion;
+                        game_in.mouse_delta = {0, 0};
+                    }
+                    (*world)->frame(dt, game_in);
 
                     const auto view = noor::game::collect_view((*world)->scene(), asset_path);
                     if (!view.camera && !warned_no_camera) {

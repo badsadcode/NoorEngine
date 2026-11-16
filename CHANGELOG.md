@@ -15,6 +15,9 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 - NoorEditor's File ▸ Build Game packs C# scripts too.
 
 **Fixed**
+- Built games: the view jerked on the click that captures the mouse (entering relative mode warps
+  the hidden cursor to the window centre, which arrived as movement); switching to another window
+  now releases the mouse like Esc. Found by Tom; not yet re-checked by hand.
 - The copies of noor_player next to noor_cli (from 6a) only refreshed when noor_cli itself relinked;
   now a separate step refreshes them every build.
 - Scripts loaded by a host that isn't the editor couldn't find NoorEngine.Scripting (hostfxr loads it

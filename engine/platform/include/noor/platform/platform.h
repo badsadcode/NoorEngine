@@ -23,6 +23,7 @@ struct EventSummary {
     bool window_resized = false;
     bool window_minimized = false;
     bool window_restored = false;
+    bool focus_lost = false;    // keys and buttons were released; relative mouse mode is off
 };
 
 // Processes pending OS events and updates the input state.
