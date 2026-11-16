@@ -26,6 +26,10 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
   (`noor_viewport_set_play`, editor API **v9**; the document locks its running world for the UI
   thread's panel reads; a script's mouse-capture request reaches the UI thread as a viewport event).
   Measured: 58–60 updates/s; the editor smoke test now checks it (118 checks).
+  Regression found by Tom right after: the player couldn't move. The viewport's "has focus" used
+  `GetFocus()`, which only answers for the calling thread's windows, so on the render thread the
+  game got no keys (the smoke test's test-pointer mode counts as focused, so it passed). Focus is
+  now tracked from WM_SETFOCUS/WM_KILLFOCUS; a unit test reads it from another thread.
 - **Smooth motion** (Tom: "not as smooth as in other games"): physics steps at a fixed 60 Hz, and
   even on a 60 Hz screen frame times wobble, so some frames got no step and some two: walking
   stuttered slightly. Physics now tells the World where to *draw* what it moves, blended between its

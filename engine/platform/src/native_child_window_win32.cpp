@@ -164,7 +164,11 @@ LRESULT CALLBACK viewport_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
             return 0;
         }
         return DefWindowProcW(hwnd, msg, wparam, lparam);
+    case WM_SETFOCUS:
+        if (input) input->focused.store(true);
+        return 0;
     case WM_KILLFOCUS:  // keys released elsewhere would never reach us; the mouse goes back too
+        if (input) input->focused.store(false);
         if (input && !input->test_pointer.load()) {
             input->keys.store(0);
             for (auto& word : input->vk) word.store(0);
@@ -245,7 +249,7 @@ bool NativeChildWindow::key_down(int vk) const noexcept {
 bool NativeChildWindow::has_focus() const noexcept {
     // Test mode stands in for the user: the window counts as focused (a test process launched in the
     // background may not be allowed to take the foreground, which would make focus flaky).
-    return input_->test_pointer.load() || GetFocus() == static_cast<HWND>(hwnd_);
+    return input_->test_pointer.load() || input_->focused.load();
 }
 
 void NativeChildWindow::set_mouse_capture(bool capture) noexcept { apply_capture(static_cast<HWND>(hwnd_), input_.get(), capture); }

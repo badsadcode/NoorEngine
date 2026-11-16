@@ -19,8 +19,9 @@ add_executable(noor_unit_tests
     unit/test_character.cpp
     unit/test_csharp_host.cpp
     unit/test_audio.cpp
+    unit/test_native_window.cpp
 )
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting doctest::doctest)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting doctest::doctest)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)

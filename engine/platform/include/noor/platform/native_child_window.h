@@ -92,6 +92,9 @@ public:
         std::atomic<std::uint64_t> vk[4]{};  // 256 virtual-key bits
         std::atomic<bool> test_pointer{false};
         std::atomic<bool> captured{false};
+        // Keyboard focus, from WM_SETFOCUS / WM_KILLFOCUS: readable from any thread (GetFocus() only
+        // answers for the calling thread's windows, so the render thread always got "no").
+        std::atomic<bool> focused{false};
         std::atomic<bool> capture_is_real{false};  // cursor hidden/clipped (not a test)
         std::atomic<std::int32_t> raw_dx{0};
         std::atomic<std::int32_t> raw_dy{0};
