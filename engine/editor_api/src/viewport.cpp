@@ -82,9 +82,16 @@ struct noor_viewport {
     std::optional<ed::CameraBasis> camera;
     float camera_width = 0, camera_height = 0;
 
-    // Game input bookkeeping (UI thread).
+    // Game input bookkeeping (whoever calls noor_viewport_game_input: see api_internal.h).
     std::int32_t last_game_mouse_x = 0, last_game_mouse_y = 0;
     bool game_mouse_valid = false;
+
+    // Play mode ticked here, once per frame before drawing (noor_viewport_set_play). play_mutex is
+    // held for each tick, so set_play(nullptr) returns only once no tick is running.
+    std::mutex play_mutex;
+    noor_doc* play_doc = nullptr;
+    std::chrono::steady_clock::time_point last_play_tick{};
+    bool play_ticked = false;
 
     // Written by the render thread, drained by the UI thread.
     std::mutex event_mutex;
@@ -370,6 +377,19 @@ void render_thread_main(noor_viewport* vp) {
     };
 
     while (!vp->stop.load()) {
+        // Play mode: one game frame per drawn frame, just before drawing, so the game moves in step
+        // with the screen (the UI thread's timers can't: they ticked ~35 times a second).
+        {
+            std::scoped_lock lock(vp->play_mutex);
+            if (vp->play_doc) {
+                const auto now = std::chrono::steady_clock::now();
+                const double dt = vp->play_ticked ? std::chrono::duration<double>(now - vp->last_play_tick).count() : 1.0 / 60.0;
+                vp->last_play_tick = now;
+                vp->play_ticked = true;
+                if (const auto want = noor_doc_tick_internal(vp->play_doc, dt, noor_viewport_game_input(vp)))
+                    push_event(vp, {{"type", "mouse_capture"}, {"capture", *want}});  // the UI thread owns the cursor
+            }
+        }
         std::shared_ptr<ed::SnapshotChannel> channel;
         std::optional<std::vector<Guid>> frame_request;
         {
@@ -996,6 +1016,13 @@ NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enable
     s.ctrl = (buttons & 8) != 0;
     s.alt = (buttons & 16) != 0;
     viewport->window->set_test_pointer(enabled != 0, s);
+}
+
+NOOR_API void noor_viewport_set_play(noor_viewport* viewport, noor_doc* doc) {
+    if (!viewport) return;
+    std::scoped_lock lock(viewport->play_mutex);  // waits for a tick in progress
+    viewport->play_doc = doc;
+    viewport->play_ticked = false;
 }
 
 NOOR_API void noor_viewport_set_mouse_capture(noor_viewport* viewport, int32_t capture) {

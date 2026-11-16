@@ -134,6 +134,9 @@ public sealed class ViewportPanel : DockPanel
                 case "click":
                     _doc.Select(_doc.ClickTarget(ev["entity"]?.GetValue<string>()));
                     break;
+                case "mouse_capture":  // a script asked (play mode); the cursor belongs to the UI thread
+                    Native.noor_viewport_set_mouse_capture(Viewport.EngineHandle, ev["capture"]?.GetValue<bool>() == true ? 1 : 0);
+                    break;
                 case "transform":
                     var id = ev["entity"]!.GetValue<string>();
                     var label = ev["label"]?.GetValue<string>() ?? "Move";

@@ -4,6 +4,7 @@
 #include "noor_editor_api.h"
 
 #include "api_internal.h"
+#include "noor/foundation/log.h"
 #include "document.h"
 #include "noor/scripting/csharp_scripts.h"
 
@@ -41,6 +42,17 @@ R guarded(R on_error, Fn&& fn) {
     return on_error;
 }
 } // namespace
+
+std::optional<bool> noor_doc_tick_internal(noor_doc* doc, double seconds, const noor::runtime::InputState& input) {
+    if (!doc) return std::nullopt;
+    try {
+        doc->doc->tick(seconds, input);
+        return doc->doc->take_mouse_capture_request();
+    } catch (const std::exception& e) {
+        NOOR_LOG_ERROR("Editor", "Play frame failed: {}", e.what());
+        return std::nullopt;
+    }
+}
 
 extern "C" {
 

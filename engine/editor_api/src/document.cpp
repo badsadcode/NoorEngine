@@ -94,6 +94,7 @@ Status Document::require_editable() const {
 }
 
 Status Document::play() {
+    std::scoped_lock lock(play_mutex_);
     if (auto s = require_scene(); !s) return s;
     if (world_) return {};
     game::WorldOptions options;
@@ -111,6 +112,7 @@ Status Document::play() {
 }
 
 void Document::stop() {
+    std::scoped_lock lock(play_mutex_);
     if (!world_) return;
     NOOR_LOG_INFO("Editor", "Stop after {:.1f} s ({} frames)", world_->time(), world_->frame_count());
     world_.reset();
@@ -118,6 +120,7 @@ void Document::stop() {
 }
 
 void Document::tick(double seconds, const runtime::InputState& input) {
+    std::scoped_lock lock(play_mutex_);
     if (!world_ || seconds <= 0.0) return;
     world_->frame(seconds, input);  // caps dt itself
     ++revision_;
@@ -211,6 +214,7 @@ Status Document::require_scene() const {
 }
 
 Json Document::scene_snapshot() const {
+    std::scoped_lock lock(play_mutex_);
     Json snap;
     snap["revision"] = revision_;
     if (!scene_) {

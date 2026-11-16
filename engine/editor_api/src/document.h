@@ -98,7 +98,9 @@ public:
     bool redo();
 
     // Play mode (ADR-026): a runtime copy of the expanded scene that behaviours update. Edits are
-    // refused while playing; Stop throws the runtime copy away.
+    // refused while playing; Stop throws the runtime copy away. tick() may run on a viewport's
+    // render thread (noor_viewport_set_play) while the UI thread reads the scene: play, stop, tick,
+    // scene_snapshot and take_mouse_capture_request take play_mutex_.
     [[nodiscard]] Status play();
     void stop();
     [[nodiscard]] bool playing() const noexcept { return world_ != nullptr; }
@@ -109,6 +111,7 @@ public:
     void set_audio_device(bool enabled) noexcept { audio_device_ = enabled; }
     // A script asked to capture (true) or release (false) the mouse this frame.
     [[nodiscard]] std::optional<bool> take_mouse_capture_request() {
+        std::scoped_lock lock(play_mutex_);
         return world_ ? world_->take_mouse_capture_request() : std::nullopt;
     }
 
@@ -139,6 +142,7 @@ private:
     std::uint64_t revision_ = 0;
     std::unique_ptr<runtime::World> world_;  // play mode (ADR-026/027)
     const void* script_host_ = nullptr;      // noor_rt_host*
+    mutable std::recursive_mutex play_mutex_;  // world_ (see play())
     bool audio_device_ = true;
     asset::FileWatcher watcher_;
     std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version

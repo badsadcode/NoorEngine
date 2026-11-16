@@ -201,6 +201,17 @@ internal static class SmokeTest
         hub.Close();
         Check(settings.RecentProjects.FirstOrDefault()?.EndsWith("SmokeProject", StringComparison.Ordinal) == true, "recent projects remember the project");
 
+        // Play's update rate, from the engine's "Stop after 2.9 s (101 frames)" lines: one update per
+        // display frame. (A 16 ms timer used to give ~34/s on a 60 Hz screen.)
+        var rates = EngineLog.Lines.Select(l => System.Text.RegularExpressions.Regex.Match(l.Message, @"^Stop after ([\d.,]+) s \((\d+) frames\)"))
+                                   .Where(m => m.Success)
+                                   .Select(m => (Seconds: double.Parse(m.Groups[1].Value.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture),
+                                                 Frames: int.Parse(m.Groups[2].Value)))
+                                   .Where(r => r.Seconds >= 1.0).ToList();
+        var slowest = rates.Count == 0 ? 0 : rates.Min(r => r.Frames / r.Seconds);
+        results["play_updates_per_second"] = Math.Round(slowest, 1);
+        Check(rates.Count > 0 && slowest >= 45, $"play updates the game every display frame (slowest play: {slowest:0} updates/s)");
+
         // 11. Error budget.
         await Task.Delay(300);  // let posted log lines land
         var last = VulkanViewport.Active?.Stats;

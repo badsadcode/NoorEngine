@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 8;
+    public const uint ExpectedApiVersion = 9;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -57,6 +57,7 @@ public static class Native
     [DllImport(Dll)] public static extern int noor_viewport_world_to_screen(IntPtr viewport, float[] world, float[] output);
     [DllImport(Dll)] public static extern void noor_viewport_test_pointer(IntPtr viewport, int enabled, int x, int y, int buttons);
     [DllImport(Dll)] public static extern void noor_viewport_set_mouse_capture(IntPtr viewport, int capture);
+    [DllImport(Dll)] public static extern void noor_viewport_set_play(IntPtr viewport, IntPtr doc);
     [DllImport(Dll)] public static extern int noor_viewport_mouse_captured(IntPtr viewport);
     [DllImport(Dll)] public static extern int noor_viewport_has_focus(IntPtr viewport);
 

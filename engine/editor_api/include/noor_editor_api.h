@@ -35,8 +35,10 @@ extern "C" {
  * 5: play mode runs the runtime World (ADR-027); noor_doc_tick takes the game-view viewport.
  * 6: "create" command; physics (ADR-010) and Lua (ADR-009) run in play mode; primitive shapes.
  * 7: character controller, game camera, mouse capture; C# script host (noor_rt_api / noor_rt_host).
- * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound). */
-#define NOOR_EDITOR_API_VERSION 8u
+ * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
+ * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
+ *    screen); "mouse_capture" viewport events. */
+#define NOOR_EDITOR_API_VERSION 9u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -182,6 +184,13 @@ NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport);
  * distance from the camera long (times the "gizmo_scale" option). */
 NOOR_API int32_t noor_viewport_world_to_screen(noor_viewport* viewport, const float world[3], float out[3]);
 #define NOOR_GIZMO_SCREEN_SCALE 0.16f
+
+/* Play mode in step with the screen: while `doc` is set, the viewport's render thread runs one
+ * play-mode frame of it (noor_doc_tick with this viewport's game input) before each frame it draws.
+ * A script's mouse capture request arrives as a {"type": "mouse_capture", "capture": bool} event
+ * (noor_viewport_poll_events) for the UI thread to apply with noor_viewport_set_mouse_capture.
+ * NULL stops; it returns once no tick is running, so noor_doc_stop can follow safely. */
+NOOR_API void noor_viewport_set_play(noor_viewport* viewport, noor_doc* doc);
 
 /* For automated tests: while enabled, the viewport ignores the real mouse and uses this pointer
  * (physical pixels; buttons: 1 left, 2 right, 4 middle, 8 Ctrl, 16 Alt), and counts as having the

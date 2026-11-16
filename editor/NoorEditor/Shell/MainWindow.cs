@@ -43,10 +43,18 @@ public sealed class MainWindow : Window
     private readonly MenuItem _openScene = new() { Header = "_Open Scene" };
     private bool _closeConfirmed;
     private readonly Button _play = new() { Content = "▶  Play", Classes = { "primary" }, VerticalAlignment = VerticalAlignment.Center };
-    private readonly DispatcherTimer _playTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    // Play: the engine viewport's render thread runs the game, one frame per drawn frame
+    // (noor_viewport_set_play), in step with the screen like the fly camera. The UI thread only
+    // refreshes the panels a few times a second. (A 16 ms DispatcherTimer used to tick the game:
+    // Windows timers fire in ~15.6 ms steps and the UI thread is often busy, so it managed ~35
+    // updates/s and walking "didn't feel like 60 FPS".)
+    private readonly DispatcherTimer _panelTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+    private IntPtr _playViewport;  // the viewport ticking the game (it changes if the viewport is re-created)
+    private bool _playLoop;        // fallback without an engine viewport: tick on Avalonia's frames
+    private int _playLoopId;       // a quick Stop + Play must not leave the old loop running alongside
     private readonly DispatcherTimer _fileTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private readonly Stopwatch _playClock = new();
-    private TimeSpan _lastTick, _lastPanelRefresh;
+    private TimeSpan _lastTick;
     private readonly DockControl _dockControl;
     private IRootDock _rootDock;
 
@@ -89,16 +97,17 @@ public sealed class MainWindow : Window
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => UpdateStatusRight();
-        _playTimer.Tick += (_, _) => PlayTick();
         _fileTimer.Tick += (_, _) => Doc.PollFiles();  // the engine logs and reloads what changed
         _fileTimer.Start();
         timer.Start();
 
+        _panelTimer.Tick += (_, _) => RefreshWhilePlaying();
         Closing += OnClosing;
         Closed += (_, _) =>
         {
             timer.Stop();
-            _playTimer.Stop();
+            _playLoop = false;
+            _panelTimer.Stop();
             _fileTimer.Stop();
             Doc.SceneChanged -= OnSceneChanged;
             Doc.AssetsChanged -= RebuildOpenSceneMenu;
@@ -453,7 +462,7 @@ public sealed class MainWindow : Window
     {
         if (Doc.Playing)
         {
-            _playTimer.Stop();
+            StopPlayLoop();
             if (ViewportView?.Viewport.EngineHandle is { } vp && vp != IntPtr.Zero) Native.noor_viewport_set_mouse_capture(vp, 0);  // the mouse always comes back on Stop
             Doc.Stop();
             NoorEngine.ScriptHost.UnloadScripts();  // the next Play compiles and loads them fresh
@@ -501,22 +510,64 @@ public sealed class MainWindow : Window
         }
         if (!Doc.Play()) return false;  // the selection stays: the running copy keeps every entity's id
         _playClock.Restart();
-        _lastTick = _lastPanelRefresh = TimeSpan.Zero;
-        _playTimer.Start();
+        _lastTick = TimeSpan.Zero;
+        StartPlayLoop();
         return true;
     }
 
+    private void StartPlayLoop()
+    {
+        _panelTimer.Start();
+        FollowViewport();
+    }
+
+    private void StopPlayLoop()
+    {
+        _panelTimer.Stop();
+        if (_playViewport != IntPtr.Zero) Native.noor_viewport_set_play(_playViewport, IntPtr.Zero);  // returns once no tick runs
+        _playViewport = IntPtr.Zero;
+        _playLoop = false;
+    }
+
+    // The engine viewport runs the game; if it was re-created (the panel floated, say), the new one
+    // takes over. Without one, Avalonia's frame callback ticks it.
+    private void FollowViewport()
+    {
+        var vp = ViewportView?.Viewport.EngineHandle ?? IntPtr.Zero;
+        if (vp == _playViewport) return;
+        _playViewport = vp;
+        if (vp != IntPtr.Zero)
+        {
+            _playLoop = false;
+            Native.noor_viewport_set_play(vp, Doc.Handle);
+            return;
+        }
+        if (_playLoop) return;
+        _playLoop = true;
+        var id = ++_playLoopId;
+        void Frame(TimeSpan _)
+        {
+            if (!_playLoop || id != _playLoopId) return;
+            if (Doc.Playing) PlayTick();
+            RequestAnimationFrame(Frame);
+        }
+        RequestAnimationFrame(Frame);
+    }
+
+    // Fallback only (no engine viewport): one game frame per Avalonia frame.
     private void PlayTick()
     {
         var now = _playClock.Elapsed;
-        Doc.Tick((now - _lastTick).TotalSeconds, ViewportView?.Viewport.EngineHandle ?? IntPtr.Zero);
+        Doc.Tick((now - _lastTick).TotalSeconds, IntPtr.Zero);
         _lastTick = now;
-        // Panels follow the running scene a few times per second, not every frame.
-        if (now - _lastPanelRefresh > TimeSpan.FromMilliseconds(200))
-        {
-            _lastPanelRefresh = now;
-            Doc.Refresh();
-        }
+    }
+
+    // Panels follow the running scene a few times per second, not every frame.
+    private void RefreshWhilePlaying()
+    {
+        if (!Doc.Playing) return;
+        FollowViewport();
+        Doc.Refresh();
     }
 
     public async Task ShowPreferences()
