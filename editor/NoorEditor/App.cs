@@ -21,6 +21,10 @@ public sealed class App : Application
         RequestedThemeVariant = ThemeVariant.Dark;
         Styles.Add(NoorTheme.CreateFluent());
         Styles.Add(new DockFluentTheme());
+        Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new Uri("avares://NoorEditor/"))
+        {
+            Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"),  // NoorCode's text editor
+        });
         Styles.Add(NoorTheme.CreateStyles());
         NoorTheme.ApplyResources(Resources);
         DockTemplates.Register(this);

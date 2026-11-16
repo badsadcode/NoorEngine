@@ -63,9 +63,15 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   and sound all work (C# needs the .NET 10 runtime on the PC). Uses `noor_cli build` (ADR-028).
 - **HUD**: scripts draw text and rectangles over the game while playing (`noor.ui` in Lua, `Ui` in
   C#). The first-person player shows a crosshair and a "Click to look around" hint.
-- **Code editor**: Edit ▸ Preferences ▸ Scripts picks the program the Inspector's **Open** button
-  uses for scripts: Windows default, one found on your PC (VS Code, Visual Studio, Rider,
-  Notepad++, Notepad) or any program (arguments may use `{file}`, `{line}`, `{folder}`).
+- **NoorCode** (built-in script editor): the Inspector's **Open** button and the `File:line ↗`
+  links in the Console open scripts as tabs next to the viewport, with Lua and C# highlighting,
+  line numbers and find (Ctrl+F). Ctrl+S saves the script (a running game picks it up); Play and
+  Build save open scripts first. Errors that name a line are marked red on it and listed under
+  the editor (click to jump).
+- **External code editor**: Edit ▸ Preferences ▸ Scripts picks it: Windows default, one found on
+  your PC (VS Code, Visual Studio, Rider, Notepad++, Notepad) or any program (arguments may use
+  `{file}`, `{line}`, `{folder}`). NoorCode's **Open in …** button uses it; untick "Open scripts in
+  NoorCode" to skip NoorCode altogether.
 - **Shortcuts**: Ctrl+S save, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo, F frame, Delete.
   Unsaved changes are confirmed on close, scene switch and Close Project.
 - **Layout**: panel sizes and active tabs are remembered (per user); **Window ▸ Reset Layout**.

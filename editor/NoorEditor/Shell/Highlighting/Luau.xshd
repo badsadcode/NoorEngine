@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!-- NoorCode: Luau (Lua) highlighting. Colors match NoorTheme (dark). -->
+<SyntaxDefinition name="Luau" extensions=".luau;.lua" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#7A7396" fontStyle="italic" />
+  <Color name="String" foreground="#A5E07A" />
+  <Color name="Number" foreground="#F2A65A" />
+  <Color name="Keyword" foreground="#C49BFF" fontWeight="bold" />
+  <Color name="Constant" foreground="#F2A65A" />
+  <Color name="Builtin" foreground="#22D3EE" />
+  <Color name="Function" foreground="#8FC1FF" />
+
+  <RuleSet>
+    <Span color="Comment" multiline="true" begin="--\[=*\[" end="\]=*\]" />
+    <Span color="Comment" begin="--" />
+    <Span color="String" multiline="true" begin="\[=*\[" end="\]=*\]" />
+    <Span color="String">
+      <Begin>"</Begin><End>"</End>
+      <RuleSet><Span begin="\\" end="." /></RuleSet>
+    </Span>
+    <Span color="String">
+      <Begin>'</Begin><End>'</End>
+      <RuleSet><Span begin="\\" end="." /></RuleSet>
+    </Span>
+    <Span color="String">
+      <Begin>`</Begin><End>`</End>
+      <RuleSet><Span begin="\\" end="." /></RuleSet>
+    </Span>
+
+    <Keywords color="Keyword">
+      <Word>and</Word><Word>break</Word><Word>continue</Word><Word>do</Word><Word>else</Word>
+      <Word>elseif</Word><Word>end</Word><Word>export</Word><Word>for</Word><Word>function</Word>
+      <Word>if</Word><Word>in</Word><Word>local</Word><Word>not</Word><Word>or</Word>
+      <Word>repeat</Word><Word>return</Word><Word>then</Word><Word>type</Word><Word>until</Word>
+      <Word>while</Word>
+    </Keywords>
+    <Keywords color="Constant">
+      <Word>true</Word><Word>false</Word><Word>nil</Word>
+    </Keywords>
+    <Keywords color="Builtin">
+      <Word>self</Word><Word>noor</Word><Word>math</Word><Word>string</Word><Word>table</Word>
+      <Word>vector</Word><Word>print</Word><Word>pairs</Word><Word>ipairs</Word><Word>tostring</Word>
+      <Word>tonumber</Word><Word>typeof</Word><Word>require</Word><Word>error</Word><Word>pcall</Word>
+      <Word>assert</Word><Word>select</Word><Word>setmetatable</Word><Word>getmetatable</Word>
+    </Keywords>
+
+    <Rule color="Number">\b0[xX][0-9a-fA-F_]+|\b0[bB][01_]+|\b\d[\d_]*(\.[\d_]+)?([eE][+-]?\d+)?</Rule>
+    <Rule color="Function">\b[A-Za-z_]\w*(?=\s*\()</Rule>
+  </RuleSet>
+</SyntaxDefinition>

@@ -1,8 +1,11 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using NoorEditor.Hub;
 using NoorEditor.Interop;
 using NoorEditor.Model;
@@ -161,6 +164,7 @@ internal static class SmokeTest
         await PhysicsChecks(window, id, results, Check, Shot);
         await PlayerChecks(window, results, Check, Shot);
         await CSharpChecks(window, results, Check, Shot);
+        await NoorCodeChecks(window, results, Check, Shot);
         await AudioChecks(window, results, Check);
         await BuildChecks(window, results, Check, dir);
         CodeEditorChecks(window, results, Check);
@@ -650,13 +654,89 @@ internal static class SmokeTest
         var editors = CodeEditors.Detect();
         check(editors.Any(e => e.Name == "Notepad"), $"code editor: editors found on this PC ({string.Join(", ", editors.Select(e => e.Name))})");
         var prefs = new Preferences();
-        check(CodeEditors.CommandLine(prefs, root, file).Program == null, "code editor: by default scripts open with the Windows default app");
+        check(prefs.UseNoorCode, "code editor: scripts open in NoorCode by default");
+        check(CodeEditors.CommandLine(prefs, root, file).Program == null, "code editor: the external editor is the Windows default app by default");
         prefs.CodeEditor = @"C:\Tools\Code.exe";
         prefs.CodeEditorArguments = "\"{folder}\" -g \"{file}:{line}\"";
         var (program, args) = CodeEditors.CommandLine(prefs, root, file, 12);
         check(program == prefs.CodeEditor && args == $"\"{Path.GetFullPath(Path.Combine(root, "Scripts"))}\" -g \"{Path.GetFullPath(file)}:12\"",
               $"code editor: a chosen editor gets the file, line and Scripts folder ({args})");
         results["code_editors"] = editors.Select(e => e.Name).ToArray();
+    }
+
+    // Milestone 4, part 7b: NoorCode, the built-in script editor. Opening at a line, typing (keys
+    // go to the text, not the editor's shortcuts), Ctrl+S, Play saving first, compile errors marked
+    // on their line and linked from the Console, outside changes reloading, closing the tab.
+    private static async Task NoorCodeChecks(MainWindow window, Dictionary<string, object> results,
+                                             Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var file = Path.Combine(doc.ProjectRoot, "Scripts", "Spinner.cs");
+        var good = File.ReadAllText(file);
+        check(CodePanel.Highlighting("Scripts/A.cs") != null && CodePanel.Highlighting("Scripts/B.luau") != null,
+              "NoorCode: Lua and C# highlighting load");
+        check(ScriptLocation.Find("Scripts/Spinner.cs:7: CS1002: ; expected", doc.ProjectRoot) == new ScriptLocation("Scripts/Spinner.cs", 7) &&
+              ScriptLocation.Find("InvalidOperationException: boom at Spinner.cs:12", doc.ProjectRoot) == new ScriptLocation("Scripts/Spinner.cs", 12) &&
+              ScriptLocation.Find("Scripts/Nope.luau:3: x", doc.ProjectRoot) == null,
+              "NoorCode: error messages name script lines (Lua and C# compile errors, C# exceptions)");
+
+        var script = window.OpenScript("Scripts/Spinner.cs", 11);
+        await Task.Delay(500);
+        var panel = window.GetVisualDescendants().OfType<CodePanel>().FirstOrDefault(p => p.Script == script);
+        check(script != null && panel != null && window.FindDock("Documents")?.ActiveDockable == script,
+              "NoorCode: Open shows the script as a tab next to the viewport");
+        if (script == null || panel == null) return;
+        check(panel.Editor.TextArea.Caret.Line == 11, $"NoorCode: opens at the asked line (caret on {panel.Editor.TextArea.Caret.Line})");
+        check(window.OpenScript(file) == script && window.OpenScripts.Count == 1, "NoorCode: opening it again reuses the tab");
+
+        // Keys typed into the editor are text, not the editor's shortcuts (E is the Rotate tool).
+        panel.Editor.TextArea.Focus();
+        await Task.Delay(100);
+        var tool = doc.Tool;
+        var area = panel.Editor.TextArea;
+        var sceneModified = doc.Scene.Modified;
+        area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.E, Source = area });
+        area.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = "e", Source = area });
+        check(doc.Tool == tool && script.Text.Text != File.ReadAllText(file) && script.Modified && script.Title?.Contains('•') == true,
+              "NoorCode: typing goes into the script (E doesn't switch to the Rotate tool) and marks the tab unsaved");
+        script.Text.UndoStack.Undo();
+        script.Text.Insert(0, "// edited in NoorCode\n");
+        area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.S, KeyModifiers = KeyModifiers.Control, Source = area });
+        check(!script.Modified && File.ReadAllText(file).StartsWith("// edited in NoorCode", StringComparison.Ordinal) && doc.Scene.Modified == sceneModified,
+              "NoorCode: Ctrl+S saves the script (not the scene)");
+
+        // A compile error typed in NoorCode: Play saves first, the error lands on its line.
+        script.Text.Text = good.Replace("Noor.Log($\"Spinner ready on {Entity.Name}\");", "Noor.Log(\"oops\")");
+        await CountErrors(async () => check(!await window.PlayAsync(), "NoorCode: Play saves the script first (and the compile error stops it)"));
+        await Task.Delay(300);
+        check(script.Errors.Any(e => e.Line == 7 && e.Message.Contains("CS1002")) && !script.Modified,
+              $"NoorCode: the compile error is marked on line 7 ({string.Join("; ", script.Errors.Select(e => $"{e.Line}: {e.Message}"))})");
+        var console = window.GetVisualDescendants().OfType<ConsolePanel>().FirstOrDefault();
+        var errorLine = EngineLog.Lines.LastOrDefault(l => l.Level >= 4 && l.Message.StartsWith("Scripts/Spinner.cs:7:", StringComparison.Ordinal));
+        check(console == null || (errorLine != null && console.LocationOf(errorLine) == new ScriptLocation("Scripts/Spinner.cs", 7)),
+              "NoorCode: the Console links the error to Spinner.cs line 7");
+        window.OpenScript("Scripts/Spinner.cs", 3);
+        window.OpenScript("Scripts/Spinner.cs", 7);  // what the link does
+        await Task.Delay(300);
+        check(panel.Editor.TextArea.Caret.Line == 7, "NoorCode: following the link puts the caret on the error line");
+        shot(window, "editor_16_noorcode.png");
+
+        // Saving clears the old markers; a change made outside reloads an unmodified tab.
+        script.Text.Text = good;
+        check(script.Save() && script.Errors.Count == 0, "NoorCode: saving clears the old error markers");
+        await Task.Delay(1100);  // a new write time
+        File.WriteAllText(file, good + "// from outside\n");
+        script.PollDisk();
+        check(script.Text.Text.EndsWith("// from outside\n", StringComparison.Ordinal) && !script.Modified,
+              "NoorCode: a script changed outside reloads in its tab");
+        File.WriteAllText(file, good);
+        await Task.Delay(50);
+        script.PollDisk();
+
+        window.DockFactory.CloseDockable(script);
+        await Task.Delay(200);
+        check(window.OpenScripts.Count == 0 && window.FindDockable(script.Id) == null, "NoorCode: closing the tab");
+        results["noorcode_errors_marked"] = script.Errors.Count;
     }
 
     // Milestone 4, part 6: File ▸ Build Game (noor_cli build). The built game itself is run by the

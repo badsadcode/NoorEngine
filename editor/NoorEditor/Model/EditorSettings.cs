@@ -16,6 +16,8 @@ public sealed class Preferences
     // Scripts: the program that opens them (empty: the Windows default for the file type) and its
     // arguments ({file}, {line}, {folder}); see CodeEditors.
     public string CodeEditor { get; set; } = "";
+    // Scripts open in NoorCode, the built-in editor; off: straight in the external one above.
+    public bool UseNoorCode { get; set; } = true;
     public string CodeEditorArguments { get; set; } = CodeEditors.DefaultArguments;
 
     public Preferences Copy() => (Preferences)MemberwiseClone();

@@ -12,6 +12,7 @@ public sealed class PreferencesWindow : Window
     private readonly Preferences _edit;
     private readonly Dictionary<string, TextBox> _fields = new();
     private readonly CheckBox _snap = new() { Content = "Snap while dragging gizmos (hold Ctrl to invert)" };
+    private readonly CheckBox _noorCode = new() { Content = "Open scripts in NoorCode, the built-in editor" };
     private readonly ComboBox _editor = new() { HorizontalAlignment = HorizontalAlignment.Stretch, FontSize = 12 };
     private readonly TextBox _program = new() { Classes = { "field" }, PlaceholderText = "the program (.exe)" };
     private readonly TextBox _arguments = new() { Classes = { "field" } };
@@ -63,6 +64,8 @@ public sealed class PreferencesWindow : Window
             _fields[row.Key] = box;
         }
         _snap.IsChecked = _edit.Snap;
+        _noorCode.IsChecked = _edit.UseNoorCode;
+        ToolTip.SetTip(_noorCode, "Off: scripts open straight in the external editor below.");
 
         BuildEditorChoice();
 
@@ -76,6 +79,7 @@ public sealed class PreferencesWindow : Window
             var d = new Preferences();
             foreach (var row in Rows) _fields[row.Key].Text = Num.Format(Get(d, row.Key));
             _snap.IsChecked = d.Snap;
+            _noorCode.IsChecked = d.UseNoorCode;
             _editor.SelectedIndex = 0;
         };
         var buttons = new DockPanel { Children = { defaults, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } } } };
@@ -91,6 +95,7 @@ public sealed class PreferencesWindow : Window
                 grid,
                 _snap,
                 new TextBlock { Text = "Scripts", Classes = { "section" }, Margin = new Thickness(0, 6, 0, 0) },
+                _noorCode,
                 EditorRow(),
                 _custom,
                 _error,
@@ -112,6 +117,7 @@ public sealed class PreferencesWindow : Window
             Set(_edit, row.Key, v);
         }
         _edit.Snap = _snap.IsChecked == true;
+        _edit.UseNoorCode = _noorCode.IsChecked == true;
         var choice = _editor.SelectedIndex;
         if (choice <= 0)
         {
@@ -137,11 +143,11 @@ public sealed class PreferencesWindow : Window
     private Control EditorRow()
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("150,*") };
-        var label = new TextBlock { Text = "Code editor", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Classes = { "muted" } };
+        var label = new TextBlock { Text = "External editor", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Classes = { "muted" } };
         Grid.SetColumn(_editor, 1);
         grid.Children.Add(label);
         grid.Children.Add(_editor);
-        ToolTip.SetTip(_editor, "The program the Inspector's Open button uses for scripts.");
+        ToolTip.SetTip(_editor, "NoorCode's \"Open in …\" button uses it (and the Inspector's Open button when NoorCode is off).");
         return grid;
     }
 

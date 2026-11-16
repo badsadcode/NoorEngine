@@ -422,6 +422,7 @@ bool compile_scripts(const asset::Project& project, const stdfs::path& managed, 
 #if defined(_WIN32)
     _wputenv_s(L"DOTNET_CLI_TELEMETRY_OPTOUT", L"1");
     _wputenv_s(L"DOTNET_NOLOGO", L"1");
+    _wputenv_s(L"DOTNET_CLI_FORCE_UTF8_ENCODING", L"1");  // compiler messages in UTF-8 (Polish ones were garbled)
 #endif
     std::printf("Compiling C# scripts...\n");
     std::fflush(stdout);

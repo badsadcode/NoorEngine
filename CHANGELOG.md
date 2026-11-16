@@ -4,6 +4,34 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-16 — Milestone 4, part 7b: NoorCode MVP
+**Added**
+- **NoorCode**, the built-in script editor: scripts open as tabs next to the viewport (Inspector
+  ▸ Open, or the links in the Console). Built on **AvaloniaEdit** 12.0.0 (MIT, NuGet; editor only).
+  Lua/Luau and C# highlighting (our own `.xshd` files in the NoorTheme colours), line numbers,
+  find (Ctrl+F), undo, spaces for tabs.
+- Ctrl+S saves the script whose tab has the keyboard; a running game reloads it as before. Play and
+  Build Game save open scripts first. Closing a tab, the project or the editor asks about unsaved
+  scripts. A file changed outside reloads in its tab; with unsaved edits too, a bar asks which to keep.
+- Errors that name a script line (Lua errors, C# compile errors, C# exceptions) are marked on the
+  line in red and listed under the editor (click: go to the line). In the Console they get a
+  `File:line ↗` link that opens the script there (`ScriptLocation`).
+- Preferences ▸ Scripts: "Open scripts in NoorCode" (on by default); the external editor stays as
+  NoorCode's "Open in …" button, and is used directly when NoorCode is off.
+
+**Fixed**
+- C# compiler messages in the PC's language (Polish here) were garbled ("Oczekiwano Ļ›rednika"):
+  the editor and noor_cli now read `dotnet build` output as UTF-8.
+
+**Tests:** 15 new editor smoke checks (133 total): highlighting loads, error messages resolve to
+script lines, open at a line, typed keys go to the text and not the editor's shortcuts, Ctrl+S,
+Play saving first, a compile error marked on line 7 and linked from the Console, outside changes,
+closing. Looked at in a screenshot.
+
+**Not yet:** code completion, error checking while typing, a debugger (spec 7 is the full IDE:
+these need language services, Roslyn for C# and a Luau analyser); open tabs aren't remembered
+between sessions.
+
 ### 2026-11-16 — Milestone 4, part 7a: the HUD
 **Added**
 - Scripts draw a HUD every frame: Lua `noor.ui.text(text, x, y [, {size, color, anchor}])`,

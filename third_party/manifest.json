@@ -104,6 +104,16 @@
       "purpose": "Editor docking panels and floating windows (ADR-003)"
     },
     {
+      "name": "AvaloniaEdit (Avalonia.AvaloniaEdit)",
+      "version": "12.0.0",
+      "source": "https://github.com/AvaloniaUI/AvaloniaEdit",
+      "commit": null,
+      "license": "MIT",
+      "linkage": "NuGet package (managed)",
+      "shipped": "editor only, never in games",
+      "purpose": "NoorCode's text editor control (highlighting, search); ADR-003 named it"
+    },
+    {
       "name": "Luau",
       "version": "0.745",
       "source": "https://github.com/luau-lang/luau",

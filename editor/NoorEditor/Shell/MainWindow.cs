@@ -16,6 +16,7 @@ using Dock.Model.Mvvm;
 using NoorEditor.Interop;
 using NoorEditor.Model;
 using NoorEditor.Panels;
+using Avalonia.VisualTree;
 using DockOrientation = Dock.Model.Core.Orientation;
 using LayoutOrientation = Avalonia.Layout.Orientation;
 
@@ -33,6 +34,10 @@ public sealed class MainWindow : Window
     public HierarchyPanel? Hierarchy { get; private set; }
     public ContentPanel? ContentBrowser { get; private set; }
     public ViewportPanel? ViewportView { get; private set; }
+
+    // NoorCode: the scripts open as tabs next to the viewport (they outlive layout rebuilds).
+    private readonly List<ScriptDocument> _scripts = new();
+    public IReadOnlyList<ScriptDocument> OpenScripts => _scripts;
 
     private readonly EditorSettings _settings;
     private readonly TextBlock _statusLeft = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
@@ -97,7 +102,16 @@ public sealed class MainWindow : Window
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => UpdateStatusRight();
-        _fileTimer.Tick += (_, _) => Doc.PollFiles();  // the engine logs and reloads what changed
+        _fileTimer.Tick += (_, _) =>
+        {
+            Doc.PollFiles();  // the engine logs and reloads what changed
+            foreach (var script in _scripts) script.PollDisk();
+        };
+        EngineLog.Lines.CollectionChanged += OnLogLines;
+        DockFactory.DockableClosed += (_, e) =>
+        {
+            if (e.Dockable is ScriptDocument closed) _scripts.Remove(closed);
+        };
         _fileTimer.Start();
         timer.Start();
 
@@ -111,6 +125,7 @@ public sealed class MainWindow : Window
             _fileTimer.Stop();
             Doc.SceneChanged -= OnSceneChanged;
             Doc.AssetsChanged -= RebuildOpenSceneMenu;
+            EngineLog.Lines.CollectionChanged -= OnLogLines;
             // Viewports keep working on a closed document (they keep the last snapshot), and Avalonia
             // destroys them with the window. Close the document last.
             ViewportView?.Viewport.Detach();
@@ -139,7 +154,7 @@ public sealed class MainWindow : Window
             {
                 Inspector = new InspectorPanel(Doc);
                 Inspector.FrameRequested += FrameEntity;
-                Inspector.Components.OpenFile = file => CodeEditors.Open(_settings.Preferences, Doc.ProjectRoot, file);
+                Inspector.Components.OpenFile = file => OpenScript(file);
                 return Inspector;
             },
         };
@@ -154,7 +169,7 @@ public sealed class MainWindow : Window
                 return ContentBrowser;
             },
         };
-        var console = new PanelTool { Id = "Console", Title = "Console", CanClose = false, CreateView = () => new ConsolePanel() };
+        var console = new PanelTool { Id = "Console", Title = "Console", CanClose = false, CreateView = () => new ConsolePanel(Doc.ProjectRoot, l => OpenScript(l.RelativePath, l.Line)) };
 
         DockFactory
             .DocumentDock(out var documents, d => d.WithId("Documents").WithIsCollapsable(false))
@@ -176,6 +191,7 @@ public sealed class MainWindow : Window
             dock.ActiveDockable = items[0];
         }
         Fill(documents, ViewportDockable);
+        foreach (var script in _scripts) DockFactory.AddDockable(documents, script);  // a layout rebuild keeps open scripts
         Fill(left, hierarchy);
         Fill(right, inspector);
         Fill(bottom, content, console);
@@ -257,7 +273,7 @@ public sealed class MainWindow : Window
         closeProject.Click += async (_, _) =>
         {
             if (Doc.Playing) TogglePlay();
-            if (!await ConfirmDiscard()) return;
+            if (!await ConfirmDiscard() || !await ConfirmScripts()) return;
             ReturnToHub = true;
             _closeConfirmed = true;
             Close();
@@ -480,6 +496,7 @@ public sealed class MainWindow : Window
     public async Task<bool> PlayAsync()
     {
         if (Doc.Playing || _compiling || !Doc.Scene.Open) return Doc.Playing;
+        SaveScripts();  // Play runs what's in the editor, like an IDE's Run
         if (ScriptBuilder.HasScripts(Doc.ProjectRoot))
         {
             _compiling = true;
@@ -667,6 +684,7 @@ public sealed class MainWindow : Window
     private async Task BuildGameInteractive()
     {
         if (Doc.Playing) TogglePlay();
+        SaveScripts();
         if (Doc.Scene.Modified)
         {
             var answer = await Dialogs.Ask(this, "Unsaved changes",
@@ -710,13 +728,13 @@ public sealed class MainWindow : Window
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (Doc.Playing) TogglePlay();
-        if (_closeConfirmed || !Doc.Scene.Modified)
+        if (_closeConfirmed || (!Doc.Scene.Modified && !_scripts.Any(s => s.Modified)))
         {
             RememberWindow();
             return;
         }
         e.Cancel = true;
-        if (!await ConfirmDiscard()) return;
+        if (!await ConfirmDiscard() || !await ConfirmScripts()) return;
         _closeConfirmed = true;
         Close();
     }
@@ -733,13 +751,113 @@ public sealed class MainWindow : Window
         _settings.Save();
     }
 
+    // ---- NoorCode (scripts) ----
+
+    /// <summary>
+    /// Opens a script (absolute or project-relative path) in NoorCode, or in the external editor when
+    /// Preferences ▸ Scripts says so. <paramref name="line"/> (1-based, 0 = keep) puts the caret there.
+    /// </summary>
+    public ScriptDocument? OpenScript(string path, int line = 0)
+    {
+        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(Doc.ProjectRoot, path));
+        if (!_settings.Preferences.UseNoorCode)
+        {
+            CodeEditors.Open(_settings.Preferences, Doc.ProjectRoot, full, Math.Max(1, line));
+            return null;
+        }
+        var relative = ScriptLocation.Relative(full, Doc.ProjectRoot);
+        var script = _scripts.FirstOrDefault(s => string.Equals(s.RelativePath, relative, StringComparison.OrdinalIgnoreCase));
+        if (script == null)
+        {
+            if (!File.Exists(full))
+            {
+                EngineLog.Warn("NoorCode", $"{relative} doesn't exist");
+                return null;
+            }
+            script = new ScriptDocument(Doc.ProjectRoot, relative)
+            {
+                CreateView = s => new CodePanel(s, ExternalEditorName(), l => CodeEditors.Open(_settings.Preferences, Doc.ProjectRoot, s.FullPath, l)),
+                ConfirmClose = ConfirmCloseScript,
+            };
+            // Errors already in the Console that are newer than the file are still true.
+            var since = File.GetLastWriteTime(full);
+            foreach (var l in EngineLog.Lines.Where(l => l.Level >= 4 && l.Time >= since)) RouteError(l, script);
+            _scripts.Add(script);
+            var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
+            if (documents != null) DockFactory.AddDockable(documents, script);
+        }
+        if (script.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(script);
+            DockFactory.SetFocusedDockable(owner, script);
+        }
+        if (line > 0) script.Reveal(line);
+        return script;
+    }
+
+    /// <summary>The external editor's name for NoorCode's "Open in …" button.</summary>
+    private string ExternalEditorName()
+    {
+        var program = _settings.Preferences.CodeEditor;
+        if (string.IsNullOrWhiteSpace(program)) return "default app";
+        return CodeEditors.Detect().FirstOrDefault(e => string.Equals(e.Program, program, StringComparison.OrdinalIgnoreCase))?.Name
+               ?? Path.GetFileNameWithoutExtension(program);
+    }
+
+    /// <summary>Saves every script with unsaved changes (Play and Build use the files on disk).</summary>
+    public void SaveScripts()
+    {
+        foreach (var script in _scripts.Where(s => s.Modified).ToList()) script.Save();
+    }
+
+    private async Task ConfirmCloseScript(ScriptDocument script)
+    {
+        var answer = await Dialogs.Ask(this, "Unsaved changes", $"Save changes to {script.RelativePath}?", "Save", "Don't save", "Cancel");
+        if (answer is not ("Save" or "Don't save")) return;
+        if (answer == "Save" && !script.Save()) return;
+        script.AcceptClose();
+        DockFactory.CloseDockable(script);
+    }
+
+    /// <summary>True if every open script is saved, or the user chose what to do with the unsaved ones.</summary>
+    private async Task<bool> ConfirmScripts()
+    {
+        var unsaved = _scripts.Where(s => s.Modified).ToList();
+        if (unsaved.Count == 0) return true;
+        var names = string.Join(Environment.NewLine, unsaved.Select(s => "  " + s.RelativePath));
+        var answer = await Dialogs.Ask(this, "Unsaved scripts", $"Save changes to these scripts?{Environment.NewLine}{names}", "Save all", "Don't save", "Cancel");
+        if (answer == "Save all") return unsaved.All(s => s.Save());
+        return answer == "Don't save";
+    }
+
+    // Errors in the Console that name a line of an open script mark that line in NoorCode.
+    private void OnLogLines(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems == null || _scripts.Count == 0) return;
+        foreach (LogLine line in e.NewItems)
+            if (line.Level >= 4)
+                foreach (var script in _scripts) RouteError(line, script);
+    }
+
+    private void RouteError(LogLine line, ScriptDocument script)
+    {
+        if (ScriptLocation.Find(line.Message, Doc.ProjectRoot) is not { } at ||
+            !string.Equals(at.RelativePath, script.RelativePath, StringComparison.OrdinalIgnoreCase)) return;
+        var message = line.Message.Split('\n')[0];
+        var prefix = $"{at.RelativePath}:{at.Line}:";
+        if (message.StartsWith(prefix, StringComparison.Ordinal)) message = message[prefix.Length..].Trim();
+        script.AddError(at.Line, message);
+    }
+
     // ---- Keyboard ----
     // Keys pressed while the engine viewport has focus arrive here too: the viewport's child window
     // forwards them to this window. Text boxes keep their own Ctrl+Z/Y and letters.
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        var inText = !ViewportHasFocus() && FocusManager?.GetFocusedElement() is TextBox;
+        var focused = ViewportHasFocus() ? null : FocusManager?.GetFocusedElement();
+        var inCode = (focused as Visual)?.FindAncestorOfType<CodePanel>(includeSelf: true);
+        var inText = focused is TextBox || inCode != null;
         // While playing, keys typed into the viewport belong to the game: only Ctrl shortcuts
         // (Ctrl+P stop, Ctrl+S save) reach the editor.
         if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -753,6 +871,9 @@ public sealed class MainWindow : Window
         {
             case Key.P when ctrl:
                 TogglePlay();
+                break;
+            case Key.S when ctrl && inCode != null:
+                inCode.Script.Save();
                 break;
             case Key.S when ctrl:
                 Save();

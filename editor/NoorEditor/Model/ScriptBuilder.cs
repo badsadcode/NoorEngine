@@ -111,7 +111,12 @@ public static partial class ScriptBuilder
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // UTF-8 both ways: otherwise messages in the PC's language arrive in the console code page
+            // ("Oczekiwano średnika" came out garbled).
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+        psi.Environment["DOTNET_CLI_FORCE_UTF8_ENCODING"] = "1";
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         psi.Environment["DOTNET_NOLOGO"] = "1";
         string output;
