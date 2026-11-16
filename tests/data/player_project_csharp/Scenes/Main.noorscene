@@ -1,0 +1,247 @@
+{
+  "noor_scene": 2,
+  "id": "0a6c1f0e-0000-4000-8000-000000000000",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000001",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1.5,
+          6
+        ],
+        "rotation": [
+          -0.08715574274765817,
+          0.0,
+          0.0,
+          0.9961946980917455
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05
+        }
+      }
+    },
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000002",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            20,
+            1,
+            20
+          ],
+          "color": "#3A3550"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            20,
+            0.2,
+            20
+          ],
+          "offset": [
+            0,
+            -0.1,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000003",
+      "name": "Target",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "color": "#E03030"
+        }
+      }
+    },
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000004",
+      "name": "Ball",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#4AA8C0"
+        },
+        "collider": {
+          "shape": "sphere",
+          "radius": 0.5
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 2
+        }
+      }
+    },
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000005",
+      "name": "Rider",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color": "#7BD88F"
+        },
+        "script": {
+          "file": "Scripts/Rider.luau",
+          "params": {
+            "speed": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "0a6c1f0e-0001-4000-8000-000000000006",
+      "name": "CsRider",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.5,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "color": "#F2C14E"
+        },
+        "script": {
+          "file": "Scripts/CsRider.cs",
+          "params": {
+            "speed": 1
+          }
+        }
+      }
+    }
+  ]
+}

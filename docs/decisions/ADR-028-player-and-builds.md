@@ -38,7 +38,9 @@ says where the shared code lives, what a build is, and what is deliberately left
   ```
   <out>/<Project Name>.exe   the player, renamed
   <out>/game.json            {"title", "project": "game", "start_scene", "executable", "engine", "built"}
-  <out>/game/                the project's files, minus .noor/, .git/, Scripts/bin|obj, *.bak, *.tmp
+  <out>/game/                the project's files, minus .noor/, .git/, Scripts/bin|obj, *.bak, *.tmp,
+                             and C# sources
+  <out>/managed/             with C# scripts: Scripts.dll (+pdb) and NoorEngine.Scripting (part 6b)
   ```
   The default start scene is `Scenes/Main.noorscene`, else the first scene by path
   (`asset::Project::default_start_scene`); the editor passes the open scene. Rebuilding replaces an
@@ -55,12 +57,15 @@ says where the shared code lives, what a build is, and what is deliberately left
   cooking/packing (1B) is a later milestone and will be its own ADR.
 - Every start rescans the registry (hashes every asset). Fine for small games; the cook step will
   remove it.
-- **C# scripts are not in builds yet.** `.cs` sources aren't copied; the player has no .NET host
-  (CSharpScriptSystem reports that, once). Part 6b hosts CoreCLR in the player via hostfxr and packs
-  the compiled Scripts.dll (ADR-008).
+- **C# scripts (part 6b):** compiled at build time and run through .NET started by the player
+  (ADR-008 implementation notes). The PC needs the .NET 10 runtime; building needs the .NET SDK.
+  `noor_player <project>` doesn't compile C#: it says so and points at the editor or a build.
 
 ## Tests
-`cli.build` (headless, CI): build layout, rebuilds, refusals. `player.project` and
+`cli.build` (headless, CI): build layout, rebuilds, refusals. `cli.build_csharp` and
+`cli.build_csharp_error` (CI): C# compiled into the build; a compile error stops it before anything
+is written and names the file and line. `player.built_csharp_game` (GPU): the built game ran a C#
+script. `player.project` and
 `player.built_game` (GPU, local): 120 fixed frames of `tests/data/player_project`, checked from the
 player's `--report`: the ball rests on the floor (physics), a Lua script lifted a box exactly 2 m,
 and the centre pixel is the red box seen through the scene's camera. The editor smoke test runs

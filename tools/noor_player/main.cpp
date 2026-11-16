@@ -7,6 +7,7 @@
 //          [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]
 //
 // --frames runs N frames and exits (tests); the exit code is then 2 if anything logged an error.
+// It's a windowed program (no console): the log is <exe name>.log next to it unless --log says otherwise.
 // --report writes what happened as JSON: frames, play time, each named entity's world position, and
 // the colour of the centre pixel of the last frame.
 
@@ -25,6 +26,7 @@
 #include "noor/runtime/world.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
+#include "noor/scripting/dotnet_host.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -160,11 +162,22 @@ bool save_bmp(const noor::render::CapturedFrame& frame, const std::string& path)
     return ok;
 }
 
+bool has_csharp_scripts(const noor::asset::Project& project) {
+    std::error_code ec;
+    for (stdfs::recursive_directory_iterator it(project.root() / "Scripts", ec), end; !ec && it != end; it.increment(ec)) {
+        const auto name = it->path().filename().string();
+        if (it->is_directory() && (name == "bin" || name == "obj")) it.disable_recursion_pending();
+        else if (it->path().extension() == ".cs") return true;
+    }
+    return false;
+}
+
 // Where the game is and what to start.
 struct Game {
     stdfs::path project;
     std::string scene;
     std::string title;
+    stdfs::path csharp;  // a built game's compiled C# scripts (managed/Scripts.dll), if any
 };
 
 noor::Result<Game> locate(const Options& o) {
@@ -183,6 +196,7 @@ noor::Result<Game> locate(const Options& o) {
         g.project = executable_dir() / json->value("project", std::string("game"));
         g.scene = json->value("start_scene", std::string{});
         g.title = json->value("title", std::string{});
+        if (const auto cs = json->value("csharp", std::string{}); !cs.empty()) g.csharp = executable_dir() / cs;
     }
     if (!o.scene.empty()) g.scene = o.scene;
     if (!o.title.empty()) g.title = o.title;
@@ -245,6 +259,16 @@ int run(const Options& o) {
             noor::scene::PrefabLibrary prefabs(*project, registry);
             noor::game::WorldOptions world_options;
             world_options.audio_device = o.audio;
+            if (!game->csharp.empty()) {
+                // The game's C# scripts: start .NET (the runtime installed on this PC) with them.
+                if (auto host = noor::scripting::start_dotnet(game->csharp.parent_path(), game->csharp))
+                    world_options.script_host = *host;
+                else
+                    NOOR_LOG_ERROR("Player", "C# scripts won't run: {}", host.error().describe());
+            } else if (has_csharp_scripts(*project)) {
+                NOOR_LOG_WARN("Player", "This project has C# scripts: they run in NoorEditor and in built games "
+                                        "(noor_cli build), not with noor_player <project>");
+            }
             auto world = noor::game::make_world(*project, registry, prefabs, *scene, world_options);
             if (!world) {
                 NOOR_LOG_FATAL("Player", "{}", world.error().describe());
@@ -338,9 +362,21 @@ int main(int argc, char** argv) {
                                  "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]");
         return 64;
     }
-    if (!options.log_path.empty()) {
-        auto sink = std::make_shared<noor::FileLogSink>(options.log_path);
-        if (sink->is_open()) noor::log::add_sink(sink);
+    // There's no console (a windowed program): the log goes to a file, by default <exe name>.log
+    // next to the executable. A game folder that can't be written to just has no log.
+    {
+        stdfs::path log_path = options.log_path;
+#if defined(_WIN32)
+        if (log_path.empty()) {
+            std::wstring buffer(MAX_PATH, L'\0');
+            const DWORD n = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+            log_path = stdfs::path(buffer.substr(0, n)).replace_extension(".log");
+        }
+#endif
+        if (!log_path.empty()) {
+            auto sink = std::make_shared<noor::FileLogSink>(log_path.string());
+            if (sink->is_open()) noor::log::add_sink(sink);
+        }
     }
     const int code = run(options);
     noor::log::flush();

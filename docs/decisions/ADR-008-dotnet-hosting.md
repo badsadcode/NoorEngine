@@ -44,5 +44,20 @@ debuggable from NoorCode later and from external IDEs now. NoorEditor itself is 
   script is disabled, the game keeps running.
 - Licences: .NET runtime and SDK are MIT.
 
+## Implementation notes (Milestone 4, part 6b)
+- noor_player hosts .NET with **hostfxr** (`scripting::start_dotnet`, engine/scripting/src/
+  dotnet_host.cpp): found via `DOTNET_ROOT`, else `%ProgramFiles%\dotnet\host\fxr\<newest>`;
+  `hostfxr_initialize_for_runtime_config` with NoorEngine.Scripting's runtimeconfig.json, then
+  `load_assembly_and_get_function_pointer` for `ScriptHost.Boot` (`[UnmanagedCallersOnly]`), which
+  loads Scripts.dll (+ .pdb) and returns the `noor_rt_host` table. hostfxr's own messages (e.g. "the
+  framework isn't installed") are collected and reported. No nethost/SDK needed on the player's PC.
+- hostfxr loads NoorEngine.Scripting into an isolated load context, so the scripts' context now
+  resolves NoorEngine.Scripting to the host's own copy explicitly (one `NoorScript` type).
+- `noor_cli build` compiles `Scripts/**/*.cs` with a throw-away .csproj in the temp folder (Release,
+  portable pdb) *before* writing anything, and packs `managed/` = Scripts.dll + NoorEngine.Scripting
+  (dll, runtimeconfig, deps). Compile errors read like the editor's: `Scripts/X.cs:7: CS1002: ...`.
+- Builds are framework-dependent as decided above: the PC needs the .NET 10 runtime; if it's
+  missing the player logs where it looked and the download link, and the game runs without C#.
+
 ## Reviewed by
 Sage.

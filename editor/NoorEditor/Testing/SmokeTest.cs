@@ -645,6 +645,10 @@ internal static class SmokeTest
         check(File.Exists(Path.Combine(output, "game", "Scripts", "PlayerController.luau")) && !Directory.Exists(Path.Combine(output, "game", ".noor")),
               "build: scripts are packed, derived data isn't");
         check(EngineLog.Lines.Any(l => l.Category == "Build" && l.Message.StartsWith("Built ")), "build: noor_cli's report reaches the Console");
+        var csharp = File.Exists(manifest) ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifest))?["csharp"]?.GetValue<string>() : null;
+        check(csharp == "managed/Scripts.dll" && File.Exists(Path.Combine(output, "managed", "Scripts.dll")) &&
+              File.Exists(Path.Combine(output, "managed", "NoorEngine.Scripting.runtimeconfig.json")),
+              "build: the project's C# scripts are compiled into the game, with the managed engine half");
         results["build"] = output;
     }
 

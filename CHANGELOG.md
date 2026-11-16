@@ -4,6 +4,29 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-16 — Milestone 4, part 6b: C# scripts in built games
+**Added**
+- `scripting::start_dotnet`: noor_player starts .NET with hostfxr (the .NET runtime installed on
+  the PC; no SDK) and loads the game's compiled scripts through `ScriptHost.Boot`. ADR-008 notes.
+- `noor_cli build` compiles `Scripts/**/*.cs` (Release, with line numbers) into `managed/` with
+  NoorEngine.Scripting, before writing anything; compile errors read `Scripts/X.cs:7: CS1002: ...`.
+- The engine build now compiles NoorEngine.Scripting (`noor_scripting_managed`, needs the .NET SDK;
+  without it CMake says games can't have C#). CI installs .NET before configuring.
+- NoorEditor's File ▸ Build Game packs C# scripts too.
+
+**Fixed**
+- The copies of noor_player next to noor_cli (from 6a) only refreshed when noor_cli itself relinked;
+  now a separate step refreshes them every build.
+- Scripts loaded by a host that isn't the editor couldn't find NoorEngine.Scripting (hostfxr loads it
+  in its own context); the scripts' context now resolves it to the host's copy.
+
+**Tests:** `cli.build_csharp`, `cli.build_csharp_error` (CI) and `player.built_csharp_game` (GPU):
+a box lifted by a C# script in a built game rises exactly 2 m in 120 frames. Editor smoke: the
+built game includes the compiled C# (114 checks). The game the editor smoke test builds (player,
+physics, Lua, C#, sound) also ran 180 frames without errors when started by hand.
+
+**Not yet:** self-contained builds (bundling .NET); `noor_player <project>` doesn't compile C#.
+
 ### 2026-11-16 — Milestone 4, part 6a: games that run without the editor
 **Added**
 - `game` module (ADR-028): `make_world()` (the world with every engine system), `collect_view()`
@@ -26,7 +49,7 @@ fixed frames of `tests/data/player_project` from a project and from a build; the
 the floor, a Lua script must have lifted a box exactly 2 m, and the centre pixel must be the red box
 seen through the scene's camera. Editor smoke test: File ▸ Build Game (113 checks).
 
-**Not yet:** C# scripts in builds (part 6b: .NET hosting in the player). Builds need the Visual C++
+**Not yet:** C# scripts in builds (done in 6b, above). Builds need the Visual C++
 2015–2022 runtime on the PC; Debug tools make games that only run where Visual Studio is installed
 (noor_cli warns). No packing/cooking: a build's content is plain project files, and the registry
 is rescanned (assets hashed) at every start. No game icon, no fullscreen option yet.

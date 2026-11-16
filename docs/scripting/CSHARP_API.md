@@ -79,6 +79,14 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
 | `PlaySound()`, `StopSound()`, `IsPlaying` | The entity's `audio_source` ([components](LUA_API.md#sound-components)) |
 
+## In built games
+
+File ▸ Build Game (or `noor_cli build`) compiles your scripts into the game's `managed/` folder;
+a compile error stops the build and names the file and line. The game starts .NET itself, so the PC
+playing it needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (not the
+SDK). Without it the game still runs, and its log (`<Game>.log` next to the .exe) says that C# scripts are
+off and why.
+
 ## How it works (for engine people)
 The engine calls scripts through `noor_rt_host` and scripts call the engine through `noor_rt_api`
 (`engine/scripting/include/noor_rt_api.h`): two tables of C function pointers, so the same managed

@@ -8,7 +8,7 @@ using NoorEngine.Interop;
 namespace NoorEngine;
 
 /// <summary>
-/// The managed script host (noor_rt_host). A host application (NoorEditor, later the player):
+/// The managed script host (noor_rt_host). A host application (NoorEditor; noor_player via <see cref="Boot"/>):
 ///   1. <see cref="Initialize"/> with the engine's noor_rt_api table,
 ///   2. <see cref="LoadScripts"/> with the compiled project scripts (a collectible load context,
 ///      so <see cref="UnloadScripts"/> frees them and a rebuilt assembly can be loaded),
@@ -20,8 +20,11 @@ public static unsafe class ScriptHost
 {
     private sealed class ScriptContext() : AssemblyLoadContext("NoorScripts", isCollectible: true)
     {
-        // NoorEngine.Scripting and the framework resolve to the host's copies (shared types).
-        protected override Assembly? Load(AssemblyName name) => null;
+        // NoorEngine.Scripting resolves to the host's own copy, wherever that was loaded (the editor's
+        // default context, or the isolated context hostfxr gives noor_player), so NoorScript is one
+        // type. The framework falls through to the default context.
+        protected override Assembly? Load(AssemblyName name) =>
+            name.Name == typeof(NoorScript).Assembly.GetName().Name ? typeof(NoorScript).Assembly : null;
     }
 
     private static ScriptContext? _context;
@@ -41,6 +44,36 @@ public static unsafe class ScriptHost
             throw new InvalidOperationException($"noor_rt_api mismatch: engine v{(table == null ? 0 : table->Version)}, " +
                                                 $"NoorEngine.Scripting expects v{Engine.ExpectedVersion} ({sizeof(RtApi)} bytes)");
         Engine.Api = table;
+    }
+
+    /// <summary>
+    /// The native entry point for hosts without managed code of their own (noor_player starts .NET
+    /// with hostfxr and calls this): <see cref="Initialize"/>, load the compiled scripts from a file
+    /// (and its .pdb, for line numbers), and return <see cref="HostTable"/>. On failure returns 0 and
+    /// writes the reason (UTF-8, NUL-terminated) into <paramref name="error"/>.
+    /// </summary>
+    [UnmanagedCallersOnly]
+    public static nint Boot(nint api, byte* scriptsPath, byte* error, int errorCapacity)
+    {
+        try
+        {
+            Initialize(api);
+            var path = Engine.Str(scriptsPath) ?? throw new ArgumentException("no scripts path");
+            var pdb = Path.ChangeExtension(path, ".pdb");
+            LoadScripts(File.ReadAllBytes(path), File.Exists(pdb) ? File.ReadAllBytes(pdb) : null);
+            return HostTable;
+        }
+        catch (Exception e)
+        {
+            if (error != null && errorCapacity > 0)
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(Describe(e));
+                var n = Math.Min(bytes.Length, errorCapacity - 1);
+                bytes.AsSpan(0, n).CopyTo(new Span<byte>(error, errorCapacity));
+                error[n] = 0;
+            }
+            return 0;
+        }
     }
 
     /// <summary>The noor_rt_host table for the engine (allocated once, lives for the process).</summary>

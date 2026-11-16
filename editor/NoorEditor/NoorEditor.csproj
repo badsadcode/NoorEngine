@@ -47,6 +47,9 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorToolsDir)noor_cli.exe')" />
     <None Include="$(NoorToolsDir)noor_player.exe" Link="noor_player.exe"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorToolsDir)noor_player.exe')" />
+    <!-- ...and the managed half of scripting that games with C# scripts carry (managed/). -->
+    <None Include="$(NoorToolsDir)managed\*" Link="managed\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="NoorCheckNative" BeforeTargets="Build">

@@ -1,7 +1,7 @@
 # Runs a game for 120 fixed frames (1/60 s each) and checks what happened, from the player's
 # --report (tests/data/player_project: a falling ball, a Lua-lifted box, a red box in view).
 #   -DPLAYER=<executable> [-DPROJECT=<project folder>]  (no PROJECT: a built game with game.json)
-#   -DWORK=<folder for the report>
+#   -DWORK=<folder for the report>  [-DCSHARP=ON: also check the C# script (player_project_csharp)]
 file(MAKE_DIRECTORY "${WORK}")
 set(report "${WORK}/report.json")
 file(REMOVE "${report}")
@@ -40,6 +40,14 @@ endif()
 # Lua: Rider.luau lifts its box 1 m/s from 0.5 m: 2.5 m after 2 s.
 if(rider_y GREATER 2.55 OR rider_y LESS 2.45)
     message(FATAL_ERROR "the Lua script didn't lift the box to 2.5 m (y ${rider_y})")
+endif()
+# C#: CsRider.cs lifts its box the same way, through .NET started by the player.
+if(CSHARP)
+    get(cs_y entities CsRider 1)
+    message(STATUS "C# rider y ${cs_y}")
+    if(cs_y GREATER 2.55 OR cs_y LESS 2.45)
+        message(FATAL_ERROR "the C# script didn't lift the box to 2.5 m (y ${cs_y})")
+    endif()
 endif()
 # Rendering through the scene's camera: the red box is in the middle of the picture.
 if(r LESS 150 OR g GREATER 90 OR b GREATER 90)

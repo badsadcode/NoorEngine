@@ -79,6 +79,11 @@ jobs:
           if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja --no-progress -y }
           ninja --version
 
+      # Before Configure: the engine build compiles NoorEngine.Scripting (C# scripts in games, ADR-008).
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Configure
         run: cmake --preset windows-ninja
 
@@ -93,10 +98,6 @@ jobs:
 
       - name: Test (Release, no GPU)
         run: ctest --preset ninja-release -LE gpu
-
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '10.0.x'
 
       # The editor's smoke test needs a GPU (ctest label "editor"), so CI only builds it.
       - name: Build NoorEditor

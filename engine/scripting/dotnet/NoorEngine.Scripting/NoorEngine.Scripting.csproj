@@ -13,5 +13,8 @@
     <RootNamespace>NoorEngine</RootNamespace>
     <AssemblyName>NoorEngine.Scripting</AssemblyName>
     <Version>0.4.0</Version>
+    <!-- noor_player hosts .NET itself (hostfxr) and needs this library's runtimeconfig.json. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
 </Project>

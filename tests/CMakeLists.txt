@@ -128,3 +128,25 @@ add_test(NAME player.built_game
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_game
         -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
 set_tests_properties(player.built_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_game)
+
+# The same with a C# script: noor_cli build compiles it (needs the .NET SDK), the built game starts
+# .NET through hostfxr (needs the .NET 10 runtime) and the script must have run.
+if(TARGET noor_scripting_managed)
+    add_test(NAME cli.build_csharp
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/player_project_csharp ${CMAKE_CURRENT_BINARY_DIR}/built_csharp_game)
+    set_tests_properties(cli.build_csharp PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_csharp_game
+                         PASS_REGULAR_EXPRESSION "C# scripts compiled into managed/Scripts.dll")
+    add_test(NAME cli.build_csharp_error
+        COMMAND ${CMAKE_COMMAND}
+            -DCLI=$<TARGET_FILE:noor_cli>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/player_project_csharp
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli_build_csharp_error
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_build_csharp_error.cmake)
+    set_tests_properties(cli.build_csharp_error PROPERTIES LABELS "cli" TIMEOUT 180)
+    add_test(NAME player.built_csharp_game
+        COMMAND ${CMAKE_COMMAND}
+            "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_csharp_game/Player Test CSharp.exe"
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_csharp_game -DCSHARP=ON
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
+    set_tests_properties(player.built_csharp_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csharp_game)
+endif()
