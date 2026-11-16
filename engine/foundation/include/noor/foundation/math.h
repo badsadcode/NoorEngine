@@ -211,6 +211,14 @@ struct Quat {
     return len > 0.0f ? Quat{q.x / len, q.y / len, q.z / len, q.w / len} : Quat{};
 }
 
+// Blend between two rotations (t = 0: a, 1: b) the short way round; normalised lerp, which is close
+// enough to slerp for the small steps it's used for (interpolating between fixed steps).
+[[nodiscard]] inline Quat nlerp(Quat a, Quat b, float t) noexcept {
+    const float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    const float s = d < 0 ? -1.0f : 1.0f;
+    return normalize_quat({a.x + (b.x * s - a.x) * t, a.y + (b.y * s - a.y) * t, a.z + (b.z * s - a.z) * t, a.w + (b.w * s - a.w) * t});
+}
+
 // Rotates v by the unit quaternion q.
 [[nodiscard]] inline Vec3 rotate(Quat q, Vec3 v) noexcept {
     const Quat p = q * Quat{v.x, v.y, v.z, 0} * conjugate(q);

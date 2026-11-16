@@ -21,6 +21,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace noor::game {
@@ -69,8 +70,11 @@ struct SceneView {
 // Finds a model asset's file from the `mesh` component's asset id.
 using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid& asset)>;
 
-// `scene` must be expanded (no prefab instances left), e.g. World::scene().
-[[nodiscard]] SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path);
+// `scene` must be expanded (no prefab instances left), e.g. World::scene(). `render_poses`
+// (World::render_poses()) replaces the world matrices of entities physics moves with where to draw
+// them this frame; their children (a player's camera) follow.
+[[nodiscard]] SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path,
+                                     const std::unordered_map<Guid, math::Mat4>* render_poses = nullptr);
 
 // An AssetPath that looks ids up in a registry.
 [[nodiscard]] AssetPath registry_asset_path(const asset::Project& project, const asset::AssetRegistry& registry);

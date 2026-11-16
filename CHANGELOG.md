@@ -19,6 +19,14 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
   Inspector's Open button uses it. The dialog's layout hasn't been looked at in a screenshot yet.
 
 **Fixed**
+- **Smooth motion** (Tom: "not as smooth as in other games"): physics steps at a fixed 60 Hz, and
+  even on a 60 Hz screen frame times wobble, so some frames got no step and some two: walking
+  stuttered slightly. Physics now tells the World where to *draw* what it moves, blended between its
+  last two steps (`World::set_render_pose`, `fixed_alpha`); the editor's Play and the player draw
+  that, children (the player's camera) follow, scripts and the simulation keep the real transforms.
+  Costs one physics step (1/60 s) of visual lag, as in other engines. Test: with frame times wobbling
+  ±1.5 ms the simulated position stalls on some frames while the drawn one moves within 12 mm of
+  speed × dt every frame. Not yet checked by hand.
 - Built games: the view jerked on the click that captures the mouse (entering relative mode warps
   the hidden cursor to the window centre, which arrived as movement); switching to another window
   now releases the mouse like Esc. Found by Tom; not yet re-checked by hand.

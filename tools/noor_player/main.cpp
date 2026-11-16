@@ -313,7 +313,7 @@ int run(const Options& o) {
                     }
                     (*world)->frame(dt, game_in);
 
-                    const auto view = noor::game::collect_view((*world)->scene(), asset_path);
+                    const auto view = noor::game::collect_view((*world)->scene(), asset_path, &(*world)->render_poses());
                     if (!view.camera && !warned_no_camera) {
                         NOOR_LOG_WARN("Player", "The scene has no camera; showing it from above. Add a camera component (or Create ▸ Player) to see the game's view");
                         warned_no_camera = true;

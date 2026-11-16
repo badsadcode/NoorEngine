@@ -7,6 +7,9 @@
 #include <ostream>
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cmath>
+
 using namespace noor;
 using asset::Json;
 using physics::PhysicsSystem;
@@ -72,6 +75,37 @@ TEST_CASE("character: stands on the floor, walks at the asked speed, and stops w
     const float z = g.pos().z;
     g.walk({0, 0, 0}, 0.5);
     CHECK(g.pos().z == doctest::Approx(z).epsilon(0.01));  // no drifting
+}
+
+TEST_CASE("character: is drawn smoothly between fixed steps when frame times wobble") {
+    // A 60 Hz screen: frames take about 1/60 s, but never exactly. Physics steps at exactly 60 Hz, so
+    // some frames get no step and some get two: the simulated position stalls and skips. Where the
+    // World is told to draw the character moves the same amount every frame.
+    Game g({});
+    g.walk({0, 0, 0}, 0.3);
+    const float speed = 3.0f;
+    float last_raw = 0, last_drawn = 0;
+    int stalls = 0;
+    double worst = 0;
+    std::uint32_t seed = 12345;  // a fixed pseudo-random wobble of +-1.5 ms around 1/60 s
+    for (int i = 0; i < 120; ++i) {
+        seed = seed * 1664525u + 1013904223u;
+        const double dt = 1.0 / 60.0 + (static_cast<double>(seed >> 8) / 16777216.0 - 0.5) * 0.003;
+        g.physics->character_move(g.hero, {0, 0, -speed});
+        g.world.frame(dt, {});
+        const float raw = g.pos().z;
+        const auto pose = g.world.render_poses().find(g.hero);
+        REQUIRE(pose != g.world.render_poses().end());
+        const float drawn = pose->second.transform_point({0, 0, 0}).z;
+        if (i > 10) {  // after the walk has started
+            if (std::abs(raw - last_raw) < 0.001f) ++stalls;
+            worst = std::max(worst, std::abs(std::abs(drawn - last_drawn) - speed * dt));
+        }
+        last_raw = raw;
+        last_drawn = drawn;
+    }
+    CHECK(stalls > 0);              // the simulation alone stutters...
+    CHECK(worst < speed * 0.004);   // ...the drawn position moves smoothly (within 12 mm of speed * dt per frame)
 }
 
 TEST_CASE("character: jumps only from the ground and lands again") {

@@ -96,16 +96,38 @@ math::Vec3 color_of(const Json& primitive) {
 
 } // namespace
 
-SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path) {
+SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, const std::unordered_map<Guid, math::Mat4>* render_poses) {
     SceneView view;
     const auto& entities = scene.entities;
+    // World matrices, with render poses in place of the simulated ones (and children following).
+    std::unordered_map<Guid, std::size_t> index;
+    std::vector<std::optional<math::Mat4>> memo;
+    const bool blended = render_poses && !render_poses->empty();
+    if (blended) {
+        for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
+        memo.resize(entities.size());
+    }
+    std::function<math::Mat4(std::size_t, int)> world_of = [&](std::size_t i, int depth) -> math::Mat4 {
+        if (!blended) return scene.world_matrix(i);
+        if (memo[i]) return *memo[i];
+        math::Mat4 m;
+        if (const auto it = render_poses->find(entities[i].id); it != render_poses->end()) {
+            m = it->second;
+        } else {
+            m = entities[i].transform.matrix();
+            const auto parent = entities[i].parent ? index.find(*entities[i].parent) : index.end();
+            if (parent != index.end() && depth < 256) m = world_of(parent->second, depth + 1) * m;  // depth: cycle guard
+        }
+        memo[i] = m;
+        return m;
+    };
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
         const bool primitive = e.has("primitive") && e.components["primitive"].is_object();
         const bool mesh = e.has("mesh");
         if (!camera && !primitive && !mesh) continue;
-        const math::Mat4 world = scene.world_matrix(i);
+        const math::Mat4 world = world_of(i, 0);
         if (camera) {
             const auto& cam = e.components["camera"];
             view.camera = SceneView::Camera{world, std::clamp(number(cam, "fov", 70.0f), 10.0f, 150.0f),

@@ -446,7 +446,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         if (e.has("marker")) snap->markers.push_back({world, e.id});
     }
     // Models, shapes and the game camera: the same view noor_player draws.
-    auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_));
+    auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
     snap->primitives = std::move(view.primitives);
     if (world_) snap->camera = view.camera;
     for (auto& m : view.meshes) {

@@ -68,6 +68,7 @@ void World::flush_destroyed() {
 
 void World::frame(double dt, const InputState& input) {
     dt = std::clamp(dt, 0.0, max_dt);
+    render_poses_.clear();
     input_.begin_frame(input);
     start_new_entities();
     for (auto& s : systems_) s->update(*this, dt);

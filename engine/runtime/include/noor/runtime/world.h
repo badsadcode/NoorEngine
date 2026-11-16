@@ -79,6 +79,14 @@ public:
     // How far between the last and next fixed step (0..1), for interpolating fixed-step state.
     [[nodiscard]] double fixed_alpha() const noexcept { return accumulator_ / fixed_dt; }
 
+    // ---- Drawing between fixed steps ----
+    // Systems that move entities in fixed steps (physics) say where to *draw* them this frame:
+    // blended between their last two steps by fixed_alpha(), so motion is smooth whatever the frame
+    // rate. Only drawing uses these (World matrices); the simulation and scripts keep the real
+    // transforms. Cleared at the start of every frame.
+    void set_render_pose(const Guid& id, const math::Mat4& world_matrix) { render_poses_[id] = world_matrix; }
+    [[nodiscard]] const std::unordered_map<Guid, math::Mat4>& render_poses() const noexcept { return render_poses_; }
+
     double fixed_dt = 1.0 / 60.0;
     int max_fixed_steps = 5;
     double max_dt = 0.1;
@@ -113,6 +121,7 @@ private:
     std::vector<Guid> destroy_queue_;
     std::vector<Event> events_;
     std::optional<bool> mouse_capture_request_;
+    std::unordered_map<Guid, math::Mat4> render_poses_;
     double time_ = 0.0;
     double accumulator_ = 0.0;
     std::uint64_t frames_ = 0;

@@ -141,6 +141,21 @@ struct PhysicsSystem::Impl {
         float jump = 0.0f;           // pending jump speed
     };
     std::unordered_map<Guid, Character> characters;
+    // The last two fixed-step poses of everything physics moves (dynamic bodies, characters), so
+    // late_update can tell the World where to draw them between steps.
+    struct Pose {
+        math::Vec3 prev, curr;
+        math::Quat prev_rot, curr_rot;
+        bool character = false;  // rotation comes from the entity (scripts turn characters every frame)
+    };
+    std::unordered_map<Guid, Pose> poses;
+    void moved(const Guid& entity, math::Vec3 p, math::Quat q, bool character) {
+        auto [it, added] = poses.try_emplace(entity, Pose{p, p, q, q, character});
+        if (!added) {
+            it->second.curr = p;
+            it->second.curr_rot = q;
+        }
+    }
     std::vector<Guid> entity_of;  // body user data - 1 -> entity
     // Jolt drops the contacts of bodies that fall asleep and re-adds them when they wake. To
     // scripts the resting crate never left the floor: such pairs are parked here, not reported.
@@ -375,6 +390,7 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
 void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entity) {
     auto& d = *impl_;
     d.characters.erase(entity.id);
+    d.poses.erase(entity.id);
     const auto it = d.bodies.find(entity.id);
     if (it == d.bodies.end()) return;
     auto& bi = d.system.GetBodyInterface();
@@ -386,6 +402,10 @@ void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entit
 void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
     auto& d = *impl_;
     auto& bi = d.system.GetBodyInterface();
+    for (auto& [entity, pose] : d.poses) {  // a new step: what was current is now the previous pose
+        pose.prev = pose.curr;
+        pose.prev_rot = pose.curr_rot;
+    }
     // Kinematic bodies follow their entities (scripts move them).
     for (const auto& [entity, body] : d.bodies) {
         if (body.type != Impl::Type::Kinematic) continue;
@@ -419,6 +439,7 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         if (auto* e = world.find(entity)) {
             const auto r = runtime::api::world_rotation(world, entity).value_or(math::Quat{});
             runtime::api::set_world_pose(world, entity, from_j(ch.GetPosition()), r);
+            d.moved(entity, from_j(ch.GetPosition()), r, true);
             (void)e;
         }
     }
@@ -430,6 +451,7 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         JPH::Quat q;
         bi.GetPositionAndRotation(body.id, p, q);
         runtime::api::set_world_pose(world, entity, from_j(p), from_j(q));
+        d.moved(entity, from_j(p), from_j(q), false);
     }
     // Contact changes become events for both entities.
     std::vector<Impl::Listener::Change> changes;
@@ -550,8 +572,22 @@ bool PhysicsSystem::is_grounded(const Guid& entity) const {
     return it != impl_->characters.end() && it->second.controller->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
 }
 
-void PhysicsSystem::late_update(runtime::World&, double) {
-    for (auto& [entity, c] : impl_->characters) c.wanted = {0, 0, 0};  // scripts steer every frame
+void PhysicsSystem::late_update(runtime::World& world, double) {
+    auto& d = *impl_;
+    for (auto& [entity, c] : d.characters) c.wanted = {0, 0, 0};  // scripts steer every frame
+    // Where to draw what physics moves: between its last two steps (it lags one step behind, the
+    // usual price of smooth motion). Without this, motion stutters whenever a frame gets no step or
+    // two (frame times wobble around 1/60 s even on a 60 Hz screen).
+    const float alpha = static_cast<float>(std::clamp(world.fixed_alpha(), 0.0, 1.0));
+    for (const auto& [entity, pose] : d.poses) {
+        const auto m = runtime::api::world_matrix(world, entity);
+        if (!m) continue;
+        const math::Vec3 scale{math::length(math::transform_vector(*m, {1, 0, 0})), math::length(math::transform_vector(*m, {0, 1, 0})),
+                               math::length(math::transform_vector(*m, {0, 0, 1}))};
+        const math::Quat rot = pose.character ? runtime::api::world_rotation(world, entity).value_or(pose.curr_rot)
+                                              : math::nlerp(pose.prev_rot, pose.curr_rot, alpha);
+        world.set_render_pose(entity, math::compose(pose.prev + (pose.curr - pose.prev) * alpha, rot, scale));
+    }
 }
 
 } // namespace noor::physics
