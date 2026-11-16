@@ -57,8 +57,8 @@ letter, so thin strokes slipped between the points. Now every pixel looks at fou
 averages them. "units" is "units" again. No test would have noticed: this one was caught by
 zooming into a screenshot.
 
-**Caught by yesterday's trap.** Two of the new tests had a semicolon in their names, the exact
-mistake that hid fifteen tests yesterday. This time the guard we added made them fail loudly
+**Caught by this morning's trap.** Two of the new tests had a semicolon in their names, the exact
+mistake that hid fifteen tests earlier today. This time the guard we added made them fail loudly
 instead of passing quietly. Renamed in a minute. Traps work.
 
 ## Next engineering target
