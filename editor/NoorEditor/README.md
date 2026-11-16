@@ -61,6 +61,9 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   (`<Project>.exe`, `game.json`, `game/`) that runs without the editor; it starts with the scene
   you have open. Double-click the .exe, or zip the folder to share it. Lua and C# scripts, physics
   and sound all work (C# needs the .NET 10 runtime on the PC). Uses `noor_cli build` (ADR-028).
+- **Code editor**: Edit ▸ Preferences ▸ Scripts picks the program the Inspector's **Open** button
+  uses for scripts: Windows default, one found on your PC (VS Code, Visual Studio, Rider,
+  Notepad++, Notepad) or any program (arguments may use `{file}`, `{line}`, `{folder}`).
 - **Shortcuts**: Ctrl+S save, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo, F frame, Delete.
   Unsaved changes are confirmed on close, scene switch and Close Project.
 - **Layout**: panel sizes and active tabs are remembered (per user); **Window ▸ Reset Layout**.

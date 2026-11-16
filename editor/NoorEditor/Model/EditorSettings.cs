@@ -13,6 +13,10 @@ public sealed class Preferences
     public double FlySpeed { get; set; } = 8.0;       // metres per second
     public double LookSensitivity { get; set; } = 1.0;
     public double GizmoScale { get; set; } = 1.0;
+    // Scripts: the program that opens them (empty: the Windows default for the file type) and its
+    // arguments ({file}, {line}, {folder}); see CodeEditors.
+    public string CodeEditor { get; set; } = "";
+    public string CodeEditorArguments { get; set; } = CodeEditors.DefaultArguments;
 
     public Preferences Copy() => (Preferences)MemberwiseClone();
 

@@ -130,6 +130,7 @@ public sealed class MainWindow : Window
             {
                 Inspector = new InspectorPanel(Doc);
                 Inspector.FrameRequested += FrameEntity;
+                Inspector.Components.OpenFile = file => CodeEditors.Open(_settings.Preferences, Doc.ProjectRoot, file);
                 return Inspector;
             },
         };

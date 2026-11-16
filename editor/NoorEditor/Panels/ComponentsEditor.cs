@@ -120,18 +120,14 @@ public sealed class ComponentsEditor : StackPanel
 
         """;
 
+    /// <summary>Opens a script file (absolute path). MainWindow points this at Edit ▸ Preferences ▸ Code editor.</summary>
+    public Action<string>? OpenFile { get; set; }
+
     private void OpenScript(string relative)
     {
         var full = Path.Combine(_doc.ProjectRoot, relative);
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(full) { UseShellExecute = true });
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            // No program is associated with .luau yet (NoorCode arrives in part 7): fall back to Notepad.
-            System.Diagnostics.Process.Start("notepad.exe", $"\"{full}\"");
-        }
+        if (OpenFile != null) OpenFile(full);
+        else CodeEditors.Open(new Preferences(), _doc.ProjectRoot, full);
     }
 
     // ---- Views ----

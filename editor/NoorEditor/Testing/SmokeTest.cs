@@ -163,6 +163,7 @@ internal static class SmokeTest
         await CSharpChecks(window, results, Check, Shot);
         await AudioChecks(window, results, Check);
         await BuildChecks(window, results, Check, dir);
+        CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -628,6 +629,23 @@ internal static class SmokeTest
         await Task.Delay(300);  // log lines are posted to the UI thread
         _expectedErrors += EngineLog.ErrorCount - before;
         return EngineLog.ErrorCount - before;
+    }
+
+    // Edit ▸ Preferences ▸ Code editor: what the Open button would run (nothing is started here).
+    private static void CodeEditorChecks(MainWindow window, Dictionary<string, object> results, Action<bool, string> check)
+    {
+        var root = window.Doc.ProjectRoot;
+        var file = Path.Combine(root, "Scripts", "Radio.cs");
+        var editors = CodeEditors.Detect();
+        check(editors.Any(e => e.Name == "Notepad"), $"code editor: editors found on this PC ({string.Join(", ", editors.Select(e => e.Name))})");
+        var prefs = new Preferences();
+        check(CodeEditors.CommandLine(prefs, root, file).Program == null, "code editor: by default scripts open with the Windows default app");
+        prefs.CodeEditor = @"C:\Tools\Code.exe";
+        prefs.CodeEditorArguments = "\"{folder}\" -g \"{file}:{line}\"";
+        var (program, args) = CodeEditors.CommandLine(prefs, root, file, 12);
+        check(program == prefs.CodeEditor && args == $"\"{Path.GetFullPath(Path.Combine(root, "Scripts"))}\" -g \"{Path.GetFullPath(file)}:12\"",
+              $"code editor: a chosen editor gets the file, line and Scripts folder ({args})");
+        results["code_editors"] = editors.Select(e => e.Name).ToArray();
     }
 
     // Milestone 4, part 6: File ▸ Build Game (noor_cli build). The built game itself is run by the

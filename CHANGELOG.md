@@ -13,6 +13,10 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 - The engine build now compiles NoorEngine.Scripting (`noor_scripting_managed`, needs the .NET SDK;
   without it CMake says games can't have C#). CI installs .NET before configuring.
 - NoorEditor's File ▸ Build Game packs C# scripts too.
+- NoorEditor: **Edit ▸ Preferences ▸ Scripts ▸ Code editor** (asked for by Tom): Windows default, an
+  editor found on the PC (VS Code opens the Scripts folder at the line, Visual Studio, Rider,
+  Notepad++, Notepad), or any program with `{file}` / `{line}` / `{folder}` arguments. The
+  Inspector's Open button uses it. The dialog's layout hasn't been looked at in a screenshot yet.
 
 **Fixed**
 - Built games: the view jerked on the click that captures the mouse (entering relative mode warps
