@@ -4,8 +4,10 @@
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
 
+#include <algorithm>
 #include <chrono>
 #include <format>
+#include <vector>
 
 namespace noor::asset {
 namespace {
@@ -116,6 +118,20 @@ Result<stdfs::path> Project::resolve(std::string_view relative) const {
         }
     }
     return root_ / normal;
+}
+
+std::optional<std::string> Project::default_start_scene() const {
+    const stdfs::path scenes = scenes_dir();
+    std::error_code ec;
+    if (stdfs::exists(scenes / "Main.noorscene", ec)) return std::string("Scenes/Main.noorscene");
+    std::vector<std::string> found;
+    for (stdfs::recursive_directory_iterator it(scenes, ec), end; !ec && it != end; it.increment(ec)) {
+        if (it->is_regular_file() && it->path().extension() == ".noorscene")
+            found.push_back(stdfs::relative(it->path(), root_).generic_string());
+    }
+    if (found.empty()) return std::nullopt;
+    std::ranges::sort(found);
+    return found.front();
 }
 
 Result<std::string> Project::relative(const stdfs::path& absolute) const {

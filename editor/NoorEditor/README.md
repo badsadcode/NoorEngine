@@ -57,6 +57,10 @@ commands, so every edit is undoable and the editor holds no second copy of the s
 - **Content Browser**: scenes and importable assets (GLB/glTF, `.noorprefab`). Double-click a scene
   to open it, double-click a model or prefab to add it to the scene. **Rescan** picks up new files.
 - **Console**: engine and editor log.
+- **Build Game** (File ▸ Build Game…, Ctrl+B): makes a folder with your game as a program
+  (`<Project>.exe`, `game.json`, `game/`) that runs without the editor; it starts with the scene
+  you have open. Double-click the .exe, or zip the folder to share it. Lua, physics and sound work;
+  C# scripts don't run in builds yet. Uses `noor_cli build` (ADR-028).
 - **Shortcuts**: Ctrl+S save, Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo, F frame, Delete.
   Unsaved changes are confirmed on close, scene switch and Close Project.
 - **Layout**: panel sizes and active tabs are remembered (per user); **Window ▸ Reset Layout**.

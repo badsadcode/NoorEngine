@@ -1,11 +1,7 @@
 #include "document.h"
 
 #include "noor/asset/gltf_import.h"
-#include "noor/runtime/behaviours.h"
-#include "noor/audio/audio.h"
-#include "noor/physics/physics.h"
-#include "noor/scripting/csharp_scripts.h"
-#include "noor/scripting/lua_scripts.h"
+#include "noor/game/game.h"
 #include "noor/foundation/log.h"
 
 #include <algorithm>
@@ -100,49 +96,12 @@ Status Document::require_editable() const {
 Status Document::play() {
     if (auto s = require_scene(); !s) return s;
     if (world_) return {};
-    auto input_map = runtime::InputMap::load(project_.root() / "Settings" / "input.json");
-    if (!input_map) return std::unexpected(input_map.error());
-    world_ = std::make_unique<runtime::World>(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, std::move(*input_map));
-    world_->add_system(std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{project_.root()}));
-    world_->add_system(std::make_unique<scripting::CSharpScriptSystem>(static_cast<const noor_rt_host*>(script_host_)));
-    physics::PhysicsSystem::Options physics_options;
-    // Mesh colliders read triangles from the project's GLB files (cached per file for this play).
-    auto cache = std::make_shared<std::unordered_map<std::string, std::shared_ptr<asset::ImportedModel>>>();
-    physics_options.mesh_triangles = [this, cache](const Json& ref) -> std::optional<physics::Triangles> {
-        const auto guid = asset::guid_field(ref, "asset");
-        const auto* rec = guid ? registry_.find(*guid) : nullptr;
-        if (!rec) return std::nullopt;
-        auto path = project_.resolve(rec->path);
-        if (!path) return std::nullopt;
-        auto& model = (*cache)[path->generic_string()];
-        if (!model) {
-            auto imported = asset::import_gltf(*path);
-            if (!imported) return std::nullopt;
-            model = std::make_shared<asset::ImportedModel>(std::move(*imported));
-        }
-        const int index = ref.value("mesh_index", -1);
-        if (index < 0 || index >= static_cast<int>(model->meshes.size())) return std::nullopt;
-        physics::Triangles t;
-        for (const auto& v : model->meshes[static_cast<std::size_t>(index)].vertices) t.positions.push_back(v.position);
-        t.indices = model->meshes[static_cast<std::size_t>(index)].indices;
-        return t;
-    };
-    world_->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
-    audio::AudioSystem::Options audio_options;
-    audio_options.use_device = audio_device_;
-    // A clip is an asset id or a project-relative path.
-    audio_options.resolve_clip = [this](std::string_view clip) -> std::optional<stdfs::path> {
-        if (const auto guid = Guid::parse(clip)) {
-            const auto* rec = registry_.find(*guid);
-            if (!rec) return std::nullopt;
-            auto p = project_.resolve(rec->path);
-            return p ? std::optional(*p) : std::nullopt;
-        }
-        auto p = project_.resolve(clip);
-        return p && stdfs::exists(*p) ? std::optional(*p) : std::nullopt;
-    };
-    world_->add_system(std::make_unique<audio::AudioSystem>(std::move(audio_options)));
-    world_->add_system(std::make_unique<runtime::BehavioursSystem>());
+    game::WorldOptions options;
+    options.script_host = script_host_;
+    options.audio_device = audio_device_;
+    auto world = game::make_world(project_, registry_, prefabs_, *scene_, options);
+    if (!world) return std::unexpected(world.error());
+    world_ = std::move(*world);
     NOOR_LOG_INFO("Editor", "Play");
     ++revision_;
     std::unordered_set<Guid> authored;
@@ -485,60 +444,15 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         const math::Mat4 world = expanded.world_matrix(i);
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id});
-        if (world_ && !snap->camera && e.has("camera") && e.components["camera"].is_object()) {
-            const auto& cam = e.components["camera"];
-            const float fov = cam.contains("fov") && cam["fov"].is_number() ? cam["fov"].get<float>() : 70.0f;
-            const float near_plane = cam.contains("near") && cam["near"].is_number() ? cam["near"].get<float>() : 0.05f;
-            snap->camera = RenderSnapshot::GameCamera{world, std::clamp(fov, 10.0f, 150.0f), std::max(0.001f, near_plane), e.id};
-        }
-        if (e.has("primitive") && e.components["primitive"].is_object()) {
-            const auto& p = e.components["primitive"];
-            auto num = [&](const char* k, float d) { return p.contains(k) && p[k].is_number() ? p[k].get<float>() : d; };
-            math::Vec3 color{0.55f, 0.52f, 0.62f};
-            if (p.contains("color") && p["color"].is_string()) {
-                const std::string hex = p["color"].get<std::string>();
-                if (hex.size() == 7 && hex[0] == '#') {
-                    const auto channel = [&](int i) {
-                        const float c = static_cast<float>(std::stoi(hex.substr(static_cast<std::size_t>(1 + 2 * i), 2), nullptr, 16)) / 255.0f;
-                        return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
-                    };
-                    try {
-                        color = {channel(0), channel(1), channel(2)};
-                    } catch (const std::exception&) {
-                    }
-                }
-            }
-            const std::string shape = p.value("shape", std::string("box"));
-            RenderSnapshot::Primitive prim{RenderSnapshot::Primitive::Shape::Box, world, 0.5f, 2.0f, color, e.id};
-            if (shape == "sphere") {
-                prim.shape = RenderSnapshot::Primitive::Shape::Sphere;
-                const float r = num("radius", 0.5f);
-                prim.world = world * math::scale({r * 2, r * 2, r * 2});
-            } else if (shape == "capsule") {
-                prim.shape = RenderSnapshot::Primitive::Shape::Capsule;
-                prim.radius = num("radius", 0.3f);
-                prim.height = num("height", 1.8f);
-            } else {
-                math::Vec3 size{1, 1, 1};
-                if (p.contains("size") && p["size"].is_array() && p["size"].size() == 3) {
-                    if (p["size"][0].is_number() && p["size"][1].is_number() && p["size"][2].is_number())
-                        size = {p["size"][0].get<float>(), p["size"][1].get<float>(), p["size"][2].get<float>()};
-                }
-                if (shape == "plane") size.y = 0.02f;
-                prim.world = world * math::scale(size);
-            }
-            snap->primitives.push_back(prim);
-        }
-        if (!e.has("mesh")) continue;
-        const auto& mesh = e.components["mesh"];
-        const auto guid = asset::guid_field(mesh, "asset");
-        const auto* rec = guid ? registry_.find(*guid) : nullptr;
-        if (!rec) continue;
-        auto path = project_.resolve(rec->path);
-        if (!path) continue;
-        std::string key = path->generic_string();
+    }
+    // Models, shapes and the game camera: the same view noor_player draws.
+    auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_));
+    snap->primitives = std::move(view.primitives);
+    if (world_) snap->camera = view.camera;
+    for (auto& m : view.meshes) {
+        std::string key = m.asset_path.generic_string();
         const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
-        snap->meshes.push_back({std::move(key), mesh.value("mesh_index", -1), world, e.id, version});
+        snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version});
     }
     channel_->publish(std::move(snap));
 }

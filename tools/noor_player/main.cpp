@@ -1,0 +1,348 @@
+// noor_player: runs a NoorEngine game outside the editor (Milestone 4, part 6; ADR-028).
+//
+//   noor_player                      the game next to the executable (game.json, written by noor_cli build)
+//   noor_player <project folder>     a project as it is on disk (handy while developing)
+//
+// Options: [--scene <Scenes/X.noorscene>] [--title <text>] [--frames N] [--report <file.json>]
+//          [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]
+//
+// --frames runs N frames and exits (tests); the exit code is then 2 if anything logged an error.
+// --report writes what happened as JSON: frames, play time, each named entity's world position, and
+// the colour of the centre pixel of the last frame.
+
+#include "noor/asset/json.h"
+#include "noor/asset/project.h"
+#include "noor/asset/registry.h"
+#include "noor/foundation/file_io.h"
+#include "noor/foundation/log.h"
+#include "noor/game/game.h"
+#include "noor/game/scene_renderer.h"
+#include "noor/platform/input.h"
+#include "noor/platform/platform.h"
+#include "noor/platform/window.h"
+#include "noor/render/renderer.h"
+#include "noor/runtime/input.h"
+#include "noor/runtime/world.h"
+#include "noor/scene/prefab.h"
+#include "noor/scene/scene.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>  // GetModuleFileNameW (WIN32_LEAN_AND_MEAN comes from the build)
+#endif
+
+namespace stdfs = std::filesystem;
+using noor::asset::Json;
+
+namespace {
+
+struct Options {
+    std::string project;     // empty: the game next to the executable
+    std::string scene;       // empty: game.json's, else the project's default
+    std::string title;
+    std::uint64_t frames = 0;  // 0: until the window is closed
+    std::string report;
+    std::string screenshot;
+    std::string log_path;
+    bool audio = true;
+    bool validation = false;
+};
+
+bool parse(int argc, char** argv, Options& o) {
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        const bool more = i + 1 < argc;
+        if (a == "--scene" && more) o.scene = argv[++i];
+        else if (a == "--title" && more) o.title = argv[++i];
+        else if (a == "--frames" && more) o.frames = std::stoull(argv[++i]);
+        else if (a == "--report" && more) o.report = argv[++i];
+        else if (a == "--screenshot" && more) o.screenshot = argv[++i];
+        else if (a == "--log" && more) o.log_path = argv[++i];
+        else if (a == "--no-audio") o.audio = false;
+        else if (a == "--validation") o.validation = true;
+        else if (!a.starts_with("--") && o.project.empty()) o.project = a;
+        else return false;
+    }
+    return true;
+}
+
+stdfs::path executable_dir() {
+#if defined(_WIN32)
+    std::wstring buffer(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD n = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (n < buffer.size()) {
+            buffer.resize(n);
+            break;
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+    return stdfs::path(buffer).parent_path();
+#else
+    return stdfs::current_path();
+#endif
+}
+
+noor::runtime::Key runtime_key(noor::platform::Key k) {
+    using P = noor::platform::Key;
+    using R = noor::runtime::Key;
+    const auto n = static_cast<int>(k);
+    if (k >= P::A && k <= P::Z) return static_cast<R>(static_cast<int>(R::A) + (n - static_cast<int>(P::A)));
+    if (k >= P::Num0 && k <= P::Num9) return static_cast<R>(static_cast<int>(R::Num0) + (n - static_cast<int>(P::Num0)));
+    if (k >= P::F1 && k <= P::F12) return static_cast<R>(static_cast<int>(R::F1) + (n - static_cast<int>(P::F1)));
+    switch (k) {
+    case P::Space: return R::Space;
+    case P::Enter: return R::Enter;
+    case P::Escape: return R::Escape;
+    case P::Tab: return R::Tab;
+    case P::Backspace: return R::Backspace;
+    case P::LeftShift: case P::RightShift: return R::Shift;
+    case P::LeftCtrl: case P::RightCtrl: return R::Ctrl;
+    case P::LeftAlt: case P::RightAlt: return R::Alt;
+    case P::Up: return R::Up;
+    case P::Down: return R::Down;
+    case P::Left: return R::Left;
+    case P::Right: return R::Right;
+    default: return R::None;
+    }
+}
+
+noor::runtime::InputState game_input(const noor::platform::InputState& in, bool captured) {
+    noor::runtime::InputState out;
+    for (std::size_t i = 1; i < noor::platform::InputState::kKeyCount; ++i) {
+        if (in.keys_down[i]) out.set(runtime_key(static_cast<noor::platform::Key>(i)));
+    }
+    using B = noor::platform::MouseButton;
+    out.set(noor::runtime::Key::MouseLeft, in.down(B::Left));
+    out.set(noor::runtime::Key::MouseRight, in.down(B::Right));
+    out.set(noor::runtime::Key::MouseMiddle, in.down(B::Middle));
+    out.mouse = {in.mouse_x, in.mouse_y};
+    out.mouse_delta = {in.mouse_dx, in.mouse_dy};
+    out.wheel = in.wheel;
+    out.mouse_captured = captured;
+    return out;
+}
+
+bool save_bmp(const noor::render::CapturedFrame& frame, const std::string& path) {
+    const std::uint32_t row_bytes = (frame.width * 3 + 3) & ~3u;
+    std::vector<std::uint8_t> file(54 + static_cast<std::size_t>(row_bytes) * frame.height, 0);
+    const auto put32 = [&](std::size_t at, std::uint32_t v) {
+        for (int i = 0; i < 4; ++i) file[at + static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(v >> (8 * i));
+    };
+    file[0] = 'B';
+    file[1] = 'M';
+    put32(2, static_cast<std::uint32_t>(file.size()));
+    put32(10, 54);
+    put32(14, 40);
+    put32(18, frame.width);
+    put32(22, frame.height);
+    file[26] = 1;
+    file[28] = 24;
+    for (std::uint32_t y = 0; y < frame.height; ++y) {
+        std::uint8_t* row = &file[54 + static_cast<std::size_t>(frame.height - 1 - y) * row_bytes];
+        for (std::uint32_t x = 0; x < frame.width; ++x) {
+            const auto c = frame.rgba_at(x, y);
+            row[x * 3 + 0] = c[2];
+            row[x * 3 + 1] = c[1];
+            row[x * 3 + 2] = c[0];
+        }
+    }
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return false;
+    const bool ok = std::fwrite(file.data(), 1, file.size(), f) == file.size();
+    std::fclose(f);
+    return ok;
+}
+
+// Where the game is and what to start.
+struct Game {
+    stdfs::path project;
+    std::string scene;
+    std::string title;
+};
+
+noor::Result<Game> locate(const Options& o) {
+    Game g;
+    if (!o.project.empty()) {
+        g.project = o.project;
+    } else {
+        // A built game: game.json next to the executable says where the project is.
+        const stdfs::path manifest = executable_dir() / "game.json";
+        auto text = noor::fs::read_file(manifest);
+        if (!text)
+            return std::unexpected(noor::Error{noor::ErrorCode::NotFound,
+                                               "No game here: run noor_player <project folder>, or a game made with noor_cli build"});
+        auto json = noor::asset::parse_json(*text, manifest.generic_string());
+        if (!json) return std::unexpected(json.error());
+        g.project = executable_dir() / json->value("project", std::string("game"));
+        g.scene = json->value("start_scene", std::string{});
+        g.title = json->value("title", std::string{});
+    }
+    if (!o.scene.empty()) g.scene = o.scene;
+    if (!o.title.empty()) g.title = o.title;
+    return g;
+}
+
+int run(const Options& o) {
+    auto game = locate(o);
+    if (!game) {
+        NOOR_LOG_FATAL("Player", "{}", game.error().describe());
+        return 1;
+    }
+    auto project = noor::asset::Project::open(game->project);
+    if (!project) {
+        NOOR_LOG_FATAL("Player", "{}", project.error().describe());
+        return 1;
+    }
+    noor::asset::AssetRegistry registry;
+    if (auto scan = registry.scan(*project); !scan) {
+        NOOR_LOG_FATAL("Player", "{}", scan.error().describe());
+        return 1;
+    }
+    if (game->scene.empty()) {
+        auto found = project->default_start_scene();
+        if (!found) {
+            NOOR_LOG_FATAL("Player", "'{}' has no scenes", project->info().name);
+            return 1;
+        }
+        game->scene = *found;
+    }
+    auto scene_path = project->resolve(game->scene);
+    auto scene = scene_path ? noor::scene::Scene::load(*scene_path) : noor::Result<noor::scene::Scene>(std::unexpected(scene_path.error()));
+    if (!scene) {
+        NOOR_LOG_FATAL("Player", "{}", scene.error().describe());
+        return 1;
+    }
+    if (game->title.empty()) game->title = project->info().name;
+    NOOR_LOG_INFO("Player", "{}: {}", game->title, game->scene);
+
+    if (auto status = noor::platform::initialize(); !status) {
+        NOOR_LOG_FATAL("Player", "{}", status.error().describe());
+        return 1;
+    }
+    int exit_code = 0;
+    {
+        auto window = noor::platform::Window::create({.title = game->title, .width = 1280, .height = 720});
+        if (!window) {
+            NOOR_LOG_FATAL("Player", "{}", window.error().describe());
+            noor::platform::shutdown();
+            return 1;
+        }
+        auto renderer = noor::render::Renderer::create(**window, {.enable_validation = o.validation, .clear_color = {0.05f, 0.045f, 0.07f, 1.0f}});
+        if (!renderer) {
+            NOOR_LOG_FATAL("Player", "{}", renderer.error().describe());
+            window->reset();
+            noor::platform::shutdown();
+            return 1;
+        }
+        {
+            noor::scene::PrefabLibrary prefabs(*project, registry);
+            noor::game::WorldOptions world_options;
+            world_options.audio_device = o.audio;
+            auto world = noor::game::make_world(*project, registry, prefabs, *scene, world_options);
+            if (!world) {
+                NOOR_LOG_FATAL("Player", "{}", world.error().describe());
+                exit_code = 1;
+            } else {
+                noor::game::SceneRenderer scene_renderer(**renderer);
+                const auto asset_path = noor::game::registry_asset_path(*project, registry);
+                bool captured = false;
+                bool warned_no_camera = false;
+                std::optional<noor::render::CapturedFrame> last_capture;
+                double last = noor::platform::time_seconds();
+                while (o.frames == 0 || (*world)->frame_count() < o.frames) {
+                    const auto events = noor::platform::pump_events();
+                    if (events.quit_requested) break;
+                    if (events.window_resized || events.window_restored) (*renderer)->notify_resized();
+                    const auto& in = noor::platform::input();
+
+                    // The mouse: scripts ask for it (noor.input.capture_mouse), Esc always gives it back.
+                    if (in.pressed(noor::platform::Key::Escape) && captured) {
+                        noor::platform::set_relative_mouse(**window, false);
+                        captured = false;
+                    }
+                    if (const auto want = (*world)->take_mouse_capture_request(); want && *want != captured) {
+                        noor::platform::set_relative_mouse(**window, *want);
+                        captured = *want;
+                    }
+
+                    const double now = noor::platform::time_seconds();
+                    // Fixed steps in test runs (--frames) so results don't depend on how busy the machine is.
+                    const double dt = o.frames ? 1.0 / 60.0 : now - last;
+                    last = now;
+                    (*world)->frame(dt, game_input(in, captured));
+
+                    const auto view = noor::game::collect_view((*world)->scene(), asset_path);
+                    if (!view.camera && !warned_no_camera) {
+                        NOOR_LOG_WARN("Player", "The scene has no camera; showing it from above. Add a camera component (or Create ▸ Player) to see the game's view");
+                        warned_no_camera = true;
+                    }
+                    const auto draws = scene_renderer.draws(view);
+                    const bool last_frame = o.frames && (*world)->frame_count() == o.frames;
+                    if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture();
+                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), draws});
+                    if (!frame) {
+                        NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
+                        exit_code = 1;
+                        break;
+                    }
+                    if (*frame == noor::render::FrameResult::Skipped && (*window)->is_minimized()) noor::platform::wait_for_events(50);
+                    if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
+                }
+                if (captured) noor::platform::set_relative_mouse(**window, false);
+                NOOR_LOG_INFO("Player", "Ran {} frames ({:.1f} s of game time)", (*world)->frame_count(), (*world)->time());
+
+                if (!o.screenshot.empty()) {
+                    const bool ok = last_capture && save_bmp(*last_capture, o.screenshot);
+                    if (!ok) NOOR_LOG_ERROR("Player", "Screenshot failed: {}", o.screenshot);
+                }
+                if (!o.report.empty()) {
+                    Json report{{"frames", (*world)->frame_count()}, {"time", (*world)->time()}, {"scene", game->scene}};
+                    Json entities = Json::object();
+                    const auto& s = (*world)->scene();
+                    for (std::size_t i = 0; i < s.entities.size(); ++i) {
+                        const auto p = s.world_matrix(i).transform_point({0, 0, 0});
+                        entities[s.entities[i].name] = {p.x, p.y, p.z};
+                    }
+                    report["entities"] = std::move(entities);
+                    if (last_capture) {
+                        const auto c = last_capture->rgba_at(last_capture->width / 2, last_capture->height / 2);
+                        report["center_pixel"] = {c[0], c[1], c[2]};
+                    }
+                    report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
+                    if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
+                }
+            }
+        }  // the world (and its scripts, physics and sound) goes before the renderer and window
+        renderer->reset();
+        window->reset();
+    }
+    noor::platform::shutdown();
+    if (exit_code == 0 && o.frames && noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal) > 0) exit_code = 2;
+    return exit_code;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    noor::log::add_sink(std::make_shared<noor::ConsoleLogSink>());
+    Options options;
+    if (!parse(argc, argv, options)) {
+        NOOR_LOG_ERROR("Player", "Usage: noor_player [project folder] [--scene <path>] [--title <text>] [--frames N] "
+                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]");
+        return 64;
+    }
+    if (!options.log_path.empty()) {
+        auto sink = std::make_shared<noor::FileLogSink>(options.log_path);
+        if (sink->is_open()) noor::log::add_sink(sink);
+    }
+    const int code = run(options);
+    noor::log::flush();
+    return code;
+}

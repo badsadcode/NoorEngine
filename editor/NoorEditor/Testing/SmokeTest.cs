@@ -162,6 +162,7 @@ internal static class SmokeTest
         await PlayerChecks(window, results, Check, Shot);
         await CSharpChecks(window, results, Check, Shot);
         await AudioChecks(window, results, Check);
+        await BuildChecks(window, results, Check, dir);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
         var left = window.FindDock("Left");
@@ -627,6 +628,24 @@ internal static class SmokeTest
         await Task.Delay(300);  // log lines are posted to the UI thread
         _expectedErrors += EngineLog.ErrorCount - before;
         return EngineLog.ErrorCount - before;
+    }
+
+    // Milestone 4, part 6: File ▸ Build Game (noor_cli build). The built game itself is run by the
+    // player.* ctest tests; here the editor's side: the build runs, starts with the open scene, and
+    // its output reaches the Console.
+    private static async Task BuildChecks(MainWindow window, Dictionary<string, object> results, Action<bool, string> check, string dir)
+    {
+        var output = Path.Combine(dir, "built_game");
+        if (Directory.Exists(output)) Directory.Delete(output, true);
+        var result = await window.BuildGame(output);
+        check(result.Ok && File.Exists(result.Executable), $"build: File ▸ Build Game made {Path.GetFileName(result.Executable ?? "nothing")}");
+        var manifest = Path.Combine(output, "game.json");
+        var scene = File.Exists(manifest) ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifest))?["start_scene"]?.GetValue<string>() : null;
+        check(scene == window.Doc.Scene.Path, $"build: the game starts with the open scene ({scene})");
+        check(File.Exists(Path.Combine(output, "game", "Scripts", "PlayerController.luau")) && !Directory.Exists(Path.Combine(output, "game", ".noor")),
+              "build: scripts are packed, derived data isn't");
+        check(EngineLog.Lines.Any(l => l.Category == "Build" && l.Message.StartsWith("Built ")), "build: noor_cli's report reaches the Console");
+        results["build"] = output;
     }
 
     // Milestone 4, part 5: sound (mixed silently: the test switched the device off).

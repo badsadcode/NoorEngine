@@ -8,6 +8,7 @@
 #include "noor/asset/registry.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
+#include "noor/game/game.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/history.h"
 #include "noor/scene/prefab.h"
@@ -51,22 +52,9 @@ struct RenderSnapshot {
         Guid entity;
     };
     std::vector<Marker> markers;
-    // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
-    struct Primitive {
-        enum class Shape : std::uint8_t { Box, Sphere, Capsule } shape;
-        math::Mat4 world;  // box: +-0.5 cube scaled to size; sphere: radius 0.5 scaled; capsule: unscaled
-        float radius = 0.5f, height = 2.0f;  // capsule only
-        math::Vec3 color;  // linear
-        Guid entity;
-    };
+    using Primitive = game::SceneView::Primitive;  // simple shapes from `primitive` components
     std::vector<Primitive> primitives;
-    // While playing: the first entity with a `camera` component ({"fov": 70, "near": 0.05}).
-    struct GameCamera {
-        math::Mat4 world;
-        float fov_degrees = 70.0f;
-        float near_plane = 0.05f;
-        Guid entity;
-    };
+    using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
 };
 

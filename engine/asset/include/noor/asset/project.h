@@ -11,6 +11,7 @@
 #include "noor/foundation/guid.h"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -43,6 +44,10 @@ public:
     [[nodiscard]] Result<std::filesystem::path> resolve(std::string_view relative) const;
     // Absolute path inside the project to its relative form with '/' separators.
     [[nodiscard]] Result<std::string> relative(const std::filesystem::path& absolute) const;
+
+    // The scene a game starts with when nobody says: Scenes/Main.noorscene if it exists, otherwise
+    // the first .noorscene under Scenes/ (by path). Project-relative; nullopt if there is none.
+    [[nodiscard]] std::optional<std::string> default_start_scene() const;
 
 private:
     std::filesystem::path root_;

@@ -1,0 +1,47 @@
+# Runs a game for 120 fixed frames (1/60 s each) and checks what happened, from the player's
+# --report (tests/data/player_project: a falling ball, a Lua-lifted box, a red box in view).
+#   -DPLAYER=<executable> [-DPROJECT=<project folder>]  (no PROJECT: a built game with game.json)
+#   -DWORK=<folder for the report>
+file(MAKE_DIRECTORY "${WORK}")
+set(report "${WORK}/report.json")
+file(REMOVE "${report}")
+set(args --frames 120 --no-audio --report "${report}" --log "${WORK}/player.log")
+if(DEFINED PROJECT)
+    list(PREPEND args "${PROJECT}")
+endif()
+execute_process(COMMAND "${PLAYER}" ${args} RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+if(NOT code EQUAL 0)
+    message(FATAL_ERROR "player exited with ${code} (see ${WORK}/player.log)")
+endif()
+file(READ "${report}" json)
+
+macro(get out)
+    string(JSON ${out} GET "${json}" ${ARGN})
+endmacro()
+get(frames frames)
+get(errors errors)
+get(ball_y entities Ball 1)
+get(rider_y entities Rider 1)
+get(r center_pixel 0)
+get(g center_pixel 1)
+get(b center_pixel 2)
+message(STATUS "frames ${frames}, errors ${errors}, ball y ${ball_y}, rider y ${rider_y}, centre ${r},${g},${b}")
+
+if(NOT frames EQUAL 120)
+    message(FATAL_ERROR "ran ${frames} frames, expected 120")
+endif()
+if(NOT errors EQUAL 0)
+    message(FATAL_ERROR "${errors} error(s) logged")
+endif()
+# Physics: dropped from 5 m, after 2 s the ball (radius 0.5) rests on the floor.
+if(ball_y GREATER 0.6 OR ball_y LESS 0.4)
+    message(FATAL_ERROR "the ball isn't resting on the floor (y ${ball_y})")
+endif()
+# Lua: Rider.luau lifts its box 1 m/s from 0.5 m: 2.5 m after 2 s.
+if(rider_y GREATER 2.55 OR rider_y LESS 2.45)
+    message(FATAL_ERROR "the Lua script didn't lift the box to 2.5 m (y ${rider_y})")
+endif()
+# Rendering through the scene's camera: the red box is in the middle of the picture.
+if(r LESS 150 OR g GREATER 90 OR b GREATER 90)
+    message(FATAL_ERROR "the centre pixel isn't the red box (${r},${g},${b})")
+endif()

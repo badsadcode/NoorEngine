@@ -25,7 +25,8 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | **NoorEditor** ([editor/NoorEditor](editor/NoorEditor)): project hub, docked viewport (click to select, fly camera, move/rotate/scale gizmos with snapping, highlight), scene tree, inspector (name/transform/components), content browser with live reload, console, preferences, play/stop, undo/redo, save, remembered layout | **Milestone 3 complete.** Works; 61-check end-to-end smoke test drives real clicks, drags and keys (GPU, local). HiDPI checked by hand at 150%; no multi-select |
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
 | `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |
-| `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`) | Works; runs in CI |
+| `noor_cli`: headless project tool (`new`, `scan`, `info`, `add-model`, `make-prefab`, `add-prefab`, `validate`, `migrate`, `build`) | Works; runs in CI |
+| `noor_player` + `noor_cli build` + editor **File ▸ Build Game**: a game as a folder with its own .exe, no editor needed ([ADR-028](docs/decisions/ADR-028-player-and-builds.md)) | **Milestone 4, part 6a.** Works; tested from a project and from a build (GPU, local). C# scripts not in builds yet (6b) |
 | `runtime`: game world, frame order, fixed 60 Hz step, input actions/axes, built-in behaviours; the editor's play mode runs it with keyboard input from the viewport | **Milestone 4, part 1.** Works, unit-tested; physics and audio plug in next |
 | `scripting`: **Lua (Luau)** and **C#** scripts with one API: entities, transforms, input, components, physics, character, sound, logging ([Lua](docs/scripting/LUA_API.md), [C#](docs/scripting/CSHARP_API.md)) | **Milestone 4, parts 2 and 4.** Works; C# compiles on Play and reloads after edits |
 | `physics`: **Jolt** rigid bodies, colliders (box, sphere, capsule, mesh from GLBs), raycasts, forces, collision/trigger events; **character controller**; game camera; mouse capture; primitive shapes | **Milestone 4, part 3.** Works; unit-tested; a first-person player walks and jumps in the editor |
@@ -56,6 +57,16 @@ Controls: hold right mouse to look, WASD to move, Q/E down/up, Shift faster, whe
 Options: `--frames N` (exit after N frames), `--cubes N`, `--no-validation`, `--verify-render`,
 `--lifecycle-test`, `--glb <file.glb>` or `--project <dir> --scene <Scenes/x.noorscene>` (both hot-reload), `--screenshot <file.bmp>`, `--log <file>`.
 
+Run a project without the editor, or build it into a folder you can share:
+
+```bash
+build/ninja/tools/noor_player/Debug/noor_player.exe tests/data/player_project
+```
+
+```bash
+build/ninja/tools/noor_cli/RelWithDebInfo/noor_cli.exe build tests/data/player_project build/player_test_game
+```
+
 Tests labelled `gpu` need a Vulkan 1.3 GPU; skip them with `ctest --preset debug -LE gpu`.
 CI (GitHub Actions) builds Debug and Release on every push and pull request and runs everything
 except the `gpu` tests, because GitHub's runners have no GPU. Run those locally before pushing
@@ -75,7 +86,9 @@ renderer changes. CI uses the `windows-ninja` preset (Ninja + whatever MSVC the 
 | `engine/physics` | Jolt physics as a runtime system. |
 | `engine/scripting` | Script languages as runtime systems: Lua (Luau), and C# (`dotnet/NoorEngine.Scripting`). |
 | `tools/noor_diag` | Diagnostics app; permanent developer utility. |
-| `tools/noor_cli` | Headless project tool. |
+| `tools/noor_cli` | Headless project tool; `build` packs a game. |
+| `tools/noor_player` | Runs a game outside the editor (what a built game's .exe is). |
+| `engine/game` | What every running game needs (world setup, what to draw), shared by Play and the player. |
 | `spikes/` | Technology experiments that decide ADRs. Not product code. |
 | `tests/` | Unit and smoke tests (doctest + CTest). |
 | `docs/decisions` | Architecture Decision Records. Read these before arguing. 😉 |

@@ -56,6 +56,15 @@ add_test(NAME cli.project_workflow
         -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_workflow.cmake)
 set_tests_properties(cli.project_workflow PROPERTIES LABELS "cli" TIMEOUT 60)
 
+# noor_cli build packs the test project with the player (headless: only copies and checks files).
+add_test(NAME cli.build
+    COMMAND ${CMAKE_COMMAND}
+        -DCLI=$<TARGET_FILE:noor_cli>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/player_project
+        -DOUT=${CMAKE_CURRENT_BINARY_DIR}/built_game
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cli_build.cmake)
+set_tests_properties(cli.build PROPERTIES LABELS "cli" TIMEOUT 60 FIXTURES_SETUP built_game)
+
 # ---- GPU tests ---------------------------------------------------------------
 # Need a Vulkan 1.3 GPU and a desktop. Validation layers on; any validation error fails.
 
@@ -103,3 +112,19 @@ if(WIN32 AND NOOR_DOTNET)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/editor_smoke.cmake)
     set_tests_properties(editor.smoke PROPERTIES LABELS "gpu;editor" TIMEOUT 300)
 endif()
+
+# noor_player runs a project, then the game noor_cli build made, with no editor: physics, a Lua
+# script and rendering through the scene's camera (tests/player_check.cmake).
+add_test(NAME player.project
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/player_project
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_project
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
+set_tests_properties(player.project PROPERTIES LABELS "gpu;player" TIMEOUT 60)
+add_test(NAME player.built_game
+    COMMAND ${CMAKE_COMMAND}
+        "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_game/Player Test.exe"
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_game
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
+set_tests_properties(player.built_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_game)

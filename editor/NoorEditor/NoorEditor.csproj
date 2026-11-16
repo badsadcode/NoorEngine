@@ -20,6 +20,7 @@
     <NoorRepo>$(MSBuildThisFileDirectory)..\..\</NoorRepo>
     <NoorNativeDir Condition="'$(NoorNativeDir)' == '' And Exists('$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\noor_editor_api.dll')">$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
     <NoorNativeDir Condition="'$(NoorNativeDir)' == ''">$(NoorRepo)build\windows\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
+    <NoorToolsDir Condition="'$(NoorToolsDir)' == ''">$(NoorNativeDir)..\..\..\tools\noor_cli\$(NoorNativeConfig)\</NoorToolsDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,6 +42,11 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.dll')" />
     <None Include="$(NoorNativeDir)noor_editor_api.pdb" Link="noor_editor_api.pdb"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorNativeDir)noor_editor_api.pdb')" />
+    <!-- File ▸ Build Game runs noor_cli build, which packs noor_player (both from the engine build). -->
+    <None Include="$(NoorToolsDir)noor_cli.exe" Link="noor_cli.exe"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorToolsDir)noor_cli.exe')" />
+    <None Include="$(NoorToolsDir)noor_player.exe" Link="noor_player.exe"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(NoorToolsDir)noor_player.exe')" />
   </ItemGroup>
 
   <Target Name="NoorCheckNative" BeforeTargets="Build">

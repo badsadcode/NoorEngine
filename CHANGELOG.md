@@ -4,6 +4,33 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-16 — Milestone 4, part 6a: games that run without the editor
+**Added**
+- `game` module (ADR-028): `make_world()` (the world with every engine system), `collect_view()`
+  (models, primitive shapes, the game camera from a running scene), `SceneRenderer`, primitive
+  meshes. The editor's Play and its render snapshots now go through it, so editor and player run
+  the same code.
+- `noor_player`: runs a game in its own window (`noor_player` next to a built game, or
+  `noor_player <project folder>`). Keyboard and mouse into the game's input actions, mouse capture
+  on the script's request (Esc releases), sound, physics, Lua. Test options `--frames`, `--report`,
+  `--screenshot`, `--no-audio`.
+- `noor_cli build <project> <out> [--scene]`: validates, then writes `<Name>.exe` (the player),
+  `game.json` and `game/` (the project's files without derived data). Rebuilds replace an earlier
+  build; non-empty folders and folders inside the project are refused.
+- NoorEditor: **File ▸ Build Game…** (Ctrl+B): saves if you like, asks for a folder, builds starting
+  with the open scene, then offers **Play it** / **Show folder**. Output goes to the Console.
+- `asset::Project::default_start_scene()`.
+
+**Tests:** `cli.build` (headless, CI); `player.project` and `player.built_game` (GPU, local): 120
+fixed frames of `tests/data/player_project` from a project and from a build; the ball must rest on
+the floor, a Lua script must have lifted a box exactly 2 m, and the centre pixel must be the red box
+seen through the scene's camera. Editor smoke test: File ▸ Build Game (113 checks).
+
+**Not yet:** C# scripts in builds (part 6b: .NET hosting in the player). Builds need the Visual C++
+2015–2022 runtime on the PC; Debug tools make games that only run where Visual Studio is installed
+(noor_cli warns). No packing/cooking: a build's content is plain project files, and the registry
+is rescanned (assets hashed) at every start. No game icon, no fullscreen option yet.
+
 ### 2026-11-15 — Milestone 4, part 5: sound
 **Added**
 - `audio` module (ADR-011): **miniaudio** (pinned single header, MIT-0/public domain) as

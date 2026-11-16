@@ -10,6 +10,8 @@
 //                                                    turn an entity's subtree into a prefab and an instance
 //   noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw°]]
 //                                                    place an instance of a prefab in a scene
+//   noor_cli build <project> <output folder> [--scene <path>]
+//                                                    a runnable game: the player + the project's content
 //
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
 
@@ -20,13 +22,22 @@
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 
+#include "noor/asset/json.h"
+#include "noor/foundation/file_io.h"
+
+#include <cctype>
 #include <charconv>
+#include <format>
 #include <cstdio>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>  // GetModuleFileNameW
+#endif
 
 namespace {
 namespace stdfs = std::filesystem;
@@ -41,7 +52,8 @@ int usage() {
                "  noor_cli validate <project>\n"
                "  noor_cli migrate <project> [--dry-run]\n"
                "  noor_cli make-prefab <project> <scene> <entity name> <prefab path>\n"
-               "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n",
+               "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n"
+               "  noor_cli build <project> <output folder> [--scene <path>]\n",
                stderr);
     return 64;
 }
@@ -294,6 +306,139 @@ int cmd_migrate(const std::vector<std::string>& a) {
     return failed == 0 ? 0 : 1;
 }
 
+stdfs::path executable_dir() {
+#if defined(_WIN32)
+    std::wstring buffer(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD n = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (n < buffer.size()) {
+            buffer.resize(n);
+            break;
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+    return stdfs::path(buffer).parent_path();
+#else
+    return stdfs::current_path();
+#endif
+}
+
+// What a build leaves out: derived data, editor leftovers, IDE build output.
+bool excluded(const stdfs::path& rel) {
+    const std::string first = rel.begin() != rel.end() ? rel.begin()->string() : std::string{};
+    if (first == ".noor" || first == ".git" || first == ".vs") return true;
+    if (first == "Scripts" && rel.has_parent_path()) {
+        const auto second = std::next(rel.begin());
+        if (second != rel.end() && (second->string() == "bin" || second->string() == "obj")) return true;
+    }
+    const std::string ext = rel.extension().string();
+    return ext == ".bak" || ext == ".tmp";
+}
+
+// A file name for the game's executable: the project name without characters Windows refuses.
+std::string executable_name(const std::string& project_name) {
+    std::string out;
+    for (const char c : project_name) out += (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_') ? c : '_';
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out.empty() ? std::string("Game") : out;
+}
+
+// noor_cli build: the player executable renamed after the project, the project's content in game/,
+// and game.json (which scene to start, the window title). The folder runs on any Windows PC with a
+// Vulkan 1.3 GPU; nothing is installed.
+int cmd_build(const std::vector<std::string>& a) {
+    if (a.size() != 2 && !(a.size() == 4 && a[2] == "--scene")) return usage();
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    const stdfs::path out = stdfs::absolute(a[1]).lexically_normal();
+    const auto rel_out = out.lexically_relative(p->root());
+    if (!rel_out.empty() && rel_out.begin()->string() != "..") {
+        NOOR_LOG_ERROR("CLI", "The output folder can't be inside the project ({})", out.generic_string());
+        return 1;
+    }
+    std::error_code ec;
+    if (stdfs::exists(out, ec) && !stdfs::is_empty(out, ec) && !stdfs::exists(out / "game.json", ec)) {
+        NOOR_LOG_ERROR("CLI", "'{}' isn't empty and isn't an earlier build: choose an empty or new folder", out.generic_string());
+        return 1;
+    }
+
+    // Check the project first: a build of a broken project is a broken game.
+    if (cmd_validate({a[0]}) != 0) {
+        NOOR_LOG_ERROR("CLI", "Build stopped: fix the problems above first");
+        return 1;
+    }
+    std::string start = a.size() == 4 ? a[3] : p->default_start_scene().value_or("");
+    if (start.empty()) {
+        NOOR_LOG_ERROR("CLI", "'{}' has no scenes to start with", p->info().name);
+        return 1;
+    }
+    auto start_path = p->resolve(start);
+    if (!start_path || !stdfs::exists(*start_path, ec)) {
+        NOOR_LOG_ERROR("CLI", "Start scene '{}' not found", start);
+        return 1;
+    }
+    const stdfs::path player = executable_dir() / "noor_player.exe";
+    if (!stdfs::exists(player, ec)) {
+        NOOR_LOG_ERROR("CLI", "noor_player.exe isn't next to noor_cli ({})", player.generic_string());
+        return 1;
+    }
+
+    // An earlier build is replaced; nothing else in the folder is touched.
+    const std::string exe = executable_name(p->info().name) + ".exe";
+    if (stdfs::exists(out / "game.json", ec)) {
+        stdfs::remove_all(out / "game", ec);
+        if (auto old = asset::parse_json(fs::read_file(out / "game.json").value_or("{}"), "game.json"); old && old->contains("executable"))
+            stdfs::remove(out / (*old)["executable"].get<std::string>(), ec);
+    }
+    stdfs::create_directories(out / "game", ec);
+    if (ec) return report(Error{ErrorCode::IoError, std::format("can't create {}: {}", (out / "game").generic_string(), ec.message())});
+
+    std::size_t files = 0;
+    std::uintmax_t bytes = 0;
+    bool csharp = false;
+    for (auto it = stdfs::recursive_directory_iterator(p->root(), ec); !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
+        const stdfs::path rel = it->path().lexically_relative(p->root());
+        if (excluded(rel)) {
+            if (it->is_directory()) it.disable_recursion_pending();
+            continue;
+        }
+        const stdfs::path dest = out / "game" / rel;
+        if (it->is_directory()) {
+            stdfs::create_directories(dest, ec);
+            continue;
+        }
+        if (rel.extension() == ".cs" || rel.extension() == ".csproj") {
+            csharp = csharp || rel.extension() == ".cs";
+            continue;  // C# scripts are compiled into the build in part 6b; sources stay home
+        }
+        stdfs::copy_file(it->path(), dest, stdfs::copy_options::overwrite_existing, ec);
+        if (ec) return report(Error{ErrorCode::IoError, std::format("can't copy {}: {}", rel.generic_string(), ec.message())});
+        ++files;
+        bytes += stdfs::file_size(it->path(), ec);
+    }
+    if (ec) return report(Error{ErrorCode::IoError, ec.message()});
+    stdfs::copy_file(player, out / exe, stdfs::copy_options::overwrite_existing, ec);
+    if (ec) return report(Error{ErrorCode::IoError, std::format("can't copy the player: {}", ec.message())});
+
+    const asset::Json manifest{{"noor_game", 1},
+                               {"title", p->info().name},
+                               {"project", "game"},
+                               {"start_scene", start},
+                               {"executable", exe},
+                               {"engine", p->info().engine_version},
+                               {"built", asset::utc_now_iso8601()}};
+    if (auto w = fs::write_file_atomic(out / "game.json", manifest.dump(2) + "\n"); !w) return report(w.error());
+
+#if !defined(NDEBUG)
+    NOOR_LOG_WARN("CLI", "This is a Debug build of the engine tools: the game needs Visual Studio's debug runtime and only runs "
+                         "on development PCs. Use the Release noor_cli to make a game to share");
+#endif
+    if (csharp) NOOR_LOG_WARN("CLI", "C# scripts aren't in builds yet (Milestone 4, part 6b): entities with C# scripts won't run them");
+    std::printf("Built '%s' into %s\n  %s  (start scene %s)\n  %zu project files, %.1f MB\n", p->info().name.c_str(),
+                out.generic_string().c_str(), exe.c_str(), start.c_str(), files, static_cast<double>(bytes) / (1024.0 * 1024.0));
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -310,5 +455,6 @@ int main(int argc, char** argv) {
     if (cmd == "migrate") return cmd_migrate(args);
     if (cmd == "make-prefab") return cmd_make_prefab(args);
     if (cmd == "add-prefab") return cmd_add_prefab(args);
+    if (cmd == "build") return cmd_build(args);
     return usage();
 }

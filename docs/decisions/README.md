@@ -23,6 +23,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [025](ADR-025-editor-engine-boundary.md) | Editor/engine boundary: the engine owns the document, the editor sends commands (C API, JSON) | Accepted |
 | [026](ADR-026-play-mode.md) | Play mode: a runtime copy of the scene, built-in behaviours until scripting, edits refused while playing | Accepted |
 | [027](ADR-027-runtime-and-scripting-api.md) | Runtime module: `World`, frame order, fixed step, input actions, one `noor_rt_*` API for C# and Lua | Accepted |
+| [028](ADR-028-player-and-builds.md) | The `game` module shared by Play and `noor_player`; `noor_cli build` (player + project content + game.json) | Accepted |
 
 Still open from the register: 007 plugin ABI, 012 PBR model, 013 world coordinates,
 014–018, 020 branding.

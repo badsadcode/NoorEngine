@@ -1,3 +1,4 @@
+using Avalonia.Platform.Storage;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -251,6 +252,9 @@ public sealed class MainWindow : Window
             _closeConfirmed = true;
             Close();
         };
+        var buildGame = new MenuItem { Header = "_Build Game…", InputGesture = KeyGesture.Parse("Ctrl+B") };
+        ToolTip.SetTip(buildGame, "Makes a folder with your game as a program that runs without the editor.");
+        buildGame.Click += async (_, _) => await BuildGameInteractive();
         var exit = new MenuItem { Header = "E_xit", InputGesture = KeyGesture.Parse("Alt+F4") };
         exit.Click += (_, _) => Close();
 
@@ -281,7 +285,7 @@ public sealed class MainWindow : Window
             FontSize = 12,
             Items =
             {
-                new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), closeProject, exit } },
+                new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), buildGame, new Separator(), closeProject, exit } },
                 new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, new Separator(),
                                                          Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
                                                          Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
@@ -587,6 +591,55 @@ public sealed class MainWindow : Window
     {
         if (Doc.SelectedId is { } id) FrameEntity(id);
         else ViewportView?.Viewport.Frame(null);
+    }
+
+    // ---- File ▸ Build Game ----
+
+    private bool _building;
+
+    /// <summary>Builds the game into <paramref name="outputDir"/>, starting with the open scene.</summary>
+    public async Task<GameBuilder.Result> BuildGame(string outputDir)
+    {
+        if (_building) return new GameBuilder.Result(false, null, "A build is already running.");
+        _building = true;
+        try
+        {
+            return await GameBuilder.BuildAsync(Doc.ProjectRoot, outputDir, Doc.Scene.Open ? Doc.Scene.Path : null);
+        }
+        finally
+        {
+            _building = false;
+        }
+    }
+
+    private async Task BuildGameInteractive()
+    {
+        if (Doc.Playing) TogglePlay();
+        if (Doc.Scene.Modified)
+        {
+            var answer = await Dialogs.Ask(this, "Unsaved changes",
+                $"The build uses the files on disk. Save {Doc.Scene.Path} first?", "Save and build", "Build without saving", "Cancel");
+            if (answer == "Save and build") Doc.Save();
+            else if (answer != "Build without saving") return;
+        }
+        var parent = Directory.GetParent(Doc.ProjectRoot)?.FullName;
+        var start = parent != null ? await StorageProvider.TryGetFolderFromPathAsync(parent) : null;
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Where should the game go? (an empty folder, or an earlier build to replace)",
+            SuggestedStartLocation = start,
+        });
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } outputDir) return;
+        var result = await BuildGame(outputDir);
+        if (!result.Ok)
+        {
+            await Dialogs.Ask(this, "Build failed", result.Message, "OK");
+            return;
+        }
+        var choice = await Dialogs.Ask(this, "Game built",
+            $"{result.Message} in\n{outputDir}\n\nDouble-click the .exe to play. Copy the whole folder to share it.", "Play it", "Show folder", "OK");
+        if (choice == "Play it") Process.Start(new ProcessStartInfo(result.Executable!) { WorkingDirectory = outputDir, UseShellExecute = true });
+        else if (choice == "Show folder") Process.Start(new ProcessStartInfo("explorer.exe", $"\"{outputDir}\"") { UseShellExecute = true });
     }
 
     /// <summary>True if it is fine to drop the open scene (saved, or the user chose not to save).</summary>
