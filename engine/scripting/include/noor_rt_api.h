@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 2u /* 2: sound */
+#define NOOR_RT_API_VERSION 3u /* 2: sound; 3: HUD */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -90,6 +90,11 @@ typedef struct noor_rt_api {
     int32_t (*sound)(noor_rt_entity e, int32_t op);
     int32_t (*play_one_shot)(const char* clip, const noor_rt_vec3* position, float volume, const char* bus);
     void (*set_bus_volume)(const char* bus, float volume);
+
+    /* v3: HUD (UI units: the screen is 720 tall). color "#RRGGBB[AA]", anchor "top_left".."bottom_right"
+     * (NULL: white, top_left). 0 if the color or anchor is not understood (nothing is drawn). */
+    int32_t (*ui_text)(const char* text, float x, float y, float size, const char* color, const char* anchor);
+    int32_t (*ui_rect)(float x, float y, float w, float h, const char* color, const char* anchor);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

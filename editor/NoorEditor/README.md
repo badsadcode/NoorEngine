@@ -61,6 +61,8 @@ commands, so every edit is undoable and the editor holds no second copy of the s
   (`<Project>.exe`, `game.json`, `game/`) that runs without the editor; it starts with the scene
   you have open. Double-click the .exe, or zip the folder to share it. Lua and C# scripts, physics
   and sound all work (C# needs the .NET 10 runtime on the PC). Uses `noor_cli build` (ADR-028).
+- **HUD**: scripts draw text and rectangles over the game while playing (`noor.ui` in Lua, `Ui` in
+  C#). The first-person player shows a crosshair and a "Click to look around" hint.
 - **Code editor**: Edit ▸ Preferences ▸ Scripts picks the program the Inspector's **Open** button
   uses for scripts: Windows default, one found on your PC (VS Code, Visual Studio, Rider,
   Notepad++, Notepad) or any program (arguments may use `{file}`, `{line}`, `{folder}`).

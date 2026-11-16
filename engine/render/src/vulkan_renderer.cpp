@@ -425,6 +425,9 @@ Status Renderer::Impl::rebuild_swapchain() {
     if (auto status = ensure_mesh_pipeline(surface_format.format); !status) {
         return status;
     }
+    if (auto status = ensure_overlay(surface_format.format); !status) {
+        return std::unexpected(status.error());
+    }
 
     swapchain_dirty = false;
     ++swapchain_rebuilds;
@@ -534,6 +537,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, "Main pass", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_draws(frame.cmd, frame_desc);
+    if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
+        NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
+    }
     vkCmdEndRendering(frame.cmd);
     end_label(frame.cmd);
 
@@ -617,6 +623,7 @@ void Renderer::Impl::destroy() {
             destroy_buffer(capture.buffer);
         }
         destroy_mesh_pipeline();
+        destroy_overlay();
         destroy_swapchain_resources();
         if (swapchain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device, swapchain, nullptr);
@@ -675,6 +682,10 @@ void Renderer::request_capture() noexcept {
 }
 Result<std::optional<CapturedFrame>> Renderer::take_capture() { return impl_->take_capture(); }
 void Renderer::notify_resized() noexcept { impl_->resize_requested = true; }
+Status Renderer::set_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8) {
+    return impl_->upload_overlay_atlas(width, height, r8);
+}
+
 void Renderer::set_clear_color(const std::array<float, 4>& c) noexcept { impl_->desc.clear_color = c; }
 const GpuInfo& Renderer::gpu_info() const noexcept { return impl_->info; }
 const FrameStats& Renderer::last_frame_stats() const noexcept { return impl_->stats; }

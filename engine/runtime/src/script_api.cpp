@@ -184,4 +184,54 @@ math::Vec3 euler_from_quat(math::Quat q) {
     return {static_cast<float>(pitch * kRadToDeg), static_cast<float>(yaw * kRadToDeg), static_cast<float>(roll * kRadToDeg)};
 }
 
+std::optional<UiAnchor> parse_anchor(std::string_view name) {
+    static constexpr std::pair<std::string_view, UiAnchor> kNames[] = {
+        {"top_left", UiAnchor::TopLeft},       {"top", UiAnchor::Top},       {"top_right", UiAnchor::TopRight},
+        {"left", UiAnchor::Left},              {"center", UiAnchor::Center}, {"right", UiAnchor::Right},
+        {"bottom_left", UiAnchor::BottomLeft}, {"bottom", UiAnchor::Bottom}, {"bottom_right", UiAnchor::BottomRight},
+    };
+    for (const auto& [n, a] : kNames)
+        if (n == name) return a;
+    return std::nullopt;
+}
+
+std::optional<math::Vec4> parse_color(std::string_view hex) {
+    if ((hex.size() != 7 && hex.size() != 9) || hex[0] != '#') return std::nullopt;
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    float v[4] = {1, 1, 1, 1};
+    for (std::size_t i = 0; i * 2 + 1 < hex.size(); ++i) {
+        const int hi = nibble(hex[1 + i * 2]), lo = nibble(hex[2 + i * 2]);
+        if (hi < 0 || lo < 0) return std::nullopt;
+        v[i] = static_cast<float>(hi * 16 + lo) / 255.0f;
+    }
+    auto linear = [](float c) { return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f); };
+    return math::Vec4{linear(v[0]), linear(v[1]), linear(v[2]), v[3]};  // alpha stays linear
+}
+
+void ui_text(World& w, std::string text, math::Vec2 position, float size, math::Vec4 color, UiAnchor anchor) {
+    UiCommand c;
+    c.kind = UiCommand::Kind::Text;
+    c.anchor = anchor;
+    c.position = position;
+    c.text_size = std::clamp(size, 1.0f, 720.0f);
+    c.color = color;
+    c.text = std::move(text);
+    w.ui(std::move(c));
+}
+
+void ui_rect(World& w, math::Vec2 position, math::Vec2 size, math::Vec4 color, UiAnchor anchor) {
+    UiCommand c;
+    c.kind = UiCommand::Kind::Rect;
+    c.anchor = anchor;
+    c.position = position;
+    c.size = {std::max(0.0f, size.x), std::max(0.0f, size.y)};
+    c.color = color;
+    w.ui(std::move(c));
+}
+
 } // namespace noor::runtime::api

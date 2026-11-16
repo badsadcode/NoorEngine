@@ -2,6 +2,7 @@
 # --report (tests/data/player_project: a falling ball, a Lua-lifted box, a red box in view).
 #   -DPLAYER=<executable> [-DPROJECT=<project folder>]  (no PROJECT: a built game with game.json)
 #   -DWORK=<folder for the report>  [-DCSHARP=ON: also check the C# script (player_project_csharp)]
+#   -DHUD_VERTICES=<n>: the HUD's triangle vertices (6 per rectangle and per visible glyph)
 file(MAKE_DIRECTORY "${WORK}")
 set(report "${WORK}/report.json")
 file(REMOVE "${report}")
@@ -48,6 +49,18 @@ if(CSHARP)
     if(cs_y GREATER 2.55 OR cs_y LESS 2.45)
         message(FATAL_ERROR "the C# script didn't lift the box to 2.5 m (y ${cs_y})")
     endif()
+endif()
+# HUD: Rider.luau draws a green square at UI (10..70, 10..70) and "Score: 3" (7 visible glyphs).
+string(JSON hud_count GET "${json}" hud_vertices)
+string(JSON hr GET "${json}" ui_pixel_40_40 0)
+string(JSON hg GET "${json}" ui_pixel_40_40 1)
+string(JSON hb GET "${json}" ui_pixel_40_40 2)
+message(STATUS "HUD: ${hud_count} vertices, pixel at UI (40, 40) ${hr},${hg},${hb}")
+if(DEFINED HUD_VERTICES AND NOT hud_count EQUAL HUD_VERTICES)
+    message(FATAL_ERROR "the HUD has ${hud_count} vertices, expected ${HUD_VERTICES}")
+endif()
+if(hg LESS 200 OR hr GREATER 80 OR hb GREATER 80)
+    message(FATAL_ERROR "the HUD's green square isn't at UI (40, 40) (${hr},${hg},${hb})")
 endif()
 # Rendering through the scene's camera: the red box is in the middle of the picture.
 if(r LESS 150 OR g GREATER 90 OR b GREATER 90)

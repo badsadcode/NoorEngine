@@ -17,6 +17,7 @@
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
 #include "noor/game/game.h"
+#include "noor/game/hud.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/platform/input.h"
 #include "noor/platform/platform.h"
@@ -275,6 +276,10 @@ int run(const Options& o) {
                 exit_code = 1;
             } else {
                 noor::game::SceneRenderer scene_renderer(**renderer);
+                const noor::game::Hud hud;  // the HUD scripts draw (noor.ui / Ui), with the built-in font
+                if (auto s = (*renderer)->set_overlay_atlas(hud.atlas_width(), hud.atlas_height(), hud.atlas()); !s)
+                    NOOR_LOG_ERROR("Player", "HUD font: {}", s.error().describe());
+                std::vector<noor::render::OverlayVertex> overlay;
                 const auto asset_path = noor::game::registry_asset_path(*project, registry);
                 bool captured = false;
                 int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
@@ -321,7 +326,10 @@ int run(const Options& o) {
                     const auto draws = scene_renderer.draws(view);
                     const bool last_frame = o.frames && (*world)->frame_count() == o.frames;
                     if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture();
-                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), draws});
+                    overlay.clear();
+                    const auto pixels = (*renderer)->swapchain_size();
+                    hud.build((*world)->ui_commands(), static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
+                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), draws, overlay});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;
@@ -349,7 +357,12 @@ int run(const Options& o) {
                     if (last_capture) {
                         const auto c = last_capture->rgba_at(last_capture->width / 2, last_capture->height / 2);
                         report["center_pixel"] = {c[0], c[1], c[2]};
+                        // The pixel at UI position (40, 40) (the screen is 720 UI units tall), for HUD tests.
+                        const auto ui = static_cast<std::uint32_t>(40.0f * static_cast<float>(last_capture->height) / noor::runtime::kUiHeight);
+                        const auto p = last_capture->rgba_at(std::min(ui, last_capture->width - 1), std::min(ui, last_capture->height - 1));
+                        report["ui_pixel_40_40"] = {p[0], p[1], p[2]};
                     }
+                    report["hud_vertices"] = overlay.size();
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }

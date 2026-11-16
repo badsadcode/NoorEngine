@@ -20,8 +20,9 @@ add_executable(noor_unit_tests
     unit/test_csharp_host.cpp
     unit/test_audio.cpp
     unit/test_native_window.cpp
+    unit/test_hud.cpp
 )
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting doctest::doctest)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game doctest::doctest)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -120,13 +121,13 @@ add_test(NAME player.project
     COMMAND ${CMAKE_COMMAND}
         -DPLAYER=$<TARGET_FILE:noor_player>
         -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/player_project
-        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_project
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_project -DHUD_VERTICES=48
         -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
 set_tests_properties(player.project PROPERTIES LABELS "gpu;player" TIMEOUT 60)
 add_test(NAME player.built_game
     COMMAND ${CMAKE_COMMAND}
         "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_game/Player Test.exe"
-        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_game
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_game -DHUD_VERTICES=48
         -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
 set_tests_properties(player.built_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_game)
 
@@ -147,7 +148,7 @@ if(TARGET noor_scripting_managed)
     add_test(NAME player.built_csharp_game
         COMMAND ${CMAKE_COMMAND}
             "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_csharp_game/Player Test CSharp.exe"
-            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_csharp_game -DCSHARP=ON
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_csharp_game -DCSHARP=ON -DHUD_VERTICES=60
             -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
     set_tests_properties(player.built_csharp_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csharp_game)
 endif()

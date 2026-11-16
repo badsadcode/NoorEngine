@@ -584,6 +584,13 @@ int cmd_build(const std::vector<std::string>& a) {
             }
         }
     }
+    // Licences of what the engine builds into every game (the HUD font).
+    if (stdfs::exists(executable_dir() / "licenses", ec)) {
+        stdfs::create_directories(out / "licenses", ec);
+        for (stdfs::directory_iterator it(executable_dir() / "licenses", ec), end; !ec && it != end; it.increment(ec))
+            if (it->is_regular_file()) stdfs::copy_file(it->path(), out / "licenses" / it->path().filename(), stdfs::copy_options::overwrite_existing, ec);
+        ec.clear();
+    }
     stdfs::copy_file(player, out / exe, stdfs::copy_options::overwrite_existing, ec);
     if (ec) return report(Error{ErrorCode::IoError, std::format("can't copy the player: {}", ec.message())});
 

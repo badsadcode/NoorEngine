@@ -4,6 +4,31 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
 
+### 2026-11-16 — Milestone 4, part 7a: the HUD
+**Added**
+- Scripts draw a HUD every frame: Lua `noor.ui.text(text, x, y [, {size, color, anchor}])`,
+  `noor.ui.rect(x, y, w, h [, {color, anchor}])`; C# `Ui.Text(...)`, `Ui.Rect(...)`.
+  `noor_rt_api` **v3**. UI units (the screen is 720 tall), nine anchors, `#RRGGBB[AA]` colors;
+  wrong colors/anchors are script errors naming the problem.
+- `runtime::UiCommand` / `World::ui()` (cleared each frame), `api::parse_color` / `parse_anchor`.
+- Renderer: a 2D **overlay** pass over the 3D scene (`OverlayVertex`, `set_overlay_atlas`;
+  `vulkan_overlay.cpp`, `overlay.hlsl`): alpha blending, solid shapes, signed-distance-field text
+  (four samples per pixel, so small text keeps thin strokes).
+- `game::Hud`: bakes the built-in font's distance fields with **stb_truetype** (public domain/MIT,
+  pinned) at start (~1024×512 atlas), lays out text (UTF-8, line breaks, kerning, anchors) and
+  rectangles. Font: **Atkinson Hyperlegible** (SIL OFL 1.1, pinned, embedded in the engine);
+  Latin, Latin-1, Latin Extended-A (Polish…) and common symbols. Builds carry its licence in
+  `licenses/`.
+- The HUD shows in noor_player and in the editor's Play. The first-person player template draws a
+  crosshair while looking, and a "Click to look around" hint until then.
+
+**Tests:** 5 HUD unit tests (colors, anchors, placement maths, measuring, font coverage incl.
+Polish, vertices per glyph, Lua `noor.ui` incl. bad options); the player tests check the HUD's
+vertex count (48; 60 with a C# label) and that the pixel at UI (40, 40) is the script's green square.
+Small text was checked by eye in screenshots (14 units: fixed thin strokes by supersampling).
+
+**Not yet:** images/icons on the HUD, other fonts, clickable buttons, text wrapping.
+
 ### 2026-11-16 — Milestone 4, part 6b: C# scripts in built games
 **Added**
 - `scripting::start_dotnet`: noor_player starts .NET with hostfxr (the .NET runtime installed on

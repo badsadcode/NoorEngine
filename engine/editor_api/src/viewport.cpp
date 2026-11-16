@@ -22,6 +22,7 @@
 #include "noor/asset/json.h"
 #include "noor/foundation/log.h"
 #include "noor/game/geometry.h"
+#include "noor/game/hud.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
 
@@ -314,6 +315,8 @@ void render_thread_main(noor_viewport* vp) {
     };
     std::unordered_map<std::string, CachedAsset> assets;
     std::shared_ptr<const ed::RenderSnapshot> shown;
+    std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
+    std::vector<noor::render::OverlayVertex> overlay;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
     struct SceneDraw {
@@ -781,6 +784,18 @@ void render_thread_main(noor_viewport* vp) {
             frame.camera.fov_y = basis.fov_y;
             frame.camera.near_plane = view_near;
             frame.draws = frame_draws;
+            // The game's HUD while playing. The font atlas is baked the first time a HUD appears.
+            overlay.clear();
+            if (shown && !shown->ui.empty()) {
+                if (!hud) {
+                    hud.emplace();
+                    if (auto s = r.set_overlay_atlas(hud->atlas_width(), hud->atlas_height(), hud->atlas()); !s)
+                        NOOR_LOG_ERROR("Viewport", "HUD font: {}", s.error().describe());
+                }
+                const auto pixels = r.swapchain_size();
+                hud->build(shown->ui, static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
+            }
+            frame.overlay = overlay;
         } else {
             r.set_clear_color(demo_clear_color(pointer, size));
         }

@@ -217,3 +217,31 @@ public static unsafe class Input
     public static void CaptureMouse(bool capture = true) => Engine.A.CaptureMouse(capture ? 1 : 0);
     public static bool MouseCaptured => Engine.A.MouseCaptured() != 0;
 }
+
+/// <summary>
+/// The HUD: text and rectangles drawn over the game this frame (call every frame you want them
+/// shown). Positions and sizes in UI units: the screen is 720 tall, as wide as its shape gives.
+/// Anchor: top_left, top, top_right, left, center, right, bottom_left, bottom, bottom_right; it is
+/// both where the position is measured from and the point of the element placed there.
+/// Colors: "#RRGGBB" or "#RRGGBBAA".
+/// </summary>
+public static unsafe class Ui
+{
+    public static void Text(string text, float x, float y, float size = 24, string color = "#FFFFFF", string anchor = "top_left")
+    {
+        fixed (byte* t = Engine.Utf8(text))
+        fixed (byte* c = Engine.Utf8(color))
+        fixed (byte* a = Engine.Utf8(anchor))
+            if (Engine.A.UiText(t, x, y, size, c, a) == 0) throw Bad(color, anchor);
+    }
+
+    public static void Rect(float x, float y, float width, float height, string color = "#FFFFFF", string anchor = "top_left")
+    {
+        fixed (byte* c = Engine.Utf8(color))
+        fixed (byte* a = Engine.Utf8(anchor))
+            if (Engine.A.UiRect(x, y, width, height, c, a) == 0) throw Bad(color, anchor);
+    }
+
+    private static ArgumentException Bad(string color, string anchor) =>
+        new($"Ui: color \"{color}\" or anchor \"{anchor}\" not understood (colors: \"#RRGGBB\" or \"#RRGGBBAA\"; anchors: top_left … bottom_right)");
+}

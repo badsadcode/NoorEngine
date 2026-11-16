@@ -103,6 +103,26 @@ add_library(noor_third_party_miniaudio STATIC ${CMAKE_CURRENT_LIST_DIR}/../third
 target_include_directories(noor_third_party_miniaudio SYSTEM PUBLIC ${miniaudio_SOURCE_DIR})
 add_library(miniaudio::miniaudio ALIAS noor_third_party_miniaudio)
 
+# --- stb_truetype (public domain / MIT, single file): HUD text (engine/game) -------------
+FetchContent_Declare(stb_truetype
+    URL      https://raw.githubusercontent.com/nothings/stb/2a34860c372bc520e1521c6aa7e3e4b4138c76f8/stb_truetype.h
+    URL_HASH SHA256=2bd60d66b2af1e54b9ce6dc32393de79e66294137b94b44c92d0237099d3f4f3
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME stb_truetype.h)
+FetchContent_MakeAvailable(stb_truetype)
+add_library(noor_third_party_stb_truetype INTERFACE)
+target_include_directories(noor_third_party_stb_truetype SYSTEM INTERFACE ${stb_truetype_SOURCE_DIR})
+add_library(stb::truetype ALIAS noor_third_party_stb_truetype)
+
+# --- Atkinson Hyperlegible (SIL OFL 1.1): the default HUD font, embedded in the engine ------
+FetchContent_Declare(hud_font
+    URL      https://raw.githubusercontent.com/google/fonts/1b22086d13bdbbf5ec63d01a39a49246e4ac355f/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf
+    URL_HASH SHA256=7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME AtkinsonHyperlegible-Regular.ttf)
+FetchContent_MakeAvailable(hud_font)
+set(NOOR_HUD_FONT ${hud_font_SOURCE_DIR}/AtkinsonHyperlegible-Regular.ttf CACHE INTERNAL "The HUD font (OFL)")
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

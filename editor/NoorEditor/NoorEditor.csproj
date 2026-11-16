@@ -50,6 +50,8 @@
     <!-- ...and the managed half of scripting that games with C# scripts carry (managed/). -->
     <None Include="$(NoorToolsDir)managed\*" Link="managed\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NoorToolsDir)licenses\*" Link="licenses\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="NoorCheckNative" BeforeTargets="Build">

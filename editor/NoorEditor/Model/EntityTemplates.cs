@@ -96,6 +96,10 @@ public static class EntityTemplates
                 local look = p.look_sensitivity or 0.12
                 self.yaw -= noor.input.axis("look_x") * look
                 self.pitch = math.clamp(self.pitch - noor.input.axis("look_y") * look, -85, 85)
+                -- HUD: a small crosshair in the middle of the screen.
+                noor.ui.rect(0, 0, 4, 4, { color = "#FFFFFFC0", anchor = "center" })
+            else
+                noor.ui.text("Click to look around · Esc gives the mouse back", 0, -40, { size = 20, anchor = "bottom", color = "#FFFFFFB0" })
             end
             self.entity:set_euler(vector.create(0, self.yaw, 0))
             if self.camera then

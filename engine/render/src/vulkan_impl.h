@@ -157,6 +157,22 @@ struct Renderer::Impl {
     VkPipeline mesh_pipeline = VK_NULL_HANDLE;
     VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;
 
+    // Overlay (HUD): vulkan_overlay.cpp
+    struct Overlay {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkFormat color_format = VK_FORMAT_UNDEFINED;
+        VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+        VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+        VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;
+        VkImage atlas_image = VK_NULL_HANDLE;
+        VmaAllocation atlas_allocation = VK_NULL_HANDLE;
+        VkImageView atlas_view = VK_NULL_HANDLE;
+        std::array<GpuBuffer, kFramesInFlight> vertices{};
+        std::array<std::size_t, kFramesInFlight> capacity{};
+    } overlay;
+
     std::array<FrameSync, kFramesInFlight> frames{};
     std::uint32_t frame_index = 0;
 
@@ -194,6 +210,11 @@ struct Renderer::Impl {
     Status create_depth_buffer();
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
+    // vulkan_overlay.cpp
+    Status ensure_overlay(VkFormat color_format);
+    Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);
+    Status record_overlay(VkCommandBuffer cmd, std::span<const OverlayVertex> vertices);
+    void destroy_overlay();
     void destroy_mesh_pipeline();
     Result<GpuBuffer> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, bool readback);
     void destroy_buffer(GpuBuffer& buffer);

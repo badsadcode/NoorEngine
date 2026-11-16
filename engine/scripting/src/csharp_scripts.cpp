@@ -187,6 +187,34 @@ void rt_set_bus_volume(const char* bus, float volume) {
     if (auto* a = audio_of(); a && bus) a->set_bus_volume(bus, volume);
 }
 
+bool ui_style(const char* color, const char* anchor, math::Vec4& c, runtime::UiAnchor& a) {
+    if (color) {
+        const auto parsed = runtime::api::parse_color(color);
+        if (!parsed) return false;
+        c = *parsed;
+    }
+    if (anchor) {
+        const auto parsed = runtime::api::parse_anchor(anchor);
+        if (!parsed) return false;
+        a = *parsed;
+    }
+    return true;
+}
+int32_t rt_ui_text(const char* text, float x, float y, float size, const char* color, const char* anchor) {
+    math::Vec4 c{1, 1, 1, 1};
+    runtime::UiAnchor a = runtime::UiAnchor::TopLeft;
+    if (!t_world || !text || !ui_style(color, anchor, c, a)) return 0;
+    runtime::api::ui_text(*t_world, text, {x, y}, size, c, a);
+    return 1;
+}
+int32_t rt_ui_rect(float x, float y, float w, float h, const char* color, const char* anchor) {
+    math::Vec4 c{1, 1, 1, 1};
+    runtime::UiAnchor a = runtime::UiAnchor::TopLeft;
+    if (!t_world || !ui_style(color, anchor, c, a)) return 0;
+    runtime::api::ui_rect(*t_world, {x, y}, {w, h}, c, a);
+    return 1;
+}
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -196,6 +224,7 @@ const noor_rt_api kApi = {
     rt_input, rt_axis, rt_capture_mouse, rt_mouse_captured,
     rt_raycast, rt_push, rt_character_jump, rt_is_grounded,
     rt_sound, rt_play_one_shot, rt_set_bus_volume,
+    rt_ui_text, rt_ui_rect,
 };
 
 } // namespace

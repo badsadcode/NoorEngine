@@ -1,6 +1,6 @@
 # NoorEngine C# API
 
-Status: **Milestone 4, parts 4–5**. The same API as Lua ([LUA_API.md](LUA_API.md)), in C#.
+Status: **Milestone 4, parts 4–7**. The same API as Lua ([LUA_API.md](LUA_API.md)), in C#.
 Everything here is implemented and tested (`tests/unit/test_csharp_host.cpp` for the engine half,
 the editor smoke test with real scripts).
 
@@ -78,6 +78,25 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies |
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
 | `PlaySound()`, `StopSound()`, `IsPlaying` | The entity's `audio_source` ([components](LUA_API.md#sound-components)) |
+
+## `Ui` (the HUD)
+
+```csharp
+public override void OnUpdate(float dt)
+{
+    Ui.Text($"Score: {_score}", 20, 20, size: 32);
+    Ui.Rect(0, 0, 4, 4, "#FFFFFFC0", "center");  // a crosshair
+}
+```
+
+| | |
+|---|---|
+| `Ui.Text(text, x, y, size = 24, color = "#FFFFFF", anchor = "top_left")` | Text (line height `size`; `\n` for new lines) |
+| `Ui.Rect(x, y, width, height, color = "#FFFFFF", anchor = "top_left")` | A filled rectangle |
+
+Same rules as Lua ([The HUD](LUA_API.md#the-hud)): draw every frame; UI units (the screen is 720
+tall); anchors `top_left` … `bottom_right`; colors `"#RRGGBB[AA]"`. A wrong color or anchor throws
+`ArgumentException`.
 
 ## In built games
 

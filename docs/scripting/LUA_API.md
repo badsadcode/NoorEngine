@@ -1,6 +1,6 @@
 # NoorEngine Lua API (Luau)
 
-Status: **Milestone 4, parts 2–5**. The API grows each part;
+Status: **Milestone 4, parts 2–7**. The API grows each part;
 everything here is implemented and tested (`tests/unit/test_lua_scripts.cpp`).
 
 NoorEngine's Lua is **Luau** (ADR-009): Lua 5.1 syntax plus `continue`, compound assignment
@@ -64,6 +64,7 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
 | `noor.play_sound(clip [, position [, volume [, bus]]])` | Plays a sound once: `clip` is an asset id or a path like `"Assets/Audio/step.wav"`; with a `position` (vector) it's 3D, without it plays everywhere. Default bus `sfx`. Returns `true` if it started |
 | `noor.set_volume(bus, volume)` | Bus volume (`master`, `music`, `sfx`, `ui`, `voice`), `0` is silent, `1` normal |
+| `noor.ui.text(...)`, `noor.ui.rect(...)` | The HUD: see [The HUD](#the-hud) |
 | `noor.input.capture_mouse(on)` | Ask to capture the mouse for looking (`true`) or release it. Works once the player has clicked into the game view; **Esc** always releases it |
 | `noor.input.mouse_captured()` | Whether the mouse is captured now (then `look_x` / `look_y` are raw mouse movement) |
 
@@ -149,6 +150,37 @@ Drag a `.wav`, `.flac` or `.mp3` into `Assets/`, then **Add to scene** in the Co
 Spatial sounds get quieter with distance (full volume inside `min_distance`, no further fading
 past `max_distance`) and pan with the listener's orientation. Without an `audio_listener` the
 first `camera` hears.
+
+## The HUD
+
+Text and rectangles drawn over the game. Draw them **every frame** you want them shown (in
+`on_update`); what isn't drawn this frame is gone.
+
+```lua
+function Hud:on_update(dt)
+    noor.ui.text("Score: " .. self.score, 20, 20, { size = 32 })
+    noor.ui.rect(0, 0, 4, 4, { color = "#FFFFFFC0", anchor = "center" })        -- a crosshair
+    noor.ui.rect(20, -20, 200 * self.health, 12, { color = "#E04040", anchor = "bottom_left" })
+end
+```
+
+| | |
+|---|---|
+| `noor.ui.text(text, x, y [, {size, color, anchor}])` | Text; `size` is the line height (default 24); `\n` starts a new line |
+| `noor.ui.rect(x, y, w, h [, {color, anchor}])` | A filled rectangle |
+
+**UI units:** the screen is always **720 units tall** (as wide as its shape gives: 1280 on a 16:9
+screen), so a HUD looks the same at any window size. +x is right, +y is down.
+**Anchor** (`top_left` default, `top`, `top_right`, `left`, `center`, `right`, `bottom_left`,
+`bottom`, `bottom_right`) is both the point of the screen `x, y` is measured from and the point of
+the element placed there: `anchor = "center"` at `0, 0` centres it; `bottom_right` at `-20, -20`
+puts it 20 units in from the corner. Text lines align the same way (left, centred, right).
+**Colors:** `"#RRGGBB"` or `"#RRGGBBAA"` (alpha: `80` is half see-through). A wrong color or
+anchor is a script error that names the problem.
+
+The built-in font is Atkinson Hyperlegible (SIL OFL 1.1), sharp at any size, with Latin, Latin-1
+and Latin Extended-A (Polish, Czech, German, French…) plus € ° – — … ‘ ’ “ ” •. Other characters
+show as `?`. Everything is drawn over the scene in the order you draw it (later on top).
 
 ## Not yet
 Pause and fades, spawning prefabs, timers and

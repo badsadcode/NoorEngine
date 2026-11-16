@@ -76,9 +76,19 @@ struct DrawItem {
     bool overlay = false;
 };
 
+// The 2D overlay (HUD), drawn over the 3D scene with alpha blending. Triangle-list vertices in
+// framebuffer pixels (origin top-left). uv.x < 0: a solid vertex (color only); otherwise uv samples
+// the overlay atlas as a signed distance field (0.5 = edge), e.g. text.
+struct OverlayVertex {
+    math::Vec2 position;
+    math::Vec2 uv;
+    math::Vec4 color;  // linear RGB, straight alpha
+};
+
 struct FrameDesc {
     Camera camera;
     std::span<const DrawItem> draws;
+    std::span<const OverlayVertex> overlay;
 };
 
 struct FrameStats {
@@ -132,6 +142,10 @@ public:
     void notify_resized() noexcept;
 
     void set_clear_color(const std::array<float, 4>& linear_rgba) noexcept;
+
+    // The overlay's texture: one R8 image (width x height bytes, row by row), e.g. a font's
+    // distance-field glyphs. Replacing it waits for the GPU; do it at start, not every frame.
+    [[nodiscard]] Status set_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);
 
     [[nodiscard]] const GpuInfo& gpu_info() const noexcept;
     [[nodiscard]] const FrameStats& last_frame_stats() const noexcept;

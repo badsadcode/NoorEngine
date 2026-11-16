@@ -153,6 +153,37 @@ struct LuaScriptSystem::Impl {
         const float* v = luaL_checkvector(L, idx);
         return {v[0], v[1], v[2]};
     }
+    // The optional table of noor.ui.* calls: size, color ("#RRGGBB[AA]"), anchor ("top_left", ...).
+    struct UiOptions {
+        float size = 24.0f;
+        math::Vec4 color{1, 1, 1, 1};
+        runtime::UiAnchor anchor = runtime::UiAnchor::TopLeft;
+    };
+    static UiOptions ui_options(lua_State* L, int idx) {
+        UiOptions o;
+        if (lua_isnoneornil(L, idx)) return o;
+        luaL_checktype(L, idx, LUA_TTABLE);
+        lua_getfield(L, idx, "size");
+        if (!lua_isnil(L, -1)) o.size = static_cast<float>(luaL_checknumber(L, -1));
+        lua_pop(L, 1);
+        lua_getfield(L, idx, "color");
+        if (!lua_isnil(L, -1)) {
+            const char* c = luaL_checkstring(L, -1);
+            const auto parsed = runtime::api::parse_color(c);
+            if (!parsed) luaL_error(L, "color '%s': use \"#RRGGBB\" or \"#RRGGBBAA\"", c);
+            o.color = *parsed;
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, idx, "anchor");
+        if (!lua_isnil(L, -1)) {
+            const char* a = luaL_checkstring(L, -1);
+            const auto parsed = runtime::api::parse_anchor(a);
+            if (!parsed) luaL_error(L, "anchor '%s': top_left, top, top_right, left, center, right, bottom_left, bottom or bottom_right", a);
+            o.anchor = *parsed;
+        }
+        lua_pop(L, 1);
+        return o;
+    }
     static int push_vec(lua_State* L, const std::optional<math::Vec3>& v) {
         if (v) lua_pushvector(L, v->x, v->y, v->z);
         else lua_pushnil(L);
@@ -396,8 +427,31 @@ struct LuaScriptSystem::Impl {
              }},
             {nullptr, nullptr},
         };
+        // noor.ui.text(text, x, y [, {size=24, color="#FFFFFF", anchor="top_left"}])
+        // noor.ui.rect(x, y, w, h [, {color="#FFFFFF", anchor="top_left"}])
+        static const luaL_Reg ui_functions[] = {
+            {"text", [](lua_State* L) {
+                 std::string text = luaL_checkstring(L, 1);
+                 const math::Vec2 at{static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3))};
+                 const auto o = ui_options(L, 4);
+                 api::ui_text(world_of(L), std::move(text), at, o.size, o.color, o.anchor);
+                 return 0;
+             }},
+            {"rect", [](lua_State* L) {
+                 const math::Vec2 at{static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2))};
+                 const math::Vec2 size{static_cast<float>(luaL_checknumber(L, 3)), static_cast<float>(luaL_checknumber(L, 4))};
+                 const auto o = ui_options(L, 5);
+                 api::ui_rect(world_of(L), at, size, o.color, o.anchor);
+                 return 0;
+             }},
+            {nullptr, nullptr},
+        };
         lua_newtable(L);
         luaL_register(L, nullptr, noor_functions);
+        lua_newtable(L);
+        luaL_register(L, nullptr, ui_functions);
+        lua_setreadonly(L, -1, true);
+        lua_setfield(L, -2, "ui");
         lua_newtable(L);
         luaL_register(L, nullptr, input_functions);
         lua_setreadonly(L, -1, true);

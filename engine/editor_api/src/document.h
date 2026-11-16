@@ -56,6 +56,8 @@ struct RenderSnapshot {
     std::vector<Primitive> primitives;
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
+    // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
+    std::vector<runtime::UiCommand> ui;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.

@@ -59,6 +59,14 @@ void set_component(World& w, const Guid& e, std::string_view type, asset::Json v
 void capture_mouse(World& w, bool capture);
 [[nodiscard]] bool mouse_captured(World& w);
 
+// ---- HUD (UI units: the screen is 720 tall; see UiCommand) ----
+// "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right".
+[[nodiscard]] std::optional<UiAnchor> parse_anchor(std::string_view name);
+// "#RRGGBB" or "#RRGGBBAA" (sRGB, as colour pickers show it) -> linear RGBA.
+[[nodiscard]] std::optional<math::Vec4> parse_color(std::string_view hex);
+void ui_text(World& w, std::string text, math::Vec2 position, float size, math::Vec4 color, UiAnchor anchor);
+void ui_rect(World& w, math::Vec2 position, math::Vec2 size, math::Vec4 color, UiAnchor anchor);
+
 // ---- Euler helpers (shared with the editor's convention) ----
 [[nodiscard]] math::Quat quat_from_euler(math::Vec3 degrees);
 [[nodiscard]] math::Vec3 euler_from_quat(math::Quat q);

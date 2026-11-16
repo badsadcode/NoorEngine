@@ -6,7 +6,12 @@ set_target_properties(noor_cli PROPERTIES FOLDER "Tools")
 # `noor_cli build` packs noor_player.exe and, for C# scripts, the managed half of scripting: keep
 # current copies next to noor_cli. A separate target that runs every build (the copies are
 # "if different"), so a rebuilt player is copied even when noor_cli itself didn't change.
-set(payload_commands COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:noor_player> $<TARGET_FILE_DIR:noor_cli>)
+set(payload_commands
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:noor_player> $<TARGET_FILE_DIR:noor_cli>
+    # The built-in HUD font's licence (SIL OFL 1.1): games carry it in licenses/.
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:noor_cli>/licenses
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/third_party/fonts/OFL.txt
+            $<TARGET_FILE_DIR:noor_cli>/licenses/AtkinsonHyperlegible-OFL.txt)
 if(TARGET noor_scripting_managed)
     list(APPEND payload_commands
         COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${NOOR_MANAGED_DIR} $<TARGET_FILE_DIR:noor_cli>/managed)

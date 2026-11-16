@@ -33,6 +33,23 @@ struct Event {
     Guid other;   // the other entity involved
 };
 
+// A HUD element a script draws this frame (noor.ui.* in Lua, Ui.* in C#). Positions and sizes are
+// in UI units: the screen is kUiHeight (720) units tall and as many wide as its shape gives, so a
+// HUD looks the same at any window size. `anchor` is both the point of the screen the position is
+// measured from and the point of the element that goes there (Center: centred on screen centre +
+// position; BottomRight with position (-20, -20): 20 units in from the corner). +x right, +y down.
+enum class UiAnchor : std::uint8_t { TopLeft, Top, TopRight, Left, Center, Right, BottomLeft, Bottom, BottomRight };
+inline constexpr float kUiHeight = 720.0f;
+struct UiCommand {
+    enum class Kind : std::uint8_t { Rect, Text } kind = Kind::Rect;
+    UiAnchor anchor = UiAnchor::TopLeft;
+    math::Vec2 position{0, 0};
+    math::Vec2 size{0, 0};          // Rect
+    float text_size = 24.0f;        // Text: line height
+    math::Vec4 color{1, 1, 1, 1};   // linear RGB, straight alpha
+    std::string text;               // UTF-8; '\n' starts a new line
+};
+
 class System {
 public:
     virtual ~System() = default;
@@ -79,6 +96,15 @@ public:
     // How far between the last and next fixed step (0..1), for interpolating fixed-step state.
     [[nodiscard]] double fixed_alpha() const noexcept { return accumulator_ / fixed_dt; }
 
+    // ---- HUD ----
+    // What scripts drew on the HUD this frame, in order (later on top). Cleared at frame start, so
+    // scripts draw every frame they want something shown (immediate mode).
+    void ui(UiCommand command) {
+        if (ui_.size() < kMaxUiCommands) ui_.push_back(std::move(command));
+    }
+    [[nodiscard]] const std::vector<UiCommand>& ui_commands() const noexcept { return ui_; }
+    static constexpr std::size_t kMaxUiCommands = 20000;  // a runaway loop can't eat the memory
+
     // ---- Drawing between fixed steps ----
     // Systems that move entities in fixed steps (physics) say where to *draw* them this frame:
     // blended between their last two steps by fixed_alpha(), so motion is smooth whatever the frame
@@ -122,6 +148,7 @@ private:
     std::vector<Event> events_;
     std::optional<bool> mouse_capture_request_;
     std::unordered_map<Guid, math::Mat4> render_poses_;
+    std::vector<UiCommand> ui_;
     double time_ = 0.0;
     double accumulator_ = 0.0;
     std::uint64_t frames_ = 0;

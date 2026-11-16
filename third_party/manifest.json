@@ -132,6 +132,26 @@
       "linkage": "static (single file)",
       "shipped": true,
       "purpose": "Audio: devices, decoding (WAV/FLAC/MP3), mixing, buses, 3D sound (engine/audio, ADR-011)"
+    },
+    {
+      "name": "stb_truetype",
+      "version": "1.26",
+      "source": "https://github.com/nothings/stb",
+      "commit": "2a34860c372bc520e1521c6aa7e3e4b4138c76f8",
+      "license": "Public domain or MIT (dual)",
+      "linkage": "static (single header)",
+      "shipped": true,
+      "purpose": "HUD text: TrueType parsing and signed-distance-field glyphs (engine/game)"
+    },
+    {
+      "name": "Atkinson Hyperlegible Regular",
+      "version": "google/fonts 2021-05-07",
+      "source": "https://github.com/google/fonts/tree/main/ofl/atkinsonhyperlegible",
+      "commit": "1b22086d13bdbbf5ec63d01a39a49246e4ac355f",
+      "license": "SIL OFL 1.1 (Copyright 2020 Braille Institute of America, Inc.)",
+      "linkage": "embedded font data",
+      "shipped": true,
+      "purpose": "The default HUD font, built into the engine; licence text in third_party/fonts/OFL.txt"
     }
   ]
 }
