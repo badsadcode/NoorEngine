@@ -279,7 +279,7 @@ int run(const Options& o) {
                 NOOR_LOG_FATAL("Player", "{}", world.error().describe());
                 exit_code = 1;
             } else {
-                noor::game::SceneRenderer scene_renderer(**renderer);
+                noor::game::SceneRenderer scene_renderer(**renderer, project->root() / ".noor" / "cache" / "textures");
                 const noor::game::Hud hud;  // the HUD scripts draw (noor.ui / Ui), with the built-in font
                 if (auto s = (*renderer)->set_overlay_atlas(hud.atlas_width(), hud.atlas_height(), hud.atlas()); !s)
                     NOOR_LOG_ERROR("Player", "HUD font: {}", s.error().describe());

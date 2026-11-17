@@ -4,6 +4,8 @@ The golden-image render tests (`tests/render_golden.cmake`, Milestone 5): each s
 noor_player and compared with `tests/golden/<scene>.png` (320x180) by `noor_image_compare`.
 
 - `Daylight`: the default sun and sky, EV 14, Khronos PBR Neutral.
+- `Textured`: a checker texture on the floor (repeated 15x) and a box, a brick normal map on a
+  wall and a ball, a shiny metal ball; the sun from the left (Milestone 5, part 2).
 - `Sunset`: a warm low sun (20,000 lux from the right) under a dim sky (1,200 nits), EV 12, the
   ACES fit.
 

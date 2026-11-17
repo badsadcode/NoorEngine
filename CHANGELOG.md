@@ -4,6 +4,40 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 2: textures
+**Added**
+- **Texture assets** (ADR-029): .png (8/16-bit), .jpg, .tga, .bmp, .hdr under `Assets/` get a
+  `.noormeta` with import settings (`kind` color/data/normal/hdr, `normal_convention`, `mips`,
+  `max_size`), guessed from the file name. `asset::import_texture`, `load_texture`,
+  `guess_texture_settings` (`noor/asset/texture.h`).
+- Import: sRGB-to-linear for colour, DirectX green flip, halving to `max_size`, mipmaps averaged
+  in linear light, renormalised normal-map mips; RGBA8 sRGB / RGBA8 / RGBA16F. Cached in
+  `<project>/.noor/cache/textures` (content hash + settings + importer version).
+- Renderer: `create_texture` / `destroy_texture` / `texture_memory`, a **bindless texture table**
+  (4096 slots, descriptor indexing; built-in white, flat normal and a missing-texture checker),
+  one trilinear 8x anisotropic sampler. `DrawItem::surface` (`render::Surface`: base colour and
+  normal textures, roughness, metallic, normal strength, UV scale/offset). The camera matrix
+  moved into the frame uniforms; push constants carry the surface.
+- Shader: base colour texture, tangent-space **normal maps** (OpenGL convention), roughness and
+  metallic per draw.
+- `primitive` components: `base_color_map`, `normal_map`, `normal_scale`, `roughness`,
+  `metallic`, `uv_scale`. `game::TextureLibrary` loads them for noor_player and the editor.
+- Editor: textures in the Content Browser; **Add to scene** on a texture makes a cube wearing it.
+- `noor_cli texture <files>`: how the engine reads each image (kind, size, mips, GPU memory).
+- `.noor/` (project derived data) is ignored by Git everywhere.
+
+**Fixed (found by the editor smoke test before release):** closing a viewport that had shown a
+texture crashed the editor (textures were released after their renderer).
+
+**Tests:** 7 texture unit tests (name guessing, linear-light mips, data vs colour, normal map
+renormalisation and DirectX flip, HDR to 16-bit float, broken files, cache and registry);
+`render.golden_Textured` (checker floor with mips, a brick normal map on a wall and a ball, a
+metal ball); an editor smoke check for texture assets. Checked on a real PBR library: every
+albedo, normal, roughness, AO, height, depth, curvature, cavity and ORM map got the right kind.
+
+**Not yet:** compression (part 7), GLB textures (part 3, with materials), .exr (part 5), hot
+reload of changed textures, an import-settings panel in the editor.
+
 ### 2026-11-17 — Milestone 5, part 1: the frame foundation
 **Added**
 - The scene is lit into a **16-bit float HDR image** in physical units, then **exposed and

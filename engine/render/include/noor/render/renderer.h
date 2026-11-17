@@ -63,6 +63,44 @@ struct MeshHandle {
     [[nodiscard]] bool valid() const noexcept { return id != 0; }
 };
 
+// ---- Textures (ADR-029) ------------------------------------------------------------------
+
+enum class TextureFormat : std::uint8_t {
+    Rgba8Srgb,    // colour: sampled as linear (the GPU decodes sRGB)
+    Rgba8Unorm,   // data and normal maps: sampled as stored
+    Rgba16Float,  // light values (HDR)
+};
+
+struct TextureMipData {
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::span<const std::uint8_t> bytes;  // tightly packed rows
+};
+
+struct TextureDesc {
+    TextureFormat format = TextureFormat::Rgba8Srgb;
+    std::span<const TextureMipData> mips;  // full size first, each next one half (rounded down, at least 1)
+    std::string_view debug_name;
+};
+
+// A texture in GPU memory. Its id is its slot in the shader's texture table; 0 is never a
+// texture you created (it is the built-in white).
+struct TextureHandle {
+    std::uint32_t id = 0;
+    [[nodiscard]] bool valid() const noexcept { return id != 0; }
+};
+
+// How a draw's surface looks until materials (part 3): textures and a few numbers.
+struct Surface {
+    TextureHandle base_color_texture;  // multiplies the colour; none = white
+    TextureHandle normal_texture;      // tangent-space normal map (OpenGL convention); none = flat
+    float roughness = 0.5f;            // 0 mirror .. 1 matte
+    float metallic = 0.0f;
+    float normal_scale = 1.0f;         // strength of the normal map
+    math::Vec2 uv_scale{1, 1};         // texture repeats
+    math::Vec2 uv_offset{0, 0};
+};
+
 // ---- Frames -----------------------------------------------------------------------------
 
 struct Camera {
@@ -105,6 +143,7 @@ struct DrawItem {
     // Overlay items (editor gizmos) are drawn after tonemapping, in front of everything, in their
     // own display colours (not lit, not exposed). They still depth-test against each other.
     bool overlay = false;
+    Surface surface;
 };
 
 // The 2D overlay (HUD), drawn over the 3D scene with alpha blending. Triangle-list vertices in
@@ -164,6 +203,15 @@ public:
     // asynchronous streaming comes with the asset system).
     [[nodiscard]] Result<MeshHandle> create_mesh(const MeshData& data);
     void destroy_mesh(MeshHandle mesh);
+
+    // Uploads a texture (all its mips) and gives it a slot in the shader's texture table. Blocks
+    // until the upload finishes. Fails with a clear message when the table is full (4096).
+    [[nodiscard]] Result<TextureHandle> create_texture(const TextureDesc& desc);
+    void destroy_texture(TextureHandle texture);
+    // GPU memory held by textures created with create_texture.
+    [[nodiscard]] std::uint64_t texture_memory() const noexcept;
+    // A magenta-and-black checker for textures that couldn't be loaded (visible on purpose).
+    [[nodiscard]] TextureHandle missing_texture() const noexcept;
 
     // Draws `frame.draws` from `frame.camera`, lit by `frame.lighting`, then the gizmos and the HUD.
     [[nodiscard]] Result<FrameResult> render_frame(const FrameDesc& frame);

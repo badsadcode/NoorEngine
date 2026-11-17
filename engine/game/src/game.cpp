@@ -158,6 +158,18 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             const auto& p = e.components["primitive"];
             const std::string shape = p.value("shape", std::string("box"));
             SceneView::Primitive prim{SceneView::Primitive::Shape::Box, world, 0.5f, 2.0f, color_of(p), e.id};
+            if (asset_path) {
+                for (const auto& [field, out] : {std::pair{"base_color_map", &prim.base_color_map}, std::pair{"normal_map", &prim.normal_map}}) {
+                    if (const auto guid = asset::guid_field(p, field))
+                        if (auto path = asset_path(*guid)) *out = std::move(*path);
+                }
+            }
+            prim.roughness = std::clamp(number(p, "roughness", 0.5f), 0.0f, 1.0f);
+            prim.metallic = std::clamp(number(p, "metallic", 0.0f), 0.0f, 1.0f);
+            prim.normal_scale = number(p, "normal_scale", 1.0f);
+            if (p.contains("uv_scale") && p["uv_scale"].is_array() && p["uv_scale"].size() == 2 && p["uv_scale"][0].is_number() &&
+                p["uv_scale"][1].is_number())
+                prim.uv_scale = {p["uv_scale"][0].get<float>(), p["uv_scale"][1].get<float>()};
             if (shape == "sphere") {
                 prim.shape = SceneView::Primitive::Shape::Sphere;
                 const float r = number(p, "radius", 0.5f);

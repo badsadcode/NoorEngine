@@ -175,6 +175,26 @@ internal static class SmokeTest
         Check(sun?.Components["light"]?["type"]?.GetValue<string>() == "directional" && sunPitch < -30,
               $"Create ▸ Sun: a directional light tilted down ({sunPitch:0}°)");
         if (sunId != null) doc.Undo();
+
+        // Milestone 5, part 2: a texture in Assets/ is imported, and Add to scene puts it on a cube.
+        var texDir = Path.Combine(doc.ProjectRoot, "Assets", "Textures");
+        Directory.CreateDirectory(texDir);
+        File.Copy(Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Textures", "checker_color.png"),
+                  Path.Combine(texDir, "checker_color.png"), overwrite: true);
+        doc.RefreshAssets(rescan: true);
+        var texture = doc.Assets.FirstOrDefault(a => a.Path.EndsWith("checker_color.png", StringComparison.Ordinal));
+        Check(texture is { Importer: "texture", Kind: "Texture" }, $"textures: a PNG in Assets is a texture asset ({texture?.Importer})");
+        if (texture != null)
+        {
+            var before = doc.Scene.Entities.Count;
+            window.AddAsset(texture);
+            var cube = doc.Selected;
+            Check(doc.Scene.Entities.Count == before + 1 && cube?.Components["primitive"]?["base_color_map"]?.GetValue<string>() == texture.Guid,
+                  "textures: Add to scene makes a cube wearing the texture");
+            await Task.Delay(500);  // drawn a few times (the end of the test checks Vulkan validation)
+            Shot(window, "editor_17_texture.png");
+            doc.Undo();
+        }
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.

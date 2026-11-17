@@ -53,7 +53,8 @@ void Renderer::Impl::destroy_hdr_target() {
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+                                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layout_info.bindingCount = 1;
     layout_info.pBindings = &binding;
@@ -95,7 +96,11 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     const math::Vec3 sun = l.sun_color * (l.sun_illuminance * exposure);
     const math::Vec3 sky = l.sky_color * (l.sky_luminance * exposure);
     const math::Vec3 ground = l.ground_color * (l.sky_luminance * exposure);
-    const FrameUniforms u{{eye.x, eye.y, eye.z, 1},
+    const float aspect = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
+    const math::Mat4 clip_from_world =
+        math::perspective_reverse_z(frame.camera.fov_y, aspect, frame.camera.near_plane) * frame.camera.view;
+    const FrameUniforms u{clip_from_world,
+                          {eye.x, eye.y, eye.z, 1},
                           {to_sun.x, to_sun.y, to_sun.z, 0},
                           {sun.x, sun.y, sun.z, 0},
                           {sky.x, sky.y, sky.z, 0},

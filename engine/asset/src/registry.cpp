@@ -1,4 +1,5 @@
 #include "noor/asset/registry.h"
+#include "noor/asset/texture.h"
 
 #include "noor/asset/json.h"
 #include "noor/foundation/file_io.h"
@@ -92,7 +93,7 @@ std::optional<Guid> prefab_guid(const stdfs::path& source) {
 } // namespace
 
 bool AssetRegistry::is_importable(const stdfs::path& path) {
-    if (is_prefab(path) || is_audio(path)) return true;
+    if (is_prefab(path) || is_audio(path) || is_texture_file(path)) return true;
     const std::string ext = lower_extension(path);
     if (ext != ".glb" && ext != ".gltf") return false;
     static const std::regex lod(R"(\.lod[0-9]+$)", std::regex::icase);
@@ -189,15 +190,17 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                 }
                 const bool prefab = is_prefab(source);
                 const bool audio = is_audio(source);
-                const auto from_manifest = prefab || audio ? std::nullopt : interchange_guid(source);
+                const bool texture = is_texture_file(source);
+                const auto from_manifest = prefab || audio || texture ? std::nullopt : interchange_guid(source);
                 const auto embedded = prefab ? prefab_guid(source) : from_manifest;
                 meta.json = Json::object();
                 meta.json["noor_meta"] = kMetaFormat;
                 meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
-                meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : "gltf";
+                meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : texture ? "texture" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
-                meta.json["settings"] = Json::object();
+                // Textures: the first guess at their settings, from the name (ADR-029); edit them later.
+                meta.json["settings"] = texture ? guess_texture_settings(source).to_json() : Json::object();
                 ++report.created;
                 write = true;
             }

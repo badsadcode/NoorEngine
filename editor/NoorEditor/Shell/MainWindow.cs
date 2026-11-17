@@ -613,6 +613,19 @@ public sealed class MainWindow : Window
             _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
             return;
         }
+        if (asset.Importer == "texture")
+        {
+            // A 1 m test cube wearing the texture: as its colour, or as its normal map when the name
+            // says so (the engine reads the real kind from the .noormeta; this only picks the slot).
+            var normal = System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileNameWithoutExtension(asset.Path),
+                                                                       @"(^|[_\-. ])(normal|nrm|nor|norm)([_\-. ]|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var primitive = EntityTemplates.Box(color: normal ? "#B8B0A8" : "#FFFFFF");
+            primitive[normal ? "normal_map" : "base_color_map"] = asset.Guid;
+            if (Doc.Create(Path.GetFileNameWithoutExtension(asset.Path), new System.Text.Json.Nodes.JsonObject { ["primitive"] = primitive },
+                           new Vec3(0, 0.5, 0)) is { } tid)
+                FrameEntity(tid);
+            return;
+        }
         if (asset.Importer == "audio")
         {
             // A sound emitter at the origin, playing its clip when play starts.

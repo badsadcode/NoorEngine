@@ -5,25 +5,33 @@
 //          little shading, straight into the sRGB screen.
 // Conventions (ADR-022): column-major matrices, mul(M, v); colours are linear.
 //
-// Surfaces have no materials yet (Milestone 5, part 3): the colour is the vertex colour, or the
-// draw's tint, and every surface is a rough dielectric (roughness 0.5, metallic 0).
+// Surfaces have no materials yet (Milestone 5, part 3): the colour is the vertex colour (or the
+// draw's tint) times an optional base colour texture, with an optional normal map, roughness and
+// metallic from the draw (render::Surface). Textures come from the bindless table (set 1).
 
 [[vk::constant_id(0)]] const bool kDisplay = false;
 
 struct PushConstants
 {
-    float4x4 clip_from_object;  // projection * view * model
-    float4 world_row0;          // the model matrix's top three rows (3x4: rotation/scale + translation)
+    float4 world_row0;  // the model matrix's top three rows (3x4: rotation/scale + translation)
     float4 world_row1;
     float4 world_row2;
-    float4 tint;                // rgb linear colour, a = how much of it replaces the vertex colour
+    float4 tint;        // rgb linear colour, a = how much of it replaces the vertex colour
+    uint4 textures;     // x: base colour slot, y: normal map slot
+    float4 surface;     // x: roughness, y: metallic, z: normal map strength
+    float4 uv;          // xy: scale, zw: offset
 };
 [[vk::push_constant]] PushConstants pc;
+
+// The bindless texture table (ADR-012): every texture, indexed by slot; one shared sampler.
+[[vk::binding(0, 1)]] Texture2D<float4> textures[];
+[[vk::binding(1, 1)]] SamplerState texture_sampler;
 
 // Per frame (set 0, binding 0). Radiances are already multiplied by the exposure.
 struct FrameUniforms
 {
-    float4 camera_position;  // xyz, world
+    float4x4 clip_from_world;  // projection * view
+    float4 camera_position;    // xyz, world
     float4 to_sun;           // xyz: unit vector towards the sun
     float4 sun_radiance;     // rgb: sun colour * illuminance (lux) * exposure
     float4 sky_radiance;     // rgb: sky colour * luminance (nits) * exposure
@@ -58,13 +66,13 @@ float3 to_world_vector(float3 v)
 VertexOutput VSMain(VertexInput input)
 {
     VertexOutput output;
-    output.position = mul(pc.clip_from_object, float4(input.position, 1.0));
     const float4 p = float4(input.position, 1.0);
     output.world_position = float3(dot(pc.world_row0, p), dot(pc.world_row1, p), dot(pc.world_row2, p));
+    output.position = mul(frame.clip_from_world, float4(output.world_position, 1.0));
     output.normal = to_world_vector(input.normal);  // rotation/uniform scale; non-uniform scale later
     output.tangent = float4(to_world_vector(input.tangent.xyz), input.tangent.w);
     output.color = lerp(input.color, pc.tint.rgb, pc.tint.a);
-    output.uv = input.uv;
+    output.uv = input.uv * pc.uv.xy + pc.uv.zw;
     return output;
 }
 
@@ -129,19 +137,30 @@ float3 hemisphere(float up)
     return lerp(frame.ground_radiance.rgb, frame.sky_radiance.rgb, up * 0.5 + 0.5);
 }
 
+// The normal map (tangent space, OpenGL convention: +Y up the texture) turned into a world normal.
+float3 apply_normal_map(float3 n, float4 tangent, float2 uv)
+{
+    const float3 sampled = textures[pc.textures.y].Sample(texture_sampler, uv).xyz * 2.0 - 1.0;
+    const float3 t = normalize(tangent.xyz - n * dot(n, tangent.xyz));
+    const float3 b = cross(n, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
+    const float3 m = float3(sampled.xy * pc.surface.z, sampled.z);
+    return normalize(t * m.x + b * m.y + n * m.z);
+}
+
 float4 PSMain(VertexOutput input) : SV_Target
 {
-    const float3 n = normalize(input.normal);
+    float3 n = normalize(input.normal);
     if (kDisplay)
     {
         // Gizmos: readable shapes in their own colours, a fixed light from above-front.
         const float diffuse = saturate(dot(n, normalize(float3(0.4, 0.8, 0.45))));
         return float4(input.color * (0.55 + 0.45 * diffuse), 1.0);
     }
+    if (pc.textures.y != 1u) n = apply_normal_map(n, input.tangent, input.uv);  // slot 1: flat, nothing to do
     const float3 v = normalize(frame.camera_position.xyz - input.world_position);
-    const float3 base_color = input.color;
-    const float metallic = 0.0;
-    const float roughness = 0.5;
+    const float3 base_color = input.color * textures[pc.textures.x].Sample(texture_sampler, input.uv).rgb;
+    const float roughness = pc.surface.x;
+    const float metallic = pc.surface.y;
 
     float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb);
     // Ambient until image-based lighting (part 5): a hemisphere from the ground up to the sky.

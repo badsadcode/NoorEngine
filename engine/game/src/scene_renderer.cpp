@@ -7,7 +7,8 @@
 
 namespace noor::game {
 
-SceneRenderer::SceneRenderer(render::Renderer& renderer) : renderer_(renderer) {
+SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache)
+    : renderer_(renderer), textures_(renderer, std::move(texture_cache)) {
     box_ = upload(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
     sphere_ = upload(make_round(0.5f, 1.0f), "Primitive sphere");
 }
@@ -71,9 +72,21 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         if (!h.valid()) continue;
         render::DrawItem item{h, p.world};
         item.tint = {p.color.x, p.color.y, p.color.z, 1.0f};
+        item.surface = surface(p, textures_);
         out.push_back(item);
     }
     return out;
+}
+
+render::Surface SceneRenderer::surface(const SceneView::Primitive& p, TextureLibrary& textures) {
+    render::Surface s;
+    s.base_color_texture = textures.get(p.base_color_map);
+    s.normal_texture = textures.get(p.normal_map);
+    s.roughness = p.roughness;
+    s.metallic = p.metallic;
+    s.normal_scale = p.normal_scale;
+    s.uv_scale = p.uv_scale;
+    return s;
 }
 
 render::Camera SceneRenderer::camera(const SceneView& view) {

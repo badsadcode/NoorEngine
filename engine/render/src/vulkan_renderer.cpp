@@ -195,11 +195,19 @@ Status Renderer::Impl::pick_gpu() {
         }
 
         VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        f12.pNext = &f13;
         VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-        f2.pNext = &f13;
+        f2.pNext = &f12;
         vkGetPhysicalDeviceFeatures2(candidate, &f2);
         if (!f13.synchronization2 || !f13.dynamicRendering) {
             reject("synchronization2/dynamicRendering missing");
+            continue;
+        }
+        // The bindless texture table (ADR-012): descriptor indexing, standard on desktop GPUs.
+        if (!f12.runtimeDescriptorArray || !f12.descriptorBindingPartiallyBound ||
+            !f12.descriptorBindingSampledImageUpdateAfterBind || !f12.descriptorBindingUpdateUnusedWhilePending) {
+            reject("descriptor indexing (bindless textures) not supported");
             continue;
         }
 
@@ -236,6 +244,7 @@ Status Renderer::Impl::pick_gpu() {
             info.driver_version_raw = props.driverVersion;
             timestamp_period_ns = props.limits.timestampPeriod;
             timestamps_supported = families[*family].timestampValidBits > 0 && props.limits.timestampPeriod > 0.0f;
+            max_anisotropy = f2.features.samplerAnisotropy ? std::min(8.0f, props.limits.maxSamplerAnisotropy) : 1.0f;
         }
     }
 
@@ -256,8 +265,15 @@ Status Renderer::Impl::create_device() {
     VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     f13.synchronization2 = VK_TRUE;
     f13.dynamicRendering = VK_TRUE;
+    VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    f12.pNext = &f13;
+    f12.runtimeDescriptorArray = VK_TRUE;
+    f12.descriptorBindingPartiallyBound = VK_TRUE;
+    f12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+    f12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
     VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-    f2.pNext = &f13;
+    f2.pNext = &f12;
+    f2.features.samplerAnisotropy = max_anisotropy > 1.0f ? VK_TRUE : VK_FALSE;
 
     const char* extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDeviceCreateInfo create_info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
@@ -681,6 +697,7 @@ void Renderer::Impl::destroy() {
         destroy_mesh_pipeline();
         destroy_overlay();
         destroy_frame_resources();
+        destroy_textures();
         destroy_swapchain_resources();
         if (swapchain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device, swapchain, nullptr);
@@ -729,6 +746,13 @@ Result<std::unique_ptr<Renderer>> Renderer::create(const platform::PresentationT
 }
 
 Result<MeshHandle> Renderer::create_mesh(const MeshData& data) { return impl_->create_mesh(data); }
+Result<TextureHandle> Renderer::create_texture(const TextureDesc& desc) {
+    if (auto s = impl_->ensure_texture_table(); !s) return std::unexpected(s.error());
+    return impl_->create_texture(desc);
+}
+void Renderer::destroy_texture(TextureHandle texture) { impl_->destroy_texture(texture); }
+std::uint64_t Renderer::texture_memory() const noexcept { return impl_->texture_bytes; }
+TextureHandle Renderer::missing_texture() const noexcept { return TextureHandle{kTextureMissing}; }
 void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
 Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) { return impl_->render_frame(frame); }
 void Renderer::request_capture() noexcept {

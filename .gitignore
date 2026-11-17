@@ -21,3 +21,6 @@ Thumbs.db
 # .NET
 bin/
 obj/
+
+# NoorEngine projects: derived data (texture cache etc.), never the source of truth
+.noor/

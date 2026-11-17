@@ -49,12 +49,18 @@ struct SceneView {
         Guid entity;
     };
     // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
+    // Until materials (part 3) a primitive can carry a few surface values itself:
+    //   "base_color_map": <texture asset id>, "normal_map": <texture asset id>, "normal_scale": 1,
+    //   "roughness": 0.5, "metallic": 0, "uv_scale": [1, 1]
     struct Primitive {
         enum class Shape : std::uint8_t { Box, Sphere, Capsule } shape;
         math::Mat4 world;  // box: +-0.5 cube scaled to size; sphere: radius 0.5 scaled; capsule: unscaled
         float radius = 0.5f, height = 2.0f;  // capsule only
         math::Vec3 color;  // linear
         Guid entity;
+        std::filesystem::path base_color_map, normal_map;  // resolved texture files (empty: none)
+        float roughness = 0.5f, metallic = 0.0f, normal_scale = 1.0f;
+        math::Vec2 uv_scale{1, 1};
     };
     // The first entity with a `camera` component ({"fov": 70, "near": 0.05}).
     struct Camera {

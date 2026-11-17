@@ -168,11 +168,13 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
         return {};
     }
     if (auto s = ensure_frame_uniforms(); !s) return s;
+    if (auto s = ensure_texture_table(); !s) return s;
     if (pipeline_layout == VK_NULL_HANDLE) {
-        VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants)};
+        VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(MeshPushConstants)};
+        const VkDescriptorSetLayout set_layouts[2] = {frame_set_layout, texture_set_layout};
         VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        layout_info.setLayoutCount = 1;
-        layout_info.pSetLayouts = &frame_set_layout;
+        layout_info.setLayoutCount = 2;
+        layout_info.pSetLayouts = set_layouts;
         layout_info.pushConstantRangeCount = 1;
         layout_info.pPushConstantRanges = &push;
         NOOR_VK_TRY(vkCreatePipelineLayout(device, &layout_info, nullptr, &pipeline_layout));
@@ -366,9 +368,9 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos) {
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
-    const math::Mat4 clip_from_world =
-        math::perspective_reverse_z(frame.camera.fov_y, aspect, frame.camera.near_plane) * frame.camera.view;
+    const auto slot = [&](TextureHandle t, std::uint32_t fallback) {
+        return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
+    };
     bool bound = false;
     for (const DrawItem& item : frame.draws) {
         if (item.overlay != gizmos) continue;
@@ -377,17 +379,21 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, b
             vkCmdSetViewport(cmd, 0, 1, &vp);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gizmos ? gizmo_pipeline : mesh_pipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &frame_sets[frame_index], 0, nullptr);
+            const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
             bound = true;
         }
         const GpuMesh& mesh = meshes[item.mesh.id - 1];
         const math::Mat4& w = item.world_from_object;
-        const MeshPushConstants push{clip_from_world * w,
-                                     {w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
+        const Surface& s = item.surface;
+        const MeshPushConstants push{{w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
                                      {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
                                      {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
-                                     item.tint};
-        vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+                                     item.tint,
+                                     {slot(s.base_color_texture, kTextureWhite), slot(s.normal_texture, kTextureFlatNormal), 0, 0},
+                                     {std::clamp(s.roughness, 0.0f, 1.0f), std::clamp(s.metallic, 0.0f, 1.0f), s.normal_scale, 0},
+                                     {s.uv_scale.x, s.uv_scale.y, s.uv_offset.x, s.uv_offset.y}};
+        vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
         const VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
         vkCmdBindIndexBuffer(cmd, mesh.indices.buffer, 0, VK_INDEX_TYPE_UINT32);

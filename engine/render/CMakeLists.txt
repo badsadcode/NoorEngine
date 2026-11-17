@@ -5,6 +5,7 @@ noor_add_module(render
         src/vulkan_resources.cpp
         src/vulkan_capture.cpp
         src/vulkan_frame.cpp
+        src/vulkan_textures.cpp
         src/vulkan_overlay.cpp
         src/vma_impl.cpp
     PUBLIC_DEPS

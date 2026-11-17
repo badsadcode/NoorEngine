@@ -23,6 +23,8 @@
 #include "noor/foundation/log.h"
 #include "noor/game/geometry.h"
 #include "noor/game/hud.h"
+#include "noor/game/scene_renderer.h"
+#include "noor/game/texture_library.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
 
@@ -316,6 +318,7 @@ void render_thread_main(noor_viewport* vp) {
     std::unordered_map<std::string, CachedAsset> assets;
     std::shared_ptr<const ed::RenderSnapshot> shown;
     std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
+    std::optional<noor::game::TextureLibrary> textures;  // primitives' textures, on first use
     std::vector<noor::render::OverlayVertex> overlay;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
@@ -488,6 +491,8 @@ void render_thread_main(noor_viewport* vp) {
                     if (!lm->handle.valid()) continue;
                     noor::render::DrawItem item{lm->handle, prim.world};
                     item.tint = {prim.color.x, prim.color.y, prim.color.z, 1.0f};
+                    if (!textures) textures.emplace(r, snap->texture_cache);
+                    item.surface = noor::game::SceneRenderer::surface(prim, *textures);
                     scene_draws.push_back({item, prim.entity, lm, true});
                     for (int c = 0; c < 8; ++c) {
                         grow(lo, hi, prim.world.transform_point({c & 1 ? lm->hi.x : lm->lo.x, c & 2 ? lm->hi.y : lm->lo.y, c & 4 ? lm->hi.z : lm->lo.z}));
@@ -832,6 +837,7 @@ void render_thread_main(noor_viewport* vp) {
         vp->stats.validation_errors = r.validation_error_count();
     }
 
+    textures.reset();  // GPU textures go before the renderer that owns them
     renderer->reset();
     if (vp->stats.state != NOOR_VIEWPORT_FAILED) set_state(vp, NOOR_VIEWPORT_STOPPED);
 }

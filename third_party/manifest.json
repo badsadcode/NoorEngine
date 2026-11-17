@@ -160,8 +160,8 @@
       "commit": "2a34860c372bc520e1521c6aa7e3e4b4138c76f8",
       "license": "Public domain or MIT (dual)",
       "linkage": "static (single headers)",
-      "shipped": false,
-      "purpose": "Render tests: reading screenshots and PNG reference images, writing PNGs. Textures (ADR-029) will ship stb_image in the engine"
+      "shipped": true,
+      "purpose": "stb_image: texture decoding in the engine (ADR-029). stb_image_write: tests only (PNG references, test images)"
     },
     {
       "name": "Atkinson Hyperlegible Regular",

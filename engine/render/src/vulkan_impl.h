@@ -4,6 +4,7 @@
 //   vulkan_resources.cpp GPU memory (VMA), meshes, the mesh pipeline
 //   vulkan_capture.cpp   frame readback for automated tests
 //   vulkan_frame.cpp     the HDR image, per-frame lighting uniforms, tonemapping (ADR-012)
+//   vulkan_textures.cpp  textures and the bindless texture table (ADR-029)
 //   vulkan_overlay.cpp   the HUD
 
 #include "noor/foundation/log.h"
@@ -57,6 +58,13 @@ inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
 // GPU timestamps per frame: start, after the scene, after tonemapping, after the gizmos, end.
 inline constexpr std::uint32_t kTimestampsPerFrame = 5;
+// The bindless texture table (set 1): slots 0..2 are built in.
+inline constexpr std::uint32_t kMaxTextures = 4096;
+inline constexpr std::uint32_t kTextureWhite = 0;
+inline constexpr std::uint32_t kTextureFlatNormal = 1;
+inline constexpr std::uint32_t kTextureMissing = 2;
+inline constexpr std::uint32_t kFirstUserTexture = 3;
+inline constexpr std::uint32_t kAnySlot = ~0u;  // create_texture: the first free user slot
 
 struct FrameSync {
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -71,6 +79,14 @@ struct GpuBuffer {
     void* mapped = nullptr;  // only for host-visible buffers
 };
 
+struct GpuTexture {
+    VkImage image = VK_NULL_HANDLE;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    std::uint64_t bytes = 0;
+    bool alive = false;
+};
+
 struct GpuMesh {
     GpuBuffer vertices;
     GpuBuffer indices;
@@ -78,20 +94,24 @@ struct GpuMesh {
     bool alive = false;
 };
 
-// Push constants for mesh.hlsl (must match its PushConstants struct; 128 bytes = guaranteed minimum).
-// The model matrix's top three rows (rotation/scale and translation) give world positions and normals.
+// Push constants for mesh.hlsl (must match its PushConstants struct; at most 128 bytes).
+// The model matrix's top three rows (rotation/scale and translation) give world positions and
+// normals; the camera's clip_from_world is in FrameUniforms.
 struct MeshPushConstants {
-    math::Mat4 clip_from_object;
     math::Vec4 world_row0;
     math::Vec4 world_row1;
     math::Vec4 world_row2;
-    math::Vec4 tint;  // rgb = linear color, a = blend amount (0 = mesh colors)
+    math::Vec4 tint;              // rgb = linear color, a = blend amount (0 = mesh colors)
+    std::uint32_t textures[4];    // base colour slot, normal map slot, unused, unused
+    math::Vec4 surface;           // roughness, metallic, normal scale, unused
+    math::Vec4 uv;                // scale xy, offset xy
 };
-static_assert(sizeof(MeshPushConstants) == 128);
+static_assert(sizeof(MeshPushConstants) == 112);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
 
 // mesh.hlsl's FrameUniforms (set 0, binding 0), one buffer per frame in flight. Radiances are pre-exposed.
 struct FrameUniforms {
+    math::Mat4 clip_from_world;
     math::Vec4 camera_position;
     math::Vec4 to_sun;
     math::Vec4 sun_radiance;
@@ -177,6 +197,15 @@ struct Renderer::Impl {
     std::array<VkDescriptorSet, kFramesInFlight> frame_sets{};
     std::array<GpuBuffer, kFramesInFlight> frame_ubos{};
 
+    // The bindless texture table (vulkan_textures.cpp): set 1, binding 0 = images, binding 1 = sampler
+    VkDescriptorSetLayout texture_set_layout = VK_NULL_HANDLE;
+    VkDescriptorPool texture_pool = VK_NULL_HANDLE;
+    VkDescriptorSet texture_set = VK_NULL_HANDLE;
+    VkSampler texture_sampler = VK_NULL_HANDLE;
+    std::vector<GpuTexture> textures;  // index = slot
+    std::uint64_t texture_bytes = 0;   // user textures only
+    float max_anisotropy = 1.0f;
+
     // Mesh pipelines: the lit scene (into the HDR image) and editor gizmos (into the screen)
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipeline mesh_pipeline = VK_NULL_HANDLE;
@@ -257,6 +286,11 @@ struct Renderer::Impl {
     void update_frame_uniforms(const FrameDesc& frame);
     void record_tonemap(VkCommandBuffer cmd, const Lighting& lighting);
     void destroy_frame_resources();
+    // vulkan_textures.cpp
+    Status ensure_texture_table();
+    Result<TextureHandle> create_texture(const TextureDesc& texture, std::uint32_t slot = kAnySlot);
+    void destroy_texture(TextureHandle handle);
+    void destroy_textures();
     // vulkan_overlay.cpp
     Status ensure_overlay(VkFormat color_format);
     Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);

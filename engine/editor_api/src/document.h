@@ -57,6 +57,7 @@ struct RenderSnapshot {
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
+    std::filesystem::path texture_cache;  // <project>/.noor/cache/textures (decoded textures)
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
 };

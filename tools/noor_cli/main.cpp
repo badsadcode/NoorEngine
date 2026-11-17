@@ -3,6 +3,8 @@
 //   noor_cli new <folder> <name>                     create a project
 //   noor_cli scan <project>                          create/repair .noormeta files under Assets/
 //   noor_cli info <file.glb>                         summarize a GLB (nodes, meshes, markers)
+//   noor_cli texture <image files...>                how the engine reads each texture: kind (from its
+//                                                    .noormeta or the name), size, mips, GPU memory
 //   noor_cli add-model <project> <asset> <scene>     instantiate an asset into a scene (creates it)
 //   noor_cli validate <project>                      check every scene's references; exit 1 on problems
 //   noor_cli migrate <project> [--dry-run]           upgrade scenes to the current format (keeps .bak)
@@ -18,11 +20,14 @@
 #include "noor/asset/gltf_import.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
+#include "noor/asset/texture.h"
 #include "noor/foundation/log.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 
 #include "noor/asset/json.h"
+
+#include <chrono>
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
 
@@ -53,6 +58,7 @@ int usage() {
                "  noor_cli new <folder> <name>\n"
                "  noor_cli scan <project>\n"
                "  noor_cli info <file.glb>\n"
+               "  noor_cli texture <image files...>\n"
                "  noor_cli add-model <project> <asset path> <scene path>\n"
                "  noor_cli validate <project>\n"
                "  noor_cli migrate <project> [--dry-run]\n"
@@ -91,6 +97,32 @@ int cmd_scan(const std::vector<std::string>& a) {
     }
     for (const auto& o : r->orphaned_metas) std::printf("  orphaned: %s\n", o.c_str());
     return r->warnings.empty() ? 0 : 2;
+}
+
+// One line per texture: what import would do with it. Exit 1 if any can't be read.
+int cmd_texture(const std::vector<std::string>& a) {
+    if (a.empty()) return usage();
+    int failed = 0;
+    std::uint64_t total = 0;
+    for (const auto& file : a) {
+        const auto settings = asset::texture_settings_for(file);
+        const auto start = std::chrono::steady_clock::now();
+        auto t = asset::import_texture(file, settings);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        if (!t) {
+            std::printf("FAIL  %s: %s\n", file.c_str(), t.error().message.c_str());
+            ++failed;
+            continue;
+        }
+        total += t->gpu_bytes();
+        std::printf("%-6s %-24s %5ux%-5u %2zu mips %7.2f MB %6.0f ms  %s\n", std::string(asset::kind_name(settings.kind)).c_str(),
+                    settings.kind == asset::TextureKind::Normal ? (settings.directx_normals ? "(directx, green flipped)" : "(opengl)") : "",
+                    t->width(), t->height(), t->mips.size(), static_cast<double>(t->gpu_bytes()) / (1024.0 * 1024.0), ms,
+                    std::filesystem::path(file).filename().string().c_str());
+    }
+    std::printf("%zu texture(s), %.1f MB of GPU memory uncompressed, %d failed\n", a.size() - static_cast<std::size_t>(failed),
+                static_cast<double>(total) / (1024.0 * 1024.0), failed);
+    return failed ? 1 : 0;
 }
 
 int cmd_info(const std::vector<std::string>& a) {
@@ -627,6 +659,7 @@ int main(int argc, char** argv) {
     if (cmd == "new") return cmd_new(args);
     if (cmd == "scan") return cmd_scan(args);
     if (cmd == "info") return cmd_info(args);
+    if (cmd == "texture") return cmd_texture(args);
     if (cmd == "add-model") return cmd_add_model(args);
     if (cmd == "validate") return cmd_validate(args);
     if (cmd == "migrate") return cmd_migrate(args);

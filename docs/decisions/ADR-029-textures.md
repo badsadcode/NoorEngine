@@ -1,6 +1,6 @@
 # ADR-029: Textures: import, colour spaces, mips and GPU formats
 
-**Status:** Proposed · **Date:** 2026-11-17 · **Milestone:** 5
+**Status:** Accepted (part 2 built it; compression and .exr still open) · **Date:** 2026-11-17 · **Milestone:** 5
 
 ## Context
 Textures were deferred from Milestone 2 to here (M2 review). Spec 10.4 and 11.7: 8-bit and
@@ -50,8 +50,11 @@ HDRIs (`.hdr`, `.exr`) for environments.
   visible), and render tests that would catch a normal map read as sRGB.
 
 ## Evidence / benchmark
-None yet. Decoder licences: stb (public domain or MIT), tinyexr (BSD-3-Clause); both go in
-`third_party/manifest.json` with pinned commits and hashes.
+Part 2: unit tests for every rule above; `render.golden_Textured`. On a real PBR texture library
+(1254² maps): every map kind was guessed right from its name; a Debug build imports a map in
+300–700 ms (once, then cached); 8 MB of GPU memory per map uncompressed, so compression will matter
+for real scenes. Decoder licences: stb (public domain or MIT, pinned in
+`third_party/manifest.json`); tinyexr (BSD-3-Clause) is deferred to environments (part 5).
 
 ## Migration or reversal strategy
 Settings live in `.noormeta`, so changing decoders or adding compression re-imports from the

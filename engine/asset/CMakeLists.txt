@@ -6,9 +6,11 @@ noor_add_module(asset
         src/gltf_import.cpp
         src/migration.cpp
         src/file_watcher.cpp
+        src/texture.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json
     PRIVATE_DEPS
         cgltf::cgltf
+        stb::image
 )
