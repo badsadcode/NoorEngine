@@ -1,7 +1,33 @@
 # CSG brushes
 
-How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, part 1**: the
-kernel and the shapes, as an engine module with tests. Brushes in the editor come in part 2.
+How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, parts 1–2**: the
+kernel and the shapes, and brushes in the editor.
+
+## In the editor
+
+**Create ▸ Brush ▸ Box / Wedge / Cylinder / Cone / Sphere / Stairs / Arch.** With nothing (or
+something unrelated) selected, this makes a **CSG model** entity and the brush inside it. With a
+CSG model or one of its brushes selected, the new brush goes into that model. One undo step.
+
+- **A brush is an entity** with a `brush` component, a child of the model. Move, rotate and scale
+  it with the usual gizmos and snapping; edit its numbers in the Inspector: shape and operation
+  from lists, size, sides, steps, a material from the project, UV scale/offset/rotation.
+- **The order of the model's children is the order of operations.** Edit ▸ Move Up / Move Down
+  (Alt+Up / Alt+Down) moves the selected brush earlier or later: a doorway moved before its wall
+  cuts nothing.
+- **Subtract and intersect brushes** show as see-through red and blue shapes while editing (not
+  while playing), so they can be seen and clicked. Clicking a face of the result selects the brush
+  that made it.
+- Everything is undoable and saved in the scene like any other entity.
+
+```json
+"brush": { "shape": "box", "operation": "add", "size": [4, 3, 0.3], "sides": 16, "steps": 8,
+           "material": "<material id>", "uv_scale": [1, 1], "uv_offset": [0, 0], "uv_rotation": 0 }
+```
+
+The document rebuilds a model when its brushes change (cached per model, keyed by what it was
+built from). While a gizmo is being dragged the brush moves as it is; the cut updates when you
+let go. A small house rebuilds in a few milliseconds in a release build.
 
 ## Brushes
 
@@ -52,5 +78,6 @@ meshes (part 4). The test `boundary.runtime_has_no_editor_code` fails if either 
 into `noor_player` or a runtime module.
 
 ## Not yet
-Brushes in scenes and the editor (part 2), per-face material editing and UV tools (part 3),
-cooked meshes, collision and GLB export (part 4).
+Per-face materials and UV tools (part 3; for now one material per brush), live re-cutting while a
+gizmo is dragged, cooked meshes for games (part 4: the player doesn't draw CSG models yet),
+collision and GLB export (part 4), brush outlines for add brushes, nested models.

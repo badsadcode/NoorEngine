@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 13u
+#define NOOR_EDITOR_API_VERSION 14u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -119,6 +119,11 @@ NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json);
     "source_width", "source_height", "width", "height", "mips", "format" ("BC7 sRGB", "BC5", "RGBA8"...),
     "gpu_bytes", "rgba8_bytes"}. NULL on error. */
 NOOR_API const char* noor_doc_texture(noor_doc* doc, const char* texture_path);
+/* v14: the open scene's CSG models (Milestone 6): [{"model": id, "brushes", "triangles", "volume"
+   (cubic metres), "build_ms", "warnings": [...]}]. Brushes are `brush` components on the children
+   of an entity with a `csg_model` component, combined in child order. The command {"op": "move",
+   "entity": id, "before": sibling id | null} reorders siblings (null: to the end). */
+NOOR_API const char* noor_doc_csg(noor_doc* doc);
 /* v13: new import settings for a texture (the "settings" object above; missing keys get defaults).
    Written to its .noormeta; viewports reload the texture. Returns 1 or 0. */
 NOOR_API int32_t noor_doc_set_texture_settings(noor_doc* doc, const char* texture_path, const char* settings_json);

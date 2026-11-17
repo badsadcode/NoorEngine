@@ -26,6 +26,36 @@
 
 namespace noor::editor {
 
+// A CSG model built from its brushes (ADR-016), in the model's space; shared between snapshots
+// while the brushes don't change.
+struct CsgMesh {
+    std::uint64_t key = 0;  // what it was built from (brushes, transforms, materials)
+    std::vector<render::Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+    // One group per brush that has triangles in the result: its runs (one per material slot).
+    struct Part {
+        std::uint32_t first_index = 0, index_count = 0, slot = 0;
+    };
+    struct Group {
+        Guid brush;
+        std::vector<Part> parts;
+    };
+    std::vector<Group> groups;
+    std::vector<std::filesystem::path> materials;  // per slot; empty: the default material
+    // Subtract and intersect brushes as see-through shapes, so they can be seen and clicked.
+    struct Ghost {
+        Guid brush;
+        bool intersect = false;
+        std::vector<math::Vec3> positions;  // triangle list
+    };
+    std::vector<Ghost> ghosts;
+    std::size_t brush_count = 0;
+    std::size_t triangles = 0;
+    double volume = 0.0;
+    double build_ms = 0.0;
+    std::vector<std::string> warnings;
+};
+
 // What a viewport needs to draw the document's scene, immutable once published.
 struct RenderSnapshot {
     struct Mesh {
@@ -64,6 +94,13 @@ struct RenderSnapshot {
     std::uint64_t reload_token = 0;   // changed: reload materials and textures now
     // Every asset's file by id (materials find their textures and parents with it).
     std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> asset_files;
+    // CSG models (entities with `csg_model` and `brush` children).
+    struct Csg {
+        Guid model;
+        math::Mat4 world;
+        std::shared_ptr<const CsgMesh> mesh;
+    };
+    std::vector<Csg> csg;
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
 };
@@ -140,8 +177,14 @@ public:
     // A texture's import settings and what they make of it; and changing them (Milestone 5).
     [[nodiscard]] Result<asset::Json> texture(std::string_view texture_path);
     [[nodiscard]] Status set_texture_settings(std::string_view texture_path, const asset::Json& settings);
+    // The CSG models of the open scene: [{"model", "brushes", "triangles", "volume", "build_ms", "warnings"}].
+    [[nodiscard]] asset::Json csg_info() const;
 
 private:
+    // CSG models built for snapshots, by model entity (rebuilt only when their brushes change).
+    std::unordered_map<Guid, std::shared_ptr<const CsgMesh>> csg_cache_;
+    std::vector<std::shared_ptr<const CsgMesh>> csg_last_;  // in the last published snapshot
+    std::shared_ptr<const CsgMesh> build_csg(const scene::Scene& expanded, std::size_t model);
     explicit Document(asset::Project project);
     [[nodiscard]] Status require_scene() const;
     [[nodiscard]] Status add_asset(const asset::Json& command);

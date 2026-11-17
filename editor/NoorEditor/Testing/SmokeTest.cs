@@ -248,6 +248,7 @@ internal static class SmokeTest
         }
         await RenderPanelChecks(window, settings, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
+        await BrushChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -878,6 +879,57 @@ internal static class SmokeTest
               "texture settings: back to compressed");
         window.DockFactory.CloseDockable(texture);
         window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        await Task.Delay(300);
+    }
+
+    // Milestone 6, part 2: CSG brushes in the editor (create, cut, reorder, edit, undo, save/reopen).
+    private static async Task BrushChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        double Volume() => doc.CsgInfo().OfType<JsonObject>().Sum(m => m["volume"]!.GetValue<double>());
+        long Triangles() => doc.CsgInfo().OfType<JsonObject>().Sum(m => m["triangles"]!.GetValue<long>());
+        doc.Select(null);
+        var wall = window.CreateBrush("box");
+        var model = wall == null ? null : doc.Scene.Entities.FirstOrDefault(e => e.Id == wall)?.Parent;
+        check(wall != null && model != null && doc.Scene.Entities.First(e => e.Id == model).Components["csg_model"] != null &&
+              doc.CsgInfo().Count == 1 && Triangles() == 12 && Math.Abs(Volume() - 3.6) < 1e-4,
+              $"brushes: Create ▸ Brush ▸ Box makes a CSG model with a 4 x 3 x 0.3 m wall ({Triangles()} triangles, {Volume():0.###} m³)");
+        if (wall == null || model == null) return;
+
+        // An arch (a doorway) goes into the selected brush's model and cuts through the wall.
+        var door = window.CreateBrush("arch");
+        var doorEntity = doc.Scene.Entities.FirstOrDefault(e => e.Id == door);
+        // 1 x 1.7 m plus a half circle of radius 0.5 (an 8-segment half of a 16-gon), 0.3 m deep.
+        var doorway = 0.3 * (1.7 + 0.5 * 16 * 0.25 * Math.Sin(2 * Math.PI / 16) / 2);
+        check(doorEntity?.Parent == model && Math.Abs(Volume() - (3.6 - doorway)) < 1e-3 && Triangles() > 12,
+              $"brushes: an arch brush cuts a doorway through the wall ({Volume():0.####} m³, expected {3.6 - doorway:0.####})");
+
+        // The order of brushes is the order of operations: the cut moved before the wall cuts nothing.
+        doc.Select(door);
+        window.MoveSelected(-1);
+        check(doc.Scene.Entities.Where(e => e.Parent == model).Select(e => e.Id).First() == door && Math.Abs(Volume() - 3.6) < 1e-4,
+              "brushes: moving the doorway before the wall (Alt+Up) means it cuts nothing");
+        doc.Undo();
+        check(Math.Abs(Volume() - (3.6 - doorway)) < 1e-3, "brushes: undo puts the doorway back after the wall");
+
+        // Edit the wall's size in place: the model is rebuilt.
+        var brush = (JsonObject)doc.Scene.Entities.First(e => e.Id == wall).Components["brush"]!.DeepClone();
+        brush["size"] = new JsonArray(6.0, 3.0, 0.3);
+        brush["material"] = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Textures/tiles.noormat")?.Guid;
+        doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = wall, ["type"] = "brush", ["value"] = brush });
+        check(Math.Abs(Volume() - (6 * 3 * 0.3 - doorway)) < 1e-3, $"brushes: a wider wall rebuilds the model ({Volume():0.###} m³)");
+        window.ViewportView?.Viewport.Frame(doc.Subtree(model));
+        doc.Select(door);
+        await Task.Delay(800);
+        shot(window, "editor_24_brushes.png");
+
+        // Saved and opened again: the same model.
+        var before = Volume();
+        var path = doc.Scene.Path;
+        check(doc.Save() && doc.OpenScene(path) && Math.Abs(Volume() - before) < 1e-6 && doc.Scene.Entities.Count(e => e.Parent == model) == 2,
+              "brushes: saved and opened again, the model is the same");
+        doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
+        check(doc.CsgInfo().Count == 0, "brushes: deleting the model removes it");
         await Task.Delay(300);
     }
 

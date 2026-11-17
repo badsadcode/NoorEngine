@@ -130,7 +130,11 @@ Result<Model> build_model(std::span<const Brush> brushes) {
     std::vector<std::size_t> order(tri_count);
     for (std::size_t t = 0; t < tri_count; ++t) order[t] = t;
     const auto material_of = [&](std::size_t t) { return brushes[source[t].brush].surface_of(source[t].face).material; };
-    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return material_of(a) < material_of(b); });
+    // By material, then by brush: each brush's triangles are one run per material (the editor draws
+    // and picks them per brush).
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return std::pair{material_of(a), source[a].brush} < std::pair{material_of(b), source[b].brush};
+    });
 
     std::map<std::tuple<std::uint32_t, std::uint32_t, std::uint64_t, std::uint32_t>, std::uint32_t> vertex_of;
     for (const std::size_t t : order) {

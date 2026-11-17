@@ -221,6 +221,35 @@ public sealed class ComponentsEditor : StackPanel
             case JsonValue v when v.TryGetValue<double>(out var d):
                 editor = NumberBox(d, x => SetField(type, field, JsonValue.Create(x)));
                 break;
+            case JsonValue v when v.TryGetValue<string>(out var choice) && type == "brush" && field is "shape" or "operation":
+            {
+                // Brushes: their shape and operation from the lists (ADR-016).
+                var options = field == "shape" ? EntityTemplates.BrushShapes : EntityTemplates.BrushOperations;
+                var combo = new ComboBox { ItemsSource = options, SelectedItem = options.Contains(choice) ? choice : null, Classes = { "field" },
+                                           HorizontalAlignment = HorizontalAlignment.Stretch };
+                combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
+                editor = combo;
+                break;
+            }
+            case var _ when field == "material" && (value is null || value is JsonValue mv && mv.TryGetValue<string>(out _)):
+            {
+                // A material: picked from the project's materials (or none: the default).
+                var current = (value as JsonValue)?.GetValue<string>();
+                var materials = _doc.Assets.Where(a => a.Importer == "material").ToList();
+                var items = new List<string> { "(none)" };
+                items.AddRange(materials.Select(m => m.Path));
+                var selected = current == null ? "(none)" : materials.FirstOrDefault(m => m.Guid == current)?.Path ?? "(missing material)";
+                if (!items.Contains(selected)) items.Add(selected);
+                var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string path || path == selected || path == "(missing material)") return;
+                    var guid = path == "(none)" ? null : materials.FirstOrDefault(m => m.Path == path)?.Guid;
+                    SetField(type, field, guid == null ? null : JsonValue.Create(guid));
+                };
+                editor = combo;
+                break;
+            }
             case JsonValue v when v.TryGetValue<string>(out var s):
                 var text = new TextBox { Text = s, Classes = { "field" } };
                 Commit(text, () => { if (text.Text != s) SetField(type, field, JsonValue.Create(text.Text ?? "")); });

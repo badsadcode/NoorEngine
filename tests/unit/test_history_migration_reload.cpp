@@ -85,6 +85,45 @@ TEST_CASE("history: reparenting refuses cycles and keeps parents before children
     CHECK(scene::validate_structure(s).empty());
 }
 
+TEST_CASE("history: moving an entity among its siblings keeps its subtree and undoes exactly") {
+    // A model with three children; the second has a child of its own.
+    scene::Scene s;
+    const auto add = [&](const char* name, std::optional<Guid> parent) {
+        scene::Entity e;
+        e.id = Guid::generate();
+        e.name = name;
+        e.parent = parent;
+        scene::History tmp;
+        REQUIRE(tmp.execute(s, scene::add_entity(e)));
+        return e.id;
+    };
+    const Guid model = add("Model", std::nullopt);
+    const Guid a = add("A", model), b = add("B", model), c = add("C", model);
+    const Guid b_child = add("B child", b);
+    const auto children = [&] {
+        std::vector<Guid> out;
+        for (const auto& e : s.entities)
+            if (e.parent == model) out.push_back(e.id);
+        return out;
+    };
+    const auto original = s.entities;
+    scene::History h;
+    REQUIRE(h.execute(s, scene::move_before(b, a)));  // B first, its child with it
+    CHECK(children() == std::vector<Guid>{b, a, c});
+    CHECK(scene::validate_structure(s).empty());
+    CHECK(s.entities[2].id == b_child);  // right after B
+    REQUIRE(h.execute(s, scene::move_before(b, std::nullopt)));  // B last
+    CHECK(children() == std::vector<Guid>{a, c, b});
+    CHECK(s.entities.back().id == b_child);
+    CHECK_FALSE(h.execute(s, scene::move_before(b, std::nullopt)));  // already last: nothing to do
+    CHECK_FALSE(h.execute(s, scene::move_before(b, model)));         // not a sibling
+    CHECK_FALSE(h.execute(s, scene::move_before(b, b)));
+    h.undo(s);
+    h.undo(s);
+    REQUIRE(s.entities.size() == original.size());
+    for (std::size_t i = 0; i < s.entities.size(); ++i) CHECK(s.entities[i].id == original[i].id);
+}
+
 TEST_CASE("history: modified() tracks the saved state, including undo back to it") {
     scene::Scene s = building_scene();
     scene::History h;

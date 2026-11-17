@@ -85,5 +85,9 @@ std::unique_ptr<Command> add_entity(Entity entity);
 std::unique_ptr<Command> remove_entity(const Guid& entity);
 // Changes an entity's parent (nullopt = root), keeping its local transform. Refuses cycles.
 std::unique_ptr<Command> reparent(const Guid& entity, std::optional<Guid> new_parent);
+// Moves an entity (with its subtree) among its siblings: before `sibling`, or after the last one
+// (nullopt). Sibling order matters where order means something (CSG brushes: the operation
+// history). Refuses a sibling with another parent; a move that changes nothing isn't applied.
+std::unique_ptr<Command> move_before(const Guid& entity, std::optional<Guid> sibling);
 
 } // namespace noor::scene

@@ -326,6 +326,16 @@ void render_thread_main(noor_viewport* vp) {
         std::optional<std::vector<LoadedMesh>> meshes;  // nullopt: failed to load
     };
     std::unordered_map<std::string, CachedAsset> assets;
+    // CSG models on the GPU, by build key (ADR-016): one mesh per model; per brush a LoadedMesh
+    // that shares it (its own parts and, for picking, its triangles); see-through ghosts for
+    // subtract and intersect brushes. Unused builds are dropped after each new snapshot.
+    struct CsgGpu {
+        noor::render::MeshHandle handle;
+        std::vector<LoadedMesh> groups;
+        std::vector<LoadedMesh> ghosts;
+    };
+    std::unordered_map<std::uint64_t, CsgGpu> csg_gpu;
+    noor::render::MaterialHandle ghost_subtract, ghost_intersect;
     std::shared_ptr<const ed::RenderSnapshot> shown;
     std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
     std::optional<noor::game::TextureLibrary> textures;    // textures and materials, made with the first snapshot
@@ -549,6 +559,90 @@ void render_thread_main(noor_viewport* vp) {
                         grow(lo, hi, prim.world.transform_point({c & 1 ? lm->hi.x : lm->lo.x, c & 2 ? lm->hi.y : lm->lo.y, c & 4 ? lm->hi.z : lm->lo.z}));
                         any = true;
                     }
+                }
+                // CSG models: one draw per brush (so a click selects the brush that made the face).
+                if (!ghost_subtract.valid()) {
+                    noor::render::MaterialDesc ghost;
+                    ghost.alpha = noor::render::AlphaMode::Blend;
+                    ghost.double_sided = true;
+                    ghost.roughness = 0.7f;
+                    ghost.base_color = {0.95f, 0.3f, 0.25f, 0.22f};
+                    if (auto h = r.create_material(ghost)) ghost_subtract = *h;
+                    ghost.base_color = {0.25f, 0.55f, 1.0f, 0.22f};
+                    if (auto h = r.create_material(ghost)) ghost_intersect = *h;
+                }
+                for (const auto& model : snap->csg) {
+                    const ed::CsgMesh& m = *model.mesh;
+                    auto [git, fresh] = csg_gpu.try_emplace(m.key);
+                    CsgGpu& gpu = git->second;
+                    if (fresh) {
+                        std::vector<Vec3> positions;
+                        positions.reserve(m.vertices.size());
+                        for (const auto& v : m.vertices) positions.push_back(v.position);
+                        if (!m.indices.empty())
+                            if (auto h = r.create_mesh({{m.vertices.data(), m.vertices.size()}, m.indices, "CSG model"})) gpu.handle = *h;
+                        for (const auto& group : m.groups) {
+                            LoadedMesh lm{gpu.handle, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, positions, {}, {}};
+                            for (const auto& part : group.parts) {
+                                const auto& file = part.slot < m.materials.size() ? m.materials[part.slot] : std::filesystem::path{};
+                                lm.parts.push_back({part.first_index, part.index_count,
+                                                    file.empty() ? noor::render::MaterialHandle{} : materials->file(file)});
+                                for (std::uint32_t i = part.first_index; i < part.first_index + part.index_count; ++i) {
+                                    lm.indices.push_back(m.indices[i]);
+                                    grow(lm.lo, lm.hi, positions[m.indices[i]]);
+                                }
+                            }
+                            gpu.groups.push_back(std::move(lm));
+                        }
+                        for (const auto& ghost : m.ghosts) {
+                            // Flat-shaded triangles (the ghost is a hint, not a surface).
+                            std::vector<noor::render::Vertex> verts;
+                            std::vector<std::uint32_t> idx;
+                            for (std::size_t i = 0; i + 2 < ghost.positions.size(); i += 3) {
+                                const Vec3 a = ghost.positions[i], b = ghost.positions[i + 1], c = ghost.positions[i + 2];
+                                const Vec3 n = noor::math::normalize(noor::math::cross(b - a, c - a));
+                                for (const Vec3 p : {a, b, c}) {
+                                    idx.push_back(static_cast<std::uint32_t>(verts.size()));
+                                    verts.push_back({p, n, {1, 1, 1}, {0, 0}, {1, 0, 0, 1}});
+                                }
+                            }
+                            LoadedMesh lm{{}, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, ghost.positions, idx, {}};
+                            for (const Vec3 p : ghost.positions) grow(lm.lo, lm.hi, p);
+                            if (!verts.empty())
+                                if (auto h = r.create_mesh({{verts.data(), verts.size()}, idx, "CSG ghost"})) lm.handle = *h;
+                            lm.parts.push_back({0, static_cast<std::uint32_t>(idx.size()), ghost.intersect ? ghost_intersect : ghost_subtract});
+                            gpu.ghosts.push_back(std::move(lm));
+                        }
+                    }
+                    for (std::size_t gi = 0; gi < gpu.groups.size(); ++gi) {
+                        const LoadedMesh& lm = gpu.groups[gi];
+                        if (!lm.handle.valid()) continue;
+                        scene_draws.push_back({{lm.handle, model.world}, m.groups[gi].brush, &lm});
+                        for (int c = 0; c < 8; ++c) {
+                            grow(lo, hi, model.world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));
+                            any = true;
+                        }
+                    }
+                    if (!snap->camera)  // editing, not playing: show the cutters
+                        for (std::size_t gi = 0; gi < gpu.ghosts.size(); ++gi) {
+                            const LoadedMesh& lm = gpu.ghosts[gi];
+                            if (!lm.handle.valid()) continue;
+                            noor::render::DrawItem item{lm.handle, model.world};
+                            item.cast_shadow = false;
+                            scene_draws.push_back({item, m.ghosts[gi].brush, &lm});
+                        }
+                }
+                // Builds no longer in the scene: free their GPU meshes.
+                for (auto it = csg_gpu.begin(); it != csg_gpu.end();) {
+                    const bool used = std::ranges::any_of(snap->csg, [&](const auto& c) { return c.mesh->key == it->first; });
+                    if (used) {
+                        ++it;
+                        continue;
+                    }
+                    if (it->second.handle.valid()) r.destroy_mesh(it->second.handle);
+                    for (const auto& g : it->second.ghosts)
+                        if (g.handle.valid()) r.destroy_mesh(g.handle);
+                    it = csg_gpu.erase(it);
                 }
             }
             if (any) {
@@ -924,6 +1018,14 @@ void render_thread_main(noor_viewport* vp) {
         if (!stats_json.empty()) vp->render_stats = std::move(stats_json);
     }
 
+    for (auto& [key, gpu] : csg_gpu) {
+        if (gpu.handle.valid()) r.destroy_mesh(gpu.handle);
+        for (const auto& g : gpu.ghosts)
+            if (g.handle.valid()) r.destroy_mesh(g.handle);
+    }
+    csg_gpu.clear();
+    if (ghost_subtract.valid()) r.destroy_material(ghost_subtract);
+    if (ghost_intersect.valid()) r.destroy_material(ghost_intersect);
     environment.reset();
     materials.reset();  // GPU materials and textures go before the renderer that owns them
     textures.reset();

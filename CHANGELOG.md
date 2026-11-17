@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-17 — Milestone 6, part 2: brushes in the editor
+**Added**
+- **Create ▸ Brush** (box, wedge, cylinder, cone, sphere, stairs, arch): into the selected CSG
+  model, or a new **CSG model** entity. Brushes are entities with a `brush` component; the
+  model's child order is the order of operations.
+- Inspector: shape and operation from lists, a material picker (any component's `material` field),
+  sizes, sides, steps, UV settings.
+- **Edit ▸ Move Up / Move Down** (Alt+Up / Alt+Down): reorder siblings. Engine command
+  `{"op": "move", "entity", "before"}` (`scene::move_before`, undoable).
+- The editor builds CSG models when publishing the scene (cached per model), draws one piece per
+  brush (a click selects the brush that made the face) and see-through red/blue shapes for
+  subtract/intersect brushes while editing.
+- Editor API **v14**: `noor_doc_csg` (per model: brushes, triangles, volume, build time, warnings).
+
+**Tests:** 7 editor smoke checks (create a wall, cut a doorway with an exact volume, reorder so it
+cuts nothing, undo, resize and retexture, save and reopen, delete).
+
+**Not yet:** per-face materials and UV tools (part 3), re-cutting during a drag, CSG in games
+(cooking, part 4).
+
 ### 2026-11-17 — Milestone 6, part 1: the CSG kernel
 **Added**
 - `noor_csg` (`noor/csg/csg.h`, editor and cooking only): brushes (box, wedge, cylinder, cone,

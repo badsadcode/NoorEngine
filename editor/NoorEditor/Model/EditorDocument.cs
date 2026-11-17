@@ -180,6 +180,13 @@ public sealed class EditorDocument : IDisposable
         return id;
     }
 
+    /// <summary>Moves an entity among its siblings: before <paramref name="before"/>, or to the end (null).</summary>
+    public bool Move(string id, string? before) =>
+        Execute(new JsonObject { ["op"] = "move", ["entity"] = id, ["before"] = before });
+
+    /// <summary>The scene's CSG models as the engine built them (noor_doc_csg).</summary>
+    public JsonArray CsgInfo() => JsonNode.Parse(Native.Csg(Handle)) as JsonArray ?? [];
+
     public bool AddAsset(AssetInfo asset, Vec3 position)
     {
         var ok = Execute(new JsonObject { ["op"] = "add_asset", ["asset"] = asset.Guid, ["position"] = position.ToJson() });

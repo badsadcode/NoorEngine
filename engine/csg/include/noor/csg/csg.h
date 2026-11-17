@@ -79,7 +79,7 @@ struct Vertex {
     math::Vec4 tangent;  // xyz along +u, w = handedness (like glTF)
 };
 
-// The combined model: triangles grouped by material slot.
+// The combined model: triangles grouped by material slot, and within a slot by brush.
 struct Model {
     struct Submesh {
         std::uint32_t material = 0;

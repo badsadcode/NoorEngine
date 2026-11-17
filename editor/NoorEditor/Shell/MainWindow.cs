@@ -304,6 +304,10 @@ public sealed class MainWindow : Window
         var delete = new MenuItem { Header = "_Delete", InputGesture = KeyGesture.Parse("Delete") };
         delete.Click += (_, _) => DeleteSelected();
         var frame = new MenuItem { Header = "_Frame Selected", InputGesture = KeyGesture.Parse("F") };
+        var moveUp = new MenuItem { Header = "Move _Up (earlier)", InputGesture = KeyGesture.Parse("Alt+Up") };
+        moveUp.Click += (_, _) => MoveSelected(-1);
+        var moveDown = new MenuItem { Header = "Move Dow_n (later)", InputGesture = KeyGesture.Parse("Alt+Down") };
+        moveDown.Click += (_, _) => MoveSelected(1);
         frame.Click += (_, _) => FrameSelectedOrAll();
 
         var preferences = new MenuItem { Header = "_Preferences…" };
@@ -336,7 +340,7 @@ public sealed class MainWindow : Window
             Items =
             {
                 new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), buildGame, new Separator(), closeProject, exit } },
-                new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, new Separator(),
+                new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, moveUp, moveDown, new Separator(),
                                                          Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
                                                          Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
                                                          new Separator(), preferences } },
@@ -373,6 +377,15 @@ public sealed class MainWindow : Window
             menu.Items.Add(item);
         }
         menu.Items.Add(new Separator());
+        var brushes = new MenuItem { Header = "_Brush" };
+        foreach (var shape in EntityTemplates.BrushShapes)
+        {
+            var item = new MenuItem { Header = char.ToUpperInvariant(shape[0]) + shape[1..] + (shape == "arch" ? " (doorway, subtracts)" : "") };
+            item.Click += async (_, _) => { if (await ReadyToEdit()) CreateBrush(shape); };
+            brushes.Items.Add(item);
+        }
+        menu.Items.Add(brushes);
+        menu.Items.Add(new Separator());
         var player = new MenuItem { Header = EntityTemplates.PlayerTemplateName };
         player.Click += async (_, _) => { if (await ReadyToEdit()) CreatePlayer(new Vec3(0, 0.05, 0)); };
         menu.Items.Add(player);
@@ -406,6 +419,43 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>Create ▸ template: added to the open scene and selected.</summary>
+    /// <summary>
+    /// Create ▸ Brush: into the selected CSG model (or the model of the selected brush); without
+    /// one, a new "CSG model" entity first. One undo step. Returns the brush's id.
+    /// </summary>
+    public string? CreateBrush(string shape)
+    {
+        if (!Doc.Scene.Open || Doc.Playing) return null;
+        var selected = Doc.Selected;
+        string? model = null;
+        if (selected?.Components["csg_model"] != null) model = selected.Id;
+        else if (selected?.Components["brush"] != null && selected.Parent is { } p &&
+                 Doc.Scene.Entities.FirstOrDefault(e => e.Id == p)?.Components["csg_model"] != null) model = p;
+        var brush = EntityTemplates.Brush(shape);
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "begin", ["label"] = $"Create {shape} brush" });
+        model ??= Doc.Create("CSG model", new System.Text.Json.Nodes.JsonObject { ["csg_model"] = new System.Text.Json.Nodes.JsonObject() }, new Vec3(0, 0, 0));
+        string? id = null;
+        if (model != null)
+        {
+            var count = Doc.Scene.Entities.Count(e => e.Parent == model && e.Components["brush"]?["shape"]?.GetValue<string>() == shape);
+            id = Doc.Create(char.ToUpperInvariant(shape[0]) + shape[1..] + (count > 0 ? $" {count + 1}" : ""),
+                            new System.Text.Json.Nodes.JsonObject { ["brush"] = brush }, EntityTemplates.BrushPosition(brush), model);
+        }
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "end" });
+        return id;
+    }
+
+    /// <summary>Edit ▸ Move Up / Move Down: one place earlier or later among its siblings (CSG brushes: the order of operations).</summary>
+    public bool MoveSelected(int direction)
+    {
+        if (Doc.Selected is not { } e || Doc.Playing) return false;
+        var siblings = Doc.Scene.Entities.Where(s => s.Parent == e.Parent).Select(s => s.Id).ToList();
+        var i = siblings.IndexOf(e.Id);
+        if (direction < 0 && i > 0) return Doc.Move(e.Id, siblings[i - 1]);
+        if (direction > 0 && i >= 0 && i + 1 < siblings.Count) return Doc.Move(e.Id, i + 2 < siblings.Count ? siblings[i + 2] : null);
+        return false;
+    }
+
     public string? CreateEntity(EntityTemplates.Template t)
     {
         if (!Doc.Scene.Open)
@@ -1029,6 +1079,12 @@ public sealed class MainWindow : Window
                 break;
             case Key.S when ctrl:
                 Save();
+                break;
+            case Key.Up when e.KeyModifiers == KeyModifiers.Alt && !inText:
+                MoveSelected(-1);
+                break;
+            case Key.Down when e.KeyModifiers == KeyModifiers.Alt && !inText:
+                MoveSelected(1);
                 break;
             case Key.Z when ctrl && !shift && !inText && inMaterial != null:
                 inMaterial.Material.Undo();

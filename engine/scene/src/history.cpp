@@ -205,6 +205,40 @@ private:
     std::vector<Entity> before_;
 };
 
+class MoveBefore final : public Command {
+public:
+    MoveBefore(Guid id, std::optional<Guid> sibling) : id_(id), sibling_(sibling) {}
+    std::string label() const override { return "Reorder"; }
+    bool apply(Scene& s) override {
+        const auto i = index_of(s, id_);
+        if (i < 0) return false;
+        const auto parent = s.entities[static_cast<std::size_t>(i)].parent;
+        if (sibling_) {
+            const auto j = index_of(s, *sibling_);
+            if (j < 0 || *sibling_ == id_ || s.entities[static_cast<std::size_t>(j)].parent != parent) return false;
+        }
+        before_ = s.entities;
+        std::vector<Entity> moving;
+        const auto family = subtree(s, id_);
+        for (const std::size_t m : family) moving.push_back(s.entities[m]);
+        for (auto it = family.rbegin(); it != family.rend(); ++it) s.entities.erase(s.entities.begin() + static_cast<std::ptrdiff_t>(*it));
+        std::size_t at = s.entities.size();
+        if (sibling_) at = static_cast<std::size_t>(index_of(s, *sibling_));
+        else if (parent) at = subtree(s, *parent).back() + 1;
+        s.entities.insert(s.entities.begin() + static_cast<std::ptrdiff_t>(at), moving.begin(), moving.end());
+        const bool same = std::equal(s.entities.begin(), s.entities.end(), before_.begin(), before_.end(),
+                                     [](const Entity& a, const Entity& b) { return a.id == b.id; });
+        if (same) s.entities = before_;
+        return !same;
+    }
+    void revert(Scene& s) override { s.entities = before_; }
+
+private:
+    Guid id_;
+    std::optional<Guid> sibling_;
+    std::vector<Entity> before_;
+};
+
 } // namespace
 
 bool History::execute(Scene& scene, std::unique_ptr<Command> command) {
@@ -276,5 +310,6 @@ std::unique_ptr<Command> set_component(const Guid& e, std::string t, asset::Json
 std::unique_ptr<Command> add_entity(Entity e) { return std::make_unique<AddEntity>(std::move(e)); }
 std::unique_ptr<Command> remove_entity(const Guid& e) { return std::make_unique<RemoveEntity>(e); }
 std::unique_ptr<Command> reparent(const Guid& e, std::optional<Guid> p) { return std::make_unique<Reparent>(e, p); }
+std::unique_ptr<Command> move_before(const Guid& e, std::optional<Guid> s) { return std::make_unique<MoveBefore>(e, s); }
 
 } // namespace noor::scene

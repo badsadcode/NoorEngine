@@ -97,6 +97,11 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API const char* noor_doc_csg(noor_doc* doc) {
+    if (!doc) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* { return give(doc->doc->csg_info()); });
+}
+
 NOOR_API const char* noor_doc_texture(noor_doc* doc, const char* texture_path) {
     if (!doc || !texture_path) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {

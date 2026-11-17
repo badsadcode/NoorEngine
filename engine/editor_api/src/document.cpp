@@ -1,6 +1,7 @@
 #include "document.h"
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
+#include "noor/csg/csg.h"
 #include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
@@ -8,6 +9,7 @@
 #include "noor/foundation/log.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <unordered_map>
@@ -426,6 +428,15 @@ Status Document::execute(const Json& command) {
         applied = history_.execute(*scene_, scene::set_component(*id, command["type"], command.value("value", Json())));
     } else if (op == "remove") {
         applied = history_.execute(*scene_, scene::remove_entity(*id));
+    } else if (op == "move") {
+        // {"op": "move", "entity": id, "before": sibling id | null (= last)}
+        std::optional<Guid> before;
+        if (command.contains("before") && !command["before"].is_null()) {
+            auto b = entity_field(command, "before");
+            if (!b) return std::unexpected(b.error());
+            before = *b;
+        }
+        applied = history_.execute(*scene_, scene::move_before(*id, before));
     } else if (op == "reparent") {
         std::optional<Guid> parent;
         if (command.contains("parent") && !command["parent"].is_null()) {
@@ -570,12 +581,148 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();
     }
+    // CSG models: built from their brush children in order (ADR-016), cached per model.
+    csg_last_.clear();
+    for (std::size_t i = 0; i < entities.size(); ++i) {
+        if (!entities[i].has("csg_model")) continue;
+        auto mesh = build_csg(expanded, i);
+        if (!mesh) continue;
+        snap->csg.push_back({entities[i].id, expanded.world_matrix(i), mesh});
+        csg_last_.push_back(std::move(mesh));
+    }
     for (auto& m : view.meshes) {
         std::string key = m.asset_path.generic_string();
         const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
         snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version});
     }
     channel_->publish(std::move(snap));
+}
+
+// ---- CSG (ADR-016) ----
+
+namespace {
+
+float json_float(const Json& j, const char* key, float fallback) {
+    return j.contains(key) && j[key].is_number() ? j[key].get<float>() : fallback;
+}
+math::Vec2 json_vec2(const Json& j, const char* key, math::Vec2 fallback) {
+    if (!j.contains(key) || !j[key].is_array() || j[key].size() != 2 || !j[key][0].is_number() || !j[key][1].is_number()) return fallback;
+    return {j[key][0].get<float>(), j[key][1].get<float>()};
+}
+
+csg::Shape shape_of(const std::string& name) {
+    for (const auto s : {csg::Shape::Box, csg::Shape::Wedge, csg::Shape::Cylinder, csg::Shape::Cone, csg::Shape::Sphere, csg::Shape::Stairs, csg::Shape::Arch})
+        if (csg::shape_name(s) == name) return s;
+    return csg::Shape::Box;
+}
+
+} // namespace
+
+std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded, std::size_t model_index) {
+    const auto& entities = expanded.entities;
+    const Guid model_id = entities[model_index].id;
+    // The model's brushes: its direct children with a `brush` component, in order.
+    std::vector<std::size_t> brush_entities;
+    for (std::size_t j = model_index + 1; j < entities.size(); ++j)
+        if (entities[j].parent == model_id && entities[j].has("brush")) brush_entities.push_back(j);
+
+    // What the result depends on, hashed: brush components, local transforms, material files.
+    std::string recipe = model_id.to_string();
+    for (const std::size_t j : brush_entities) {
+        const auto& t = entities[j].transform;
+        recipe += entities[j].id.to_string() + entities[j].components.at("brush").dump();
+        recipe += std::format("{} {} {} {} {} {} {} {} {} {}", t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y,
+                              t.rotation.z, t.rotation.w, t.scale.x, t.scale.y, t.scale.z);
+    }
+    const std::uint64_t key = std::hash<std::string>{}(recipe);
+    if (const auto it = csg_cache_.find(model_id); it != csg_cache_.end() && it->second->key == key) return it->second;
+
+    const auto start = std::chrono::steady_clock::now();
+    auto mesh = std::make_shared<CsgMesh>();
+    mesh->key = key;
+    mesh->materials.emplace_back();  // slot 0: the default material
+    std::unordered_map<Guid, std::uint32_t> slot_of;
+    std::vector<csg::Brush> brushes;
+    std::vector<Guid> brush_ids;
+    for (const std::size_t j : brush_entities) {
+        const Json& c = entities[j].components.at("brush");
+        if (!c.is_object()) continue;
+        csg::Brush b;
+        b.shape = shape_of(c.value("shape", std::string("box")));
+        const std::string op = c.value("operation", std::string("add"));
+        b.operation = op == "subtract" ? csg::Operation::Subtract : op == "intersect" ? csg::Operation::Intersect : csg::Operation::Add;
+        if (c.contains("size") && c["size"].is_array() && c["size"].size() == 3)
+            b.size = {c["size"][0].get<float>(), c["size"][1].get<float>(), c["size"][2].get<float>()};
+        b.sides = static_cast<std::uint32_t>(std::clamp(json_float(c, "sides", 16.0f), 3.0f, 256.0f));
+        b.steps = static_cast<std::uint32_t>(std::clamp(json_float(c, "steps", 4.0f), 1.0f, 256.0f));
+        const auto& t = entities[j].transform;
+        b.transform = math::compose(t.position, t.rotation, t.scale);
+        b.surface.scale = json_vec2(c, "uv_scale", {1, 1});
+        b.surface.offset = json_vec2(c, "uv_offset", {0, 0});
+        b.surface.rotation_degrees = json_float(c, "uv_rotation", 0.0f);
+        if (const auto id = asset::guid_field(c, "material")) {
+            auto [it, added] = slot_of.try_emplace(*id, static_cast<std::uint32_t>(mesh->materials.size()));
+            if (added) {
+                std::filesystem::path file;
+                if (const auto* rec = registry_.find(*id))
+                    if (auto resolved = project_.resolve(rec->path)) file = *resolved;
+                mesh->materials.push_back(std::move(file));
+            }
+            b.surface.material = it->second;
+        }
+        if (b.operation != csg::Operation::Add) {
+            const auto bm = csg::brush_mesh(b);
+            CsgMesh::Ghost ghost{entities[j].id, b.operation == csg::Operation::Intersect, {}};
+            for (const auto index : bm.indices) ghost.positions.push_back(bm.positions[index]);
+            mesh->ghosts.push_back(std::move(ghost));
+        }
+        brushes.push_back(std::move(b));
+        brush_ids.push_back(entities[j].id);
+    }
+    mesh->brush_count = brushes.size();
+
+    auto built = csg::build_model(brushes);
+    if (!built) {
+        mesh->warnings.push_back(built.error().describe());
+    } else {
+        mesh->warnings = built->warnings;
+        mesh->volume = built->volume;
+        mesh->triangles = built->triangle_count();
+        mesh->vertices.reserve(built->vertices.size());
+        for (const auto& v : built->vertices)
+            mesh->vertices.push_back({v.position, v.normal, {1, 1, 1}, v.uv, v.tangent});
+        mesh->indices = std::move(built->indices);
+        // Runs of the same (brush, material) become one part of that brush's group.
+        std::unordered_map<std::uint32_t, std::size_t> group_of;
+        for (std::size_t t = 0; t < built->triangle_source.size(); ++t) {
+            const std::uint32_t brush = built->triangle_source[t].brush;
+            const std::uint32_t slot = brushes[brush].surface_of(built->triangle_source[t].face).material;
+            auto [git, added] = group_of.try_emplace(brush, mesh->groups.size());
+            if (added) mesh->groups.push_back({brush_ids[brush], {}});
+            auto& parts = mesh->groups[git->second].parts;
+            const auto first = static_cast<std::uint32_t>(t * 3);
+            if (!parts.empty() && parts.back().slot == slot && parts.back().first_index + parts.back().index_count == first) parts.back().index_count += 3;
+            else parts.push_back({first, 3, slot});
+        }
+    }
+    mesh->build_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    for (const auto& w : mesh->warnings) NOOR_LOG_WARN("CSG", "{}: {}", entities[model_index].name, w);
+    csg_cache_[model_id] = mesh;
+    return mesh;
+}
+
+Json Document::csg_info() const {
+    Json out = Json::array();
+    for (const auto& [id, mesh] : csg_cache_) {
+        if (std::ranges::find(csg_last_, mesh) == csg_last_.end()) continue;  // not in the scene any more
+        out.push_back({{"model", id.to_string()},
+                       {"brushes", mesh->brush_count},
+                       {"triangles", mesh->triangles},
+                       {"volume", mesh->volume},
+                       {"build_ms", mesh->build_ms},
+                       {"warnings", mesh->warnings}});
+    }
+    return out;
 }
 
 } // namespace noor::editor

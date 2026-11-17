@@ -68,6 +68,35 @@ public static class EntityTemplates
         }, new Vec3(0, 4, 0), new Vec3(-90, 0, 0)),
     ];
 
+    // ---- CSG brushes (Milestone 6, ADR-016): children of an entity with a `csg_model` component,
+    // combined in child order. Sizes are a sensible start for building at human scale. ----
+
+    public static readonly string[] BrushShapes = ["box", "wedge", "cylinder", "cone", "sphere", "stairs", "arch"];
+    public static readonly string[] BrushOperations = ["add", "subtract", "intersect"];
+
+    public static JsonObject Brush(string shape) => new()
+    {
+        ["shape"] = shape,
+        ["operation"] = shape == "arch" ? "subtract" : "add",  // an arch is a doorway: it cuts
+        ["size"] = shape switch
+        {
+            "box" => new JsonArray(4.0, 3.0, 0.3),          // a wall
+            "wedge" => new JsonArray(4.0, 1.5, 3.0),        // a roof slope
+            "stairs" => new JsonArray(1.2, 1.5, 2.4),
+            "arch" => new JsonArray(1.0, 2.2, 1.0),     // a door opening (deeper than walls, to cut through)
+            "sphere" => new JsonArray(1.0, 1.0, 1.0),
+            _ => new JsonArray(1.0, 2.0, 1.0),
+        },
+        ["sides"] = shape is "sphere" ? 24 : 16,
+        ["steps"] = 8,
+        ["uv_scale"] = new JsonArray(1.0, 1.0),
+        ["material"] = null,
+    };
+
+    /// <summary>Where a new brush sits in its model: on the model's floor (y = half its height).</summary>
+    public static Vec3 BrushPosition(JsonObject brush) =>
+        new(0, (brush["size"] as JsonArray)?[1] is JsonNode h && Num.TryParse(h.ToJsonString(), out var y) ? y / 2 : 0.5, 0);
+
     // ---- Player (first person): an entity with a character controller and a Lua script, a capsule
     // body to see it by, and a camera at eye height. ----
 
