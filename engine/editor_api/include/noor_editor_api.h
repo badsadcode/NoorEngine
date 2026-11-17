@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 10u
+#define NOOR_EDITOR_API_VERSION 11u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -104,6 +104,10 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan); /* [{guid, 
 /* v10: a material from the texture set `texture_path` (project-relative) belongs to, written beside
    it as <set>.noormat (kept if it exists). Returns {"path", "created", "maps": [{"role", "path"}]} or NULL. */
 NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_path);
+/* v11: the material preview: {"shape": "sphere" | "cube" | "plane", "material": "Assets/x.noormat",
+   "hdri": "Assets/sky.hdr" or "" (procedural sky), "ev100": 14, "intensity": 8000, "rotation": 0,
+   "reload": n (a new number reloads materials and textures at once)}. Returns 1 or 0. */
+NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json);
 NOOR_API const char* noor_doc_scenes(noor_doc* doc);                 /* ["Scenes/Main.noorscene", ...] */
 
 NOOR_API int32_t noor_doc_open_scene(noor_doc* doc, const char* relative_path);
@@ -147,6 +151,8 @@ NOOR_API void noor_doc_set_audio_device(noor_doc* doc, int32_t enabled);
 /* Viewports showing documents. Passing NULL detaches. The viewport keeps working if the
  * document is closed first (it keeps showing the last published scene). */
 NOOR_API void noor_viewport_set_document(noor_viewport* viewport, noor_doc* doc);
+/* v11: shows the document's material preview (noor_doc_set_preview) instead of its scene. */
+NOOR_API void noor_viewport_set_preview(noor_viewport* viewport, noor_doc* doc);
 /* Moves the viewport camera to show everything (NULL or "[]") or the given entities
  * (JSON array of ids; include descendants to frame a whole subtree). */
 NOOR_API void noor_viewport_frame(noor_viewport* viewport, const char* entity_ids_json);

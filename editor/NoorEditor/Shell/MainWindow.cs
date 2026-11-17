@@ -38,6 +38,8 @@ public sealed class MainWindow : Window
     // NoorCode: the scripts open as tabs next to the viewport (they outlive layout rebuilds).
     private readonly List<ScriptDocument> _scripts = new();
     public IReadOnlyList<ScriptDocument> OpenScripts => _scripts;
+    private readonly List<MaterialDocument> _materials = new();
+    public IReadOnlyList<MaterialDocument> OpenMaterials => _materials;
 
     private readonly EditorSettings _settings;
     private readonly TextBlock _statusLeft = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
@@ -106,11 +108,13 @@ public sealed class MainWindow : Window
         {
             Doc.PollFiles();  // the engine logs and reloads what changed
             foreach (var script in _scripts) script.PollDisk();
+            foreach (var material in _materials) material.PollDisk();
         };
         EngineLog.Lines.CollectionChanged += OnLogLines;
         DockFactory.DockableClosed += (_, e) =>
         {
             if (e.Dockable is ScriptDocument closed) _scripts.Remove(closed);
+            if (e.Dockable is MaterialDocument closedMaterial) _materials.Remove(closedMaterial);
         };
         _fileTimer.Start();
         timer.Start();
@@ -166,6 +170,7 @@ public sealed class MainWindow : Window
                 ContentBrowser = new ContentPanel(Doc);
                 ContentBrowser.AddRequested += async a => { if (await ReadyToEdit()) AddAsset(a); };
                 ContentBrowser.OpenSceneRequested += s => _ = OpenScene(s);
+                ContentBrowser.EditRequested += a => OpenMaterial(a.Path);
                 return ContentBrowser;
             },
         };
@@ -192,6 +197,7 @@ public sealed class MainWindow : Window
         }
         Fill(documents, ViewportDockable);
         foreach (var script in _scripts) DockFactory.AddDockable(documents, script);  // a layout rebuild keeps open scripts
+        foreach (var material in _materials) DockFactory.AddDockable(documents, material);
         Fill(left, hierarchy);
         Fill(right, inspector);
         Fill(bottom, content, console);
@@ -835,6 +841,68 @@ public sealed class MainWindow : Window
         return script;
     }
 
+    /// <summary>Opens a material (project-relative .noormat path) in the material editor, as a tab.</summary>
+    public MaterialDocument? OpenMaterial(string relativePath)
+    {
+        var material = _materials.FirstOrDefault(m => string.Equals(m.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        if (material == null)
+        {
+            if (!File.Exists(Path.Combine(Doc.ProjectRoot, relativePath)))
+            {
+                EngineLog.Warn("Materials", $"{relativePath} doesn't exist");
+                return null;
+            }
+            material = new MaterialDocument(Doc, relativePath)
+            {
+                CreateView = m =>
+                {
+                    var panel = new MaterialPanel(m);
+                    panel.SaveAsInstanceRequested += m2 => SaveMaterialInstance(m2);
+                    panel.OpenRequested += p => OpenMaterial(p);
+                    return panel;
+                },
+            };
+            _materials.Add(material);
+            var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
+            if (documents != null) DockFactory.AddDockable(documents, material);
+        }
+        if (material.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(material);
+            DockFactory.SetFocusedDockable(owner, material);
+        }
+        return material;
+    }
+
+    /// <summary>Save as instance: <c>name_variant.noormat</c> beside the material, changing nothing yet; opens it.</summary>
+    public MaterialDocument? SaveMaterialInstance(MaterialDocument parent)
+    {
+        parent.Flush();
+        if (parent.Asset is not { } asset)
+        {
+            EngineLog.Error("Materials", $"{parent.RelativePath} isn't an imported asset yet (Rescan)");
+            return null;
+        }
+        var folder = Path.GetDirectoryName(parent.RelativePath)?.Replace(Path.DirectorySeparatorChar, '/') ?? "";
+        var stem = Path.GetFileNameWithoutExtension(parent.RelativePath);
+        string relative;
+        var n = 1;
+        do relative = $"{folder}/{stem}_variant{(n == 1 ? "" : n.ToString())}.noormat".TrimStart('/');
+        while (File.Exists(Path.Combine(Doc.ProjectRoot, relative)) && ++n < 1000);
+        try
+        {
+            File.WriteAllText(Path.Combine(Doc.ProjectRoot, relative), MaterialFile.InstanceText(asset.Guid));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            EngineLog.Error("Materials", $"Couldn't write {relative}: {e.Message}");
+            return null;
+        }
+        Doc.RefreshAssets(rescan: true);
+        EngineLog.Info("Materials", $"Made {relative}, an instance of {parent.RelativePath}");
+        return OpenMaterial(relative);
+    }
+
     /// <summary>The external editor's name for NoorCode's "Open in …" button.</summary>
     private string ExternalEditorName()
     {
@@ -898,6 +966,7 @@ public sealed class MainWindow : Window
         var focused = ViewportHasFocus() ? null : FocusManager?.GetFocusedElement();
         var inCode = (focused as Visual)?.FindAncestorOfType<CodePanel>(includeSelf: true);
         var inText = focused is TextBox || inCode != null;
+        var inMaterial = (focused as Visual)?.FindAncestorOfType<MaterialPanel>(includeSelf: true);
         // While playing, keys typed into the viewport belong to the game: only Ctrl shortcuts
         // (Ctrl+P stop, Ctrl+S save) reach the editor.
         if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -917,6 +986,13 @@ public sealed class MainWindow : Window
                 break;
             case Key.S when ctrl:
                 Save();
+                break;
+            case Key.Z when ctrl && !shift && !inText && inMaterial != null:
+                inMaterial.Material.Undo();
+                break;
+            case Key.Y when ctrl && !inText && inMaterial != null:
+            case Key.Z when ctrl && shift && !inText && inMaterial != null:
+                inMaterial.Material.Redo();
                 break;
             case Key.Z when ctrl && !shift && !inText:
                 Doc.Undo();

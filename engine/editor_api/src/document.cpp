@@ -138,6 +138,60 @@ Json Document::project_info() const {
             {"engine", project_.info().engine_version}};
 }
 
+std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> Document::asset_files() const {
+    auto files = std::make_shared<std::unordered_map<Guid, std::filesystem::path>>();
+    for (const auto& a : registry_.assets())
+        if (auto path = project_.resolve(a.path)) files->emplace(a.guid, *path);
+    return files;
+}
+
+Status Document::set_preview(const Json& s) {
+    if (!s.is_object()) return fail(ErrorCode::InvalidArgument, "preview settings must be an object");
+    auto snap = std::make_shared<RenderSnapshot>();
+    snap->show_grid = false;
+    snap->texture_cache = project_.root() / ".noor" / "cache" / "textures";
+    snap->asset_files = asset_files();
+    snap->reload_token = s.value("reload", std::uint64_t{0});
+
+    game::SceneView::Primitive prim{game::SceneView::Primitive::Shape::Box, math::Mat4::identity(), 0.5f, 2.0f, {1, 1, 1}, Guid{}, {}, {}};
+    const std::string shape = s.value("shape", std::string("sphere"));
+    if (shape == "sphere") {
+        prim.shape = game::SceneView::Primitive::Shape::Sphere;
+        prim.world = math::translation({0, 0.5f, 0}) * math::scale({1, 1, 1});
+    } else if (shape == "plane") {
+        prim.world = math::translation({0, 0.5f, 0}) * math::rotation({1, 0, 0}, math::radians(70.0f)) * math::scale({1.2f, 1.2f, 0.02f});
+    } else {
+        prim.world = math::translation({0, 0.45f, 0}) * math::rotation({0, 1, 0}, math::radians(30.0f)) * math::scale({0.75f, 0.75f, 0.75f});
+    }
+    if (const std::string material = s.value("material", std::string()); !material.empty()) {
+        auto file = project_.resolve(material);
+        if (!file) return std::unexpected(file.error());
+        prim.material_file = *file;
+    }
+    snap->primitives.push_back(prim);
+
+    render::Lighting lighting;
+    lighting.ev100 = std::clamp(s.value("ev100", 14.0f), -10.0f, 25.0f);
+    lighting.sun_shadows = false;  // nothing to cast on
+    if (const std::string hdri = s.value("hdri", std::string()); !hdri.empty()) {
+        auto file = project_.resolve(hdri);
+        if (!file) return std::unexpected(file.error());
+        snap->environment.hdri = *file;
+        lighting.environment_intensity = std::clamp(s.value("intensity", 8000.0f), 0.0f, 1.0e7f);
+        lighting.sun_illuminance = 0.0f;  // the photo has its sun
+    } else {
+        // The default procedural sky (as game::collect_view makes it) and the default sun.
+        snap->environment.zenith = lighting.sky_color * 0.8f;
+        snap->environment.horizon = (lighting.sky_color + math::Vec3{1, 1, 1}) * 0.6f;
+        snap->environment.ground = lighting.ground_color;
+        lighting.environment_intensity = lighting.sky_luminance;
+    }
+    lighting.environment_rotation = math::radians(s.value("rotation", 0.0f));
+    snap->lighting = lighting;
+    preview_channel_->publish(std::move(snap));
+    return {};
+}
+
 Result<Json> Document::make_material(std::string_view texture_path) {
     auto texture = project_.resolve(texture_path);
     if (!texture) return std::unexpected(texture.error());
@@ -485,12 +539,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     snap->environment = view.environment;
     for (const auto& lm : view.light_markers) snap->markers.push_back({math::translation(lm.position), lm.entity, lm.color});
     snap->texture_cache = project_.root() / ".noor" / "cache" / "textures";
-    {
-        auto files = std::make_shared<std::unordered_map<Guid, std::filesystem::path>>();
-        for (const auto& a : registry_.assets())
-            if (auto path = project_.resolve(a.path)) files->emplace(a.guid, *path);
-        snap->asset_files = std::move(files);
-    }
+    snap->asset_files = asset_files();
     if (world_) {
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();

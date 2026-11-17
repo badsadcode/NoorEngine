@@ -330,6 +330,7 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::MaterialLibrary> materials;
     std::optional<noor::game::EnvironmentLibrary> environment;
     auto refresh_clock = std::chrono::steady_clock::now();
+    std::uint64_t seen_reload_token = 0;
     std::vector<noor::render::OverlayVertex> overlay;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
@@ -437,6 +438,11 @@ void render_thread_main(noor_viewport* vp) {
             environment.emplace(r, snap->texture_cache);
         }
         if (snap && environment) environment->apply(snap->environment);
+        // A new reload token (the material editor saved): pick changed materials up now.
+        if (snap && materials && snap->reload_token != 0 && snap->reload_token != seen_reload_token) {
+            seen_reload_token = snap->reload_token;
+            materials->refresh();
+        }
         if (snap && materials && snap != shown) {
             materials->set_resolver([files = snap->asset_files](const Guid& id) -> std::optional<std::filesystem::path> {
                 if (!files) return std::nullopt;
@@ -450,6 +456,8 @@ void render_thread_main(noor_viewport* vp) {
             materials->refresh();
         }
         if (snap != shown) {
+            // The material preview frames its object when it first appears.
+            if (!shown && snap && !snap->show_grid && !frame_request) frame_request.emplace();
             shown = snap;
             scene_draws.clear();
             entity_by_id.clear();
@@ -809,7 +817,7 @@ void render_thread_main(noor_viewport* vp) {
                     frame_draws.push_back(item);
                 }
             }
-            if (ground.valid()) {
+            if (ground.valid() && (!shown || shown->show_grid)) {
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
                 const Vec3 c = (scene_lo + scene_hi) * 0.5f;
                 noor::render::DrawItem ground_item{ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})};
@@ -1016,6 +1024,12 @@ NOOR_API void noor_viewport_set_document(noor_viewport* viewport, noor_doc* doc)
     if (!viewport) return;
     std::scoped_lock lock(viewport->doc_mutex);
     viewport->channel = noor_doc_channel(doc);
+}
+
+NOOR_API void noor_viewport_set_preview(noor_viewport* viewport, noor_doc* doc) {
+    if (!viewport) return;
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->channel = noor_doc_preview_channel(doc);
 }
 
 NOOR_API void noor_viewport_frame(noor_viewport* viewport, const char* entity_ids_json) {

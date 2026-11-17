@@ -97,6 +97,16 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json) {
+    if (!doc || !json) return 0;
+    return guarded<>(int32_t{0}, [&]() -> int32_t {
+        auto parsed = noor::asset::parse_json(json, "preview");
+        if (!parsed) return fail_with(parsed.error());
+        auto s = doc->doc->set_preview(*parsed);
+        return s ? 1 : fail_with(s.error());
+    });
+}
+
 NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_path) {
     if (!doc || !texture_path) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
@@ -211,4 +221,9 @@ NOOR_API const char* noor_doc_poll_files(noor_doc* doc) {
 // For viewport.cpp: the channel a document publishes to.
 std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_channel(noor_doc* doc) {
     return doc ? doc->doc->channel() : nullptr;
+}
+
+// For viewport.cpp: the material preview's channel.
+std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_preview_channel(noor_doc* doc) {
+    return doc ? doc->doc->preview_channel() : nullptr;
 }

@@ -60,6 +60,8 @@ struct RenderSnapshot {
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
     game::SceneView::Environment environment;
     std::filesystem::path texture_cache;  // <project>/.noor/cache/textures (decoded textures)
+    bool show_grid = true;            // false: the material preview (no ground grid)
+    std::uint64_t reload_token = 0;   // changed: reload materials and textures now
     // Every asset's file by id (materials find their textures and parents with it).
     std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> asset_files;
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
@@ -132,6 +134,9 @@ public:
 
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
     [[nodiscard]] std::shared_ptr<SnapshotChannel> channel() const noexcept { return channel_; }
+    // The material editor's preview: one shape wearing a material, under an environment.
+    [[nodiscard]] std::shared_ptr<SnapshotChannel> preview_channel() const noexcept { return preview_channel_; }
+    [[nodiscard]] Status set_preview(const asset::Json& settings);
 
 private:
     explicit Document(asset::Project project);
@@ -157,6 +162,8 @@ private:
     asset::FileWatcher watcher_;
     std::unordered_map<std::string, std::uint64_t> asset_versions_;  // absolute generic path -> version
     std::shared_ptr<SnapshotChannel> channel_ = std::make_shared<SnapshotChannel>();
+    std::shared_ptr<SnapshotChannel> preview_channel_ = std::make_shared<SnapshotChannel>();
+    std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> asset_files() const;
 };
 
 } // namespace noor::editor

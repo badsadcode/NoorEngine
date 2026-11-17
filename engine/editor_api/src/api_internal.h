@@ -21,6 +21,7 @@ void set_last_error(std::string message);
 
 // The render-snapshot channel a document publishes to (document_api.cpp), for viewports.
 std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_channel(noor_doc* doc);
+std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_preview_channel(noor_doc* doc);
 
 // Game input from a viewport (viewport.cpp), for play mode. Empty unless the viewport has the
 // keyboard focus, and while the right button flies the editor camera. One caller at a time: the

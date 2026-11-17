@@ -10,7 +10,8 @@ namespace NoorEditor.Panels;
 
 /// <summary>
 /// Scenes and importable assets of the project (from the engine's asset registry).
-/// Double-click a scene to open it; double-click a model or prefab to add it to the open scene.
+/// Double-click a scene to open it, a material to edit it; double-click a model or prefab to add it
+/// to the open scene.
 /// </summary>
 public sealed class ContentPanel : DockPanel
 {
@@ -33,6 +34,9 @@ public sealed class ContentPanel : DockPanel
         return m.Path;
     }
     public event Action<string>? OpenSceneRequested;
+    /// <summary>Edit (materials): opens the material editor.</summary>
+    public event Action<AssetInfo>? EditRequested;
+    private readonly Button _edit = new() { Content = "Edit", Classes = { "tool" }, IsEnabled = false };
 
     public ContentPanel(EditorDocument doc)
     {
@@ -45,11 +49,17 @@ public sealed class ContentPanel : DockPanel
         add.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
         _makeMaterial.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "texture" } a) MakeMaterial(a); };
         ToolTip.SetTip(_makeMaterial, "A material from this texture's set (its _albedo, _normal, _orm… files), saved beside it");
-        _assets.SelectionChanged += (_, _) => _makeMaterial.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "texture" };
+        _edit.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "material" } a) EditRequested?.Invoke(a); };
+        ToolTip.SetTip(_edit, "Open the material editor (double-click does too)");
+        _assets.SelectionChanged += (_, _) =>
+        {
+            _makeMaterial.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "texture" };
+            _edit.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "material" };
+        };
         var bar = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(6, 6, 6, 4),
-            Children = { _search, rescan, add, _makeMaterial, _summary },
+            Children = { _search, rescan, add, _edit, _makeMaterial, _summary },
         };
         SetDock(bar, Avalonia.Controls.Dock.Top);
         Children.Add(bar);
@@ -59,7 +69,11 @@ public sealed class ContentPanel : DockPanel
             Row(a.Kind switch { "Prefab" => "◆", "Sound" => "♪", "Material" => "●", _ => "▣" },
                 a.Kind is "Prefab" or "Material" ? NoorTheme.Cyan : NoorTheme.Accent, a.Path, a.Kind));
         _scenes.DoubleTapped += (_, _) => { if (_scenes.SelectedItem is string s) OpenSceneRequested?.Invoke(s); };
-        _assets.DoubleTapped += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
+        _assets.DoubleTapped += (_, _) =>
+        {
+            if (_assets.SelectedItem is AssetInfo { Importer: "material" } m) EditRequested?.Invoke(m);
+            else if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a);
+        };
 
         var scenesHeader = Header("Scenes");
         var assetsHeader = Header("Assets");

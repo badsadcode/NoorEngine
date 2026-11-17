@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 10;
+    public const uint ExpectedApiVersion = 11;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -49,6 +49,7 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_viewport_get_stats(IntPtr viewport, out ViewportStats stats);
     [DllImport(Dll)] public static extern void noor_viewport_destroy(IntPtr viewport);
     [DllImport(Dll)] public static extern void noor_viewport_set_document(IntPtr viewport, IntPtr doc);
+    [DllImport(Dll)] public static extern void noor_viewport_set_preview(IntPtr viewport, IntPtr doc);
     [DllImport(Dll)] public static extern void noor_viewport_frame(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_selection(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_gizmo(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityId, int mode);
@@ -73,6 +74,7 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_doc_project_info(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_assets(IntPtr doc, int rescan);
     [DllImport(Dll)] private static extern IntPtr noor_doc_make_material(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
+    [DllImport(Dll)] public static extern int noor_doc_set_preview(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
     [DllImport(Dll)] private static extern IntPtr noor_doc_scenes(IntPtr doc);
     [DllImport(Dll)] public static extern int noor_doc_open_scene(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string relativePath);
     [DllImport(Dll)] public static extern int noor_doc_new_scene(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string relativePath, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);

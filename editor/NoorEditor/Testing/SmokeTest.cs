@@ -244,6 +244,7 @@ internal static class SmokeTest
             await Task.Delay(600);
             Shot(window, "editor_18_material.png");
             doc.Undo();
+            await MaterialEditorChecks(window, materialAsset, Check, Shot);
         }
         CodeEditorChecks(window, results, Check);
 
@@ -745,6 +746,73 @@ internal static class SmokeTest
     // Milestone 4, part 7b: NoorCode, the built-in script editor. Opening at a line, typing (keys
     // go to the text, not the editor's shortcuts), Ctrl+S, Play saving first, compile errors marked
     // on their line and linked from the Console, outside changes reloading, closing the tab.
+    // Milestone 5, part 6: the material editor (preview, edits saved to the file, undo, instances).
+    private static async Task MaterialEditorChecks(MainWindow window, AssetInfo tiles, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var file = Path.Combine(doc.ProjectRoot, tiles.Path);
+        var material = window.OpenMaterial(tiles.Path);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<MaterialPanel>().FirstOrDefault(p => p.Material == material);
+        check(material != null && panel != null && window.FindDock("Documents")?.ActiveDockable == material,
+              "material editor: Edit opens the material as a tab next to the viewport");
+        if (material == null || panel == null) return;
+        var stats = await WaitFor(() => panel.Preview.Stats, s => s is { State: Native.ViewportState.Running, FramesPresented: > 5 }, 10);
+        check(stats is { State: Native.ViewportState.Running, FramesPresented: > 5 } && VulkanViewport.Active?.IsPreview != true,
+              $"material editor: the preview renders ({stats?.FramesPresented} frames) in its own viewport");
+
+        var before = File.ReadAllText(file);
+        material.Edit("roughness", 0.2);
+        material.Flush();
+        var edited = MaterialFile.Read(file);
+        check(edited?["roughness"]?.GetValue<double>() == 0.2 && edited["metallic_roughness_map"] != null,
+              "material editor: an edit is saved to the .noormat (other fields kept)");
+        material.Edit("base_color", new JsonArray(0.8, 0.3, 0.1, 1.0));
+        await Task.Delay(700);  // saved by itself after a pause; the preview reloads it
+        check(MaterialFile.Read(file)?["base_color"]?[1]?.GetValue<double>() == 0.3, "material editor: edits save themselves");
+        shot(window, "editor_20_material_editor.png");
+        material.Undo();
+        material.Undo();
+        check(JsonNode.DeepEquals(MaterialFile.Read(file), JsonNode.Parse(before)),
+              "material editor: undo takes the edits back out of the file");
+        check(MaterialFile.ToHex(MaterialFile.FromHex("#BC7A3C")!) == "#BC7A3C" && MaterialFile.ToHex([0.5, 0.5, 0.5]) == "#BCBCBC",
+              "material editor: colours are sRGB hex in the UI and linear in the file");
+
+        // Save as instance: a child that changes nothing yet, then one field.
+        var variant = window.SaveMaterialInstance(material);
+        await Task.Delay(400);
+        var variantPanel = window.GetVisualDescendants().OfType<MaterialPanel>().FirstOrDefault(p => p.Material == variant);
+        var variantFile = variant == null ? null : MaterialFile.Read(variant.FullPath);
+        check(variant?.RelativePath == "Assets/Textures/tiles_variant.noormat" && variantFile?["parent"]?.GetValue<string>() == tiles.Guid &&
+              doc.Assets.Any(a => a.Path == variant.RelativePath && a.Kind == "Material"),
+              $"material instances: Save as instance writes {variant?.RelativePath} with the parent's id");
+        if (variant != null && variantPanel != null)
+        {
+            check(!variantPanel.ShowsOverride("roughness") && variant.Material.GetMap("normal_map") == material.Material.GetMap("normal_map") &&
+                  variant.Material.GetMap("normal_map") != null,
+                  "material instances: an instance shows its parent's values and textures");
+            variant.Edit("uv_scale", new JsonArray(4.0, 4.0));
+            variant.Flush();
+            await Task.Delay(100);
+            check(variantPanel.ShowsOverride("uv_scale") || variant.Material.Sets("uv_scale"), "material instances: a changed field is marked as the instance's own");
+            check(MaterialFile.Read(variant.FullPath)?["overrides"]?["uv_scale"] != null && MaterialFile.Read(file)?["uv_scale"] == null,
+                  "material instances: the change goes into the instance's overrides, the parent stays as it was");
+            variant.Edit("normal_map", null);
+            check(variant.Material.GetMap("normal_map") == null && variant.Material.Root["overrides"]?.AsObject().ContainsKey("normal_map") == true,
+                  "material instances: (none) hides the parent's texture (null override)");
+            variant.Edit("normal_map", null, reset: true);
+            await WaitFor(() => variantPanel.Preview.Stats, s => s is { FramesPresented: > 10 }, 10);
+            variant.Flush();
+            shot(window, "editor_21_material_instance.png");
+            window.DockFactory.CloseDockable(variant);
+        }
+        window.DockFactory.CloseDockable(material);
+        window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        await Task.Delay(300);
+        check(window.OpenMaterials.Count == 0 && VulkanViewport.Active is { IsPreview: false },
+              "material editor: closing the tabs leaves the scene viewport");
+    }
+
     private static async Task NoorCodeChecks(MainWindow window, Dictionary<string, object> results,
                                              Action<bool, string> check, Action<Window, string> shot)
     {

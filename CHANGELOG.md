@@ -4,6 +4,32 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 6: the material editor
+**Added**
+- **Material editor** (`MaterialPanel`, `MaterialDocument`, `MaterialFile`): a `.noormat` opens as a
+  tab next to the viewport (double-click it in the Content Browser, or **Edit**). It has a live
+  preview (sphere, cube or plane; procedural sky or any project `.hdr`; exposure and environment
+  rotation) and every material field: sRGB hex colours stored as linear numbers, sliders, and
+  texture slots chosen from the project's textures. Changes save themselves to the file (no Save
+  button). Ctrl+Z / Ctrl+Y undo inside the tab. Outside changes to the file are picked up.
+- **Instances in the editor**: **Save as instance** (`<name>_variant.noormat`, opened at once).
+  An instance shows its parents' values, marks the fields it changes (↺ gives one back to the
+  parent), and `(none)` hides a parent's texture. **Open parent**.
+- Editor API **v11**: `noor_doc_set_preview` (a one-object preview scene on a second snapshot
+  channel) and `noor_viewport_set_preview`. Snapshots gained `show_grid` and `reload_token`; a new
+  token makes the viewport re-read materials and textures at once. The preview frames its object
+  when it first appears.
+
+**Tests:** 12 editor smoke checks. The editor opens the tiles material and the preview renders.
+Edits reach the file, save themselves and undo out of it. sRGB/linear round trip. Save as
+instance writes the parent id. The instance inherits textures, its overrides land in
+`overrides` while the parent stays untouched, and a `null` override hides a texture. Closing the
+tabs gives back the scene viewport. Screenshots `editor_20`/`editor_21`.
+
+**Not yet:** material thumbnails, several previews at once (the tab in front owns the document's
+preview), exposure *presets* (a slider for now), the texture import-settings panel (moved to
+part 7), the node graph (designed in ADR-030, not built).
+
 ### 2026-11-17 — Milestone 5, part 5: environments (HDRI) and image-based lighting
 **Added**
 - **Environments** (`noor/asset/environment.h`): an equirectangular `.hdr` or a procedural sky,

@@ -1,8 +1,7 @@
 # Materials
 
-How surfaces get their look (ADR-030). Status: **Milestone 5, part 3**. A material editor panel
-with a live preview comes in part 6; until then materials are made from texture sets or written
-as small JSON files.
+How surfaces get their look (ADR-030). Status: **Milestone 5, parts 3 and 6** (materials, and the
+material editor).
 
 ## A material file: `.noormat`
 
@@ -75,6 +74,33 @@ removes a parent's texture. Change the parent and every instance follows.
   (textures inside the GLB included; base colour factors are in the vertex colours).
 - **By hand**: write a `.noormat`, or an instance of one.
 
+## The material editor
+
+Double-click a material in the Content Browser (or select it and press **Edit**). It opens as a
+tab next to the viewport:
+
+- **Preview**: a sphere, cube or plane wearing the material, in its own viewport (orbit it like
+  the scene view). Lit by the default sky and sun or by any `.hdr` in the project, with an
+  exposure slider (EV 8–17) and a slider that turns the environment.
+- **Fields**: every channel above. Colours are typed as sRGB hex, like in a paint program, and
+  saved as linear numbers. Texture slots list the project's textures, or `(none)`.
+- **Saving**: there is no Save button. Each change is written to the `.noormat` a moment later,
+  so the preview, the scene and running games all read the same file. **Ctrl+Z / Ctrl+Y** undo
+  and redo inside the tab (a slider drag is one step). A change made to the file outside the
+  editor (a text editor, git) is picked up.
+- **Instances**: **Save as instance** writes `<name>_variant.noormat` next to the material, as an
+  instance that changes nothing yet, and opens it. An instance shows its parents' values. Fields
+  it changes are cyan with a **↺** that gives the field back to the parent. Choosing `(none)` for
+  a texture hides the parent's texture (a `null` override). **Open parent** opens the parent.
+
+The engine side is small. `noor_doc_set_preview` publishes a one-object scene on the document's
+second snapshot channel, and `noor_viewport_set_preview` points a viewport at it (editor API v11).
+A new `reload` number in the settings makes the preview re-read materials and textures at once,
+instead of waiting for the half-second check.
+
+Not yet: material thumbnails in the Content Browser, editing several materials at once (one
+preview per document: the tab in front owns it), and the texture import-settings panel.
+
 ## Using materials
 
 On a `primitive` component: `"material": "<material id>"`. Its `color` then tints the material only
@@ -93,6 +119,5 @@ number, like textures (ADR-012). Double-sided materials use a second pipeline wi
 culling; cutout ones discard pixels below `alpha_cutoff`.
 
 ## Not yet
-See-through blending (sorted, after the opaque scene), a material editor with preview (part 6),
-material graphs (later, ADR-030), painting and layers (with CSG, Milestone 6), clear coat, sheen,
+See-through blending (sorted, after the opaque scene), material graphs (later, ADR-030), painting and layers (with CSG, Milestone 6), clear coat, sheen,
 transmission, a second UV set, external image files referenced by glTF (only images inside GLBs).

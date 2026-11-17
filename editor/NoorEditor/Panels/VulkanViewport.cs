@@ -16,6 +16,7 @@ public sealed class VulkanViewport : NativeControlHost
 {
     private IntPtr _viewport;
     private readonly EditorDocument _doc;
+    private readonly bool _preview;
 
     /// <summary>The most recently created live viewport (one per editor window for now).</summary>
     public static VulkanViewport? Active { get; private set; }
@@ -23,7 +24,14 @@ public sealed class VulkanViewport : NativeControlHost
     /// <summary>How many engine viewports have been created this session (re-parenting increments it).</summary>
     public static int CreatedCount { get; private set; }
 
-    public VulkanViewport(EditorDocument doc) => _doc = doc;
+    /// <summary><paramref name="preview"/>: shows the document's material preview, not its scene.</summary>
+    public VulkanViewport(EditorDocument doc, bool preview = false)
+    {
+        _doc = doc;
+        _preview = preview;
+    }
+
+    public bool IsPreview => _preview;
 
     /// <summary>The engine viewport handle (noor_viewport*), e.g. as the game view for play mode.</summary>
     public IntPtr EngineHandle => _viewport;
@@ -103,12 +111,19 @@ public sealed class VulkanViewport : NativeControlHost
             EngineLog.Error("Editor", $"Viewport creation failed: {Native.LastError()}");
             return base.CreateNativeControlCore(parent);
         }
-        if (_doc.Handle != IntPtr.Zero) Native.noor_viewport_set_document(_viewport, _doc.Handle);
+        if (_doc.Handle != IntPtr.Zero)
+        {
+            if (_preview) Native.noor_viewport_set_preview(_viewport, _doc.Handle);
+            else Native.noor_viewport_set_document(_viewport, _doc.Handle);
+        }
         Native.noor_viewport_set_selection(_viewport, _selectionJson);
         Native.noor_viewport_set_gizmo(_viewport, _gizmoEntity, _gizmoMode);
         if (_optionsJson != null) Native.noor_viewport_set_options(_viewport, _optionsJson);
-        CreatedCount++;
-        Active = this;
+        if (!_preview)
+        {
+            CreatedCount++;
+            Active = this;  // the scene viewport (previews don't count)
+        }
         return new PlatformHandle(Native.noor_viewport_native_handle(_viewport), "HWND");
     }
 
