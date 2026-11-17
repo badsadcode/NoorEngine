@@ -4,6 +4,41 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 7: quality and measurement
+**Added**
+- **MSAA** for the scene: 4× by default (`RendererDesc::msaa_samples`, `Renderer::set_msaa`; 1/2/4/8,
+  lowered to what the GPU supports). The pass draws into multisampled images and resolves into the
+  HDR image. Scene pipelines and the sky are rebuilt when the sample count changes. Editor:
+  Preferences ▸ Anti-aliasing (viewport option `msaa`). Player: `--msaa N`.
+- **See-through materials** (`"alpha": "blend"`; drawn as cutout until now): after the opaque scene
+  and the sky, sorted back to front, premultiplied (reflections keep their strength), no depth
+  writes; double-sided variant. They cast shadows like cutouts.
+- **Shadow culling per cascade** (`render::sphere_touches_cascade`); meshes keep a bounding sphere.
+- Renderer numbers: `FrameStats` gained shadow draws, culled casters, see-through draws and MSAA
+  samples; `Renderer::mesh_memory`, `render_target_memory`. noor_player's report has a `render`
+  section.
+- Editor: a **Render** panel (Window ▸ Render stats): GPU time per pass as bars, draws (shadow,
+  culled, see-through), triangles, texture/mesh/frame-image memory, picture size and MSAA.
+  Editor API **v12**: `noor_viewport_render_stats`.
+- **Exposure presets** (bright sun 14, HDRI daylight 13, overcast 12, sunset 10, indoor 8, night
+  4): a ▾ next to a camera's `ev100` in the Inspector and next to the material preview's
+  exposure slider. New cameras get `ev100: 14`.
+- [docs/rendering/MEASUREMENTS.md](docs/rendering/MEASUREMENTS.md): GPU time and memory on four
+  scenes at MSAA off/4×/8×, and the decisions: BC7/BC5 compression gets its own step before big
+  texture sets are used; one shared GPU device for editor viewports isn't needed yet.
+
+**Tests:** `render.golden_Glass` (coloured panes and a clear ball over a brick box and a glowing
+ball); a unit test for cascade culling; 4 editor smoke checks (Render panel numbers, MSAA 4× by
+default, switching it off and back on, exposure presets). The other goldens passed unchanged
+with 4× MSAA (edges move by less than the tolerance).
+
+**Fixed:** the editor status bar said "viewport not running" while a material tab hid the scene
+viewport; it now says it's resting.
+
+**Not yet:** texture compression (next step, see above), the texture import-settings panel and
+material thumbnails (moved again: they belong with compression), tinted glass (transmission),
+a tonemapped MSAA resolve, cached far shadow cascades.
+
 ### 2026-11-17 — Milestone 5, part 6: the material editor
 **Added**
 - **Material editor** (`MaterialPanel`, `MaterialDocument`, `MaterialFile`): a `.noormat` opens as a

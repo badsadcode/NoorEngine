@@ -12,6 +12,8 @@ public sealed class PreferencesWindow : Window
     private readonly Preferences _edit;
     private readonly Dictionary<string, TextBox> _fields = new();
     private readonly CheckBox _snap = new() { Content = "Snap while dragging gizmos (hold Ctrl to invert)" };
+    private readonly ComboBox _msaa = new() { ItemsSource = new[] { "Off", "2× MSAA", "4× MSAA", "8× MSAA" }, Width = 140, FontSize = 12 };
+    private static readonly int[] MsaaSamples = [1, 2, 4, 8];
     private readonly CheckBox _noorCode = new() { Content = "Open scripts in NoorCode, the built-in editor" };
     private readonly ComboBox _editor = new() { HorizontalAlignment = HorizontalAlignment.Stretch, FontSize = 12 };
     private readonly TextBox _program = new() { Classes = { "field" }, PlaceholderText = "the program (.exe)" };
@@ -64,6 +66,8 @@ public sealed class PreferencesWindow : Window
             _fields[row.Key] = box;
         }
         _snap.IsChecked = _edit.Snap;
+        _msaa.SelectedIndex = Math.Max(0, Array.IndexOf(MsaaSamples, _edit.Msaa));
+        ToolTip.SetTip(_msaa, "Smooths the jagged edges of the scene. More samples cost more GPU time (see Window ▸ Render).");
         _noorCode.IsChecked = _edit.UseNoorCode;
         ToolTip.SetTip(_noorCode, "Off: scripts open straight in the external editor below.");
 
@@ -79,6 +83,7 @@ public sealed class PreferencesWindow : Window
             var d = new Preferences();
             foreach (var row in Rows) _fields[row.Key].Text = Num.Format(Get(d, row.Key));
             _snap.IsChecked = d.Snap;
+            _msaa.SelectedIndex = Array.IndexOf(MsaaSamples, d.Msaa);
             _noorCode.IsChecked = d.UseNoorCode;
             _editor.SelectedIndex = 0;
         };
@@ -94,6 +99,11 @@ public sealed class PreferencesWindow : Window
                 new TextBlock { Text = "Viewport", Classes = { "section" } },
                 grid,
                 _snap,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal, Spacing = 12,
+                    Children = { new TextBlock { Text = "Anti-aliasing", Width = 138, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Classes = { "muted" } }, _msaa },
+                },
                 new TextBlock { Text = "Scripts", Classes = { "section" }, Margin = new Thickness(0, 6, 0, 0) },
                 _noorCode,
                 EditorRow(),
@@ -117,6 +127,7 @@ public sealed class PreferencesWindow : Window
             Set(_edit, row.Key, v);
         }
         _edit.Snap = _snap.IsChecked == true;
+        _edit.Msaa = MsaaSamples[Math.Clamp(_msaa.SelectedIndex, 0, MsaaSamples.Length - 1)];
         _edit.UseNoorCode = _noorCode.IsChecked == true;
         var choice = _editor.SelectedIndex;
         if (choice <= 0)

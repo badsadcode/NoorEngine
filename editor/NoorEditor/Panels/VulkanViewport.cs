@@ -84,6 +84,9 @@ public sealed class VulkanViewport : NativeControlHost
         if (_viewport != IntPtr.Zero) Native.noor_viewport_set_gizmo(_viewport, entityId, mode);
     }
 
+    /// <summary>The renderer's numbers (noor_viewport_render_stats JSON), or null when not running.</summary>
+    public string? RenderStats() => _viewport == IntPtr.Zero ? null : Native.RenderStats(_viewport);
+
     /// <summary>Clicks and finished gizmo drags since the last call (JSON array).</summary>
     public string PollEvents() => _viewport == IntPtr.Zero ? "[]" : Native.PollEvents(_viewport);
 

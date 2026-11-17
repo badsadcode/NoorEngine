@@ -202,6 +202,22 @@ public sealed class ComponentsEditor : StackPanel
                 check.IsCheckedChanged += (_, _) => SetField(type, field, JsonValue.Create(check.IsChecked == true));
                 editor = check;
                 break;
+            case JsonValue v when v.TryGetValue<double>(out var d) && field == "ev100":
+                // Exposure: a number, or a preset for the situation (Model/ExposurePresets.cs).
+                var presets = new Button { Content = "▾", Classes = { "tool" }, Padding = new Thickness(5, 0), Margin = new Thickness(2, 0, 0, 0) };
+                ToolTip.SetTip(presets, "Exposure presets");
+                var menu = new MenuFlyout();
+                foreach (var preset in ExposurePresets.All)
+                {
+                    var item = new MenuItem { Header = ExposurePresets.Label(preset) };
+                    item.Click += (_, _) => SetField(type, field, JsonValue.Create(preset.Ev100));
+                    menu.Items.Add(item);
+                }
+                presets.Flyout = menu;
+                var ev = new DockPanel { Children = { presets, NumberBox(d, x => SetField(type, field, JsonValue.Create(x))) } };
+                DockPanel.SetDock(presets, Avalonia.Controls.Dock.Right);
+                editor = ev;
+                break;
             case JsonValue v when v.TryGetValue<double>(out var d):
                 editor = NumberBox(d, x => SetField(type, field, JsonValue.Create(x)));
                 break;

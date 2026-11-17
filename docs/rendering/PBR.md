@@ -7,22 +7,44 @@ materials in [MATERIALS.md](MATERIALS.md), shadows, point and spot lights, envir
 
 ```
 shadow pass ── casters from the sun ──▶ 4 shadow cascades (depth)
-scene pass  ── lit draws ─────────────▶ HDR image (RGBA 16-bit float, already exposed)
+scene pass  ── opaque, sky, see-through ▶ HDR image (RGBA 16-bit float, exposed; MSAA resolved)
 screen pass ── tonemap ───────────────▶ the screen (sRGB)  ── editor gizmos ── HUD
 ```
 
 0. **Shadows**: everything that casts a shadow is drawn from the sun into four shadow maps (see
    below).
 1. **Scene**: every mesh is lit by the sun and the sky in physical units and multiplied by the
-   camera's exposure, into a 16-bit float image. Where nothing is drawn, the sky colour.
+   camera's exposure, into a 16-bit float image. Opaque things first, then the sky where nothing
+   was drawn, then **see-through** things (below). With anti-aliasing on, this pass draws into a
+   multisampled image that is averaged into the HDR image at its end.
 2. **Tonemap**: one full-screen triangle maps the HDR image to display colours. The GPU encodes
    sRGB when writing to the screen.
 3. **Gizmos** (editor) and the **HUD** are drawn on top in display colours: they are not lit,
    exposed or tonemapped, so a white HUD label is always white.
 
 The renderer measures GPU time per pass (`Shadows`, `Scene`, `Tonemap`, `Gizmos`, `HUD`): in
-`FrameStats::passes`, and in noor_player's `--report` as `gpu_passes`. Showing them in the editor
-is part 7 (the passes inspector).
+`FrameStats::passes`, in noor_player's `--report` (`gpu_passes`, and the `render` section with
+draws, culled shadow casters, memory and MSAA samples), and in the editor's **Window ▸ Render
+stats** panel. Measured numbers and the decisions taken from them: [MEASUREMENTS.md](MEASUREMENTS.md).
+
+### Anti-aliasing (MSAA)
+
+The scene is drawn with **4 samples per pixel** by default (`RendererDesc::msaa_samples`: 1, 2, 4
+or 8, lowered to what the GPU supports; `Renderer::set_msaa` changes it at run time). Edges get
+smooth; textures and shading are computed once per pixel as before. The samples are averaged
+before tonemapping, so very bright edges against dark ones stay a little crisp (a known
+trade-off of resolving HDR; a tonemapped resolve can come later if it shows). Editor: Preferences
+▸ Anti-aliasing. Player: `--msaa N`. 4× costs about 42 MB more at 1280×720.
+
+### See-through surfaces
+
+Materials with `"alpha": "blend"` are drawn after the opaque scene and the sky, **back to front**
+(by the distance of each object's bounding-sphere centre), with depth testing but no depth
+writes. Blending is premultiplied: the light a surface sends back is scaled by its alpha, while
+reflections and glow keep their full strength (a clear window still reflects the sky). This is
+**alpha blending, not tinted glass**: the light behind is mixed with the surface's colour, not
+filtered by it. Sorting is per object, so objects inside each other or long intersecting panes
+can sort wrongly. See-through surfaces cast shadows like cutouts (below `alpha_cutoff`: none).
 
 ## Units
 
@@ -99,6 +121,10 @@ short, so shadows close to you are sharp; the far ones are long and coarser. Eac
 "light": { "type": "directional", "illuminance": 100000, "shadows": true, "shadow_distance": 80 }
 ```
 
+**Culling per cascade**: a caster is drawn into a cascade only if its bounding sphere touches the
+cascade's sides (`render::sphere_touches_cascade`). Casters far towards the sun still count.
+`FrameStats::shadow_draws_culled` counts the skipped ones.
+
 ## Point and spot lights
 
 ```json
@@ -155,7 +181,7 @@ in sunlight. That's correct, but it surprises people used to unlit games.
 
 ## Tests
 
-`ctest -L render`: `render.golden_Daylight` and `render.golden_Sunset` draw
+`ctest -L render`: `render.golden_*` (Daylight, Sunset, Textured, Materials, Lights, three HDRIs, Glass) draw
 `tests/data/render_scenes` and compare them with `tests/golden/*.png` (320×180, at most 1% of
 pixels may differ by more than 12/255). `render.golden_catches_a_change` proves the comparison
 fails on a different picture. To accept an intended change, look at the new picture first, then

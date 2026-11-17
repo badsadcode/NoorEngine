@@ -96,8 +96,14 @@ struct GpuMesh {
     GpuBuffer vertices;
     GpuBuffer indices;
     std::uint32_t index_count = 0;
+    std::uint64_t bytes = 0;
+    math::Vec3 center;    // bounding sphere in object space (shadow culling, transparent sorting)
+    float radius = 0.0f;
     bool alive = false;
 };
+
+// Which draws record_draws records.
+enum class DrawPass : std::uint8_t { Opaque, Transparent, Gizmos };
 
 // Push constants for mesh.hlsl (must match its PushConstants struct; at most 128 bytes).
 // The model matrix's top three rows (rotation/scale and translation) give world positions and
@@ -118,7 +124,7 @@ struct GpuMaterial {
     math::Vec4 params;           // metallic, roughness, normal scale, occlusion strength
     math::Vec4 uv;               // scale xy, offset xy
     std::uint32_t tex0[4];       // base colour, metallic-roughness, roughness, metallic
-    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bits 0-1 alpha mode, bit 2 double-sided)
+    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bit 0 cutout, bit 1 blend, bit 2 double-sided)
 };
 static_assert(sizeof(GpuMaterial) == 96);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
@@ -219,6 +225,17 @@ struct Renderer::Impl {
     VmaAllocation depth_allocation = VK_NULL_HANDLE;
     VkImageView depth_view = VK_NULL_HANDLE;
 
+    // MSAA (when scene_samples > 1): the scene is drawn into these, then resolved into hdr_image
+    VkImage msaa_color_image = VK_NULL_HANDLE;
+    VmaAllocation msaa_color_allocation = VK_NULL_HANDLE;
+    VkImageView msaa_color_view = VK_NULL_HANDLE;
+    VkImage msaa_depth_image = VK_NULL_HANDLE;
+    VmaAllocation msaa_depth_allocation = VK_NULL_HANDLE;
+    VkImageView msaa_depth_view = VK_NULL_HANDLE;
+    std::uint32_t msaa_requested = 4;     // RendererDesc::msaa_samples / set_msaa
+    std::uint32_t scene_samples = 0;      // in use (0 until the first swapchain)
+    VkSampleCountFlags supported_samples = VK_SAMPLE_COUNT_1_BIT;
+
     // HDR image the scene is lit into (one, shared by frames in flight like the depth buffer)
     VkImage hdr_image = VK_NULL_HANDLE;
     VmaAllocation hdr_allocation = VK_NULL_HANDLE;
@@ -264,13 +281,14 @@ struct Renderer::Impl {
     GpuBuffer material_buffer;
     std::vector<MaterialDesc> materials;  // index = slot
     std::vector<bool> material_alive;
-    bool warned_blend = false;
 
     // Mesh pipelines: the lit scene (into the HDR image) and editor gizmos (into the screen)
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipeline mesh_pipeline = VK_NULL_HANDLE;
     VkPipeline gizmo_pipeline = VK_NULL_HANDLE;
     VkPipeline double_sided_pipeline = VK_NULL_HANDLE;  // the scene, without back-face culling
+    VkPipeline blend_pipeline = VK_NULL_HANDLE;         // see-through: blended, no depth writes
+    VkPipeline blend_double_sided_pipeline = VK_NULL_HANDLE;
     VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;  // the screen's, for the gizmo pipeline
 
     // Tonemapping: HDR image -> screen (vulkan_frame.cpp)
@@ -337,7 +355,10 @@ struct Renderer::Impl {
     Status create_depth_buffer();
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
-    VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true);
+    VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true, bool blended = false);
+    Status create_msaa_targets();
+    void destroy_msaa_targets();
+    void destroy_scene_pipelines();  // the ones drawn into the (multisampled) scene: rebuilt when samples change
     // vulkan_frame.cpp
     Status create_hdr_target();
     void destroy_hdr_target();
@@ -376,8 +397,9 @@ struct Renderer::Impl {
     Status upload_to_device(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, GpuBuffer& out);
     Result<MeshHandle> create_mesh(const MeshData& data);
     void destroy_mesh(MeshHandle handle);
-    // The scene's draws (gizmos = false: lit, into the HDR image) or the editor gizmos (true).
-    void record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos);
+    // The scene's opaque draws, its see-through ones (sorted back to front), or the editor gizmos.
+    void record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass);
+    [[nodiscard]] std::uint32_t material_slot(const DrawItem& item) const noexcept;
 
     // vulkan_capture.cpp
     Status record_capture(VkCommandBuffer cmd, VkImage image);

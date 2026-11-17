@@ -13,6 +13,7 @@ public sealed class Preferences
     public double FlySpeed { get; set; } = 8.0;       // metres per second
     public double LookSensitivity { get; set; } = 1.0;
     public double GizmoScale { get; set; } = 1.0;
+    public int Msaa { get; set; } = 4;                // scene anti-aliasing samples: 1 (off), 2, 4, 8
     // Scripts: the program that opens them (empty: the Windows default for the file type) and its
     // arguments ({file}, {line}, {folder}); see CodeEditors.
     public string CodeEditor { get; set; } = "";
@@ -31,6 +32,7 @@ public sealed class Preferences
         ["fly_speed"] = FlySpeed,
         ["look_sensitivity"] = LookSensitivity,
         ["gizmo_scale"] = GizmoScale,
+        ["msaa"] = Msaa,
     });
 }
 

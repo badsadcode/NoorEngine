@@ -181,9 +181,19 @@ void Renderer::Impl::record_shadows(VkCommandBuffer cmd, const FrameDesc& frame)
                 const std::uint32_t first = std::min(item.first_index, mesh.index_count);
                 const std::uint32_t count = item.index_count == 0 ? mesh.index_count - first : std::min(item.index_count, mesh.index_count - first);
                 if (count == 0) continue;
-                const std::uint32_t material =
-                    item.material.valid() && item.material.id < materials.size() && material_alive[item.material.id] ? item.material.id : 0u;
                 const math::Mat4& w = item.world_from_object;
+                {
+                    // Skip casters that can't reach this cascade (world sphere: centre moved, radius
+                    // scaled by the largest axis scale).
+                    const float scale = std::max({math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z}),
+                                                  math::length(math::Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
+                                                  math::length(math::Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
+                    if (!sphere_touches_cascade(cascades[c], w.transform_point(mesh.center), mesh.radius * scale)) {
+                        ++stats.shadow_draws_culled;
+                        continue;
+                    }
+                }
+                const std::uint32_t material = material_slot(item);
                 const MeshPushConstants push{{w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
                                              {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
                                              {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
@@ -195,6 +205,7 @@ void Renderer::Impl::record_shadows(VkCommandBuffer cmd, const FrameDesc& frame)
                 vkCmdBindIndexBuffer(cmd, mesh.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdDrawIndexed(cmd, count, 1, first, 0, 0);
                 ++stats.draw_calls;
+                ++stats.shadow_draw_calls;
             }
             vkCmdEndRendering(cmd);
         }

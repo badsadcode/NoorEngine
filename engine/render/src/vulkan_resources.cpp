@@ -161,6 +161,62 @@ void Renderer::Impl::destroy_depth_buffer() {
     }
 }
 
+// ------------------------------------------------------------------ MSAA images
+
+Status Renderer::Impl::create_msaa_targets() {
+    destroy_msaa_targets();
+    if (scene_samples <= 1) return {};
+    const auto make = [&](VkFormat format, VkImageUsageFlags usage, VkImageAspectFlags aspect, VkImage& image,
+                          VmaAllocation& allocation, VkImageView& view, const char* name) -> Status {
+        VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        image_info.imageType = VK_IMAGE_TYPE_2D;
+        image_info.format = format;
+        image_info.extent = {extent.width, extent.height, 1};
+        image_info.mipLevels = 1;
+        image_info.arrayLayers = 1;
+        image_info.samples = static_cast<VkSampleCountFlagBits>(scene_samples);
+        image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        image_info.usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;  // never read after the pass
+        VmaAllocationCreateInfo alloc_info{};
+        alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
+        alloc_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        NOOR_VK_TRY(vmaCreateImage(allocator, &image_info, &alloc_info, &image, &allocation, nullptr));
+        VkImageViewCreateInfo view_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        view_info.image = image;
+        view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        view_info.format = format;
+        view_info.subresourceRange = {aspect, 0, 1, 0, 1};
+        NOOR_VK_TRY(vkCreateImageView(device, &view_info, nullptr, &view));
+        set_name(VK_OBJECT_TYPE_IMAGE, image, std::format("{} ({}x MSAA)", name, scene_samples));
+        return {};
+    };
+    if (auto s = make(kHdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT, msaa_color_image,
+                      msaa_color_allocation, msaa_color_view, "HDR scene, multisampled");
+        !s)
+        return s;
+    return make(kDepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, msaa_depth_image,
+                msaa_depth_allocation, msaa_depth_view, "Depth, multisampled");
+}
+
+void Renderer::Impl::destroy_msaa_targets() {
+    if (device == VK_NULL_HANDLE) return;
+    if (msaa_color_view) vkDestroyImageView(device, msaa_color_view, nullptr);
+    if (msaa_color_image) vmaDestroyImage(allocator, msaa_color_image, msaa_color_allocation);
+    if (msaa_depth_view) vkDestroyImageView(device, msaa_depth_view, nullptr);
+    if (msaa_depth_image) vmaDestroyImage(allocator, msaa_depth_image, msaa_depth_allocation);
+    msaa_color_view = msaa_depth_view = VK_NULL_HANDLE;
+    msaa_color_image = msaa_depth_image = VK_NULL_HANDLE;
+    msaa_color_allocation = msaa_depth_allocation = VK_NULL_HANDLE;
+}
+
+void Renderer::Impl::destroy_scene_pipelines() {
+    if (device == VK_NULL_HANDLE) return;
+    for (VkPipeline* p : {&mesh_pipeline, &double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &sky_pipeline}) {
+        if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
+        *p = VK_NULL_HANDLE;
+    }
+}
+
 // ------------------------------------------------------------------ mesh pipeline
 
 Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
@@ -189,6 +245,14 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
             return vk_failure(r, "vkCreateGraphicsPipelines (scene, double-sided)");
         }
         set_name(VK_OBJECT_TYPE_PIPELINE, double_sided_pipeline, "Scene pipeline (double-sided)");
+        if (VkResult r = create_mesh_pipeline(kHdrFormat, false, blend_pipeline, true, true); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (scene, see-through)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, blend_pipeline, "Scene pipeline (see-through)");
+        if (VkResult r = create_mesh_pipeline(kHdrFormat, false, blend_double_sided_pipeline, false, true); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (scene, see-through double-sided)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, blend_double_sided_pipeline, "Scene pipeline (see-through, double-sided)");
     }
     if (gizmo_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
@@ -205,7 +269,7 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
 
 // One pipeline from mesh.hlsl: `display` false = lit scene into the HDR image, true = gizmos in
 // display colours (the shader's kDisplay specialization constant).
-VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back) {
+VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back, bool blended) {
     const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& module) {
         VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         info.codeSize = size;
@@ -257,16 +321,27 @@ VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool displa
     raster.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = display ? VK_SAMPLE_COUNT_1_BIT : static_cast<VkSampleCountFlagBits>(std::max(1u, scene_samples));
 
     VkPipelineDepthStencilStateCreateInfo depth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
     depth.depthTestEnable = VK_TRUE;
-    depth.depthWriteEnable = VK_TRUE;
+    depth.depthWriteEnable = blended ? VK_FALSE : VK_TRUE;  // see-through: behind ones must still show
     depth.depthCompareOp = VK_COMPARE_OP_GREATER;  // reverse-Z
 
     VkPipelineColorBlendAttachmentState blend_attachment{};
     blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    if (blended) {
+        // Premultiplied alpha (mesh.hlsl already multiplied what the surface lets through): reflections
+        // keep their strength on glass, the rest shows through by (1 - alpha).
+        blend_attachment.blendEnable = VK_TRUE;
+        blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+        blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    }
     VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     blend.attachmentCount = 1;
     blend.pAttachments = &blend_attachment;
@@ -309,9 +384,9 @@ void Renderer::Impl::destroy_mesh_pipeline() {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
         gizmo_pipeline = VK_NULL_HANDLE;
     }
-    if (double_sided_pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(device, double_sided_pipeline, nullptr);
-        double_sided_pipeline = VK_NULL_HANDLE;
+    for (VkPipeline* p : {&double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline}) {
+        if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
+        *p = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
@@ -347,6 +422,17 @@ Result<MeshHandle> Renderer::Impl::create_mesh(const MeshData& data) {
         return std::unexpected(s.error());
     }
     mesh.index_count = static_cast<std::uint32_t>(data.indices.size());
+    mesh.bytes = data.vertices.size_bytes() + data.indices.size_bytes();
+    {
+        // Bounding sphere: the box's centre, and the farthest vertex from it.
+        math::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+        for (const Vertex& v : data.vertices) {
+            lo = {std::min(lo.x, v.position.x), std::min(lo.y, v.position.y), std::min(lo.z, v.position.z)};
+            hi = {std::max(hi.x, v.position.x), std::max(hi.y, v.position.y), std::max(hi.z, v.position.z)};
+        }
+        mesh.center = data.vertices.empty() ? math::Vec3{} : (lo + hi) * 0.5f;
+        for (const Vertex& v : data.vertices) mesh.radius = std::max(mesh.radius, math::length(v.position - mesh.center));
+    }
     mesh.alive = true;
     const std::string label = data.debug_name.empty() ? std::string("Mesh") : std::string(data.debug_name);
     set_name(VK_OBJECT_TYPE_BUFFER, mesh.vertices.buffer, label + " vertices");
@@ -373,19 +459,51 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
     mesh = {};
 }
 
-void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos) {
+std::uint32_t Renderer::Impl::material_slot(const DrawItem& item) const noexcept {
+    return item.material.valid() && item.material.id < materials.size() && material_alive[item.material.id] ? item.material.id : 0u;
+}
+
+void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass) {
+    const bool gizmos = pass == DrawPass::Gizmos;
+    // Which draws, in which order. See-through ones go back to front (by their bounding sphere's
+    // centre: right for separate objects, not for objects inside each other).
+    std::vector<std::uint32_t> order;
+    order.reserve(frame.draws.size());
+    for (std::uint32_t i = 0; i < frame.draws.size(); ++i) {
+        const DrawItem& item = frame.draws[i];
+        if (item.overlay != gizmos) continue;
+        if (!gizmos && (materials[material_slot(item)].alpha == AlphaMode::Blend) != (pass == DrawPass::Transparent)) continue;
+        order.push_back(i);
+    }
+    if (order.empty()) return;
+    if (pass == DrawPass::Transparent) {
+        const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
+        std::vector<float> distance(frame.draws.size(), 0.0f);
+        for (const std::uint32_t i : order) {
+            const DrawItem& item = frame.draws[i];
+            math::Vec3 c = item.world_from_object.transform_point({0, 0, 0});
+            if (item.mesh.valid() && item.mesh.id <= meshes.size()) c = item.world_from_object.transform_point(meshes[item.mesh.id - 1].center);
+            distance[i] = math::length(c - eye);
+        }
+        std::ranges::stable_sort(order, [&](std::uint32_t a, std::uint32_t b) { return distance[a] > distance[b]; });
+        stats.transparent_draws = static_cast<std::uint32_t>(order.size());
+        begin_label(cmd, "See-through (sorted)", {0.6f, 0.85f, 1.0f, 1.0f});
+    }
+
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
     VkPipeline bound = VK_NULL_HANDLE;
     bool sets_bound = false;
-    for (const DrawItem& item : frame.draws) {
-        if (item.overlay != gizmos) continue;
+    for (const std::uint32_t i : order) {
+        const DrawItem& item = frame.draws[i];
         if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) continue;
         const GpuMesh& mesh = meshes[item.mesh.id - 1];
-        const std::uint32_t material = item.material.valid() && item.material.id < materials.size() && material_alive[item.material.id]
-                                           ? item.material.id
-                                           : 0u;
-        const VkPipeline pipeline = gizmos ? gizmo_pipeline : materials[material].double_sided ? double_sided_pipeline : mesh_pipeline;
+        const std::uint32_t material = material_slot(item);
+        const bool two_sided = materials[material].double_sided;
+        const VkPipeline pipeline = gizmos                         ? gizmo_pipeline
+                                    : pass == DrawPass::Transparent ? (two_sided ? blend_double_sided_pipeline : blend_pipeline)
+                                    : two_sided                    ? double_sided_pipeline
+                                                                   : mesh_pipeline;
         if (!sets_bound) {
             vkCmdSetViewport(cmd, 0, 1, &vp);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
@@ -417,6 +535,7 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, b
         ++stats.draw_calls;
         stats.triangles += count / 3;
     }
+    if (pass == DrawPass::Transparent) end_label(cmd);
 }
 
 } // namespace noor::render

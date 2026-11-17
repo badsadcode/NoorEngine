@@ -245,6 +245,7 @@ Status Renderer::Impl::pick_gpu() {
             timestamp_period_ns = props.limits.timestampPeriod;
             timestamps_supported = families[*family].timestampValidBits > 0 && props.limits.timestampPeriod > 0.0f;
             max_anisotropy = f2.features.samplerAnisotropy ? std::min(8.0f, props.limits.maxSamplerAnisotropy) : 1.0f;
+            supported_samples = props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts;
         }
     }
 
@@ -437,7 +438,22 @@ Status Renderer::Impl::rebuild_swapchain() {
         set_name(VK_OBJECT_TYPE_IMAGE, images[i], std::format("Swapchain image {}", i));
         set_name(VK_OBJECT_TYPE_IMAGE_VIEW, image_views[i], std::format("Swapchain image {} view", i));
     }
+    {
+        // Scene samples: what was asked for, lowered to what the GPU can do. A change rebuilds the
+        // scene pipelines (their sample count is fixed when they are made).
+        std::uint32_t samples = 1;
+        for (const std::uint32_t s : {8u, 4u, 2u})
+            if (s <= std::max(1u, msaa_requested) && (supported_samples & s) != 0) { samples = s; break; }
+        if (samples != scene_samples) {
+            if (scene_samples != 0) NOOR_LOG_INFO("Render", "Anti-aliasing: {}x MSAA", samples);
+            destroy_scene_pipelines();
+            scene_samples = samples;
+        }
+    }
     if (auto status = create_depth_buffer(); !status) {
+        return status;
+    }
+    if (auto status = create_msaa_targets(); !status) {
         return status;
     }
     if (auto status = create_hdr_target(); !status) {
@@ -539,6 +555,10 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     stamp(0, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
     stats.draw_calls = 0;
     stats.triangles = 0;
+    stats.shadow_draw_calls = 0;
+    stats.shadow_draws_culled = 0;
+    stats.transparent_draws = 0;
+    stats.msaa_samples = scene_samples;
     update_frame_uniforms(frame_desc);
     const std::string frame_label = std::format("NoorEngine frame {}", frames_presented);
     begin_label(frame.cmd, frame_label.c_str(), {0.42f, 0.25f, 0.85f, 1.0f});  // Noor purple
@@ -561,6 +581,18 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    const bool msaa = scene_samples > 1;
+    if (msaa) {
+        image_barrier(frame.cmd, msaa_color_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                      VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT);
+        image_barrier(frame.cmd, msaa_depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                      VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                      VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                      VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    }
 
     // Where nothing is drawn: the sky (exposed like everything else) with alpha 0, so the tonemap
     // pass knows it's background (and can show the fixed clear colour instead).
@@ -572,6 +604,16 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     hdr_color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     hdr_color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     hdr_color.clearValue.color = {{sky.x, sky.y, sky.z, 0.0f}};
+    if (msaa) {
+        // Draw into the multisampled image; the GPU averages each pixel's samples into the HDR image
+        // at the end of the pass (before tonemapping: bright edges stay a little crisp, a known
+        // trade-off of resolving HDR).
+        hdr_color.imageView = msaa_color_view;
+        hdr_color.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        hdr_color.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        hdr_color.resolveImageView = hdr_view;
+        hdr_color.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
 
     VkRenderingAttachmentInfo depth{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     depth.imageView = depth_view;
@@ -579,6 +621,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depth.clearValue.depthStencil = {0.0f, 0};  // reverse-Z: 0 is infinitely far (ADR-022)
+    if (msaa) depth.imageView = msaa_depth_view;
 
     VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
     rendering.renderArea = {{0, 0}, extent};
@@ -588,9 +631,11 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.pDepthAttachment = &depth;
     begin_label(frame.cmd, "Scene (lit, HDR)", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
     vkCmdBeginRendering(frame.cmd, &rendering);
-    record_draws(frame.cmd, frame_desc, false);
+    record_draws(frame.cmd, frame_desc, DrawPass::Opaque);
     record_sky(frame.cmd, lighting);  // after the opaque scene: only where nothing was drawn
+    record_draws(frame.cmd, frame_desc, DrawPass::Transparent);  // see-through, over everything
     vkCmdEndRendering(frame.cmd);
+    if (msaa) depth.imageView = depth_view;  // the screen pass's gizmos use the plain depth buffer
     end_label(frame.cmd);
     stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
@@ -622,7 +667,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
     stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-    record_draws(frame.cmd, frame_desc, true);
+    record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
     stamp(4, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
@@ -712,6 +757,7 @@ void Renderer::Impl::destroy() {
         destroy_shadows();
         destroy_environment();
         destroy_mesh_pipeline();
+        destroy_msaa_targets();
         destroy_overlay();
         destroy_frame_resources();
         destroy_textures();
@@ -752,6 +798,7 @@ Result<std::unique_ptr<Renderer>> Renderer::create(const platform::PresentationT
     auto impl = std::make_unique<Impl>();
     impl->target = &target;
     impl->desc = desc;
+    impl->msaa_requested = desc.msaa_samples;
 
     for (auto step : {&Impl::create_instance, &Impl::pick_gpu, &Impl::create_device, &Impl::create_allocator,
                       &Impl::create_frames, &Impl::rebuild_swapchain}) {
@@ -769,6 +816,25 @@ Result<TextureHandle> Renderer::create_texture(const TextureDesc& desc) {
 }
 void Renderer::destroy_texture(TextureHandle texture) { impl_->destroy_texture(texture); }
 std::uint64_t Renderer::texture_memory() const noexcept { return impl_->texture_bytes; }
+std::uint64_t Renderer::mesh_memory() const noexcept {
+    std::uint64_t bytes = 0;
+    for (const auto& m : impl_->meshes)
+        if (m.alive) bytes += m.bytes;
+    return bytes;
+}
+std::uint64_t Renderer::render_target_memory() const noexcept {
+    const std::uint64_t pixels = static_cast<std::uint64_t>(impl_->extent.width) * impl_->extent.height;
+    const std::uint64_t samples = impl_->scene_samples;
+    std::uint64_t bytes = pixels * (8 + 4);                  // HDR (RGBA16F) + depth (D32)
+    if (samples > 1) bytes += pixels * samples * (8 + 4);   // the multisampled scene images
+    bytes += static_cast<std::uint64_t>(impl_->shadow_size) * impl_->shadow_size * 4 * kShadowCascades;
+    return bytes;
+}
+void Renderer::set_msaa(std::uint32_t samples) noexcept {
+    impl_->msaa_requested = samples;
+    impl_->swapchain_dirty = true;  // rebuilt (with its images and pipelines) before the next frame
+}
+std::uint32_t Renderer::msaa_samples() const noexcept { return impl_->scene_samples; }
 TextureHandle Renderer::missing_texture() const noexcept { return TextureHandle{kTextureMissing}; }
 
 Status Renderer::set_environment(const EnvironmentDesc& desc) {

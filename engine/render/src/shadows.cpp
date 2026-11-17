@@ -64,4 +64,15 @@ std::array<ShadowCascade, kShadowCascades> compute_cascades(const Camera& camera
     return out;
 }
 
+bool sphere_touches_cascade(const ShadowCascade& cascade, math::Vec3 center, float radius) noexcept {
+    const math::Mat4& m = cascade.clip_from_world;
+    // Clip x and y of the centre, and the radius in clip units (an orthographic projection scales
+    // every direction of a row the same way).
+    const float x = m.m[0].x * center.x + m.m[1].x * center.y + m.m[2].x * center.z + m.m[3].x;
+    const float y = m.m[0].y * center.x + m.m[1].y * center.y + m.m[2].y * center.z + m.m[3].y;
+    const float rx = radius * math::length(math::Vec3{m.m[0].x, m.m[1].x, m.m[2].x});
+    const float ry = radius * math::length(math::Vec3{m.m[0].y, m.m[1].y, m.m[2].y});
+    return std::abs(x) <= 1.0f + rx && std::abs(y) <= 1.0f + ry;
+}
+
 } // namespace noor::render

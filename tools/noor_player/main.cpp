@@ -4,14 +4,15 @@
 //   noor_player <project folder>     a project as it is on disk (handy while developing)
 //
 // Options: [--scene <Scenes/X.noorscene>] [--title <text>] [--frames N] [--report <file.json>]
-//          [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>]
+//          [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8]
 // --no-input: the game gets no keyboard or mouse (automated tests: a click on the window by
 // whoever sits at the PC must not change the result).
 //
 // --frames runs N frames and exits (tests); the exit code is then 2 if anything logged an error.
 // It's a windowed program (no console): the log is <exe name>.log next to it unless --log says otherwise.
 // --report writes what happened as JSON: frames, play time, each named entity's world position, and
-// the colour of the centre pixel of the last frame, the HUD's vertex count and its text.
+// the colour of the centre pixel of the last frame, the HUD's vertex count and its text, and the
+// renderer's numbers (GPU time per pass, draws, memory, MSAA samples).
 
 #include "noor/asset/json.h"
 #include "noor/asset/project.h"
@@ -58,6 +59,7 @@ struct Options {
     bool audio = true;
     bool input = true;
     bool validation = false;
+    std::uint32_t msaa = 4;
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -73,6 +75,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--no-audio") o.audio = false;
         else if (a == "--no-input") o.input = false;
         else if (a == "--validation") o.validation = true;
+        else if (a == "--msaa" && more) o.msaa = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
     }
@@ -253,7 +256,7 @@ int run(const Options& o) {
             noor::platform::shutdown();
             return 1;
         }
-        auto renderer = noor::render::Renderer::create(**window, {.enable_validation = o.validation, .clear_color = {0.05f, 0.045f, 0.07f, 1.0f}});
+        auto renderer = noor::render::Renderer::create(**window, {.enable_validation = o.validation, .msaa_samples = o.msaa, .clear_color = {0.05f, 0.045f, 0.07f, 1.0f}});
         if (!renderer) {
             NOOR_LOG_FATAL("Player", "{}", renderer.error().describe());
             window->reset();
@@ -381,6 +384,19 @@ int run(const Options& o) {
                     Json passes = Json::object();  // GPU milliseconds per pass of a recent frame
                     for (const auto& pass : (*renderer)->last_frame_stats().passes) passes[pass.name] = pass.ms;
                     report["gpu_passes"] = std::move(passes);
+                    const auto& fs = (*renderer)->last_frame_stats();
+                    report["render"] = {{"gpu_ms", fs.gpu_ms},
+                                        {"draw_calls", fs.draw_calls},
+                                        {"triangles", fs.triangles},
+                                        {"shadow_draw_calls", fs.shadow_draw_calls},
+                                        {"shadow_draws_culled", fs.shadow_draws_culled},
+                                        {"transparent_draws", fs.transparent_draws},
+                                        {"msaa_samples", fs.msaa_samples},
+                                        {"texture_bytes", (*renderer)->texture_memory()},
+                                        {"mesh_bytes", (*renderer)->mesh_memory()},
+                                        {"render_target_bytes", (*renderer)->render_target_memory()},
+                                        {"width", last_capture ? last_capture->width : 0u},
+                                        {"height", last_capture ? last_capture->height : 0u}};
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }
@@ -401,7 +417,7 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse(argc, argv, options)) {
         NOOR_LOG_ERROR("Player", "Usage: noor_player [project folder] [--scene <path>] [--title <text>] [--frames N] "
-                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>]");
+                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8]");
         return 64;
     }
     // There's no console (a windowed program): the log goes to a file, by default <exe name>.log

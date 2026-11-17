@@ -246,6 +246,7 @@ internal static class SmokeTest
             doc.Undo();
             await MaterialEditorChecks(window, materialAsset, Check, Shot);
         }
+        await RenderPanelChecks(window, settings, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -811,6 +812,43 @@ internal static class SmokeTest
         await Task.Delay(300);
         check(window.OpenMaterials.Count == 0 && VulkanViewport.Active is { IsPreview: false },
               "material editor: closing the tabs leaves the scene viewport");
+    }
+
+    // Milestone 5, part 7: the Render panel's numbers, and anti-aliasing switched from Preferences.
+    private static async Task RenderPanelChecks(MainWindow window, EditorSettings settings, Action<bool, string> check, Action<Window, string> shot)
+    {
+        if (window.FindDockable("Render") is not { } dockable)
+        {
+            check(false, "render panel: Window ▸ Render stats has a panel to show");
+            return;
+        }
+        window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(1200);  // two refreshes
+        var panel = window.GetVisualDescendants().OfType<RenderPanel>().FirstOrDefault();
+        panel?.Refresh();
+        var last = panel?.Last;
+        long N(string key) => last?[key]?.GetValue<long>() ?? -1;
+        check(panel != null && N("draw_calls") > 0 && N("triangles") > 0 && N("render_target_bytes") > 0 &&
+              (last?["passes"] as JsonArray)?.Count == 5,
+              $"render panel: shows the scene viewport's draws ({N("draw_calls")}), triangles, memory and 5 pass timings");
+        check(N("msaa_samples") == 4, $"anti-aliasing: 4x MSAA by default ({N("msaa_samples")})");
+        await Task.Delay(300);  // drawn on screen before the picture
+        shot(window, "editor_22_render_panel.png");
+
+        var prefs = settings.Preferences.Copy();
+        prefs.Msaa = 1;
+        settings.SetPreferences(prefs);
+        await WaitFor(() => { panel?.Refresh(); return panel?.Last?["msaa_samples"]?.GetValue<long>(); }, v => v == 1, 5);
+        check(panel?.Last?["msaa_samples"]?.GetValue<long>() == 1, "anti-aliasing: Preferences ▸ Anti-aliasing Off reaches the viewport");
+        prefs = settings.Preferences.Copy();
+        prefs.Msaa = 4;
+        settings.SetPreferences(prefs);
+        await WaitFor(() => { panel?.Refresh(); return panel?.Last?["msaa_samples"]?.GetValue<long>(); }, v => v == 4, 5);
+        check(panel?.Last?["msaa_samples"]?.GetValue<long>() == 4 && VulkanViewport.Active?.Stats?.State == Native.ViewportState.Running,
+              "anti-aliasing: switching back to 4x rebuilds the frame and keeps drawing");
+        check(ExposurePresets.All.Any(p => p.Ev100 == 14) && ExposurePresets.All.Any(p => p.Ev100 <= 8),
+              "exposure: presets from bright sun (EV 14) to indoor and night");
+        window.DockFactory.SetActiveDockable(window.FindDockable("Content")!);
     }
 
     private static async Task NoorCodeChecks(MainWindow window, Dictionary<string, object> results,

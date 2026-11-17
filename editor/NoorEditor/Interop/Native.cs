@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 11;
+    public const uint ExpectedApiVersion = 12;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -54,6 +54,7 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_viewport_set_selection(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_gizmo(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityId, int mode);
     [DllImport(Dll)] private static extern IntPtr noor_viewport_poll_events(IntPtr viewport);
+    [DllImport(Dll)] private static extern IntPtr noor_viewport_render_stats(IntPtr viewport);
     [DllImport(Dll)] public static extern void noor_viewport_set_options(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string optionsJson);
     [DllImport(Dll)] public static extern int noor_viewport_world_to_screen(IntPtr viewport, float[] world, float[] output);
     [DllImport(Dll)] public static extern void noor_viewport_test_pointer(IntPtr viewport, int enabled, int x, int y, int buttons);
@@ -66,6 +67,7 @@ public static class Native
     public const float GizmoScreenScale = 0.16f;
 
     public static string PollEvents(IntPtr viewport) => Str(noor_viewport_poll_events(viewport)) ?? "[]";
+    public static string RenderStats(IntPtr viewport) => Str(noor_viewport_render_stats(viewport)) ?? "{}";
 
     // ---- Documents (ADR-025). Strings in and out are UTF-8; returned strings are copied at once. ----
     [DllImport(Dll)] public static extern IntPtr noor_doc_open_project([MarshalAs(UnmanagedType.LPUTF8Str)] string projectPath);

@@ -130,11 +130,7 @@ void Renderer::Impl::write_material(std::uint32_t slot, const MaterialDesc& d) {
     const auto tex = [&](TextureHandle t, std::uint32_t fallback) {
         return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
     };
-    if (d.alpha == AlphaMode::Blend && !warned_blend) {
-        NOOR_LOG_WARN("Render", "See-through (blend) materials are drawn as cutout for now");
-        warned_blend = true;
-    }
-    const std::uint32_t flags = static_cast<std::uint32_t>(d.alpha == AlphaMode::Opaque ? 0 : 1) | (d.double_sided ? 4u : 0u);
+    const std::uint32_t flags = (d.alpha == AlphaMode::Cutout ? 1u : 0u) | (d.alpha == AlphaMode::Blend ? 2u : 0u) | (d.double_sided ? 4u : 0u);
     const GpuMaterial m{d.base_color,
                         {d.emissive.x, d.emissive.y, d.emissive.z, d.alpha_cutoff},
                         {d.metallic, d.roughness, d.normal_scale, d.occlusion_strength},

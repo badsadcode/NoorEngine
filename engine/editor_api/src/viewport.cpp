@@ -79,7 +79,9 @@ struct noor_viewport {
         bool snap = false;
         float move_step = 1.0f, rotate_step = 15.0f, scale_step = 0.1f;
         float fly_speed = 8.0f, look_sensitivity = 1.0f, gizmo_scale = 1.0f;
+        std::uint32_t msaa = 4;
     } options;
+    std::string render_stats = "{}";  // JSON (noor_viewport_render_stats), under stats_mutex
     std::uint64_t options_version = 0;
 
     // The camera of the last drawn frame (for noor_viewport_world_to_screen).
@@ -331,6 +333,7 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::EnvironmentLibrary> environment;
     auto refresh_clock = std::chrono::steady_clock::now();
     std::uint64_t seen_reload_token = 0;
+    auto last_stats_time = std::chrono::steady_clock::now() - 1s;
     std::vector<noor::render::OverlayVertex> overlay;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
@@ -419,6 +422,7 @@ void render_thread_main(noor_viewport* vp) {
                 options = vp->options;
                 camera.fly_speed = options.fly_speed;
                 camera.turn_speed = 0.006f * options.look_sensitivity;
+                if (options.msaa != r.msaa_samples()) r.set_msaa(options.msaa);
             }
             if (vp->selection_version != seen_selection_version) {
                 seen_selection_version = vp->selection_version;
@@ -882,6 +886,28 @@ void render_thread_main(noor_viewport* vp) {
             last_fps_time = now;
             frames_at_last_fps = presented;
         }
+        std::string stats_json;
+        if (now - last_stats_time >= 500ms) {
+            last_stats_time = now;
+            const auto& fs = r.last_frame_stats();
+            noor::asset::Json passes = noor::asset::Json::array();
+            for (const auto& p : fs.passes) passes.push_back({{"name", p.name}, {"ms", p.ms}});
+            stats_json = noor::asset::Json{{"gpu_ms", fs.gpu_ms},
+                                           {"passes", std::move(passes)},
+                                           {"draw_calls", fs.draw_calls},
+                                           {"triangles", fs.triangles},
+                                           {"shadow_draw_calls", fs.shadow_draw_calls},
+                                           {"shadow_draws_culled", fs.shadow_draws_culled},
+                                           {"transparent_draws", fs.transparent_draws},
+                                           {"msaa_samples", fs.msaa_samples},
+                                           {"texture_bytes", r.texture_memory()},
+                                           {"mesh_bytes", r.mesh_memory()},
+                                           {"render_target_bytes", r.render_target_memory()},
+                                           {"width", size.width},
+                                           {"height", size.height},
+                                           {"fps", fps}}
+                             .dump();
+        }
 
         std::scoped_lock lock(vp->stats_mutex);
         if (presented > 0 && vp->stats.seconds_to_first_frame == 0.0) {
@@ -895,6 +921,7 @@ void render_thread_main(noor_viewport* vp) {
         vp->stats.height = size.height;
         vp->stats.swapchain_rebuilds = r.swapchain_rebuilds();
         vp->stats.validation_errors = r.validation_error_count();
+        if (!stats_json.empty()) vp->render_stats = std::move(stats_json);
     }
 
     environment.reset();
@@ -1081,6 +1108,7 @@ NOOR_API void noor_viewport_set_options(noor_viewport* viewport, const char* opt
     num("fly_speed", o.fly_speed, 0.25f, 2000.0f);
     num("look_sensitivity", o.look_sensitivity, 0.1f, 5.0f);
     num("gizmo_scale", o.gizmo_scale, 0.3f, 3.0f);
+    if (j.contains("msaa") && j["msaa"].is_number_integer()) o.msaa = std::clamp(j["msaa"].get<std::uint32_t>(), 1u, 8u);
     ++viewport->options_version;
 }
 
@@ -1129,6 +1157,16 @@ NOOR_API int32_t noor_viewport_has_focus(noor_viewport* viewport) {
 
 NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport) {
     return viewport && viewport->window && viewport->window->mouse_captured() ? 1 : 0;
+}
+
+NOOR_API const char* noor_viewport_render_stats(noor_viewport* viewport) {
+    thread_local std::string t_render_stats;
+    t_render_stats = "{}";
+    if (viewport) {
+        std::scoped_lock lock(viewport->stats_mutex);
+        t_render_stats = viewport->render_stats;
+    }
+    return t_render_stats.c_str();
 }
 
 NOOR_API const char* noor_viewport_poll_events(noor_viewport* viewport) {

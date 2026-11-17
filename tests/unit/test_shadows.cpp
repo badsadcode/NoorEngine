@@ -87,3 +87,23 @@ TEST_CASE("shadows: moving the camera a little moves the shadow map by whole tex
         CHECK(std::abs(texels_y - std::round(texels_y)) < 0.01f);
     }
 }
+
+TEST_CASE("shadows: casters outside a cascade are skipped, ones that reach it are kept") {
+    const auto cam = camera_at({0, 2, 10}, {0, 1, 0});
+    render::ShadowCascadeParams params;
+    params.shadow_distance = 80.0f;
+    const Vec3 sun = math::normalize(Vec3{-0.4f, -0.8f, -0.45f});
+    const auto cascades = render::compute_cascades(cam, 16.0f / 9.0f, sun, params);
+    // Right in front of the camera: inside the first (nearest) cascade.
+    CHECK(render::sphere_touches_cascade(cascades[0], {0, 0.5f, 6}, 0.5f));
+    // 60 m ahead: too far for the first cascade, inside the last one.
+    const Vec3 far_point{0, 0.5f, -50};
+    CHECK_FALSE(render::sphere_touches_cascade(cascades[0], far_point, 0.5f));
+    CHECK(render::sphere_touches_cascade(cascades[3], far_point, 0.5f));
+    // Far off to the side: in no cascade at all...
+    for (const auto& c : cascades) CHECK_FALSE(render::sphere_touches_cascade(c, {400, 0, 0}, 1.0f));
+    // ...unless it is big enough to reach in.
+    CHECK(render::sphere_touches_cascade(cascades[3], {400, 0, 0}, 500.0f));
+    // A caster high up towards the sun (it shades the ground in front of the camera) still counts.
+    CHECK(render::sphere_touches_cascade(cascades[0], Vec3{0, 0.5f, 6} - sun * 40.0f, 0.5f));
+}

@@ -284,7 +284,7 @@ public sealed class MaterialPanel : Grid
         };
         ToolTip.SetTip(env, "What lights the preview: the default sky and sun, or an HDRI from the project");
 
-        var ev = new Slider { Minimum = 8, Maximum = 17, Value = p.Ev100, Width = 110, VerticalAlignment = VerticalAlignment.Center };
+        var ev = new Slider { Minimum = 4, Maximum = 17, Value = p.Ev100, Width = 110, VerticalAlignment = VerticalAlignment.Center };
         var evText = new TextBlock { Text = $"EV {p.Ev100:0.#}", Width = 46, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
         ev.ValueChanged += (_, _) =>
         {
@@ -293,6 +293,16 @@ public sealed class MaterialPanel : Grid
             Material.ShowPreview();
         };
         ToolTip.SetTip(ev, "Exposure: 14 for sunlight, about 13 for most HDRIs, lower for dim scenes");
+        var presets = new Button { Content = "▾", Classes = { "tool" }, Padding = new Thickness(5, 0) };
+        ToolTip.SetTip(presets, "Exposure presets");
+        var presetMenu = new MenuFlyout();
+        foreach (var preset in ExposurePresets.All)
+        {
+            var item = new MenuItem { Header = ExposurePresets.Label(preset) };
+            item.Click += (_, _) => ev.Value = Math.Clamp(preset.Ev100, ev.Minimum, ev.Maximum);
+            presetMenu.Items.Add(item);
+        }
+        presets.Flyout = presetMenu;
 
         var turn = new Slider { Minimum = 0, Maximum = 360, Value = p.Rotation, Width = 90, VerticalAlignment = VerticalAlignment.Center };
         turn.ValueChanged += (_, _) => { p.Rotation = Math.Round(turn.Value); Material.ShowPreview(); };
@@ -303,7 +313,7 @@ public sealed class MaterialPanel : Grid
             Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(6, 4),
             Children =
             {
-                shape, env, evText, ev,
+                shape, env, evText, ev, presets,
                 new TextBlock { Text = "Turn", FontSize = 11, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center }, turn,
             },
         };
@@ -491,7 +501,7 @@ public sealed class MaterialPanel : Grid
     private void AlphaRow()
     {
         var combo = new ComboBox { ItemsSource = new[] { "opaque", "cutout", "blend" }, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
-        ToolTip.SetTip(combo, "Cutout: leaves, fences (pixels below the cutoff vanish). Blend is drawn as cutout for now.");
+        ToolTip.SetTip(combo, "Cutout: leaves, fences (pixels below the cutoff vanish). Blend: see-through, like glass (base colour alpha says how much).");
         void Show() => combo.SelectedItem = Material.Material.Get("alpha") is JsonValue v && v.TryGetValue<string>(out var s) ? s : "opaque";
         combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string s) Changed("alpha", s); };
         _updating = true;

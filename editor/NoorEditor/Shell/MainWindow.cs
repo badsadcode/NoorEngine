@@ -175,6 +175,7 @@ public sealed class MainWindow : Window
             },
         };
         var console = new PanelTool { Id = "Console", Title = "Console", CanClose = false, CreateView = () => new ConsolePanel(Doc.ProjectRoot, l => OpenScript(l.RelativePath, l.Line)) };
+        var render = new PanelTool { Id = "Render", Title = "Render", CanClose = false, CreateView = () => new RenderPanel() };
 
         DockFactory
             .DocumentDock(out var documents, d => d.WithId("Documents").WithIsCollapsable(false))
@@ -200,7 +201,7 @@ public sealed class MainWindow : Window
         foreach (var material in _materials) DockFactory.AddDockable(documents, material);
         Fill(left, hierarchy);
         Fill(right, inspector);
-        Fill(bottom, content, console);
+        Fill(bottom, content, console, render);
 
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };
@@ -312,6 +313,15 @@ public sealed class MainWindow : Window
         about.Click += async (_, _) => await Dialogs.Ask(this, "About NoorEditor",
             $"NoorEditor (Milestone 3 preview)\nEngine API v{Native.noor_editor_api_version()} · MIT licence\nBad Ideas Works", "OK");
 
+        var renderStats = new MenuItem { Header = "_Render stats" };
+        renderStats.Click += (_, _) =>
+        {
+            if (FindDockable("Render") is { } d && d.Owner is Dock.Model.Core.IDock owner)
+            {
+                DockFactory.SetActiveDockable(d);
+                DockFactory.SetFocusedDockable(owner, d);
+            }
+        };
         var menu = new Menu
         {
             FontSize = 12,
@@ -323,7 +333,7 @@ public sealed class MainWindow : Window
                                                          Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
                                                          new Separator(), preferences } },
                 CreateMenu(),
-                new MenuItem { Header = "_Window", Items = { resetLayout } },
+                new MenuItem { Header = "_Window", Items = { renderStats, new Separator(), resetLayout } },
                 new MenuItem { Header = "_Help", Items = { about } },
             },
         };
@@ -457,7 +467,8 @@ public sealed class MainWindow : Window
     private void UpdateStatusRight()
     {
         var s = ViewportView?.Viewport.Stats;
-        var fps = s is { State: Native.ViewportState.Running } st ? $"{st.FramesPerSecond:0} FPS   ·   {st.GpuName}" : "viewport not running";
+        var fps = s is { State: Native.ViewportState.Running } st ? $"{st.FramesPerSecond:0} FPS   ·   {st.GpuName}"
+                : s == null ? "viewport resting (its tab is hidden)" : "viewport not running";
         _statusRight.Text = $"{fps}   ·   RAM {Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)} MB";
     }
 

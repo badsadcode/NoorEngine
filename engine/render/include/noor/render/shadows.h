@@ -35,4 +35,8 @@ struct ShadowCascadeParams {
 [[nodiscard]] std::array<ShadowCascade, kShadowCascades> compute_cascades(const Camera& camera, float aspect, math::Vec3 sun_direction,
                                                                           const ShadowCascadeParams& params);
 
+// Can a caster with this world-space bounding sphere put a shadow into the cascade? Tests the
+// cascade's sides only (casters between it and the sun, however far, still count).
+[[nodiscard]] bool sphere_touches_cascade(const ShadowCascade& cascade, math::Vec3 center, float radius) noexcept;
+
 } // namespace noor::render

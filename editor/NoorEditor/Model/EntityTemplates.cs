@@ -87,7 +87,7 @@ public static class EntityTemplates
     public static JsonObject PlayerBody() => new() { ["primitive"] = Capsule(color: "#7C4DFF") };
     public static JsonObject PlayerCamera() => new()
     {
-        ["camera"] = new JsonObject { ["fov"] = 75, ["near"] = 0.05 },
+        ["camera"] = new JsonObject { ["fov"] = 75, ["near"] = 0.05, ["ev100"] = 14 },
         ["audio_listener"] = new JsonObject(),  // the player's ears
     };
 

@@ -33,7 +33,7 @@ struct GpuMaterial
     float4 params;           // metallic, roughness, normal scale, occlusion strength
     float4 uv;               // scale xy, offset xy
     uint4 tex0;              // base colour, metallic-roughness (G, B), roughness (R), metallic (R)
-    uint4 tex1;              // normal, occlusion (R), emissive, flags (bit 0: alpha test, bit 2: double-sided)
+    uint4 tex1;              // normal, occlusion (R), emissive, flags (bit 0: cutout, bit 1: see-through, bit 2: double-sided)
 };
 [[vk::binding(2, 1)]] StructuredBuffer<GpuMaterial> materials;
 
@@ -269,7 +269,16 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), base_color, metallic);
     const float3 r = reflect(-v, n);
     const float3 diffuse = base_color * (1.0 - metallic) * environment_irradiance(n) / kPi;
-    color += (diffuse + environment_specular(r, roughness, n_dot_v, f0)) * occlusion;
+    const float3 reflection = environment_specular(r, roughness, n_dot_v, f0) * occlusion;
+    color += diffuse * occlusion;
+    if ((mat.tex1.w & 2u) != 0u)
+    {
+        // See-through (premultiplied alpha): the light the surface sends back is scaled by how much
+        // of it is there; reflections and glow stay whole (a clear window still reflects the sky).
+        const float a = saturate(alpha);
+        return float4(color * a + reflection + emissive, a);
+    }
+    color += reflection;
     color += emissive;  // relative to the exposure (already "exposed"): 1 is about white on screen
     return float4(color, 1.0);  // alpha 1: something was drawn here (tonemap.hlsl)
 }

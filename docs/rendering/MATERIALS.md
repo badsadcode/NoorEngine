@@ -18,7 +18,7 @@ Anywhere under `Assets/`. Every field is optional; missing ones take the default
   "normal_map": "<id>", "normal_scale": 1,
   "occlusion_map": "<id>", "occlusion_strength": 1,
   "emissive": [0, 0, 0], "emissive_map": "<id>", "emissive_strength": 1,
-  "alpha": "opaque",                   // or "cutout" (leaves, fences); "blend" is drawn as cutout for now
+  "alpha": "opaque",                   // or "cutout" (leaves, fences) or "blend" (see-through: glass, water)
   "alpha_cutoff": 0.5,
   "double_sided": false,
   "uv_scale": [1, 1], "uv_offset": [0, 0]
@@ -116,8 +116,9 @@ within half a second.
 
 Materials live in a table of 4096 on the GPU (`render::MaterialDesc`); a draw names its material by
 number, like textures (ADR-012). Double-sided materials use a second pipeline without back-face
-culling; cutout ones discard pixels below `alpha_cutoff`.
+culling; cutout ones discard pixels below `alpha_cutoff`. See-through (`blend`) ones are drawn
+after the opaque scene, sorted back to front ([PBR.md](PBR.md#see-through-surfaces)).
 
 ## Not yet
-See-through blending (sorted, after the opaque scene), material graphs (later, ADR-030), painting and layers (with CSG, Milestone 6), clear coat, sheen,
+Tinted glass that filters the light behind it (transmission), per-triangle sorting, material graphs (later, ADR-030), painting and layers (with CSG, Milestone 6), clear coat, sheen,
 transmission, a second UV set, external image files referenced by glTF (only images inside GLBs).

@@ -33,6 +33,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | Environments: HDRI or procedural sky, image-based lighting (prefiltered cubemap, SH9, BRDF table), sky background | **Milestone 5, part 5.** Works; `.hdr` only, no reflection probes |
 | Shadows and lights: cascaded sun shadows (stable, PCF), point and spot lights in lumens | **Milestone 5, part 4.** Works; no shadows from lamps yet |
 | Materials: `.noormat` (glTF channels, instances), texture set → material, GLB materials and embedded textures, GPU material table, hot reload | **Milestone 5, part 3.** Works; no see-through blending yet |
+| Rendering quality: 4× MSAA, see-through (blend) materials, per-cascade shadow culling, exposure presets, Render stats panel, measurements | **Milestone 5, part 7.** Works; no texture compression yet ([measurements](docs/rendering/MEASUREMENTS.md)) |
 | Material editor: live preview (shapes, HDRIs, exposure), every field, instances with overrides, saves as you edit, undo | **Milestone 5, part 6.** Works; no thumbnails or node graph |
 | Textures: PNG/JPG/TGA/BMP/HDR import with colour-space kinds, linear-light mipmaps, cache; bindless texture table; base colour and normal maps on primitives | **Milestone 5, part 2.** Works; uncompressed, no GLB textures yet |
 | Lighting: HDR frame, physical units (lux, nits, EV100), GGX PBR core, sun `light` component, Khronos PBR Neutral / ACES tonemapping, golden-image render tests | **Milestone 5, part 1.** Works; no materials, textures or shadows yet |

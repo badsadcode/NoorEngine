@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 11u
+#define NOOR_EDITOR_API_VERSION 12u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -83,6 +83,12 @@ typedef struct noor_viewport_stats {
 NOOR_API noor_viewport* noor_viewport_create(void* parent_window, const noor_viewport_desc* desc);
 NOOR_API void* noor_viewport_native_handle(noor_viewport* viewport);
 NOOR_API void noor_viewport_get_stats(noor_viewport* viewport, noor_viewport_stats* out_stats);
+/* v12: the renderer's numbers for the last frame, as JSON (refreshed about twice a second):
+   {"gpu_ms", "passes": [{"name", "ms"}], "draw_calls", "triangles", "shadow_draw_calls",
+    "shadow_draws_culled", "transparent_draws", "msaa_samples", "texture_bytes", "mesh_bytes",
+    "render_target_bytes", "width", "height", "fps"}. The string is valid until the next call on
+   this thread. */
+NOOR_API const char* noor_viewport_render_stats(noor_viewport* viewport);
 /* Stops the render thread, releases GPU objects and destroys the child window. */
 NOOR_API void noor_viewport_destroy(noor_viewport* viewport);
 
@@ -170,7 +176,8 @@ typedef enum noor_gizmo_mode {
 
 /* Viewport preferences as JSON; missing keys keep their value. Defaults:
  *   {"snap": false, "move_step": 1.0, "rotate_step": 15.0, "scale_step": 0.1,
- *    "fly_speed": 8.0, "look_sensitivity": 1.0, "gizmo_scale": 1.0}
+ *    "fly_speed": 8.0, "look_sensitivity": 1.0, "gizmo_scale": 1.0, "msaa": 4}
+ * msaa (v12): scene anti-aliasing samples, 1 (off), 2, 4 or 8 (lowered to what the GPU supports).
  * Snapping: moves land on a world grid of move_step metres, rotations on multiples of
  * rotate_step degrees, scales on multiples of scale_step. Holding Ctrl while dragging inverts "snap". */
 NOOR_API void noor_viewport_set_options(noor_viewport* viewport, const char* options_json);

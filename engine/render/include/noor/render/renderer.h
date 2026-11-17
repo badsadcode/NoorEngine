@@ -25,6 +25,9 @@ struct RendererDesc {
     bool enable_validation = true;
     // Size of each sun shadow cascade (square, 4 cascades). 2048 is sharp to about 80 m.
     std::uint32_t shadow_map_size = 2048;
+    // Multisample anti-aliasing for the scene: 1 (off), 2, 4 or 8 samples per pixel, lowered to
+    // what the GPU supports. Renderer::set_msaa changes it later.
+    std::uint32_t msaa_samples = 4;
     // Linear RGBA background when Lighting::sky_background is false, shown exactly (the swapchain
     // is sRGB, so the GPU encodes it on write).
     std::array<float, 4> clear_color{0.0f, 0.0f, 0.0f, 1.0f};
@@ -94,7 +97,7 @@ struct TextureHandle {
 
 // ---- Materials (ADR-030) -----------------------------------------------------------------
 
-enum class AlphaMode : std::uint8_t {
+enum class AlphaMode : std::uint8_t {  // Blend: see-through, drawn after the opaque scene, sorted back to front
     Opaque,
     Cutout,  // pixels with alpha below alpha_cutoff are not drawn (leaves, fences)
     Blend,   // see-through blending is not implemented yet: drawn like Cutout (logged once)
@@ -248,6 +251,11 @@ struct FrameStats {
         double ms = 0.0;
     };
     std::vector<Pass> passes;
+    // Shadow-map draws (in draw_calls too) and casters skipped because they were outside a cascade.
+    std::uint32_t shadow_draw_calls = 0;
+    std::uint32_t shadow_draws_culled = 0;
+    std::uint32_t transparent_draws = 0;  // see-through (blend) draws, sorted back to front
+    std::uint32_t msaa_samples = 1;       // samples per pixel of the scene this frame
 };
 
 // A copy of a presented frame, read back from the GPU. Pixels are tightly packed
@@ -282,6 +290,14 @@ public:
     void destroy_texture(TextureHandle texture);
     // GPU memory held by textures created with create_texture.
     [[nodiscard]] std::uint64_t texture_memory() const noexcept;
+    // GPU memory held by meshes (vertex and index buffers).
+    [[nodiscard]] std::uint64_t mesh_memory() const noexcept;
+    // GPU memory of the frame's images: HDR scene, depth, MSAA images, shadow cascades.
+    [[nodiscard]] std::uint64_t render_target_memory() const noexcept;
+    // Scene anti-aliasing: 1, 2, 4 or 8 samples (lowered to what the GPU supports; applied from the
+    // next frame). msaa_samples() is what is in use.
+    void set_msaa(std::uint32_t samples) noexcept;
+    [[nodiscard]] std::uint32_t msaa_samples() const noexcept;
     // A magenta-and-black checker for textures that couldn't be loaded (visible on purpose).
     [[nodiscard]] TextureHandle missing_texture() const noexcept;
     // Sets the environment that lights the scene and shows behind it. Waits for the GPU (it replaces

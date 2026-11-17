@@ -63,7 +63,7 @@ VertexOutput VSMain(VertexInput input)
 void PSMain(VertexOutput input)
 {
     const GpuMaterial mat = materials[pc.ids.x];
-    if ((mat.tex1.w & 1u) == 0u) return;  // opaque: depth only
+    if ((mat.tex1.w & 3u) == 0u) return;  // opaque: depth only (see-through ones cast shadows like cutouts)
     const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
     const float alpha = mat.base_color.a * textures[mat.tex0.x].Sample(texture_sampler, uv).a;
     if (alpha < mat.emissive_cutoff.w) discard;
