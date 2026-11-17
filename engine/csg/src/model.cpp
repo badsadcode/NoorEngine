@@ -142,13 +142,22 @@ Result<Model> build_model(std::span<const Brush> brushes) {
         const Brush& br = brushes[src.brush];
         const Surface& surface = br.surface_of(src.face);
         const bool is_smooth = smooth(br.shape, src.face);
-        const Frame frame = projection_frame(tri_normal[t]);
+        Frame frame = projection_frame(tri_normal[t]);
+        if (surface.align == Align::Brush) {
+            // The brush's axes (rotation only: a stretched brush doesn't stretch its texture).
+            const math::Mat4& m = br.transform;
+            const Vec3 ax = math::normalize(Vec3{m.m[0].x, m.m[0].y, m.m[0].z}), ay = math::normalize(Vec3{m.m[1].x, m.m[1].y, m.m[1].z}),
+                       az = math::normalize(Vec3{m.m[2].x, m.m[2].y, m.m[2].z});
+            const Vec3 local{math::dot(tri_normal[t], ax), math::dot(tri_normal[t], ay), math::dot(tri_normal[t], az)};
+            const Frame f = projection_frame(local);
+            frame = {ax * f.u.x + ay * f.u.y + az * f.u.z, ax * f.v.x + ay * f.v.y + az * f.v.z};
+        }
         const float rad = math::radians(surface.rotation_degrees);
         const float c = std::cos(rad), sn = std::sin(rad);
         // The axis this triangle's UVs came from: part of the vertex key, so box-projected curved
         // faces get a clean seam where the axis changes instead of stretched UVs.
-        const auto axis = static_cast<std::uint32_t>(std::abs(frame.u.x) > 0.5f ? 0 : std::abs(frame.u.z) > 0.5f ? 1 : 2) +
-                          (math::dot(math::cross(frame.u, frame.v), tri_normal[t]) > 0 ? 0u : 3u);
+        const auto quant = [](float x) { return static_cast<std::uint32_t>(std::lround(x * 100.0f) + 200); };
+        const std::uint32_t axis = (quant(frame.u.x) << 20) | (quant(frame.u.y) << 10) | quant(frame.u.z);
         if (out.submeshes.empty() || out.submeshes.back().material != surface.material)
             out.submeshes.push_back({surface.material, static_cast<std::uint32_t>(out.indices.size()), 0});
         for (int k = 0; k < 3; ++k) {

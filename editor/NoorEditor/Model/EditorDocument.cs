@@ -207,6 +207,17 @@ public sealed class EditorDocument : IDisposable
     {
         if (id == SelectedId) return;
         SelectedId = id;
+        SelectedFace = null;
+        SelectionChanged?.Invoke();
+    }
+
+    /// <summary>A face of the selected CSG brush (its logical face index), picked in the viewport.</summary>
+    public int? SelectedFace { get; private set; }
+
+    public void SelectFace(int? face)
+    {
+        if (face == SelectedFace) return;
+        SelectedFace = face;
         SelectionChanged?.Invoke();
     }
 

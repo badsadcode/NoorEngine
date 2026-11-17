@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 14;
+    public const uint ExpectedApiVersion = 15;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -50,6 +50,7 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_viewport_destroy(IntPtr viewport);
     [DllImport(Dll)] public static extern void noor_viewport_set_document(IntPtr viewport, IntPtr doc);
     [DllImport(Dll)] public static extern void noor_viewport_set_preview(IntPtr viewport, IntPtr doc);
+    [DllImport(Dll)] public static extern void noor_viewport_set_face_highlight(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? brushId, int face);
     [DllImport(Dll)] public static extern void noor_viewport_frame(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_selection(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityIdsJson);
     [DllImport(Dll)] public static extern void noor_viewport_set_gizmo(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? entityId, int mode);

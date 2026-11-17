@@ -49,6 +49,13 @@ struct CsgMesh {
         std::vector<math::Vec3> positions;  // triangle list
     };
     std::vector<Ghost> ghosts;
+    // Which material each brush face ended up with, and how many triangles it has in the result.
+    struct FaceUse {
+        Guid brush;
+        std::uint32_t face = 0, slot = 0, triangles = 0;
+    };
+    std::vector<FaceUse> faces;
+    std::vector<std::uint32_t> triangle_face;  // per result triangle: its brush's logical face
     std::size_t brush_count = 0;
     std::size_t triangles = 0;
     double volume = 0.0;

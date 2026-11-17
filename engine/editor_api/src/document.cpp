@@ -9,6 +9,7 @@
 #include "noor/foundation/log.h"
 
 #include <algorithm>
+#include <map>
 #include <chrono>
 #include <cmath>
 #include <format>
@@ -657,19 +658,35 @@ std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded,
         b.steps = static_cast<std::uint32_t>(std::clamp(json_float(c, "steps", 4.0f), 1.0f, 256.0f));
         const auto& t = entities[j].transform;
         b.transform = math::compose(t.position, t.rotation, t.scale);
-        b.surface.scale = json_vec2(c, "uv_scale", {1, 1});
-        b.surface.offset = json_vec2(c, "uv_offset", {0, 0});
-        b.surface.rotation_degrees = json_float(c, "uv_rotation", 0.0f);
-        if (const auto id = asset::guid_field(c, "material")) {
-            auto [it, added] = slot_of.try_emplace(*id, static_cast<std::uint32_t>(mesh->materials.size()));
+        const auto slot = [&](const Guid& id) {
+            auto [it, added] = slot_of.try_emplace(id, static_cast<std::uint32_t>(mesh->materials.size()));
             if (added) {
                 std::filesystem::path file;
-                if (const auto* rec = registry_.find(*id))
+                if (const auto* rec = registry_.find(id))
                     if (auto resolved = project_.resolve(rec->path)) file = *resolved;
                 mesh->materials.push_back(std::move(file));
             }
-            b.surface.material = it->second;
-        }
+            return it->second;
+        };
+        // A surface from JSON: material, UV scale/offset/rotation, alignment; missing keys from `base`.
+        const auto surface = [&](const Json& j, const csg::Surface& base) {
+            csg::Surface s = base;
+            s.scale = json_vec2(j, "uv_scale", base.scale);
+            s.offset = json_vec2(j, "uv_offset", base.offset);
+            s.rotation_degrees = json_float(j, "uv_rotation", base.rotation_degrees);
+            if (j.contains("uv_align") && j["uv_align"].is_string())
+                s.align = j["uv_align"].get<std::string>() == "brush" ? csg::Align::Brush : csg::Align::World;
+            if (j.contains("material")) s.material = j["material"].is_null() ? 0u : asset::guid_field(j, "material") ? slot(*asset::guid_field(j, "material")) : base.material;
+            return s;
+        };
+        b.surface = surface(c, csg::Surface{});
+        // "faces": per logical face, null (= the brush's surface) or an object overriding it.
+        if (c.contains("faces") && c["faces"].is_array())
+            for (std::uint32_t f = 0; f < c["faces"].size() && f < csg::face_count(b.shape); ++f) {
+                const Json& fj = c["faces"][f];
+                b.faces.resize(f + 1, b.surface);
+                if (fj.is_object()) b.faces[f] = surface(fj, b.surface);
+            }
         if (b.operation != csg::Operation::Add) {
             const auto bm = csg::brush_mesh(b);
             CsgMesh::Ghost ghost{entities[j].id, b.operation == csg::Operation::Intersect, {}};
@@ -694,9 +711,13 @@ std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded,
         mesh->indices = std::move(built->indices);
         // Runs of the same (brush, material) become one part of that brush's group.
         std::unordered_map<std::uint32_t, std::size_t> group_of;
+        std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t> face_triangles;
+        mesh->triangle_face.reserve(built->triangle_source.size());
         for (std::size_t t = 0; t < built->triangle_source.size(); ++t) {
             const std::uint32_t brush = built->triangle_source[t].brush;
             const std::uint32_t slot = brushes[brush].surface_of(built->triangle_source[t].face).material;
+            mesh->triangle_face.push_back(built->triangle_source[t].face);
+            ++face_triangles[{brush, built->triangle_source[t].face}];
             auto [git, added] = group_of.try_emplace(brush, mesh->groups.size());
             if (added) mesh->groups.push_back({brush_ids[brush], {}});
             auto& parts = mesh->groups[git->second].parts;
@@ -704,6 +725,8 @@ std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded,
             if (!parts.empty() && parts.back().slot == slot && parts.back().first_index + parts.back().index_count == first) parts.back().index_count += 3;
             else parts.push_back({first, 3, slot});
         }
+        for (const auto& [brush_face, count] : face_triangles)
+            mesh->faces.push_back({brush_ids[brush_face.first], brush_face.second, brushes[brush_face.first].surface_of(brush_face.second).material, count});
     }
     mesh->build_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     for (const auto& w : mesh->warnings) NOOR_LOG_WARN("CSG", "{}: {}", entities[model_index].name, w);
@@ -715,7 +738,14 @@ Json Document::csg_info() const {
     Json out = Json::array();
     for (const auto& [id, mesh] : csg_cache_) {
         if (std::ranges::find(csg_last_, mesh) == csg_last_.end()) continue;  // not in the scene any more
+        Json faces = Json::array();
+        for (const auto& f : mesh->faces) {
+            const auto& file = f.slot < mesh->materials.size() ? mesh->materials[f.slot] : std::filesystem::path{};
+            const auto rel = file.empty() ? std::optional<std::string>{} : project_.relative(file) ? std::optional(*project_.relative(file)) : std::nullopt;
+            faces.push_back({{"brush", f.brush.to_string()}, {"face", f.face}, {"material", rel ? Json(*rel) : Json(nullptr)}, {"triangles", f.triangles}});
+        }
         out.push_back({{"model", id.to_string()},
+                       {"faces", std::move(faces)},
                        {"brushes", mesh->brush_count},
                        {"triangles", mesh->triangles},
                        {"volume", mesh->volume},

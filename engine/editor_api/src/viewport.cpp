@@ -82,6 +82,9 @@ struct noor_viewport {
         std::uint32_t msaa = 4;
     } options;
     std::string render_stats = "{}";  // JSON (noor_viewport_render_stats), under stats_mutex
+    std::optional<Guid> face_brush;  // the outlined brush face (noor_viewport_set_face_highlight), under doc_mutex
+    std::uint32_t face_index = 0;
+    std::uint64_t face_version = 0;
     std::uint64_t options_version = 0;
 
     // The camera of the last drawn frame (for noor_viewport_world_to_screen).
@@ -244,6 +247,7 @@ struct LoadedMesh {
         noor::render::MaterialHandle material;
     };
     std::vector<Part> parts;
+    std::vector<std::uint32_t> triangle_face;  // CSG brush groups: the logical face of each triangle in `indices`
 };
 
 void set_state(noor_viewport* vp, noor_viewport_state state) {
@@ -335,7 +339,11 @@ void render_thread_main(noor_viewport* vp) {
         std::vector<LoadedMesh> ghosts;
     };
     std::unordered_map<std::uint64_t, CsgGpu> csg_gpu;
-    noor::render::MaterialHandle ghost_subtract, ghost_intersect;
+    noor::render::MaterialHandle ghost_subtract, ghost_intersect, face_material;
+    noor::render::MeshHandle face_mesh;     // the highlighted face, lifted 3 mm off the surface
+    Mat4 face_world = Mat4::identity();
+    std::uint64_t seen_face_version = ~0ull;
+    std::shared_ptr<const ed::RenderSnapshot> face_snapshot;
     std::shared_ptr<const ed::RenderSnapshot> shown;
     std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
     std::optional<noor::game::TextureLibrary> textures;    // textures and materials, made with the first snapshot
@@ -591,6 +599,8 @@ void render_thread_main(noor_viewport* vp) {
                                     lm.indices.push_back(m.indices[i]);
                                     grow(lm.lo, lm.hi, positions[m.indices[i]]);
                                 }
+                                for (std::uint32_t t = part.first_index / 3; t < (part.first_index + part.index_count) / 3; ++t)
+                                    lm.triangle_face.push_back(t < m.triangle_face.size() ? m.triangle_face[t] : 0u);
                             }
                             gpu.groups.push_back(std::move(lm));
                         }
@@ -657,6 +667,53 @@ void render_thread_main(noor_viewport* vp) {
             if (preview && !drag && preview->shown_at_release != snap.get()) preview.reset();
         }
         if (preview && !drag && std::chrono::steady_clock::now() - preview->released > 1500ms) preview.reset();  // edit rejected
+
+        // The highlighted brush face: rebuilt when asked for another one or the scene changed.
+        {
+            std::optional<Guid> want;
+            std::uint32_t want_face = 0;
+            std::uint64_t version = 0;
+            {
+                std::scoped_lock lock(vp->doc_mutex);
+                want = vp->face_brush;
+                want_face = vp->face_index;
+                version = vp->face_version;
+            }
+            if (version != seen_face_version || face_snapshot != shown) {
+                seen_face_version = version;
+                face_snapshot = shown;
+                if (face_mesh.valid()) r.destroy_mesh(face_mesh);
+                face_mesh = {};
+                if (want && shown) {
+                    std::vector<noor::render::Vertex> verts;
+                    std::vector<std::uint32_t> idx;
+                    for (const auto& d : scene_draws) {
+                        if (d.entity != *want || !d.mesh || d.mesh->triangle_face.empty()) continue;
+                        const auto& lm = *d.mesh;
+                        for (std::size_t t = 0; t < lm.triangle_face.size(); ++t) {
+                            if (lm.triangle_face[t] != want_face) continue;
+                            const Vec3 a = lm.positions[lm.indices[t * 3]], b = lm.positions[lm.indices[t * 3 + 1]], c = lm.positions[lm.indices[t * 3 + 2]];
+                            const Vec3 n = noor::math::normalize(noor::math::cross(b - a, c - a));
+                            for (const Vec3 q : {a, b, c}) {
+                                idx.push_back(static_cast<std::uint32_t>(verts.size()));
+                                verts.push_back({q + n * 0.003f, n, {1, 1, 1}, {0, 0}, {1, 0, 0, 1}});
+                            }
+                        }
+                        face_world = d.item.world_from_object;
+                    }
+                    if (!face_material.valid()) {
+                        noor::render::MaterialDesc fm;
+                        fm.alpha = noor::render::AlphaMode::Blend;
+                        fm.double_sided = true;
+                        fm.base_color = {0.13f, 0.83f, 0.93f, 0.35f};  // Noor cyan, see-through
+                        fm.emissive = {0.05f, 0.33f, 0.37f};  // a little glow, so it shows in the shade too
+                        if (auto h = r.create_material(fm)) face_material = *h;
+                    }
+                    if (!verts.empty())
+                        if (auto h = r.create_mesh({{verts.data(), verts.size()}, idx, "Highlighted face"})) face_mesh = *h;
+                }
+            }
+        }
 
         if (flags_dirty) {
             flags_dirty = false;
@@ -852,6 +909,7 @@ void render_thread_main(noor_viewport* vp) {
                 // Pick the nearest mesh or marker under the pointer.
                 float best = std::numeric_limits<float>::max();
                 std::optional<Guid> hit;
+                std::optional<std::uint32_t> hit_face;  // CSG: the brush face under the pointer
                 for (const auto& d : scene_draws) {
                     const ed::Ray local_ray = ed::to_object_space(ray, d.item.world_from_object);
                     if (!d.mesh) {
@@ -869,10 +927,13 @@ void render_thread_main(noor_viewport* vp) {
                         if (auto t = ed::ray_triangle(local_ray, p[idx[i]], p[idx[i + 1]], p[idx[i + 2]]); t && *t < best) {
                             best = *t;
                             hit = d.entity;
+                            hit_face = i / 3 < d.mesh->triangle_face.size() ? std::optional(d.mesh->triangle_face[i / 3]) : std::nullopt;
                         }
                     }
                 }
-                push_event(vp, {{"type", "click"}, {"entity", hit ? noor::asset::Json(hit->to_string()) : noor::asset::Json(nullptr)}});
+                noor::asset::Json click{{"type", "click"}, {"entity", hit ? noor::asset::Json(hit->to_string()) : noor::asset::Json(nullptr)}};
+                if (hit && hit_face) click["face"] = *hit_face;
+                push_event(vp, std::move(click));
             }
             drag.reset();
             click_pending = false;
@@ -914,6 +975,12 @@ void render_thread_main(noor_viewport* vp) {
                 } else {
                     frame_draws.push_back(item);
                 }
+            }
+            if (face_mesh.valid() && shown && !shown->camera) {
+                noor::render::DrawItem face_item{face_mesh, face_world};
+                face_item.material = face_material;
+                face_item.cast_shadow = false;
+                frame_draws.push_back(face_item);
             }
             if (ground.valid() && (!shown || shown->show_grid)) {
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
@@ -1024,6 +1091,8 @@ void render_thread_main(noor_viewport* vp) {
             if (g.handle.valid()) r.destroy_mesh(g.handle);
     }
     csg_gpu.clear();
+    if (face_mesh.valid()) r.destroy_mesh(face_mesh);
+    if (face_material.valid()) r.destroy_material(face_material);
     if (ghost_subtract.valid()) r.destroy_material(ghost_subtract);
     if (ghost_intersect.valid()) r.destroy_material(ghost_intersect);
     environment.reset();
@@ -1259,6 +1328,16 @@ NOOR_API int32_t noor_viewport_has_focus(noor_viewport* viewport) {
 
 NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport) {
     return viewport && viewport->window && viewport->window->mouse_captured() ? 1 : 0;
+}
+
+NOOR_API void noor_viewport_set_face_highlight(noor_viewport* viewport, const char* brush_id, int32_t face) {
+    if (!viewport) return;
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->face_brush.reset();
+    if (brush_id)
+        if (auto id = Guid::parse(brush_id)) viewport->face_brush = *id;
+    viewport->face_index = static_cast<std::uint32_t>(std::max(0, face));
+    ++viewport->face_version;
 }
 
 NOOR_API const char* noor_viewport_render_stats(noor_viewport* viewport) {

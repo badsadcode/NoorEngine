@@ -249,6 +249,7 @@ internal static class SmokeTest
         await RenderPanelChecks(window, settings, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
+        await FaceChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -931,6 +932,72 @@ internal static class SmokeTest
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
         check(doc.CsgInfo().Count == 0, "brushes: deleting the model removes it");
         await Task.Delay(300);
+    }
+
+    // Milestone 6, part 3: click a face, give it a material, cut a window after texturing.
+    private static async Task FaceChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        doc.Select(null);
+        var wall = window.CreateBrush("box");
+        var model = wall == null ? null : doc.Scene.Entities.First(e => e.Id == wall).Parent;
+        var vp = VulkanViewport.Active;
+        if (wall == null || model == null || vp == null)
+        {
+            check(false, "faces: a wall to work on");
+            return;
+        }
+        _testViewport = vp.EngineHandle;
+        vp.Frame(doc.Subtree(model));
+        await Task.Delay(700);
+        JsonObject? Face(int face, string brush) => doc.CsgInfo().OfType<JsonObject>().SelectMany(m => (m["faces"] as JsonArray)!.OfType<JsonObject>())
+            .FirstOrDefault(f => f["brush"]!.GetValue<string>() == brush && f["face"]!.GetValue<int>() == face);
+
+        // Two clicks on the wall's front: the model, then the brush and the face under the pointer.
+        if (vp.WorldToScreen(new Vec3(0.6, 1.2, 0.15)) is { } at)
+        {
+            await Click(IntPtr.Zero, at.X, at.Y);
+            window.ViewportView?.DrainEvents();
+            await Click(IntPtr.Zero, at.X, at.Y);
+            window.ViewportView?.DrainEvents();
+        }
+        check(doc.SelectedId == wall && doc.SelectedFace == 4,
+              $"faces: clicking the wall's front twice picks the brush and its front face ({doc.SelectedFace?.ToString() ?? "none"})");
+
+        // That face gets its own material; the others keep the brush's (none).
+        var tiles = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Textures/tiles.noormat");
+        doc.SelectFace(4);
+        await Task.Delay(100);
+        var set = tiles != null && window.Inspector?.Components.SetFace(4, new JsonObject { ["material"] = tiles.Guid }) == true;
+        var front = Face(4, wall);
+        check(set && front?["material"]?.GetValue<string>() == tiles!.Path && Face(2, wall)?["material"] == null,
+              "faces: the front face takes the tiles material, the top keeps the brush's");
+        var frontTriangles = front?["triangles"]?.GetValue<int>() ?? 0;
+
+        // A window cut after texturing: the front keeps its tiles, the window's own faces don't get them.
+        doc.Select(wall);
+        var window1 = window.CreateBrush("box");
+        if (window1 != null)
+        {
+            var brush = (JsonObject)doc.Scene.Entities.First(e => e.Id == window1).Components["brush"]!.DeepClone();
+            brush["operation"] = "subtract";
+            brush["size"] = new JsonArray(1.0, 1.0, 1.0);
+            doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = window1, ["type"] = "brush", ["value"] = brush });
+        }
+        var cut = Face(4, wall);
+        var volume = doc.CsgInfo().OfType<JsonObject>().Sum(m => m["volume"]!.GetValue<double>());
+        check(window1 != null && Math.Abs(volume - (3.6 - 0.3)) < 1e-3 && cut?["material"]?.GetValue<string>() == tiles?.Path &&
+              (cut?["triangles"]?.GetValue<int>() ?? 0) > frontTriangles && Face(0, window1)?["material"] == null,
+              $"faces: a window cut after texturing keeps the front's tiles ({cut?["triangles"]} triangles); its own faces don't take them");
+
+        doc.Select(wall);
+        doc.SelectFace(4);
+        vp.Frame(doc.Subtree(model));
+        await Task.Delay(800);
+        shot(window, "editor_25_faces.png");
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
+        doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
+        await Task.Delay(200);
     }
 
     private static async Task NoorCodeChecks(MainWindow window, Dictionary<string, object> results,

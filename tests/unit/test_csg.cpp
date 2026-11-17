@@ -169,3 +169,35 @@ TEST_CASE("csg: a wall with 100 windows, built twice, is the same to the byte") 
     CHECK(second.indices == first.indices);
     CHECK(std::memcmp(second.vertices.data(), first.vertices.data(), first.vertices.size() * sizeof(csg::Vertex)) == 0);
 }
+
+TEST_CASE("csg: one face can have its own material, and its texture can turn with the brush") {
+    // A wall turned 37 degrees: its front face has material 2, aligned with the brush; the rest
+    // material 1, aligned with the world.
+    const float angle = math::radians(37.0f);
+    Brush wall = make(Shape::Box, {4, 3, 0.3f}, {}, Operation::Add, 1);
+    wall.transform = math::rotation({0, 1, 0}, angle);
+    wall.faces.resize(6, wall.surface);
+    wall.faces[4].material = 2;
+    wall.faces[4].align = csg::Align::Brush;
+    const auto model = build({wall});
+    const Vec3 along{std::cos(angle), 0, -std::sin(angle)};  // the wall's own +X, turned
+    std::size_t front = 0;
+    for (std::size_t t = 0; t < model.triangle_count(); ++t) {
+        const auto src = model.triangle_source[t];
+        const auto sub = std::find_if(model.submeshes.begin(), model.submeshes.end(), [&](const auto& s) {
+            return t * 3 >= s.first_index && t * 3 < s.first_index + s.index_count;
+        });
+        REQUIRE(sub != model.submeshes.end());
+        CHECK(sub->material == (src.face == 4 ? 2u : 1u));
+        if (src.face != 4) continue;
+        ++front;
+        for (int k = 0; k < 3; ++k) {
+            const auto& v = model.vertices[model.indices[t * 3 + k]];
+            // u runs along the wall (not along a world axis), v straight down: rows of bricks stay level.
+            CHECK(v.uv.x == doctest::Approx(math::dot(v.position, along)).epsilon(1e-4));
+            CHECK(v.uv.y == doctest::Approx(-v.position.y).epsilon(1e-4));
+        }
+    }
+    CHECK(front == 2);
+    CHECK(model.submeshes.size() == 2);
+}

@@ -1,7 +1,7 @@
 # CSG brushes
 
-How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, parts 1–2**: the
-kernel and the shapes, and brushes in the editor.
+How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, parts 1–3**: the
+kernel and the shapes, brushes in the editor, and materials and UVs per face.
 
 ## In the editor
 
@@ -22,8 +22,29 @@ CSG model or one of its brushes selected, the new brush goes into that model. On
 
 ```json
 "brush": { "shape": "box", "operation": "add", "size": [4, 3, 0.3], "sides": 16, "steps": 8,
-           "material": "<material id>", "uv_scale": [1, 1], "uv_offset": [0, 0], "uv_rotation": 0 }
+           "material": "<material id>", "uv_scale": [1, 1], "uv_offset": [0, 0], "uv_rotation": 0,
+           "uv_align": "world",
+           "faces": [null, null, null, null, { "material": "<another id>", "uv_align": "brush" }, null] }
 ```
+
+### Faces
+
+Every logical face (see the table above) can have its **own material and UV settings**; a face
+without them uses the brush's. In the editor:
+
+- **Click a face** of the selected brush in the viewport (the first click on a model selects the
+  model, the next one the brush and the face under the pointer). The face is outlined in cyan and
+  comes first, open, in the Inspector's **Faces** section.
+- Each face: a material (or "the brush's", or none), and under **UV**: repeats per metre, offset,
+  rotation and alignment, plus the **texel density** ("1024 px per metre: a 1024 px texture that
+  repeats every 1 m") so walls next to each other can be kept equally sharp. **Use the brush's**
+  removes the face's own settings.
+- **Alignment:** `world` (the default) projects along the model's axes, so textures stay put in
+  space and line up across cuts; `brush` projects along the brush's own axes, so a wall turned 37°
+  keeps level rows of bricks instead of sheared ones.
+
+Faces keep their settings through cuts: cut a window into a wall whose front is brick and the
+front stays brick; the window's sides come from the window brush.
 
 The document rebuilds a model when its brushes change (cached per model, keyed by what it was
 built from). While a gizmo is being dragged the brush moves as it is; the cut updates when you
@@ -78,6 +99,7 @@ meshes (part 4). The test `boundary.runtime_has_no_editor_code` fails if either 
 into `noor_player` or a runtime module.
 
 ## Not yet
-Per-face materials and UV tools (part 3; for now one material per brush), live re-cutting while a
+Dragging a material from the Content Browser onto a face (the native viewport doesn't take drops
+yet: pick it in the Inspector), triplanar projection, UV tools per triangle, live re-cutting while a
 gizmo is dragged, cooked meshes for games (part 4: the player doesn't draw CSG models yet),
 collision and GLB export (part 4), brush outlines for add brushes, nested models.

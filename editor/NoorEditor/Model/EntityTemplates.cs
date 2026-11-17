@@ -93,6 +93,19 @@ public static class EntityTemplates
         ["material"] = null,
     };
 
+    /// <summary>A brush shape's logical faces, in the engine's order (noor/csg/csg.h, face_name).</summary>
+    public static string[] BrushFaces(string shape) => shape switch
+    {
+        "box" => ["+X side", "-X side", "top", "bottom", "front", "back"],
+        "wedge" => ["slope", "bottom", "back", "+X side", "-X side"],
+        "cylinder" => ["side", "top", "bottom"],
+        "cone" => ["side", "bottom"],
+        "sphere" => ["surface"],
+        "stairs" => ["treads", "risers", "sides", "back", "bottom"],
+        "arch" => ["front", "back", "sides and bottom", "curve"],
+        _ => [],
+    };
+
     /// <summary>Where a new brush sits in its model: on the model's floor (y = half its height).</summary>
     public static Vec3 BrushPosition(JsonObject brush) =>
         new(0, (brush["size"] as JsonArray)?[1] is JsonNode h && Num.TryParse(h.ToJsonString(), out var y) ? y / 2 : 0.5, 0);

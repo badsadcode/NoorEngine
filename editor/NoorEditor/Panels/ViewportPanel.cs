@@ -120,6 +120,7 @@ public sealed class ViewportPanel : DockPanel
         Viewport.SetSelection(selected == null ? [] : _doc.Subtree(selected.Id));
         var mode = selected is { FromPrefab: false } && !_doc.Playing ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
+        Viewport.SetFaceHighlight(selected != null && _doc.SelectedFace is { } face ? selected.Id : null, _doc.SelectedFace ?? 0);
     }
 
     /// <summary>Handles the viewport's clicks and gizmo results (also called by the smoke test).</summary>
@@ -132,7 +133,11 @@ public sealed class ViewportPanel : DockPanel
             switch (ev?["type"]?.GetValue<string>())
             {
                 case "click":
-                    _doc.Select(_doc.ClickTarget(ev["entity"]?.GetValue<string>()));
+                    var hitId = ev["entity"]?.GetValue<string>();
+                    var target = _doc.ClickTarget(hitId);
+                    _doc.Select(target);
+                    // A CSG face: when the click selected the brush itself, remember which face.
+                    _doc.SelectFace(target != null && target == hitId && ev["face"] is JsonValue f ? f.GetValue<int>() : null);
                     break;
                 case "mouse_capture":  // a script asked (play mode); the cursor belongs to the UI thread
                     Native.noor_viewport_set_mouse_capture(Viewport.EngineHandle, ev["capture"]?.GetValue<bool>() == true ? 1 : 0);

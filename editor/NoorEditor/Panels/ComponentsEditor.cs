@@ -43,6 +43,178 @@ public sealed class ComponentsEditor : StackPanel
         if (editable) Children.Add(AddComponentButton());
     }
 
+    // ---- CSG brush faces (Milestone 6, part 3) ----
+
+    private static readonly HashSet<int> s_expandedFaces = [];
+
+    /// <summary>
+    /// A brush's faces: each can take its own material and UV settings (the brush's otherwise).
+    /// The face picked in the viewport is first, highlighted and open.
+    /// </summary>
+    private Control FacesEditor(JsonObject brush)
+    {
+        var shape = brush["shape"]?.GetValue<string>() ?? "box";
+        var names = EntityTemplates.BrushFaces(shape);
+        var faces = brush["faces"] as JsonArray;
+        var panel = new StackPanel { Spacing = 3, Margin = new Thickness(0, 6, 0, 0) };
+        panel.Children.Add(new TextBlock { Text = "Faces", Classes = { "section" } });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Click a face in the viewport (on the selected brush) to pick it. A face without its own settings uses the brush's.",
+            FontSize = 10, Classes = { "muted" }, TextWrapping = TextWrapping.Wrap,
+        });
+        var order = Enumerable.Range(0, names.Length).ToList();
+        if (_doc.SelectedFace is { } picked && picked < names.Length)
+        {
+            order.Remove(picked);
+            order.Insert(0, picked);
+            s_expandedFaces.Add(picked);
+        }
+        foreach (var f in order)
+            panel.Children.Add(FaceRow(brush, faces, f, names[f], f == _doc.SelectedFace));
+        return panel;
+    }
+
+    private JsonObject? FaceOf(JsonArray? faces, int face) => faces != null && face < faces.Count ? faces[face] as JsonObject : null;
+
+    /// <summary>Writes one face's settings (null: back to the brush's) into the brush's "faces" list.</summary>
+    public bool SetFace(int face, JsonObject? settings)
+    {
+        if (_entity?.Components["brush"] is not JsonObject brush) return false;
+        var count = EntityTemplates.BrushFaces(brush["shape"]?.GetValue<string>() ?? "box").Length;
+        var faces = new JsonArray();
+        var old = brush["faces"] as JsonArray;
+        for (var i = 0; i < count; i++) faces.Add(i == face ? settings?.DeepClone() : FaceOf(old, i)?.DeepClone());
+        var next = (JsonObject)brush.DeepClone();
+        if (faces.All(x => x == null)) next.Remove("faces");
+        else next["faces"] = faces;
+        return SetComponent("brush", next);
+    }
+
+    private Control FaceRow(JsonObject brush, JsonArray? faces, int face, string name, bool picked)
+    {
+        var own = FaceOf(faces, face);
+        var materials = _doc.Assets.Where(a => a.Importer == "material").ToList();
+        string Path(string? guid) => guid == null ? "(none)" : materials.FirstOrDefault(m => m.Guid == guid)?.Path ?? "(missing material)";
+        var brushMaterial = brush["material"] is JsonValue bm && bm.TryGetValue<string>(out var bmg) ? bmg : null;
+        const string Inherit = "(the brush's)";
+        var items = new List<string> { Inherit, "(none)" };
+        items.AddRange(materials.Select(m => m.Path));
+        var current = own == null || !own.ContainsKey("material") ? Inherit : Path(own["material"] is JsonValue v && v.TryGetValue<string>(out var g) ? g : null);
+        var combo = new ComboBox { ItemsSource = items, SelectedItem = items.Contains(current) ? current : Inherit, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedItem is not string choice || choice == current) return;
+            var next = (JsonObject?)own?.DeepClone() ?? new JsonObject();
+            if (choice == Inherit) next.Remove("material");
+            else next["material"] = choice == "(none)" ? null : JsonValue.Create(materials.First(m => m.Path == choice).Guid);
+            SetFace(face, next.Count == 0 ? null : next);
+        };
+        var label = new TextBlock
+        {
+            Text = name, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = NoorTheme.Brush(picked ? NoorTheme.Cyan : NoorTheme.Text), FontWeight = picked ? FontWeight.SemiBold : FontWeight.Normal,
+        };
+        var more = new Avalonia.Controls.Primitives.ToggleButton { Content = "UV", Classes = { "tool" }, Padding = new Thickness(5, 0), Margin = new Thickness(3, 0, 0, 0),
+                                      IsChecked = s_expandedFaces.Contains(face) };
+        ToolTip.SetTip(more, "Texture placement on this face");
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*,Auto") };
+        Grid.SetColumn(combo, 1);
+        Grid.SetColumn(more, 2);
+        head.Children.Add(label);
+        head.Children.Add(combo);
+        head.Children.Add(more);
+        var block = new StackPanel { Spacing = 2, Children = { head } };
+        var details = UvEditor(brush, own, face, materials, own != null && own.ContainsKey("material") ? (own["material"] as JsonValue)?.GetValue<string>() : brushMaterial);
+        details.IsVisible = more.IsChecked == true;
+        more.IsCheckedChanged += (_, _) =>
+        {
+            details.IsVisible = more.IsChecked == true;
+            if (more.IsChecked == true) s_expandedFaces.Add(face);
+            else s_expandedFaces.Remove(face);
+        };
+        block.Children.Add(details);
+        return new Border
+        {
+            Background = picked ? NoorTheme.Brush(NoorTheme.PanelRaised) : Brushes.Transparent,
+            BorderBrush = picked ? NoorTheme.Brush(NoorTheme.Cyan) : Brushes.Transparent,
+            BorderThickness = new Thickness(picked ? 1 : 0), CornerRadius = new CornerRadius(4), Padding = new Thickness(4, 2),
+            Child = block,
+        };
+    }
+
+    private Control UvEditor(JsonObject brush, JsonObject? own, int face, List<AssetInfo> materials, string? materialGuid)
+    {
+        double Get(string key, int i, double fallback)
+        {
+            var node = own?[key] ?? brush[key];
+            if (node is JsonArray a && i < a.Count && a[i] is JsonNode n && Num.TryParse(n.ToJsonString(), out var x)) return x;
+            if (node is JsonValue && i == 0 && Num.TryParse(node.ToJsonString(), out var y)) return y;
+            return fallback;
+        }
+        void Set(string key, JsonNode value)
+        {
+            var next = (JsonObject?)own?.DeepClone() ?? new JsonObject();
+            next[key] = value;
+            SetFace(face, next);
+        }
+        Control Pair(string key, double d)
+        {
+            var a = Get(key, 0, d);
+            var b = Get(key, 1, d);
+            var row = new Avalonia.Controls.Primitives.UniformGrid { Rows = 1, Columns = 2 };
+            row.Children.Add(NumberBox(a, x => Set(key, new JsonArray(x, b))));
+            row.Children.Add(NumberBox(b, x => Set(key, new JsonArray(a, x))));
+            return row;
+        }
+        var align = new ComboBox { ItemsSource = new[] { "world", "brush" }, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        align.SelectedItem = (own?["uv_align"] ?? brush["uv_align"])?.GetValue<string>() == "brush" ? "brush" : "world";
+        align.SelectionChanged += (_, _) => { if (align.SelectedItem is string s && s != ((own?["uv_align"] ?? brush["uv_align"])?.GetValue<string>() ?? "world")) Set("uv_align", s); };
+        ToolTip.SetTip(align, "world: the texture stays put in space (cuts line up). brush: it turns with the brush (rotated walls keep level rows)");
+        var reset = new Button { Content = "Use the brush's", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = own != null };
+        reset.Click += (_, _) => SetFace(face, null);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*"), Margin = new Thickness(8, 2, 0, 4) };
+        var rows = new (string Label, Control Editor)[]
+        {
+            ("Repeats / m", Pair("uv_scale", 1)), ("Offset", Pair("uv_offset", 0)),
+            ("Rotation °", NumberBox(Get("uv_rotation", 0, 0), x => Set("uv_rotation", x))), ("Aligned to", align),
+        };
+        for (var i = 0; i < rows.Length; i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var l = new TextBlock { Text = rows[i].Label, FontSize = 11, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetRow(l, i);
+            Grid.SetRow(rows[i].Editor, i);
+            Grid.SetColumn(rows[i].Editor, 1);
+            grid.Children.Add(l);
+            grid.Children.Add(rows[i].Editor);
+        }
+        var density = new TextBlock { FontSize = 10, Classes = { "muted" }, TextWrapping = TextWrapping.Wrap, Text = TexelDensity(materialGuid, Get("uv_scale", 0, 1)) };
+        return new StackPanel { Spacing = 3, Children = { grid, density, reset } };
+    }
+
+    /// <summary>"1024 px/m (a 1024 px texture repeating every 1 m)": how sharp the face's texture is.</summary>
+    private string TexelDensity(string? materialGuid, double repeatsPerMetre)
+    {
+        var every = repeatsPerMetre > 0 ? $"repeats every {Num.Format(1 / repeatsPerMetre)} m" : "doesn't repeat";
+        var material = materialGuid == null ? null : _doc.Assets.FirstOrDefault(a => a.Guid == materialGuid);
+        if (material == null) return $"Texture {every}.";
+        var json = MaterialFile.Read(System.IO.Path.Combine(_doc.ProjectRoot, material.Path));
+        var parent = json;
+        for (var depth = 0; depth < 16 && parent != null && parent["base_color_map"] == null && parent["overrides"]?["base_color_map"] == null &&
+                            parent["parent"] is JsonValue pid; depth++)
+        {
+            var p = _doc.Assets.FirstOrDefault(a => a.Guid == pid.GetValue<string>());
+            parent = p == null ? null : MaterialFile.Read(System.IO.Path.Combine(_doc.ProjectRoot, p.Path));
+        }
+        var mapId = (parent?["overrides"]?["base_color_map"] ?? parent?["base_color_map"]) is JsonValue mv && mv.TryGetValue<string>(out var m) ? m : null;
+        var texture = mapId == null ? null : _doc.Assets.FirstOrDefault(a => a.Guid == mapId);
+        var info = texture == null ? null : JsonNode.Parse(Interop.Native.Texture(_doc.Handle, texture.Path) ?? "null");
+        var width = info?["width"]?.GetValue<int>() ?? 0;
+        return width > 0 ? $"{Num.Format(width * repeatsPerMetre)} px per metre (a {width} px texture that {every})." : $"Texture {every}.";
+    }
+
     // ---- Commands (also used by the smoke test) ----
 
     public bool SetComponent(string type, JsonNode? value)
@@ -165,7 +337,9 @@ public sealed class ComponentsEditor : StackPanel
         }
         else if (value is JsonObject obj && editable)
         {
-            foreach (var (field, fieldValue) in obj) body.Children.Add(FieldRow(type, field, field, fieldValue));
+            foreach (var (field, fieldValue) in obj)
+                if (!(type == "brush" && field == "faces")) body.Children.Add(FieldRow(type, field, field, fieldValue));
+            if (type == "brush") body.Children.Add(FacesEditor(obj));
             var addField = new Button { Content = "+ Field", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
             addField.Click += async (_, _) => await AddField(type);
             body.Children.Add(addField);

@@ -25,10 +25,15 @@ enum class Operation : std::uint8_t { Add, Subtract, Intersect };
 [[nodiscard]] std::string_view operation_name(Operation op) noexcept;
 
 // How one face is surfaced: a material slot of the model and its UV mapping. UVs come from the
-// position in model space (metres) on the two axes across the face's main direction:
+// position (metres) on the two axes across the face's main direction:
 // uv = rotate(position, rotation) * scale + offset, so scale is "texture repeats per metre".
+// Align::World projects along the model's axes (textures stay put when brushes move: cuts line up
+// with their surroundings); Align::Brush along the brush's own axes (textures turn with a rotated
+// brush: a wall at 37 degrees keeps straight rows of bricks).
+enum class Align : std::uint8_t { World, Brush };
 struct Surface {
     std::uint32_t material = 0;
+    Align align = Align::World;
     math::Vec2 scale{1.0f, 1.0f};
     math::Vec2 offset{0.0f, 0.0f};
     float rotation_degrees = 0.0f;

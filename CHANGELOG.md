@@ -4,6 +4,23 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-17 — Milestone 6, part 3: surface materials and UVs
+**Added**
+- Per-face surfaces on brushes: `"faces": [null | {material, uv_scale, uv_offset, uv_rotation,
+  uv_align}]`; `uv_align` "world" (default) or "brush" (`csg::Align::Brush`: textures turn with a
+  rotated brush).
+- Viewport: a click on a CSG model reports the brush face (`"face"` in click events); the picked
+  face is outlined in cyan (`noor_viewport_set_face_highlight`). Editor API **v15**.
+- Inspector: a **Faces** section on brushes (the picked face first and open): material per face,
+  UV repeats/offset/rotation/alignment, texel density, "Use the brush's".
+- `noor_doc_csg` lists each brush face's material and triangle count.
+
+**Tests:** a unit test (a face with its own material, brush-aligned UVs on a rotated wall); 3 editor
+smoke checks (two real clicks pick the front face, it takes a material while the top doesn't, a
+window cut afterwards keeps the front's material and doesn't spread it).
+
+**Not yet:** drag and drop of materials onto faces, triplanar projection.
+
 ### 2026-11-17 — Milestone 6, part 2: brushes in the editor
 **Added**
 - **Create ▸ Brush** (box, wedge, cylinder, cone, sphere, stairs, arch): into the selected CSG
