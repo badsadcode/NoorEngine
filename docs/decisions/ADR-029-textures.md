@@ -1,6 +1,6 @@
 # ADR-029: Textures: import, colour spaces, mips and GPU formats
 
-**Status:** Accepted (part 2 built it; compression and .exr still open) · **Date:** 2026-11-17 · **Milestone:** 5
+**Status:** Accepted (part 2 built it; BC7/BC5 compression added after part 7's measurements; .exr and BC6H still open) · **Date:** 2026-11-17 · **Milestone:** 5
 
 ## Context
 Textures were deferred from Milestone 2 to here (M2 review). Spec 10.4 and 11.7: 8-bit and
@@ -55,6 +55,13 @@ Part 2: unit tests for every rule above; `render.golden_Textured`. On a real PBR
 300–700 ms (once, then cached); 8 MB of GPU memory per map uncompressed, so compression will matter
 for real scenes. Decoder licences: stb (public domain or MIT, pinned in
 `third_party/manifest.json`); tinyexr (BSD-3-Clause) is deferred to environments (part 5).
+
+**Compression (after Milestone 5, part 7):** BC7 for colour and data, BC5 for normals (Z rebuilt
+in the shader), `"compression": "auto" | "none"` per texture, any size. Encoder: bc7enc + rgbcx
+(MIT or public domain, pinned by commit and SHA-256), chosen over the ISPC version (Apache-2.0,
+needs the ISPC compiler) and over NVIDIA/AMD tools (closed or large). On the same 1254² set:
+8 MB → 2 MB per map, about 1 s to compress all three maps once in a release build, no visible
+difference.
 
 ## Migration or reversal strategy
 Settings live in `.noormeta`, so changing decoders or adding compression re-imports from the

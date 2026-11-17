@@ -247,6 +247,7 @@ internal static class SmokeTest
             await MaterialEditorChecks(window, materialAsset, Check, Shot);
         }
         await RenderPanelChecks(window, settings, Check, Shot);
+        await TextureSettingsChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -849,6 +850,35 @@ internal static class SmokeTest
         check(ExposurePresets.All.Any(p => p.Ev100 == 14) && ExposurePresets.All.Any(p => p.Ev100 <= 8),
               "exposure: presets from bright sun (EV 14) to indoor and night");
         window.DockFactory.SetActiveDockable(window.FindDockable("Content")!);
+    }
+
+    // Milestone 5: texture import settings and compression (BC5 normal map -> none -> back).
+    private static async Task TextureSettingsChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var normal = doc.Assets.FirstOrDefault(a => a.Path.EndsWith("tiles_normal.png", StringComparison.Ordinal));
+        var texture = normal == null ? null : window.OpenTexture(normal.Path);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<TexturePanel>().FirstOrDefault(p => p.Texture == texture);
+        check(texture != null && panel != null && window.FindDock("Documents")?.ActiveDockable == texture,
+              "texture settings: Edit opens a texture's import settings as a tab");
+        if (texture == null || panel == null) return;
+        string? Format() => panel.Last?["format"]?.GetValue<string>();
+        long Bytes(string key) => panel.Last?[key]?.GetValue<long>() ?? 0;
+        check(Format() == "BC5" && Bytes("gpu_bytes") * 3 < Bytes("rgba8_bytes"),
+              $"texture compression: a normal map is BC5 by default, under a third of the memory ({Format()}, {Bytes("gpu_bytes")} of {Bytes("rgba8_bytes")} bytes)");
+        shot(window, "editor_23_texture_settings.png");
+        panel.SetCompression(false);
+        var meta = File.ReadAllText(texture.FullPath + ".noormeta");
+        check(Format() == "RGBA8" && meta.Contains("\"compression\": \"none\""),
+              "texture settings: Compression None is written to the .noormeta and shown as RGBA8");
+        await Task.Delay(1200);  // the viewport reloads it (the end of the test checks Vulkan validation)
+        panel.SetCompression(true);
+        check(Format() == "BC5" && File.ReadAllText(texture.FullPath + ".noormeta").Contains("\"compression\": \"auto\""),
+              "texture settings: back to compressed");
+        window.DockFactory.CloseDockable(texture);
+        window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        await Task.Delay(300);
     }
 
     private static async Task NoorCodeChecks(MainWindow window, Dictionary<string, object> results,

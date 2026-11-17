@@ -40,14 +40,18 @@ table for orders of magnitude, not decimals.
 | Textures in the test scenes and NoorFPS-lite | under 1 MB (small test textures) |
 | Meshes | under 4 MB, even with the OSM building |
 
-**Texture compression (BC7/BC5): not in part 7, but planned and needed soon.** The tests don't use
+**Texture compression (BC7/BC5): done right after part 7** (see [TEXTURES.md](TEXTURES.md)).
+Measured on a real 1254² PBR set (colour, ORM, normal) in a release player: **8 MB → 2 MB per
+map** (28 MB → 10 MB for the scene, the rest being the HDRI background), about 1 s to compress
+the three maps the first time, then loads as fast as before from the cache. No visible
+difference (mean 0.06/255 per channel). The reasoning that led there: the tests don't use
 big textures, so measuring them says nothing. The arithmetic for real assets does (this is a
 calculation, not a measurement): one 2048² map with mips is 21 MB as RGBA8. A typical material
 has three (colour, normal, ORM): **64 MB per material**. Twenty such materials, a modest level of
 The Uncounted, Chapter Two, would be 1.3 GB, too much for many GPUs. BC7 (colour, ORM) and BC5
 (normals) store 1 byte per pixel instead of 4: 16 MB per material. It needs a CPU encoder (a
-licence-checked dependency) and a cache format change, so it gets its own step before a game
-uses big texture sets.
+licence-checked dependency) and a cache format change, so it got its own step before any game
+used big texture sets.
 
 **One shared GPU device for editor viewports: not needed yet.** The editor now runs two at most
 (the scene and the material preview). The preview loads only its own material's textures and

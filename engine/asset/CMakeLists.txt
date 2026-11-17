@@ -7,6 +7,7 @@ noor_add_module(asset
         src/migration.cpp
         src/file_watcher.cpp
         src/texture.cpp
+        src/texture_compress.cpp
         src/material.cpp
         src/environment.cpp
     PUBLIC_DEPS
@@ -15,4 +16,5 @@ noor_add_module(asset
     PRIVATE_DEPS
         cgltf::cgltf
         stb::image
+        bc7enc::bc7enc
 )

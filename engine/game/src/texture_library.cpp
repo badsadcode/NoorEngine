@@ -28,19 +28,35 @@ render::TextureHandle TextureLibrary::upload(const Result<asset::TextureData>& d
         NOOR_LOG_WARN("Game", "Texture {} can't be loaded ({}); showing a checker instead", name, data.error().describe());
         return renderer_.missing_texture();
     }
+    // A GPU without BC support gets the pixels decoded on the CPU (4x the memory, but it works).
+    const asset::TextureData& source = *data;
+    asset::TextureData decoded;
+    const asset::TextureData* use = &source;
+    if (asset::is_block_compressed(source.format) && !renderer_.supports_block_compression()) {
+        decoded = asset::decompress_texture(source);
+        use = &decoded;
+    }
     std::vector<render::TextureMipData> mips;
-    for (const auto& m : data->mips) mips.push_back({m.width, m.height, m.bytes});
-    const auto format = data->format == asset::TextureFormat::Rgba16Float  ? render::TextureFormat::Rgba16Float
-                        : data->format == asset::TextureFormat::Rgba8Unorm ? render::TextureFormat::Rgba8Unorm
-                                                                          : render::TextureFormat::Rgba8Srgb;
+    for (const auto& m : use->mips) mips.push_back({m.width, m.height, m.bytes});
+    const auto format = [&] {
+        switch (use->format) {
+        case asset::TextureFormat::Rgba16Float: return render::TextureFormat::Rgba16Float;
+        case asset::TextureFormat::Rgba8Unorm: return render::TextureFormat::Rgba8Unorm;
+        case asset::TextureFormat::Bc7Srgb: return render::TextureFormat::Bc7Srgb;
+        case asset::TextureFormat::Bc7Unorm: return render::TextureFormat::Bc7Unorm;
+        case asset::TextureFormat::Bc5Unorm: return render::TextureFormat::Bc5Unorm;
+        case asset::TextureFormat::Rgba8Srgb: break;
+        }
+        return render::TextureFormat::Rgba8Srgb;
+    }();
     const render::TextureDesc desc{format, mips, name};
     if (replace.valid() && replace.id != renderer_.missing_texture().id) {
         if (auto s = renderer_.update_texture(replace, desc); s) return replace;
         else NOOR_LOG_WARN("Game", "Texture {} can't be updated: {}", name, s.error().describe());
     }
     if (auto h = renderer_.create_texture(desc)) {
-        NOOR_LOG_DEBUG("Game", "Texture {}: {}x{}, {} mips, {:.1f} MB", name, data->width(), data->height(), data->mips.size(),
-                       static_cast<double>(data->gpu_bytes()) / (1024.0 * 1024.0));
+        NOOR_LOG_DEBUG("Game", "Texture {}: {}x{} {}, {} mips, {:.1f} MB", name, use->width(), use->height(), asset::format_name(use->format),
+                       use->mips.size(), static_cast<double>(use->gpu_bytes()) / (1024.0 * 1024.0));
         return *h;
     } else {
         NOOR_LOG_WARN("Game", "Texture {} can't be uploaded: {}", name, h.error().describe());

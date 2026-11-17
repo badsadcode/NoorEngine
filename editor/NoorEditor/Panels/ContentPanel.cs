@@ -10,8 +10,8 @@ namespace NoorEditor.Panels;
 
 /// <summary>
 /// Scenes and importable assets of the project (from the engine's asset registry).
-/// Double-click a scene to open it, a material to edit it; double-click a model or prefab to add it
-/// to the open scene.
+/// Double-click a scene to open it, a material or texture to edit it; double-click a model or prefab
+/// to add it to the open scene (Add to scene does it for materials and textures too).
 /// </summary>
 public sealed class ContentPanel : DockPanel
 {
@@ -34,7 +34,7 @@ public sealed class ContentPanel : DockPanel
         return m.Path;
     }
     public event Action<string>? OpenSceneRequested;
-    /// <summary>Edit (materials): opens the material editor.</summary>
+    /// <summary>Edit: opens the material editor (materials) or the import settings (textures).</summary>
     public event Action<AssetInfo>? EditRequested;
     private readonly Button _edit = new() { Content = "Edit", Classes = { "tool" }, IsEnabled = false };
 
@@ -49,12 +49,12 @@ public sealed class ContentPanel : DockPanel
         add.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
         _makeMaterial.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "texture" } a) MakeMaterial(a); };
         ToolTip.SetTip(_makeMaterial, "A material from this texture's set (its _albedo, _normal, _orm… files), saved beside it");
-        _edit.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "material" } a) EditRequested?.Invoke(a); };
-        ToolTip.SetTip(_edit, "Open the material editor (double-click does too)");
+        _edit.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" } a) EditRequested?.Invoke(a); };
+        ToolTip.SetTip(_edit, "Materials: the material editor. Textures: import settings (compression, size, kind). Double-click does the same.");
         _assets.SelectionChanged += (_, _) =>
         {
             _makeMaterial.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "texture" };
-            _edit.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "material" };
+            _edit.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "material" or "texture" };
         };
         var bar = new StackPanel
         {
@@ -71,7 +71,7 @@ public sealed class ContentPanel : DockPanel
         _scenes.DoubleTapped += (_, _) => { if (_scenes.SelectedItem is string s) OpenSceneRequested?.Invoke(s); };
         _assets.DoubleTapped += (_, _) =>
         {
-            if (_assets.SelectedItem is AssetInfo { Importer: "material" } m) EditRequested?.Invoke(m);
+            if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" } m) EditRequested?.Invoke(m);
             else if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a);
         };
 

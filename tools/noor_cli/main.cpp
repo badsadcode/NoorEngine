@@ -119,12 +119,13 @@ int cmd_texture(const std::vector<std::string>& a) {
             continue;
         }
         total += t->gpu_bytes();
-        std::printf("%-6s %-24s %5ux%-5u %2zu mips %7.2f MB %6.0f ms  %s\n", std::string(asset::kind_name(settings.kind)).c_str(),
+        std::printf("%-6s %-24s %5ux%-5u %2zu mips %-10s %7.2f MB %6.0f ms  %s\n", std::string(asset::kind_name(settings.kind)).c_str(),
                     settings.kind == asset::TextureKind::Normal ? (settings.directx_normals ? "(directx, green flipped)" : "(opengl)") : "",
-                    t->width(), t->height(), t->mips.size(), static_cast<double>(t->gpu_bytes()) / (1024.0 * 1024.0), ms,
+                    t->width(), t->height(), t->mips.size(), std::string(asset::format_name(t->format)).c_str(),
+                    static_cast<double>(t->gpu_bytes()) / (1024.0 * 1024.0), ms,
                     std::filesystem::path(file).filename().string().c_str());
     }
-    std::printf("%zu texture(s), %.1f MB of GPU memory uncompressed, %d failed\n", a.size() - static_cast<std::size_t>(failed),
+    std::printf("%zu texture(s), %.1f MB of GPU memory, %d failed\n", a.size() - static_cast<std::size_t>(failed),
                 static_cast<double>(total) / (1024.0 * 1024.0), failed);
     return failed ? 1 : 0;
 }

@@ -97,6 +97,28 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API const char* noor_doc_texture(noor_doc* doc, const char* texture_path) {
+    if (!doc || !texture_path) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto r = doc->doc->texture(texture_path);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
+NOOR_API int32_t noor_doc_set_texture_settings(noor_doc* doc, const char* texture_path, const char* settings_json) {
+    if (!doc || !texture_path || !settings_json) return 0;
+    return guarded<>(int32_t{0}, [&]() -> int32_t {
+        auto parsed = noor::asset::parse_json(settings_json, "texture settings");
+        if (!parsed) return fail_with(parsed.error());
+        auto s = doc->doc->set_texture_settings(texture_path, *parsed);
+        return s ? 1 : fail_with(s.error());
+    });
+}
+
 NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json) {
     if (!doc || !json) return 0;
     return guarded<>(int32_t{0}, [&]() -> int32_t {

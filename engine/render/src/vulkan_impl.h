@@ -277,6 +277,7 @@ struct Renderer::Impl {
     std::vector<GpuTexture> textures;  // index = slot
     std::uint64_t texture_bytes = 0;   // user textures only
     float max_anisotropy = 1.0f;
+    bool bc_supported = false;  // textureCompressionBC
     // Materials (same set, binding 2): a host-visible storage buffer, and CPU copies for choosing pipelines.
     GpuBuffer material_buffer;
     std::vector<MaterialDesc> materials;  // index = slot

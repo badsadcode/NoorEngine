@@ -20,10 +20,15 @@ from the file name the first time:
 `rock_nor_gl_1k.png` an OpenGL one.)
 
 ```json
-"settings": { "kind": "normal", "normal_convention": "opengl", "mips": true, "max_size": 4096 }
+"settings": { "kind": "normal", "normal_convention": "opengl", "mips": true, "max_size": 4096,
+              "compression": "auto" }
 ```
 
-Change the settings by editing the `.noormeta` (an editor panel for it is still to come). `kind`
+Change the settings in the editor: double-click a texture in the Content Browser (or **Edit**) for
+its **import settings** tab: kind, normal convention, compression, max size, mipmaps, and what
+the texture costs on the GPU with them (and without compression). Changes go into the
+`.noormeta` at once and the viewport reloads the texture. Editing the `.noormeta` by hand works
+too. `kind`
 matters: a normal map imported as `color` would be "gamma decoded" and point the wrong way,
 and a roughness map imported as `color` comes out darker.
 
@@ -43,9 +48,23 @@ prints the kind, size, mip count and GPU memory of each file, as the engine woul
 3. Larger than `max_size`: halved until they fit.
 4. Mipmaps down to 1×1, **averaged in linear light** (a black-and-white checker fades to the right
    mid-grey, not a too-dark one); normal map mips are renormalised to unit length.
-5. Stored for the GPU: RGBA8 sRGB (colour), RGBA8 (data, normal), RGBA16F (hdr). Uncompressed
-   for now: a 2048² texture with mips is about 21 MB of GPU memory. Block compression comes in
-   part 7, once the sample scene's numbers say how much it's needed.
+5. Stored for the GPU, **block-compressed** by default (`"compression": "auto"`):
+
+   | Kind | Format | Bytes per pixel |
+   |---|---|---|
+   | `color` | BC7 sRGB (perceptual error weights) | 1 |
+   | `data` (ORM, masks) | BC7 (all channels weighted the same) | 1 |
+   | `normal` | BC5: X and Y only; the shader rebuilds Z = √(1 − X² − Y²) | 1 |
+   | `hdr` | RGBA16F, never compressed | 8 |
+
+   `"compression": "none"` keeps RGBA8 (4 bytes per pixel): pixel-exact, for pixel art or when a
+   compression artefact shows. Any size works: the edge blocks of sizes that aren't multiples of
+   4 are padded (Vulkan allows it). A 2048² map with mips takes 5.3 MB instead of 21 MB.
+   Encoding is done on the CPU on all cores with bc7enc and rgbcx (Richard Geldreich, MIT or
+   public domain): about a third of a second per 1254² map in a release build, once; then it's
+   cached. Measured quality: BC7 colour over 38 dB PSNR on the test picture, BC5 normals within
+   3° (unit tests), and no visible difference on a real PBR set (mean 0.06/255 per channel in the
+   rendered picture). A GPU without BC support gets the pixels decoded back to RGBA8 on load.
 
 The result is cached in `<project>/.noor/cache/textures/`, keyed by the file's content, its
 settings and the importer version, so a texture is processed once. Deleting the cache is always
@@ -80,5 +99,6 @@ them) and cached by content. Changing a texture file or its `.noormeta` reloads 
 and in running games within half a second.
 
 ## Not yet
-Texture compression (BC7/BC5/BC6H), `.exr` (with environments, part 5), an import-settings panel
-in the editor, texture streaming, glTF images in separate files.
+BC6H for HDR textures, BC4 for single-channel maps (they're BC7 now: same size as BC4's double),
+cooking compressed textures into built games (they compress on first start, then cache), texture
+streaming, `.exr`, glTF images in separate files, thumbnails in the Content Browser.

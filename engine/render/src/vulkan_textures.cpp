@@ -15,11 +15,22 @@ VkFormat vk_format(TextureFormat f) {
     case TextureFormat::Rgba8Srgb: return VK_FORMAT_R8G8B8A8_SRGB;
     case TextureFormat::Rgba8Unorm: return VK_FORMAT_R8G8B8A8_UNORM;
     case TextureFormat::Rgba16Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case TextureFormat::Bc7Srgb: return VK_FORMAT_BC7_SRGB_BLOCK;
+    case TextureFormat::Bc7Unorm: return VK_FORMAT_BC7_UNORM_BLOCK;
+    case TextureFormat::Bc5Unorm: return VK_FORMAT_BC5_UNORM_BLOCK;
     }
     return VK_FORMAT_R8G8B8A8_SRGB;
 }
 
-std::uint32_t bytes_per_pixel(TextureFormat f) { return f == TextureFormat::Rgba16Float ? 8u : 4u; }
+bool block_compressed(TextureFormat f) {
+    return f == TextureFormat::Bc7Srgb || f == TextureFormat::Bc7Unorm || f == TextureFormat::Bc5Unorm;
+}
+
+// Bytes of one mip: 16 per 4x4 block for BC formats (partial blocks rounded up), else per pixel.
+std::size_t mip_size(TextureFormat f, std::uint32_t w, std::uint32_t h) {
+    if (block_compressed(f)) return static_cast<std::size_t>((w + 3) / 4) * ((h + 3) / 4) * 16;
+    return static_cast<std::size_t>(w) * h * (f == TextureFormat::Rgba16Float ? 8u : 4u);
+}
 
 } // namespace
 
@@ -146,15 +157,16 @@ void Renderer::Impl::write_material(std::uint32_t slot, const MaterialDesc& d) {
 Result<TextureHandle> Renderer::Impl::create_texture(const TextureDesc& texture, std::uint32_t slot) {
     if (texture.mips.empty() || texture.mips[0].width == 0 || texture.mips[0].height == 0)
         return fail(ErrorCode::InvalidArgument, "texture needs at least one mip with a size");
-    const std::uint32_t bpp = bytes_per_pixel(texture.format);
+    if (block_compressed(texture.format) && !bc_supported)
+        return fail(ErrorCode::Unsupported, std::format("texture '{}': this GPU can't sample BC7/BC5 textures", texture.debug_name));
     VkDeviceSize total = 0;
     for (std::size_t i = 0; i < texture.mips.size(); ++i) {
         const auto& m = texture.mips[i];
         const std::uint32_t w = std::max(1u, texture.mips[0].width >> i), h = std::max(1u, texture.mips[0].height >> i);
-        if (m.width != w || m.height != h || m.bytes.size() != static_cast<std::size_t>(w) * h * bpp)
+        if (m.width != w || m.height != h || m.bytes.size() != mip_size(texture.format, w, h))
             return fail(ErrorCode::InvalidArgument,
                         std::format("texture '{}': mip {} is {}x{} with {} bytes, expected {}x{} with {}", texture.debug_name, i,
-                                    m.width, m.height, m.bytes.size(), w, h, static_cast<std::size_t>(w) * h * bpp));
+                                    m.width, m.height, m.bytes.size(), w, h, mip_size(texture.format, w, h)));
         total += m.bytes.size();
     }
     if (slot == kAnySlot) {  // a user texture: the first free slot

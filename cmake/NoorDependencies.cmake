@@ -132,6 +132,50 @@ add_library(noor_third_party_stb_image INTERFACE)
 target_include_directories(noor_third_party_stb_image SYSTEM INTERFACE ${stb_image_SOURCE_DIR} ${stb_image_write_SOURCE_DIR})
 add_library(stb::image ALIAS noor_third_party_stb_image)
 
+# --- bc7enc + rgbcx (Richard Geldreich; MIT or public domain, dual): BC7 and BC5 texture
+# compression on the CPU (ADR-029, Milestone 5). Only the plain C++ files, not bc7e.ispc (Apache).
+# Each file is pinned to a commit and its SHA-256, and compiled once without the engine's
+# warnings-as-errors flags.
+set(NOOR_BC7ENC_COMMIT b9438627eef73a1157e84201b6fa6eb2ffd6d9f0)
+set(NOOR_BC7ENC_DIR ${CMAKE_BINARY_DIR}/_deps/bc7enc-${NOOR_BC7ENC_COMMIT})
+set(NOOR_BC7ENC_FILES
+    "LICENSE=b3e843763e8d3bdeb0f469ecd4107fc32b5fa27ebee1af10d2066bc339292800"
+    "bc7enc.cpp=b90444a091530a13c61fa6375583fcc9bc9ca47e474fd71f818876de68c1b581"
+    "bc7enc.h=f40f4a956ed6a8845b7909e83831de09512424408b32ca29551bf49aee2fecf6"
+    "bc7decomp.cpp=cfbe156926ebd96443b4407a9da1b5b7a424fdf989fedca3cf2fd0515e0c368a"
+    "bc7decomp.h=cbba8778640e0021f55ca686b6bc19e6960032539084c70af698922b05c5b242"
+    "rgbcx.cpp=059243ce8e8e3ec634bc1e3da3996115aaf36196a8d75a24d3dbb3c8bfe0ca98"
+    "rgbcx.h=111bd4c0211eca172bec9d757e2e597a47c4e4731bb122c9e8761dca85711bba"
+    "rgbcx_table4_small.h=d484802656fb7f2249674263bbb14399ab9ccb2a997ac0030e51b17a4bf8595f")
+foreach(entry IN LISTS NOOR_BC7ENC_FILES)
+    string(REPLACE "=" ";" parts "${entry}")
+    list(GET parts 0 name)
+    list(GET parts 1 hash)
+    set(target_file ${NOOR_BC7ENC_DIR}/${name})
+    if(EXISTS ${target_file})
+        file(SHA256 ${target_file} have)
+    else()
+        set(have "")
+    endif()
+    if(NOT have STREQUAL hash)
+        file(DOWNLOAD https://raw.githubusercontent.com/richgel999/bc7enc_rdo/${NOOR_BC7ENC_COMMIT}/${name} ${target_file}
+             EXPECTED_HASH SHA256=${hash} STATUS dl_status)
+        list(GET dl_status 0 dl_code)
+        if(NOT dl_code EQUAL 0)
+            message(FATAL_ERROR "bc7enc: couldn't download ${name}: ${dl_status}")
+        endif()
+    endif()
+endforeach()
+add_library(noor_third_party_bc7enc STATIC ${NOOR_BC7ENC_DIR}/bc7enc.cpp ${NOOR_BC7ENC_DIR}/bc7decomp.cpp ${NOOR_BC7ENC_DIR}/rgbcx.cpp)
+target_include_directories(noor_third_party_bc7enc SYSTEM PUBLIC ${NOOR_BC7ENC_DIR})
+target_compile_definitions(noor_third_party_bc7enc PUBLIC RGBCX_USE_SMALLER_TABLES=1)
+if(MSVC)
+    target_compile_options(noor_third_party_bc7enc PRIVATE /W0)
+else()
+    target_compile_options(noor_third_party_bc7enc PRIVATE -w)
+endif()
+add_library(bc7enc::bc7enc ALIAS noor_third_party_bc7enc)
+
 # --- Atkinson Hyperlegible (SIL OFL 1.1): the default HUD font, embedded in the engine ------
 FetchContent_Declare(hud_font
     URL      https://raw.githubusercontent.com/google/fonts/1b22086d13bdbbf5ec63d01a39a49246e4ac355f/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf

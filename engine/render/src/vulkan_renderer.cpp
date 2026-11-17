@@ -246,6 +246,7 @@ Status Renderer::Impl::pick_gpu() {
             timestamps_supported = families[*family].timestampValidBits > 0 && props.limits.timestampPeriod > 0.0f;
             max_anisotropy = f2.features.samplerAnisotropy ? std::min(8.0f, props.limits.maxSamplerAnisotropy) : 1.0f;
             supported_samples = props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts;
+            bc_supported = f2.features.textureCompressionBC == VK_TRUE;
         }
     }
 
@@ -276,6 +277,7 @@ Status Renderer::Impl::create_device() {
     VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     f2.pNext = &f12;
     f2.features.samplerAnisotropy = max_anisotropy > 1.0f ? VK_TRUE : VK_FALSE;
+    f2.features.textureCompressionBC = bc_supported ? VK_TRUE : VK_FALSE;  // BC7/BC5 textures (ADR-029)
 
     const char* extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDeviceCreateInfo create_info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
@@ -836,9 +838,13 @@ void Renderer::set_msaa(std::uint32_t samples) noexcept {
 }
 std::uint32_t Renderer::msaa_samples() const noexcept { return impl_->scene_samples; }
 TextureHandle Renderer::missing_texture() const noexcept { return TextureHandle{kTextureMissing}; }
+bool Renderer::supports_block_compression() const noexcept { return impl_->bc_supported; }
 
 Status Renderer::set_environment(const EnvironmentDesc& desc) {
     if (auto s = impl_->ensure_texture_table(); !s) return s;
+    // The environment cube lives in the per-frame descriptor sets: make them first (this can be
+    // called before the first frame, e.g. by the editor's material preview).
+    if (auto s = impl_->ensure_frame_uniforms(); !s) return s;
     return impl_->upload_environment(desc);
 }
 

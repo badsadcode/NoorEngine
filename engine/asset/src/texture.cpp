@@ -158,6 +158,8 @@ Result<TextureData> process(Image img, const TextureSettings& s, std::string_vie
             out.mips.push_back(encode(img, out.format));
         }
     }
+    const TextureFormat target = compressed_format_for(s, out.width(), out.height());
+    if (is_block_compressed(target)) return compress_texture(out, target);
     return out;
 }
 
@@ -229,14 +231,14 @@ std::optional<TextureData> deserialize(const std::string& in) {
     std::uint32_t magic = 0, version = 0, format = 0, count = 0;
     TextureData t;
     if (!get(magic) || magic != kCacheMagic || !get(version) || version != static_cast<std::uint32_t>(kTextureImporterVersion) ||
-        !get(format) || format > 2 || !get(t.source_width) || !get(t.source_height) || !get(count) || count == 0 || count > 20)
+        !get(format) || format > 5 || !get(t.source_width) || !get(t.source_height) || !get(count) || count == 0 || count > 20)
         return std::nullopt;
     t.format = static_cast<TextureFormat>(format);
     for (std::uint32_t i = 0; i < count; ++i) {
         TextureMip m;
         std::uint32_t size = 0;
         if (!get(m.width) || !get(m.height) || !get(size) || pos + size > in.size()) return std::nullopt;
-        if (static_cast<std::uint64_t>(m.width) * m.height * bytes_per_pixel(t.format) != size) return std::nullopt;
+        if (mip_bytes(t.format, m.width, m.height) != size) return std::nullopt;
         m.bytes.assign(in.begin() + static_cast<std::ptrdiff_t>(pos), in.begin() + static_cast<std::ptrdiff_t>(pos + size));
         pos += size;
         t.mips.push_back(std::move(m));
@@ -260,7 +262,8 @@ Json TextureSettings::to_json() const {
     return Json{{"kind", std::string(kind_name(kind))},
                 {"normal_convention", directx_normals ? "directx" : "opengl"},
                 {"mips", mips},
-                {"max_size", max_size}};
+                {"max_size", max_size},
+                {"compression", compress ? "auto" : "none"}};
 }
 
 TextureSettings TextureSettings::from_json(const Json& j) {
@@ -271,6 +274,7 @@ TextureSettings TextureSettings::from_json(const Json& j) {
     s.directx_normals = j.value("normal_convention", std::string("opengl")) == "directx";
     s.mips = j.value("mips", true);
     if (j.contains("max_size") && j["max_size"].is_number_unsigned()) s.max_size = std::clamp(j["max_size"].get<std::uint32_t>(), 1u, 16384u);
+    s.compress = j.value("compression", std::string("auto")) != "none";  // older metas: auto
     return s;
 }
 
@@ -313,6 +317,18 @@ TextureSettings guess_texture_settings(const stdfs::path& path) {
 
 std::uint32_t bytes_per_pixel(TextureFormat format) noexcept { return format == TextureFormat::Rgba16Float ? 8u : 4u; }
 
+std::string_view format_name(TextureFormat format) noexcept {
+    switch (format) {
+    case TextureFormat::Rgba8Srgb: return "RGBA8 sRGB";
+    case TextureFormat::Rgba8Unorm: return "RGBA8";
+    case TextureFormat::Rgba16Float: return "RGBA16F";
+    case TextureFormat::Bc7Srgb: return "BC7 sRGB";
+    case TextureFormat::Bc7Unorm: return "BC7";
+    case TextureFormat::Bc5Unorm: return "BC5";
+    }
+    return "?";
+}
+
 std::uint64_t TextureData::gpu_bytes() const noexcept {
     std::uint64_t total = 0;
     for (const auto& m : mips) total += m.bytes.size();
@@ -339,6 +355,48 @@ TextureSettings texture_settings_for(const stdfs::path& file) {
             return TextureSettings::from_json((*json)["settings"]);
     }
     return guess_texture_settings(file);
+}
+
+Result<TextureInfo> texture_info(const stdfs::path& file, const TextureSettings& s) {
+    auto data = fs::read_file(file, 1ull << 30);
+    if (!data) return std::unexpected(data.error());
+    int w = 0, h = 0, channels = 0;
+    if (!stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(data->data()), static_cast<int>(data->size()), &w, &h, &channels) || w <= 0 || h <= 0)
+        return fail(ErrorCode::ParseError, std::format("texture {}: {}", file.filename().string(), stbi_failure_reason()));
+    TextureInfo info;
+    info.source_width = static_cast<std::uint32_t>(w);
+    info.source_height = static_cast<std::uint32_t>(h);
+    info.width = info.source_width;
+    info.height = info.source_height;
+    const std::uint32_t max_size = std::max(1u, s.max_size);
+    while (info.width > max_size || info.height > max_size) {
+        info.width = std::max(1u, info.width / 2);
+        info.height = std::max(1u, info.height / 2);
+    }
+    info.format = compressed_format_for(s, info.width, info.height);
+    const TextureFormat plain = s.kind == TextureKind::Hdr ? TextureFormat::Rgba16Float : TextureFormat::Rgba8Unorm;
+    std::uint32_t mw = info.width, mh = info.height;
+    for (;;) {
+        ++info.mips;
+        info.gpu_bytes += mip_bytes(info.format, mw, mh);
+        info.rgba8_bytes += mip_bytes(plain, mw, mh);
+        if (!s.mips || (mw == 1 && mh == 1)) break;
+        mw = std::max(1u, mw / 2);
+        mh = std::max(1u, mh / 2);
+    }
+    return info;
+}
+
+Status set_texture_settings(const stdfs::path& file, const TextureSettings& settings) {
+    const stdfs::path meta = file.string() + ".noormeta";
+    auto text = fs::read_file(meta, 1 << 20);
+    if (!text) return std::unexpected(text.error());
+    auto json = parse_json(*text, meta.generic_string());
+    if (!json) return std::unexpected(json.error());
+    if (!json->is_object() || json->value("importer", std::string()) != "texture")
+        return fail(ErrorCode::InvalidArgument, std::format("{} isn't a texture's .noormeta", meta.generic_string()));
+    (*json)["settings"] = settings.to_json();
+    return fs::write_file_atomic(meta, to_text(*json), false);
 }
 
 Result<TextureData> load_texture(const stdfs::path& file, const stdfs::path& cache_dir) {

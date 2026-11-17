@@ -228,9 +228,11 @@ float3 environment_specular(float3 r, float roughness, float n_dot_v, float3 f0)
 }
 
 // The normal map (tangent space, OpenGL convention: +Y up the texture) turned into a world normal.
+// Only X and Y are read; Z is rebuilt (BC5 normal maps store two channels).
 float3 apply_normal_map(float3 n, float4 tangent, float2 uv, uint slot, float strength)
 {
-    const float3 sampled = textures[slot].Sample(texture_sampler, uv).xyz * 2.0 - 1.0;
+    const float2 xy = textures[slot].Sample(texture_sampler, uv).xy * 2.0 - 1.0;
+    const float3 sampled = float3(xy, sqrt(saturate(1.0 - dot(xy, xy))));
     const float3 t = normalize(tangent.xyz - n * dot(n, tangent.xyz));
     const float3 b = cross(n, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
     const float3 m = float3(sampled.xy * strength, sampled.z);

@@ -182,6 +182,16 @@
       "linkage": "test data (tests/data/render_scenes/Assets/Environments)",
       "shipped": false,
       "purpose": "Render tests for image-based lighting (Milestone 5, part 5)"
+    },
+    {
+      "name": "bc7enc and rgbcx (from bc7enc_rdo)",
+      "version": "master, 2026-07-31",
+      "source": "https://github.com/richgel999/bc7enc_rdo",
+      "commit": "b9438627eef73a1157e84201b6fa6eb2ffd6d9f0",
+      "license": "MIT or public domain / Unlicense (dual); bc7e.ispc (Apache-2.0) is not used",
+      "linkage": "static (bc7enc.cpp, bc7decomp.cpp, rgbcx.cpp; each file pinned by SHA-256)",
+      "shipped": true,
+      "purpose": "Texture compression on the CPU: BC7 (colour, ORM/data) and BC5 (normal maps), and decoding for tests and for GPUs without BC support (ADR-029)"
     }
   ]
 }

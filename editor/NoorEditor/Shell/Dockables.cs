@@ -25,5 +25,6 @@ public static class DockTemplates
         app.DataTemplates.Add(new FuncDataTemplate<PanelDocument>((d, _) => d?.CreateView()));
         app.DataTemplates.Add(new FuncDataTemplate<NoorEditor.Panels.ScriptDocument>((d, _) => d?.CreateView?.Invoke(d)));
         app.DataTemplates.Add(new FuncDataTemplate<NoorEditor.Panels.MaterialDocument>((d, _) => d?.CreateView?.Invoke(d)));
+        app.DataTemplates.Add(new FuncDataTemplate<NoorEditor.Panels.TextureDocument>((d, _) => d?.CreateView?.Invoke(d)));
     }
 }

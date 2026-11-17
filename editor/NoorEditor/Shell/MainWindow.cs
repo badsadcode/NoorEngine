@@ -40,6 +40,8 @@ public sealed class MainWindow : Window
     public IReadOnlyList<ScriptDocument> OpenScripts => _scripts;
     private readonly List<MaterialDocument> _materials = new();
     public IReadOnlyList<MaterialDocument> OpenMaterials => _materials;
+    private readonly List<TextureDocument> _textures = new();
+    public IReadOnlyList<TextureDocument> OpenTextures => _textures;
 
     private readonly EditorSettings _settings;
     private readonly TextBlock _statusLeft = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
@@ -115,6 +117,7 @@ public sealed class MainWindow : Window
         {
             if (e.Dockable is ScriptDocument closed) _scripts.Remove(closed);
             if (e.Dockable is MaterialDocument closedMaterial) _materials.Remove(closedMaterial);
+            if (e.Dockable is TextureDocument closedTexture) _textures.Remove(closedTexture);
         };
         _fileTimer.Start();
         timer.Start();
@@ -170,7 +173,11 @@ public sealed class MainWindow : Window
                 ContentBrowser = new ContentPanel(Doc);
                 ContentBrowser.AddRequested += async a => { if (await ReadyToEdit()) AddAsset(a); };
                 ContentBrowser.OpenSceneRequested += s => _ = OpenScene(s);
-                ContentBrowser.EditRequested += a => OpenMaterial(a.Path);
+                ContentBrowser.EditRequested += a =>
+                {
+                    if (a.Importer == "texture") OpenTexture(a.Path);
+                    else OpenMaterial(a.Path);
+                };
                 return ContentBrowser;
             },
         };
@@ -199,6 +206,7 @@ public sealed class MainWindow : Window
         Fill(documents, ViewportDockable);
         foreach (var script in _scripts) DockFactory.AddDockable(documents, script);  // a layout rebuild keeps open scripts
         foreach (var material in _materials) DockFactory.AddDockable(documents, material);
+        foreach (var texture in _textures) DockFactory.AddDockable(documents, texture);
         Fill(left, hierarchy);
         Fill(right, inspector);
         Fill(bottom, content, console, render);
@@ -883,6 +891,30 @@ public sealed class MainWindow : Window
             DockFactory.SetFocusedDockable(owner, material);
         }
         return material;
+    }
+
+    /// <summary>Opens a texture's import settings (project-relative path) as a tab.</summary>
+    public TextureDocument? OpenTexture(string relativePath)
+    {
+        var texture = _textures.FirstOrDefault(t => string.Equals(t.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        if (texture == null)
+        {
+            if (!File.Exists(Path.Combine(Doc.ProjectRoot, relativePath)))
+            {
+                EngineLog.Warn("Textures", $"{relativePath} doesn't exist");
+                return null;
+            }
+            texture = new TextureDocument(Doc, relativePath) { CreateView = t => new TexturePanel(t) };
+            _textures.Add(texture);
+            var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
+            if (documents != null) DockFactory.AddDockable(documents, texture);
+        }
+        if (texture.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(texture);
+            DockFactory.SetFocusedDockable(owner, texture);
+        }
+        return texture;
     }
 
     /// <summary>Save as instance: <c>name_variant.noormat</c> beside the material, changing nothing yet; opens it.</summary>

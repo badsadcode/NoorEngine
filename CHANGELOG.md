@@ -4,6 +4,39 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5: texture compression and import settings
+**Added**
+- **Block compression** by default: colour → BC7 sRGB, data (ORM, masks) → BC7, normal maps →
+  BC5 (X, Y; the shader rebuilds Z). 1 byte per pixel instead of 4; any size (edge blocks are
+  padded). `"compression": "auto" | "none"` in a texture's settings (older `.noormeta` files get
+  "auto"). Encoded on all cores with bc7enc + rgbcx (MIT or public domain, pinned by commit and
+  SHA-256 in `cmake/NoorDependencies.cmake`, listed in `third_party/manifest.json`), cached like
+  the rest of the import (importer version 2: caches rebuild once). GPUs without BC support get
+  the pixels decoded back to RGBA8 on load.
+- `render::TextureFormat` Bc7Srgb / Bc7Unorm / Bc5Unorm, `Renderer::supports_block_compression`
+  (the `textureCompressionBC` feature is enabled when present).
+- `asset::compress_texture`, `decompress_texture`, `mip_bytes`, `texture_info` (from the image
+  header), `set_texture_settings` (writes the `.noormeta`, keeps the id).
+- Editor: a texture's **import settings** tab (double-click a texture or **Edit**): kind, normal
+  convention, compression, max size, mipmaps, and the GPU memory with and without compression.
+  Editor API **v13**: `noor_doc_texture`, `noor_doc_set_texture_settings`.
+- `noor_cli texture` shows the GPU format.
+
+**Measured** (release player, a real 1254² PBR set): 8 MB → 2 MB per map, about 1 s once to
+compress three maps, no visible difference (mean 0.06/255 per channel).
+
+**Fixed:** `Renderer::set_environment` before the first frame wrote to descriptor sets that didn't
+exist yet (Vulkan error, then a crash). The material preview hit it once its snapshot arrived
+before the first frame; the per-frame sets are now made first.
+
+**Tests:** BC7 colour/data quality (PSNR over 38 dB), BC5 normals within 3°, odd sizes, HDR and
+"none" stay as they should, settings round trip, texture info and settings writing; 3 editor
+smoke checks (the import settings tab, compression off and back on). The render goldens pass
+unchanged with compressed textures.
+
+**Not yet:** BC6H for HDR, BC4 for single-channel maps, compressed textures cooked into built games
+(they compress on the first start), thumbnails.
+
 ### 2026-11-17 — Milestone 5, part 7: quality and measurement
 **Added**
 - **MSAA** for the scene: 4× by default (`RendererDesc::msaa_samples`, `Renderer::set_msaa`; 1/2/4/8,

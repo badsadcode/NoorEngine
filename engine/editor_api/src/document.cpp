@@ -1,5 +1,6 @@
 #include "document.h"
 #include "noor/asset/material.h"
+#include "noor/asset/texture.h"
 #include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
@@ -190,6 +191,31 @@ Status Document::set_preview(const Json& s) {
     snap->lighting = lighting;
     preview_channel_->publish(std::move(snap));
     return {};
+}
+
+Result<Json> Document::texture(std::string_view texture_path) {
+    auto file = project_.resolve(texture_path);
+    if (!file) return std::unexpected(file.error());
+    const auto settings = asset::texture_settings_for(*file);
+    auto info = asset::texture_info(*file, settings);
+    if (!info) return std::unexpected(info.error());
+    return Json{{"settings", settings.to_json()},
+                {"source_width", info->source_width},
+                {"source_height", info->source_height},
+                {"width", info->width},
+                {"height", info->height},
+                {"mips", info->mips},
+                {"format", std::string(asset::format_name(info->format))},
+                {"gpu_bytes", info->gpu_bytes},
+                {"rgba8_bytes", info->rgba8_bytes}};
+}
+
+Status Document::set_texture_settings(std::string_view texture_path, const Json& settings) {
+    auto file = project_.resolve(texture_path);
+    if (!file) return std::unexpected(file.error());
+    if (!std::filesystem::exists(std::filesystem::path(file->string() + ".noormeta")))
+        return fail(ErrorCode::NotFound, std::format("{} has no .noormeta (Rescan first)", texture_path));
+    return asset::set_texture_settings(*file, asset::TextureSettings::from_json(settings));
 }
 
 Result<Json> Document::make_material(std::string_view texture_path) {

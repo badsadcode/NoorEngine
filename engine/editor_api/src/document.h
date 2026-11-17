@@ -137,6 +137,9 @@ public:
     // The material editor's preview: one shape wearing a material, under an environment.
     [[nodiscard]] std::shared_ptr<SnapshotChannel> preview_channel() const noexcept { return preview_channel_; }
     [[nodiscard]] Status set_preview(const asset::Json& settings);
+    // A texture's import settings and what they make of it; and changing them (Milestone 5).
+    [[nodiscard]] Result<asset::Json> texture(std::string_view texture_path);
+    [[nodiscard]] Status set_texture_settings(std::string_view texture_path, const asset::Json& settings);
 
 private:
     explicit Document(asset::Project project);

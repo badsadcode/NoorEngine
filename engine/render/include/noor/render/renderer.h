@@ -74,6 +74,9 @@ enum class TextureFormat : std::uint8_t {
     Rgba8Srgb,    // colour: sampled as linear (the GPU decodes sRGB)
     Rgba8Unorm,   // data and normal maps: sampled as stored
     Rgba16Float,  // light values (HDR)
+    Bc7Srgb,      // block-compressed colour (16 bytes per 4x4 block)
+    Bc7Unorm,     // block-compressed data (ORM, masks)
+    Bc5Unorm,     // block-compressed normal maps: X and Y only (the shader rebuilds Z)
 };
 
 struct TextureMipData {
@@ -298,6 +301,8 @@ public:
     // next frame). msaa_samples() is what is in use.
     void set_msaa(std::uint32_t samples) noexcept;
     [[nodiscard]] std::uint32_t msaa_samples() const noexcept;
+    // The GPU can sample BC7/BC5 textures (every desktop GPU we target; false: decompress first).
+    [[nodiscard]] bool supports_block_compression() const noexcept;
     // A magenta-and-black checker for textures that couldn't be loaded (visible on purpose).
     [[nodiscard]] TextureHandle missing_texture() const noexcept;
     // Sets the environment that lights the scene and shows behind it. Waits for the GPU (it replaces
