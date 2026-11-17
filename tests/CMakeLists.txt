@@ -25,8 +25,9 @@ add_executable(noor_unit_tests
     unit/test_material.cpp
     unit/test_shadows.cpp
     unit/test_environment.cpp
+    unit/test_csg.cpp
 )
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game doctest::doctest stb::image)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -207,3 +208,52 @@ if(TARGET noor_scripting_managed)
         set_tests_properties(sample.fps_${variant} PROPERTIES LABELS "gpu;sample" TIMEOUT 90 FIXTURES_REQUIRED built_sample_fps)
     endforeach()
 endif()
+
+# The runtime boundary (Milestone 6 gate, ADR-016): games must not carry editor-only code. Walks
+# the link graph of the player and the runtime modules at configure time; the test fails if the
+# CSG module or Manifold is anywhere in it.
+function(noor_collect_links target out_var)
+    set(seen "")
+    set(queue ${target})
+    while(queue)
+        list(POP_FRONT queue t)
+        if(t IN_LIST seen OR NOT TARGET ${t})
+            continue()
+        endif()
+        list(APPEND seen ${t})
+        get_target_property(aliased ${t} ALIASED_TARGET)
+        if(aliased)
+            list(APPEND queue ${aliased})
+            continue()
+        endif()
+        foreach(prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+            get_target_property(libs ${t} ${prop})
+            if(libs)
+                foreach(lib IN LISTS libs)
+                    string(REGEX REPLACE "^[$]<LINK_ONLY:(.*)>" "\\1" lib "${lib}")
+                    list(APPEND queue ${lib})
+                endforeach()
+            endif()
+        endforeach()
+    endwhile()
+    set(${out_var} ${seen} PARENT_SCOPE)
+endfunction()
+set(noor_boundary_report "")
+foreach(runtime_target IN ITEMS noor_player noor_runtime noor_game noor_scene noor_render noor_physics)
+    noor_collect_links(${runtime_target} links)
+    foreach(forbidden IN ITEMS noor_csg manifold)
+        if(forbidden IN_LIST links)
+            string(APPEND noor_boundary_report "${runtime_target} links ${forbidden}\n")
+        endif()
+    endforeach()
+endforeach()
+# The walker must see what is there: the unit tests do link the CSG module and Manifold.
+noor_collect_links(noor_unit_tests links)
+if(NOT noor_csg IN_LIST links OR NOT manifold IN_LIST links)
+    string(APPEND noor_boundary_report "the link walk is broken: it doesn't find noor_csg/manifold in noor_unit_tests
+")
+endif()
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/runtime_boundary.txt "${noor_boundary_report}")
+add_test(NAME boundary.runtime_has_no_editor_code
+    COMMAND ${CMAKE_COMMAND} -DREPORT=${CMAKE_CURRENT_BINARY_DIR}/runtime_boundary.txt -P ${CMAKE_CURRENT_SOURCE_DIR}/runtime_boundary.cmake)
+set_tests_properties(boundary.runtime_has_no_editor_code PROPERTIES LABELS "unit")

@@ -27,6 +27,7 @@ add_subdirectory(engine/physics)
 add_subdirectory(engine/audio)
 add_subdirectory(engine/scripting)
 add_subdirectory(engine/game)
+add_subdirectory(engine/csg)  # editor and cooking only (ADR-016): games load cooked meshes
 add_subdirectory(tools/noor_cli)
 add_subdirectory(tools/noor_player)
 if(WIN32)

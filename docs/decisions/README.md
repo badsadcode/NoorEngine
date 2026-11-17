@@ -16,7 +16,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [010](ADR-010-physics.md) | Physics: Jolt (MIT), fixed 60 Hz tick, `CharacterVirtual` controller | Accepted |
 | [011](ADR-011-audio.md) | Audio: miniaudio (public domain / MIT-0), buses, 3D sources | Accepted |
 | [012](ADR-012-pbr-shading-and-render-path.md) | PBR: metallic-roughness GGX, forward path, photometric units, HDR, PBR Neutral (AgX pending a licence check), IBL, bindless textures | Accepted (Milestone 5) |
-| [016](ADR-016-csg-kernel.md) | CSG: brushes as entities, Manifold booleans (spike first), materials/UVs follow source faces, cooked meshes for runtime | Proposed (Milestone 6) |
+| [016](ADR-016-csg-kernel.md) | CSG: brushes as entities, Manifold booleans (spike first), materials/UVs follow source faces, cooked meshes for runtime | Accepted (Milestone 6, part 1) |
 | [019](ADR-019-licensing.md) | MIT license | Accepted |
 | [021](ADR-021-platform-layer-and-dependencies.md) | SDL3 platform layer, pinned-dependency policy | Accepted |
 | [022](ADR-022-math-and-coordinate-conventions.md) | Right-handed, +Y up, meters, column-major, reverse-Z | Accepted |

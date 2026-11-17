@@ -132,6 +132,26 @@ add_library(noor_third_party_stb_image INTERFACE)
 target_include_directories(noor_third_party_stb_image SYSTEM INTERFACE ${stb_image_SOURCE_DIR} ${stb_image_write_SOURCE_DIR})
 add_library(stb::image ALIAS noor_third_party_stb_image)
 
+# --- Manifold (Apache-2.0): robust mesh booleans for CSG brushes (ADR-016, Milestone 6).
+# Editor and cooking only (noor_csg); games load cooked meshes. 3D only: no CrossSection (so no
+# Clipper2), no TBB, no tests, bindings or downloads; a static library.
+set(MANIFOLD_CROSS_SECTION OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_PAR OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_TEST OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_PYBIND OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_CBIND OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_DOWNLOADS OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_DEBUG OFF CACHE BOOL "" FORCE)
+set(MANIFOLD_STRICT OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS_BEFORE_MANIFOLD ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+FetchContent_Declare(manifold
+    GIT_REPOSITORY https://github.com/elalish/manifold.git
+    GIT_TAG        ce50d78021d64507f89e8c9fc2c2e51018117857 # v3.5.4
+    SYSTEM)
+FetchContent_MakeAvailable(manifold)
+set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_BEFORE_MANIFOLD})
+
 # --- bc7enc + rgbcx (Richard Geldreich; MIT or public domain, dual): BC7 and BC5 texture
 # compression on the CPU (ADR-029, Milestone 5). Only the plain C++ files, not bc7e.ispc (Apache).
 # Each file is pinned to a commit and its SHA-256, and compiled once without the engine's

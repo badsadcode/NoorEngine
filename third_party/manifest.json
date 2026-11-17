@@ -202,6 +202,16 @@
       "linkage": "sample data (samples/PBR-Showroom/Assets, samples/NoorFPS-lite/Assets/Textures)",
       "shipped": false,
       "purpose": "The Milestone 5 PBR sample and NoorFPS-lite's textured arena; render tests"
+    },
+    {
+      "name": "Manifold",
+      "version": "3.5.4",
+      "source": "https://github.com/elalish/manifold",
+      "commit": "ce50d78021d64507f89e8c9fc2c2e51018117857",
+      "license": "Apache-2.0 (its quickhull derives from public-domain work by Antti Kuukka)",
+      "linkage": "static (CrossSection, TBB, bindings and tests off)",
+      "shipped": true,
+      "purpose": "CSG booleans for brushes in the editor and when cooking (ADR-016); not linked into games"
     }
   ]
 }

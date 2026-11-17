@@ -1,6 +1,6 @@
 # ADR-016: CSG kernel: brushes, booleans, materials and UVs
 
-**Status:** Proposed (Milestone 6; the part 1 spike decides) · **Date:** 2026-11-17 · **Milestone:** 6
+**Status:** Accepted (Milestone 6, part 1 spike passed) · **Date:** 2026-11-17 · **Milestone:** 6
 
 ## Context
 Spec 12 asks for level building inside the editor: brush primitives, union/subtract/intersect
@@ -22,11 +22,11 @@ ADR-016: "geometry robustness, UV/material inheritance, editable source".
 - **C: Polygon BSP CSG** (csg.js style). Tiny and easy, but known to produce slivers and to blow up
   polygon counts on repeated operations; not robust enough for editable history.
 
-## Decision (proposed)
-**A, Manifold**, behind our own `noor_csg` interface, confirmed or rejected by a spike (Milestone 6,
-part 1) on these cases: a doorway through a wall, rotated and non-uniformly scaled brushes, coplanar
-faces (two walls touching), a brush entirely inside another, 100 subtracts on one wall, and timings.
-If it fails them, **B** with convex-decomposed shapes.
+## Decision
+**A, Manifold** (v3.5.4), behind our own `noor_csg` interface. The spike (Milestone 6, part 1)
+passed every case it set: a doorway through a wall, rotated and non-uniformly scaled brushes, coplanar
+faces (two walls touching), a brush entirely inside another, 100 subtracts on one wall, and timings
+(see Evidence). **B** stays the fallback if real levels find cases Manifold can't handle.
 
 Shared regardless of the kernel:
 - **Brushes are entities** with a `brush` component (shape + exact parameters, operation, face
@@ -48,8 +48,26 @@ Shared regardless of the kernel:
   Apache-2.0 NOTICE, and keep it out of runtime modules (a CMake/test check).
 
 ## Evidence / benchmark
-None yet. The part 1 spike records robustness on the cases above and rebuild times for a house
-(target: under 50 ms for ~100 brushes in a release build, so editing feels live).
+Spike, `tests/unit/test_csg.cpp` (5 cases, 193 checks, all passing on the first run of the
+kernel):
+- every shape (box, wedge, cylinder, cone, sphere, stairs, arch) is a closed solid with its exact
+  analytic volume (polygonal ones to 1e-4, the sphere to 2%);
+- a doorway whose bottom is coplanar with the wall's: exact volume; the wall's front keeps
+  material 1 with UVs exactly `(x, -y) × scale`, as before the cut; the jambs are the door's
+  faces (material 2) and lie inside the wall's thickness;
+- a wall turned 37° with a non-uniformly scaled cutter, and a cutter tilted 20° (volume
+  `0.075 / cos 20°` to 1e-3), and a mirrored (negative scale) brush;
+- touching boxes leave no inside face; a box inside a box makes a hollow; box ∩ sphere;
+- a 10 m wall with 100 windows: exact volume, the same bytes when built twice, **~14 ms in a
+  release build** (285 ms in Debug), 2,012 triangles.
+
+How materials and UVs survive: Manifold carries each input mesh's original id and a per-triangle
+face id through the booleans; `noor_csg` maps them back to (brush, face) and computes normals, box
+projection UVs (in model space) and tangents after the boolean.
+
+Also in place from part 1: `boundary.runtime_has_no_editor_code`, a test that walks the link graph
+of `noor_player` and the runtime modules and fails if `noor_csg` or Manifold appear (and checks
+that the walk does find them in the unit tests, so the guard can fail).
 
 ## Migration or reversal strategy
 Scenes store brushes (shape parameters, operations, materials), never kernel data. Switching
@@ -57,4 +75,4 @@ kernels changes how cooked meshes are made, not the saved files. Cooked meshes a
 the scene at any time.
 
 ## Reviewed by
-Sage (proposal). To be reviewed after the spike.
+Sage: proposed before the spike, accepted after it (2026-11-17).

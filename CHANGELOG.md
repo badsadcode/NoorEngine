@@ -2,7 +2,24 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 6 planned (manual creation tools)
+## [Unreleased] — Milestone 6 in progress (manual creation tools)
+
+### 2026-11-17 — Milestone 6, part 1: the CSG kernel
+**Added**
+- `noor_csg` (`noor/csg/csg.h`, editor and cooking only): brushes (box, wedge, cylinder, cone,
+  sphere, stairs, arch) with exact parameters, logical faces and per-face surfaces (material,
+  UV scale/offset/rotation); `build_model` combines them in order (add, subtract, intersect)
+  into one mesh grouped by material, with normals (smooth on curved faces), model-space box
+  projection UVs, tangents, and each triangle's source (brush, face).
+- **Manifold** v3.5.4 (Apache-2.0) for the booleans, pinned by commit, 3D only (no Clipper2, no
+  TBB), in `third_party/manifest.json`.
+- ADR-016 accepted after the spike; [docs/level/CSG.md](docs/level/CSG.md).
+- `boundary.runtime_has_no_editor_code`: fails if `noor_csg` or Manifold reach `noor_player` or a
+  runtime module (and checks the check can see them where they are).
+
+**Tests:** shape volumes (exact), a doorway with a coplanar edge (volume, materials, UVs unchanged
+on the wall), rotated/scaled/tilted/mirrored brushes, touching boxes, a hollow, an intersection,
+100 windows (same bytes twice; ~14 ms release, 285 ms Debug).
 
 ### 2026-11-17 — Milestone 6 plan
 - [M6_PLAN.md](docs/milestones/M6_PLAN.md): brushes and CSG, surface materials and UVs, cooking,
