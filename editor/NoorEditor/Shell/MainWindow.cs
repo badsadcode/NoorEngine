@@ -622,6 +622,24 @@ public sealed class MainWindow : Window
                 FrameEntity(mid);
             return;
         }
+        if (asset.Importer == "texture" && asset.Path.EndsWith(".hdr", StringComparison.OrdinalIgnoreCase))
+        {
+            // An HDRI becomes the scene's environment (the sky and the light from all around): the
+            // existing Environment entity gets it, or a new one is made.
+            var existing = Doc.Scene.Entities.FirstOrDefault(e => e.Components["environment"] is System.Text.Json.Nodes.JsonObject);
+            if (existing != null)
+            {
+                var env = (System.Text.Json.Nodes.JsonObject)existing.Components["environment"]!.DeepClone();
+                env["hdri"] = asset.Guid;
+                Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "set_component", ["entity"] = existing.Id, ["type"] = "environment", ["value"] = env });
+                Doc.Select(existing.Id);
+            }
+            else
+            {
+                Doc.Create("Environment", new System.Text.Json.Nodes.JsonObject { ["environment"] = EntityTemplates.Environment(asset.Guid) }, new Vec3(0, 0, 0));
+            }
+            return;
+        }
         if (asset.Importer == "texture")
         {
             // A 1 m test cube wearing the texture: as its colour, or as its normal map when the name

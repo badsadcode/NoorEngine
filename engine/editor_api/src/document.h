@@ -58,6 +58,7 @@ struct RenderSnapshot {
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
+    game::SceneView::Environment environment;
     std::filesystem::path texture_cache;  // <project>/.noor/cache/textures (decoded textures)
     // Every asset's file by id (materials find their textures and parents with it).
     std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> asset_files;

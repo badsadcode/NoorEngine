@@ -146,6 +146,21 @@ enum class Tonemapper : std::uint8_t {
     None,     // clamp: for debugging exposure
 };
 
+// ---- Environments (image-based lighting, Milestone 5 part 5) ----------------------------
+
+// What lights the scene from all around and shows behind it: a prefiltered cubemap (mip m = what a
+// surface of roughness m / (mips - 1) reflects), diffuse irradiance as spherical harmonics, and a
+// background texture (equirectangular, RGBA16F) drawn as the sky. Values are in the environment's
+// own units; Lighting::environment_intensity (nits per unit) and the exposure scale them.
+struct EnvironmentDesc {
+    std::uint32_t face_size = 0;
+    std::uint32_t mip_count = 0;
+    // RGBA 16-bit float texels, mip by mip, each mip face by face (+X, -X, +Y, -Y, +Z, -Z).
+    std::span<const std::uint16_t> cube;
+    std::array<math::Vec3, 9> irradiance_sh{};
+    TextureHandle background;  // an equirect RGBA16F texture (create_texture); none: no sky drawn
+};
+
 // A point or spot light (Milestone 5, part 4). Intensity is luminous power in lumens, like a
 // bulb's box says (a 60 W-equivalent bulb is about 800 lm): a point light sends it everywhere, a
 // spot into its cone (so a narrower spot of the same lumens is brighter, like a torch). Light
@@ -176,6 +191,10 @@ struct Lighting {
     // Where nothing is drawn: the sky (true), or the renderer's clear colour shown exactly as given
     // (not lit, exposed or tonemapped: tests and the editor's empty view).
     bool sky_background = true;
+    // The environment (set_environment): nits per environment unit, and its turn about the vertical
+    // axis (radians). Without an environment the renderer lights with a plain grey one.
+    float environment_intensity = 8000.0f;
+    float environment_rotation = 0.0f;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;
@@ -265,6 +284,10 @@ public:
     [[nodiscard]] std::uint64_t texture_memory() const noexcept;
     // A magenta-and-black checker for textures that couldn't be loaded (visible on purpose).
     [[nodiscard]] TextureHandle missing_texture() const noexcept;
+    // Sets the environment that lights the scene and shows behind it. Waits for the GPU (it replaces
+    // what frames in flight use): call it when the environment changes, not every frame.
+    [[nodiscard]] Status set_environment(const EnvironmentDesc& desc);
+
     // Replaces a texture's pixels, keeping its handle (so materials using it follow). Waits for the GPU.
     [[nodiscard]] Status update_texture(TextureHandle texture, const TextureDesc& desc);
 

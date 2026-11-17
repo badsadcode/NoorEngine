@@ -3,6 +3,7 @@
 
 #include "noor/game/game.h"
 #include "noor/game/geometry.h"
+#include "noor/game/environment_library.h"
 #include "noor/game/material_library.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
@@ -49,6 +50,7 @@ private:
     std::unordered_map<std::string, std::optional<Model>> models_;  // nullopt: failed
     TextureLibrary textures_;
     MaterialLibrary materials_;
+    EnvironmentLibrary environment_;
 };
 
 } // namespace noor::game

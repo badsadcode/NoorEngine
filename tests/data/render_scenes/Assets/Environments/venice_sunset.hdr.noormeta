@@ -1,0 +1,12 @@
+{
+  "guid": "7e5d0000-e470-4000-8000-000000000003",
+  "importer": "texture",
+  "noor_meta": 1,
+  "settings": {
+    "kind": "hdr",
+    "max_size": 8192,
+    "mips": true,
+    "normal_convention": "opengl"
+  },
+  "source_sha256": "e151d451a6b9885e32d2caae055ce04c338db3f6edde880f55f0b8b837d537dc"
+}

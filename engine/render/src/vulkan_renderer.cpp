@@ -452,6 +452,12 @@ Status Renderer::Impl::rebuild_swapchain() {
     if (auto status = ensure_shadows(); !status) {
         return status;
     }
+    if (auto status = ensure_sky_pipeline(); !status) {
+        return status;
+    }
+    if (auto status = ensure_default_environment(); !status) {
+        return status;
+    }
     if (auto status = ensure_overlay(surface_format.format); !status) {
         return std::unexpected(status.error());
     }
@@ -583,6 +589,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, "Scene (lit, HDR)", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_draws(frame.cmd, frame_desc, false);
+    record_sky(frame.cmd, lighting);  // after the opaque scene: only where nothing was drawn
     vkCmdEndRendering(frame.cmd);
     end_label(frame.cmd);
     stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -703,6 +710,7 @@ void Renderer::Impl::destroy() {
             destroy_buffer(capture.buffer);
         }
         destroy_shadows();
+        destroy_environment();
         destroy_mesh_pipeline();
         destroy_overlay();
         destroy_frame_resources();
@@ -762,6 +770,11 @@ Result<TextureHandle> Renderer::create_texture(const TextureDesc& desc) {
 void Renderer::destroy_texture(TextureHandle texture) { impl_->destroy_texture(texture); }
 std::uint64_t Renderer::texture_memory() const noexcept { return impl_->texture_bytes; }
 TextureHandle Renderer::missing_texture() const noexcept { return TextureHandle{kTextureMissing}; }
+
+Status Renderer::set_environment(const EnvironmentDesc& desc) {
+    if (auto s = impl_->ensure_texture_table(); !s) return s;
+    return impl_->upload_environment(desc);
+}
 
 Status Renderer::update_texture(TextureHandle texture, const TextureDesc& desc) {
     if (texture.id < kFirstUserTexture || texture.id >= impl_->textures.size() || !impl_->textures[texture.id].alive)

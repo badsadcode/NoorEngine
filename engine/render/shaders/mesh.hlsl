@@ -62,10 +62,17 @@ struct FrameUniforms
     float4 camera_forward;
     uint4 light_count;       // x: local lights in use
     GpuLight lights[16];
+    float4x4 world_from_clip;
+    float4 irradiance_sh[9]; // the environment's diffuse light, spherical harmonics (rgb)
+    float4 environment;      // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
+    uint4 background;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2DArray<float> shadow_map;
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerComparisonState shadow_sampler;
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] TextureCube<float4> environment_map;
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState environment_sampler;
+static const uint kBrdfLut = 3;  // built-in texture slot
 
 struct VertexInput
 {
@@ -148,18 +155,6 @@ float3 brdf_direct(float3 n, float3 v, float3 l, float3 base_color, float metall
     return (diffuse + specular) * radiance * n_dot_l;
 }
 
-// The split-sum environment BRDF (scale, bias for F0) without a lookup table: the analytic fit
-// from Brian Karis's "Physically Based Shading on Mobile" (Unreal Engine blog, 2014). Replaced
-// by a real lookup table with image-based lighting (part 5).
-float2 env_brdf_approx(float roughness, float n_dot_v)
-{
-    const float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
-    const float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
-    const float4 r = roughness * c0 + c1;
-    const float a004 = min(r.x * r.x, exp2(-9.28 * n_dot_v)) * r.x + r.y;
-    return float2(-1.04, 1.04) * a004 + r.zw;
-}
-
 // How much sunlight reaches `world` (1 lit, 0 in shadow): the cascade for this distance, a normal
 // offset against acne, 3x3 hardware-filtered PCF (a soft edge about two texels wide), and a fade
 // over the last 10% of the shadow distance so shadows don't end in a hard line.
@@ -205,9 +200,31 @@ float3 local_lights(float3 world, float3 n, float3 v, float3 base_color, float m
     return sum;
 }
 
-float3 hemisphere(float up)
+// Image-based lighting (part 5). Directions are turned by the environment's rotation first.
+float3 environment_direction(float3 d)
 {
-    return lerp(frame.ground_radiance.rgb, frame.sky_radiance.rgb, up * 0.5 + 0.5);
+    const float c = frame.environment.y, s = frame.environment.z;
+    return float3(c * d.x + s * d.z, d.y, -s * d.x + c * d.z);
+}
+
+// Diffuse: irradiance from the environment's spherical harmonics (already cosine-convolved).
+float3 environment_irradiance(float3 n)
+{
+    const float3 d = environment_direction(n);
+    const float y[9] = {0.282095, 0.488603 * d.y, 0.488603 * d.z, 0.488603 * d.x, 1.092548 * d.x * d.y, 1.092548 * d.y * d.z,
+                        0.315392 * (3.0 * d.z * d.z - 1.0), 1.092548 * d.x * d.z, 0.546274 * (d.x * d.x - d.y * d.y)};
+    float3 e = 0.0;
+    [unroll] for (int i = 0; i < 9; ++i) e += frame.irradiance_sh[i].rgb * y[i];
+    return max(e, 0.0) * frame.environment.x;
+}
+
+// Specular: the prefiltered environment for this roughness, scaled by the split-sum BRDF lookup.
+float3 environment_specular(float3 r, float roughness, float n_dot_v, float3 f0)
+{
+    const float3 prefiltered = environment_map.SampleLevel(environment_sampler, environment_direction(r), roughness * frame.environment.w).rgb;
+    const float2 lut_uv = clamp(float2(n_dot_v, roughness), 0.5 / 64.0, 1.0 - 0.5 / 64.0);  // the sampler repeats: stay inside
+    const float2 ab = textures[kBrdfLut].SampleLevel(texture_sampler, lut_uv, 0).rg;
+    return prefiltered * frame.environment.x * (f0 * ab.x + ab.y);
 }
 
 // The normal map (tangent space, OpenGL convention: +Y up the texture) turned into a world normal.
@@ -247,14 +264,12 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0));
     float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow);
     color += local_lights(input.world_position, n, v, base_color, metallic, roughness);
-    // Ambient until image-based lighting (part 5): a hemisphere from the ground up to the sky.
-    // Diffuse: irradiance pi * L times albedo / pi. Specular: the sky seen in the reflection
-    // direction, weighted by the environment BRDF (every surface reflects at least ~4% of it).
+    // The environment (image-based lighting): diffuse irradiance and prefiltered reflections.
     const float n_dot_v = max(dot(n, v), 1e-4);
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), base_color, metallic);
-    const float2 env = env_brdf_approx(roughness, n_dot_v);
     const float3 r = reflect(-v, n);
-    color += (base_color * (1.0 - metallic) * hemisphere(n.y) + (f0 * env.x + env.y) * hemisphere(r.y)) * occlusion;
+    const float3 diffuse = base_color * (1.0 - metallic) * environment_irradiance(n) / kPi;
+    color += (diffuse + environment_specular(r, roughness, n_dot_v, f0)) * occlusion;
     color += emissive;  // relative to the exposure (already "exposed"): 1 is about white on screen
     return float4(color, 1.0);  // alpha 1: something was drawn here (tonemap.hlsl)
 }

@@ -4,6 +4,33 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 5: environments (HDRI) and image-based lighting
+**Added**
+- **Environments** (`noor/asset/environment.h`): an equirectangular `.hdr` or a procedural sky,
+  processed on the CPU into a GGX-prefiltered cubemap (filtered importance sampling, one mip per
+  roughness step) and irradiance spherical harmonics (SH9); cached in `.noor/cache`.
+- **Image-based lighting** in the shader: SH9 diffuse, prefiltered specular with the split-sum
+  BRDF lookup table (`render::brdf_lut`, CPU, built-in texture slot 3). It replaces part 1's
+  hemisphere ambient and its analytic BRDF fit.
+- The **sky pass**: the environment's background drawn behind the scene (rotation, intensity).
+- `Renderer::set_environment` (`EnvironmentDesc`), `Lighting::environment_intensity` and
+  `environment_rotation`; `game::EnvironmentLibrary` (player and editor, re-processes only when
+  the environment changes).
+- An **`environment` component** (`hdri`, `intensity` nits per unit, `rotation`, `background`);
+  without one, a procedural sky from the sun's `sky_color` / `sky_luminance`. A scene with an
+  HDRI and no sun entity gets no default sun (the photo has one).
+- Editor: **Add to scene** on an `.hdr` makes it the scene's environment.
+- Test data: three CC0 HDRIs from Poly Haven (Studio Small 09, Kloppenheim 06, Venice Sunset),
+  shrunk to 256×128.
+
+**Tests:** 4 unit tests (equirect/cube directions, constant sky = π·L irradiance and flat mips,
+bright sky over dark ground, the BRDF table); `render.golden_Env_*` (white plastic and gold, rough
+0 to 1, under the three HDRIs); all references updated after checking them by eye; an editor
+smoke check for environments.
+
+**Not yet:** `.exr` HDRIs, reflection probes (local reflections), a sun found from the HDRI, sky
+blur control, environment preview in the editor (part 6).
+
 ### 2026-11-17 — Milestone 5, part 4: shadows and lights
 **Added**
 - **Sun shadows**: four cascaded shadow maps (2048², D32 array) up to `shadow_distance` (80 m),

@@ -98,6 +98,8 @@ math::Vec3 color_of(const Json& primitive, math::Vec3 color = {0.55f, 0.52f, 0.6
 SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, const std::unordered_map<Guid, math::Mat4>* render_poses) {
     SceneView view;
     const auto& entities = scene.entities;
+    bool has_environment = false;
+    float env_intensity = 8000.0f;
     // World matrices, with render poses in place of the simulated ones (and children following).
     std::unordered_map<Guid, std::size_t> index;
     std::vector<std::optional<math::Mat4>> memo;
@@ -129,7 +131,17 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const std::string light_type = is_light ? e.components["light"].value("type", std::string("directional")) : "";
         const bool sun = is_light && !view.has_sun && light_type == "directional";
         const bool local = is_light && (light_type == "point" || light_type == "spot");
-        if (!camera && !primitive && !mesh && !sun && !local) continue;
+        const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
+        if (!camera && !primitive && !mesh && !sun && !local && !env) continue;
+        if (env) {
+            const auto& en = e.components["environment"];
+            if (const auto id = asset::guid_field(en, "hdri"); id && asset_path)
+                if (auto file = asset_path(*id)) view.environment.hdri = std::move(*file);
+            env_intensity = std::clamp(number(en, "intensity", 8000.0f), 0.0f, 1.0e7f);
+            view.lighting.environment_rotation = math::radians(number(en, "rotation", 0.0f));
+            if (en.contains("background") && en["background"].is_boolean()) view.lighting.sky_background = en["background"].get<bool>();
+            has_environment = true;
+        }
         const math::Mat4 world = world_of(i, 0);
         if (camera) {
             const auto& cam = e.components["camera"];
@@ -208,6 +220,19 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             if (!guid) continue;
             if (auto path = asset_path(*guid)) view.meshes.push_back({std::move(*path), m.value("mesh_index", -1), world, e.id});
         }
+    }
+    // The environment: an HDRI, or a procedural sky from the sun's sky settings (or the defaults).
+    if (view.environment.hdri.empty()) {
+        const math::Vec3 sky = view.lighting.sky_color;
+        view.environment.zenith = sky;
+        view.environment.horizon = (sky + math::Vec3{1, 1, 1}) * 0.55f;  // paler and brighter near the horizon
+        view.environment.ground = view.lighting.ground_color;
+        view.lighting.environment_intensity = view.lighting.sky_luminance;
+    } else {
+        view.lighting.environment_intensity = env_intensity;
+        // The photo has its own sun: no default sun on top of it (add a directional light to get
+        // sharp sun shadows, then match its direction to the sun in the photo).
+        if (!view.has_sun) view.lighting.sun_illuminance = 0.0f;
     }
     return view;
 }

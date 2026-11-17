@@ -115,6 +115,8 @@ Status Renderer::Impl::ensure_texture_table() {
         const TextureMipData mip{b.size, b.size, {b.bytes, static_cast<std::size_t>(b.size) * b.size * 4}};
         if (auto h = create_texture({b.format, {&mip, 1}, b.name}, b.slot); !h) return std::unexpected(h.error());
     }
+    textures.resize(kFirstUserTexture);
+    if (auto s = create_brdf_lut(); !s) return s;
     texture_bytes = 0;  // the built-ins don't count as "your" textures
     materials.assign(1, MaterialDesc{});  // slot 0: the default material
     material_alive.assign(1, true);

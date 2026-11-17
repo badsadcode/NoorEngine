@@ -482,6 +482,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
     snap->primitives = std::move(view.primitives);
     snap->lighting = view.lighting;
+    snap->environment = view.environment;
     for (const auto& lm : view.light_markers) snap->markers.push_back({math::translation(lm.position), lm.entity, lm.color});
     snap->texture_cache = project_.root() / ".noor" / "cache" / "textures";
     {

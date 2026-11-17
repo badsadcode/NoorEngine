@@ -65,7 +65,8 @@ inline constexpr std::uint32_t kMaxTextures = 4096;
 inline constexpr std::uint32_t kTextureWhite = 0;
 inline constexpr std::uint32_t kTextureFlatNormal = 1;
 inline constexpr std::uint32_t kTextureMissing = 2;
-inline constexpr std::uint32_t kFirstUserTexture = 3;
+inline constexpr std::uint32_t kTextureBrdfLut = 3;  // image-based lighting's lookup table
+inline constexpr std::uint32_t kFirstUserTexture = 4;
 inline constexpr std::uint32_t kAnySlot = ~0u;  // create_texture: the first free user slot
 // The material table (set 1, binding 2): slot 0 is the default material.
 inline constexpr std::uint32_t kMaxMaterials = 4096;
@@ -145,6 +146,10 @@ struct FrameUniforms {
     math::Vec4 camera_forward;
     std::uint32_t light_count[4];
     GpuLight lights[kMaxLocalLights];
+    math::Mat4 world_from_clip;          // the sky's view rays
+    math::Vec4 irradiance_sh[9];         // the environment's diffuse light (rgb)
+    math::Vec4 environment;              // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
+    std::uint32_t background[4];         // x: background texture slot
 };
 
 struct PendingCapture {
@@ -228,6 +233,18 @@ struct Renderer::Impl {
     VkPipeline shadow_pipeline = VK_NULL_HANDLE;
     std::uint32_t shadow_size = 0;
     std::array<ShadowCascade, kShadowCascades> cascades{};  // this frame's
+
+    // The environment (vulkan_environment.cpp): prefiltered cube (frame set, binding 2), SH, background
+    struct Environment {
+        VkImage image = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;
+        std::uint32_t mip_count = 1;
+        std::array<math::Vec3, 9> sh{};
+        TextureHandle background;
+    } environment;
+    VkPipeline sky_pipeline = VK_NULL_HANDLE;
 
     // Per-frame lighting uniforms (vulkan_frame.cpp)
     VkDescriptorSetLayout frame_set_layout = VK_NULL_HANDLE;
@@ -330,6 +347,14 @@ struct Renderer::Impl {
     void update_frame_uniforms(const FrameDesc& frame);
     void record_tonemap(VkCommandBuffer cmd, const Lighting& lighting);
     void destroy_frame_resources();
+    // vulkan_environment.cpp
+    Status create_brdf_lut();
+    Status upload_environment(const EnvironmentDesc& desc);
+    Status ensure_default_environment();
+    Status ensure_sky_pipeline();
+    void record_sky(VkCommandBuffer cmd, const Lighting& lighting);
+    void destroy_environment_image();
+    void destroy_environment();
     // vulkan_shadows.cpp
     Status ensure_shadows();
     void record_shadows(VkCommandBuffer cmd, const FrameDesc& frame);

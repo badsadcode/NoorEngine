@@ -172,6 +172,16 @@
       "linkage": "embedded font data",
       "shipped": true,
       "purpose": "The default HUD font, built into the engine; licence text in third_party/fonts/OFL.txt"
+    },
+    {
+      "name": "Poly Haven HDRIs (Studio Small 09, Kloppenheim 06, Venice Sunset)",
+      "version": "1k .hdr, shrunk to 256x128",
+      "source": "https://polyhaven.com/hdris",
+      "commit": null,
+      "license": "CC0 1.0",
+      "linkage": "test data (tests/data/render_scenes/Assets/Environments)",
+      "shipped": false,
+      "purpose": "Render tests for image-based lighting (Milestone 5, part 5)"
     }
   ]
 }

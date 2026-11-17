@@ -91,6 +91,16 @@ struct SceneView {
         Guid entity;
     };
     std::vector<LightMarker> light_markers;
+
+    // The environment that lights the scene from all around and shows as the sky: the first entity
+    // with an `environment` component ({"hdri": <.hdr asset id>, "intensity": 8000 (nits per HDRI
+    // unit), "rotation": 0 (degrees), "background": true}); without one, a procedural sky made from
+    // the sun light's sky_color / sky_luminance (or the defaults).
+    struct Environment {
+        std::filesystem::path hdri;   // empty: procedural
+        math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)
+    };
+    Environment environment;
 };
 
 // Finds a model asset's file from the `mesh` component's asset id.

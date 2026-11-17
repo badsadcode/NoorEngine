@@ -1,8 +1,7 @@
 # Lighting and shading (PBR)
 
-How NoorEngine turns light into pixels (ADR-012). Status: **Milestone 5, parts 1–4** (frame, sun
-and sky, materials in [MATERIALS.md](MATERIALS.md), shadows, point and spot lights). Skies from
-HDRIs come in part 5.
+How NoorEngine turns light into pixels (ADR-012). Status: **Milestone 5, parts 1–5** (frame, sun,
+materials in [MATERIALS.md](MATERIALS.md), shadows, point and spot lights, environments).
 
 ## The frame
 
@@ -31,7 +30,8 @@ is part 7 (the passes inspector).
 |---|---|---|---|
 | Sun | lux (illuminance) | 100,000 (bright sunshine) | `light` component: `illuminance` |
 | Sun colour | linear RGB from `#RRGGBB` | `#FFF5E6` (slightly warm) | `light`: `color` |
-| Sky | nits (cd/m²) | 8,000, light blue | `light`: `sky_luminance`, `sky_color` (until environments, part 5) |
+| Sky (procedural) | nits (cd/m²) | 8,000, light blue | `light`: `sky_luminance`, `sky_color` |
+| Environment (HDRI) | nits per HDRI unit | 8,000 | `environment`: `intensity` |
 | Exposure | EV100 | 14 | `camera`: `ev100` |
 
 Exposure multiplies the scene by `1 / (1.2 × 2^EV100)`. Higher EV is darker. Handy values:
@@ -46,6 +46,38 @@ step is twice or half the light, like one stop on a camera.
 
 The sun shines along its entity's **forward** (−Z): rotate the entity to move the sun.
 **Create ▸ Sun (directional light)** makes one. A scene without a sun gets the defaults above.
+
+## Environments (image-based lighting)
+
+Everything around the scene lights it: the sky, the ground, distant buildings. NoorEngine takes
+that from an **environment**: an HDRI photo, or a procedural sky when the scene has none.
+
+```json
+"environment": { "hdri": "<.hdr texture id>", "intensity": 8000, "rotation": 0, "background": true }
+```
+
+- **`hdri`**: an equirectangular `.hdr` (Poly Haven's are CC0). In the editor, **Add to scene** on
+  an `.hdr` makes it the scene's environment.
+- **`intensity`**: nits per HDRI unit. HDRI files aren't calibrated to real brightness, so this is
+  the knob; 8000 suits most daylight HDRIs at EV 13–14.
+- **`rotation`**: degrees about the vertical axis (turns the light and the background together).
+- **`background`**: draw the HDRI as the sky (or keep the clear colour).
+- **No environment**: a procedural sky from the sun's `sky_color` / `sky_luminance` (blue overhead,
+  paler at the horizon, `ground_color` below). It lights the scene the same way, so metals have
+  something to reflect.
+- **The sun**: an HDRI already contains its sun, so a scene with an HDRI and no `light` entity gets
+  no default sun. Add a directional light (pointing like the photo's sun) for sharp sun shadows.
+
+How it works, once per environment, on the CPU, cached in `<project>/.noor/cache`:
+- a **prefiltered cubemap** (faces up to 256², one mip per roughness step): mip 0 is the sharp
+  environment, each next mip what a rougher surface reflects (GGX importance sampling with
+  filtered lookups, Křivánek 2008);
+- **irradiance as 9 spherical-harmonics coefficients** (Ramamoorthi & Hanrahan 2001): the soft
+  light a matte surface gets, from nine colours;
+- a **BRDF lookup table** (split sum, Karis 2013), computed once when the renderer starts.
+
+In the shader: diffuse = albedo / π × irradiance(normal); specular = prefiltered(reflection,
+roughness) × (F0 × A + B); both multiplied by the material's ambient occlusion.
 
 ## Sun shadows
 
@@ -97,10 +129,7 @@ model (the same maths as Filament, Unreal and Godot, so assets look alike across
 - **Fresnel**: Schlick, `F0 = 0.04` for non-metals, the base colour for metals.
 - **Diffuse**: Lambert, `base_color / π`, reduced by what the Fresnel term reflected and by
   metalness.
-- **Ambient** (until image-based lighting): a hemisphere from the ground colour up to the sky
-  colour. Diffuse uses the surface normal; specular uses the reflection direction, weighted by an
-  analytic fit of the split-sum environment BRDF (Karis 2014), so every surface reflects a little
-  sky, like real surfaces do.
+- **Ambient**: image-based lighting from the environment (above).
 
 Not yet: multi-scattering energy compensation (rough metals are slightly too dark), clear coat,
 sheen, transmission.

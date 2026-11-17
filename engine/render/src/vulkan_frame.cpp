@@ -54,16 +54,17 @@ void Renderer::Impl::destroy_hdr_target() {
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[2] = {
+    const VkDescriptorSetLayoutBinding bindings[3] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
+        {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // environment cube
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 2;
+    layout_info.bindingCount = 3;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
-                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight}};
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 2}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
     pool_info.poolSizeCount = 2;
@@ -148,6 +149,11 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
                        {d.x, d.y, d.z, light.type == LocalLight::Type::Spot ? 1.0f : 0.0f},
                        {std::cos(outer), std::cos(inner), 0, 0}};
     }
+    u.world_from_clip = math::inverse(clip_from_world);
+    for (std::size_t i = 0; i < 9; ++i) u.irradiance_sh[i] = {environment.sh[i].x, environment.sh[i].y, environment.sh[i].z, 0};
+    u.environment = {frame.lighting.environment_intensity * exposure, std::cos(frame.lighting.environment_rotation),
+                     std::sin(frame.lighting.environment_rotation), static_cast<float>(environment.mip_count - 1)};
+    u.background[0] = environment.background.valid() ? environment.background.id : kTextureWhite;
     GpuBuffer& ubo = frame_ubos[frame_index];
     std::memcpy(ubo.mapped, &u, sizeof(u));
     vmaFlushAllocation(allocator, ubo.allocation, 0, sizeof(u));

@@ -1,0 +1,473 @@
+{
+  "noor_scene": 2,
+  "id": "7e5d0000-000c-4000-8000-000000000000",
+  "name": "Env venice_sunset",
+  "entities": [
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000001",
+      "name": "Environment",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "hdri": "7e5d0000-e470-4000-8000-000000000003",
+          "intensity": 8000,
+          "rotation": 60
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000002",
+      "name": "Plastic 0.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.125,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 0.0
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000003",
+      "name": "Gold 0.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.125,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 0.0,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000004",
+      "name": "Plastic 0.2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.875,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 0.2
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000005",
+      "name": "Gold 0.2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.875,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 0.2,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000006",
+      "name": "Plastic 0.4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.625,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 0.4
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000007",
+      "name": "Gold 0.4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.625,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 0.4,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000008",
+      "name": "Plastic 0.6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.625,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-000000000009",
+      "name": "Gold 0.6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.625,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 0.6,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-00000000000a",
+      "name": "Plastic 0.8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.875,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 0.8
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-00000000000b",
+      "name": "Gold 0.8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.875,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 0.8,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-00000000000c",
+      "name": "Plastic 1.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.125,
+          1.65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#F0F0F0",
+          "roughness": 1.0
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-00000000000d",
+      "name": "Gold 1.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.125,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.5,
+          "color": "#FFD27A",
+          "roughness": 1.0,
+          "metallic": 1
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000c-4000-8000-00000000000e",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1.1,
+          6.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 50,
+          "near": 0.05,
+          "ev100": 12
+        }
+      }
+    }
+  ]
+}

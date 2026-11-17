@@ -7,6 +7,7 @@ noor_add_module(game
         src/scene_renderer.cpp
         src/texture_library.cpp
         src/material_library.cpp
+        src/environment_library.cpp
     PUBLIC_DEPS
         noor::asset
         noor::scene

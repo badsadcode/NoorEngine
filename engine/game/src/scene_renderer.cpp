@@ -8,7 +8,8 @@
 namespace noor::game {
 
 SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache, asset::AssetFileResolver resolve)
-    : renderer_(renderer), textures_(renderer, std::move(texture_cache)), materials_(renderer, textures_, std::move(resolve)) {
+    : renderer_(renderer), textures_(renderer, texture_cache), materials_(renderer, textures_, std::move(resolve)),
+      environment_(renderer, std::move(texture_cache)) {
     box_ = upload(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
     sphere_ = upload(make_round(0.5f, 1.0f), "Primitive sphere");
 }
@@ -36,6 +37,7 @@ render::MeshHandle SceneRenderer::upload(const Geometry& g, const char* name) {
 }
 
 std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
+    environment_.apply(view.environment);
     std::vector<render::DrawItem> out;
     out.reserve(view.meshes.size() + view.primitives.size());
     for (const auto& m : view.meshes) {

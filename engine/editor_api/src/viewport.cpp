@@ -26,6 +26,7 @@
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
+#include "noor/game/environment_library.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
 
@@ -327,6 +328,7 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
     std::optional<noor::game::TextureLibrary> textures;    // textures and materials, made with the first snapshot
     std::optional<noor::game::MaterialLibrary> materials;
+    std::optional<noor::game::EnvironmentLibrary> environment;
     auto refresh_clock = std::chrono::steady_clock::now();
     std::vector<noor::render::OverlayVertex> overlay;
 
@@ -432,7 +434,9 @@ void render_thread_main(noor_viewport* vp) {
         if (snap && !materials) {
             textures.emplace(r, snap->texture_cache);
             materials.emplace(r, *textures, noor::asset::AssetFileResolver{});
+            environment.emplace(r, snap->texture_cache);
         }
+        if (snap && environment) environment->apply(snap->environment);
         if (snap && materials && snap != shown) {
             materials->set_resolver([files = snap->asset_files](const Guid& id) -> std::optional<std::filesystem::path> {
                 if (!files) return std::nullopt;
@@ -885,6 +889,7 @@ void render_thread_main(noor_viewport* vp) {
         vp->stats.validation_errors = r.validation_error_count();
     }
 
+    environment.reset();
     materials.reset();  // GPU materials and textures go before the renderer that owns them
     textures.reset();
     renderer->reset();

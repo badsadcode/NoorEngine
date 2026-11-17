@@ -24,6 +24,7 @@ add_executable(noor_unit_tests
     unit/test_texture.cpp
     unit/test_material.cpp
     unit/test_shadows.cpp
+    unit/test_environment.cpp
 )
 target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -122,7 +123,7 @@ endif()
 # reference pictures in tests/golden by noor_image_compare (tests/tools/image_compare.cpp).
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
-foreach(name IN ITEMS Daylight Sunset Textured Materials Lights)
+foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>

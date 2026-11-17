@@ -207,6 +207,25 @@ internal static class SmokeTest
             doc.Undo();
         }
 
+        // Milestone 5, part 5: an HDRI added to the scene becomes its environment (once: a second one replaces it).
+        foreach (var hdr in new[] { "kloppenheim_06.hdr", "venice_sunset.hdr" })
+            File.Copy(Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Environments", hdr), Path.Combine(texDir, hdr), overwrite: true);
+        doc.RefreshAssets(rescan: true);
+        var envEntities = 0;
+        foreach (var hdr in new[] { "kloppenheim_06.hdr", "venice_sunset.hdr" })
+        {
+            var hdri = doc.Assets.FirstOrDefault(a => a.Path.EndsWith(hdr, StringComparison.Ordinal));
+            if (hdri != null) window.AddAsset(hdri);
+            await Task.Delay(400);  // processed and drawn (the end of the test checks Vulkan validation)
+            envEntities = doc.Scene.Entities.Count(e => e.Components["environment"] != null);
+        }
+        var envEntity = doc.Scene.Entities.FirstOrDefault(e => e.Components["environment"] != null);
+        var venice = doc.Assets.FirstOrDefault(a => a.Path.EndsWith("venice_sunset.hdr", StringComparison.Ordinal));
+        Check(envEntities == 1 && envEntity?.Components["environment"]?["hdri"]?.GetValue<string>() == venice?.Guid,
+              "environments: an HDRI added to the scene becomes its environment, a second one replaces it");
+        Shot(window, "editor_19_environment.png");
+        if (envEntity != null) { doc.Undo(); doc.Undo(); }
+
         // Milestone 5, part 3: a texture set becomes a material; Add to scene puts it on a ball.
         foreach (var map in new[] { "tiles_albedo.png", "tiles_normal.png", "tiles_orm.png" })
             File.Copy(Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Textures", map), Path.Combine(texDir, map), overwrite: true);

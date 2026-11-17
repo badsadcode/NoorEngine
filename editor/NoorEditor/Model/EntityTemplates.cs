@@ -11,6 +11,12 @@ public static class EntityTemplates
 
     public const string SunTemplateName = "Sun (directional light)";
 
+    /// <summary>An environment from an HDRI (Milestone 5, part 5): intensity in nits per HDRI unit.</summary>
+    public static JsonObject Environment(string hdri) => new()
+    {
+        ["hdri"] = hdri, ["intensity"] = 8000, ["rotation"] = 0, ["background"] = true,
+    };
+
     public static JsonObject Sun() => new()
     {
         ["type"] = "directional", ["color"] = "#FFF5E6", ["illuminance"] = 100000,
