@@ -4,6 +4,29 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 4: shadows and lights
+**Added**
+- **Sun shadows**: four cascaded shadow maps (2048², D32 array) up to `shadow_distance` (80 m),
+  practical split scheme, bounding-sphere cascades snapped to whole texels (stable, no shimmering),
+  3x3 hardware PCF, slope-scaled depth bias plus normal offset, fade at the end. A depth-only pass
+  (`shadow.hlsl`, `vulkan_shadows.cpp`); cutout materials cast cut-out shadows.
+  `render::compute_cascades` (`noor/render/shadows.h`) is pure maths and unit-tested.
+- **Point and spot lights** (`render::LocalLight`, `Lighting::lights`, 16 per frame, nearest the
+  camera): intensity in lumens (spots focus them into their cone), inverse-square falloff windowed
+  to `range`, soft spot cones. `light` components of `type` `point` / `spot`; the sun's `shadows`
+  and `shadow_distance`.
+- Editor: **Create ▸ Point light / Spot light**; lights shown as markers in their colour; editor
+  helpers and the ground grid don't cast shadows (`DrawItem::cast_shadow`).
+- GPU timings gain a `Shadows` pass.
+
+**Tests:** 3 cascade unit tests (ordering and sharpness, every view corner inside its cascade,
+whole-texel movement when the camera moves); `render.golden_Lights` (dusk: long sun shadows, a
+point light, a spot); the other golden scenes now show shadows (references updated after
+checking them by eye); editor smoke checks for the light templates.
+
+**Not yet:** shadows from point and spot lights, clustered lighting for many lights, per-cascade
+culling (every caster is drawn into all four cascades), contact shadows.
+
 ### 2026-11-17 — Milestone 5, part 3: materials
 **Added**
 - **`.noormat` materials** (ADR-030): glTF metallic-roughness channels (base colour, metallic,

@@ -6,6 +6,7 @@
 #include "noor/shaders/tonemap_ps.h"
 #include "noor/shaders/tonemap_vs.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -53,17 +54,20 @@ void Renderer::Impl::destroy_hdr_target() {
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-                                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+    const VkDescriptorSetLayoutBinding bindings[2] = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
+    };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 1;
-    layout_info.pBindings = &binding;
+    layout_info.bindingCount = 2;
+    layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
-    VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight};
+    const VkDescriptorPoolSize pool_sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
-    pool_info.poolSizeCount = 1;
-    pool_info.pPoolSizes = &pool_size;
+    pool_info.poolSizeCount = 2;
+    pool_info.pPoolSizes = pool_sizes;
     NOOR_VK_TRY(vkCreateDescriptorPool(device, &pool_info, nullptr, &frame_pool));
     std::array<VkDescriptorSetLayout, kFramesInFlight> layouts;
     layouts.fill(frame_set_layout);
@@ -89,6 +93,14 @@ Status Renderer::Impl::ensure_frame_uniforms() {
 }
 
 void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
+    const float aspect_ratio = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
+    const bool shadows_on = frame.lighting.sun_shadows && frame.lighting.sun_illuminance > 0.0f && shadow_size > 0;
+    if (shadows_on) {
+        ShadowCascadeParams params;
+        params.shadow_distance = std::max(1.0f, frame.lighting.shadow_distance);
+        params.resolution = shadow_size;
+        cascades = compute_cascades(frame.camera, aspect_ratio, frame.lighting.sun_direction, params);
+    }
     const Lighting& l = frame.lighting;
     const float exposure = l.exposure();
     const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
@@ -96,15 +108,46 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     const math::Vec3 sun = l.sun_color * (l.sun_illuminance * exposure);
     const math::Vec3 sky = l.sky_color * (l.sky_luminance * exposure);
     const math::Vec3 ground = l.ground_color * (l.sky_luminance * exposure);
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
     const math::Mat4 clip_from_world =
-        math::perspective_reverse_z(frame.camera.fov_y, aspect, frame.camera.near_plane) * frame.camera.view;
-    const FrameUniforms u{clip_from_world,
-                          {eye.x, eye.y, eye.z, 1},
-                          {to_sun.x, to_sun.y, to_sun.z, 0},
-                          {sun.x, sun.y, sun.z, 0},
-                          {sky.x, sky.y, sky.z, 0},
-                          {ground.x, ground.y, ground.z, 0}};
+        math::perspective_reverse_z(frame.camera.fov_y, aspect_ratio, frame.camera.near_plane) * frame.camera.view;
+    FrameUniforms u{};
+    u.clip_from_world = clip_from_world;
+    u.camera_position = {eye.x, eye.y, eye.z, 1};
+    u.to_sun = {to_sun.x, to_sun.y, to_sun.z, 0};
+    u.sun_radiance = {sun.x, sun.y, sun.z, 0};
+    u.sky_radiance = {sky.x, sky.y, sky.z, 0};
+    u.ground_radiance = {ground.x, ground.y, ground.z, 0};
+    for (std::uint32_t i = 0; i < kShadowCascades; ++i) u.cascades[i] = cascades[i].clip_from_world;
+    u.cascade_splits = {cascades[0].split_far, cascades[1].split_far, cascades[2].split_far, cascades[3].split_far};
+    u.cascade_texel = {cascades[0].texel_world, cascades[1].texel_world, cascades[2].texel_world, cascades[3].texel_world};
+    u.shadow_params = {shadows_on ? 1.0f : 0.0f, static_cast<float>(shadow_size), frame.lighting.shadow_distance, 0};
+    const math::Vec3 fwd = math::normalize(math::transform_vector(math::inverse(frame.camera.view), {0, 0, -1}));
+    u.camera_forward = {fwd.x, fwd.y, fwd.z, 0};
+
+    // Local lights: the ones nearest the camera (that reach it at all first), up to kMaxLocalLights.
+    std::vector<const LocalLight*> lights;
+    for (const auto& light : frame.lighting.lights)
+        if (light.lumens > 0.0f && light.range > 0.0f) lights.push_back(&light);
+    std::ranges::sort(lights, [&](const LocalLight* a, const LocalLight* b) {
+        return math::length(a->position - eye) - a->range < math::length(b->position - eye) - b->range;
+    });
+    const auto count = static_cast<std::uint32_t>(std::min<std::size_t>(lights.size(), kMaxLocalLights));
+    u.light_count[0] = count;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const LocalLight& light = *lights[i];
+        const math::Vec3 d = math::length(light.direction) > 1e-6f ? math::normalize(light.direction) : math::Vec3{0, -1, 0};
+        const float outer = std::clamp(light.outer_angle, 0.01f, math::kPi * 0.5f);
+        const float inner = std::clamp(light.inner_angle, 0.0f, outer - 0.001f);
+        // Lumens to candela: a point light spreads them over the whole sphere (4π sr); a spot, like
+        // a lamp with a reflector, puts them into its cone (2π(1 - cos outer) sr): narrower = brighter.
+        const float solid_angle = light.type == LocalLight::Type::Spot ? 2.0f * math::kPi * (1.0f - std::cos(outer)) : 4.0f * math::kPi;
+        const float candela = light.lumens / solid_angle;
+        const math::Vec3 c = light.color * (candela * exposure);
+        u.lights[i] = {{light.position.x, light.position.y, light.position.z, light.range},
+                       {c.x, c.y, c.z, 0},
+                       {d.x, d.y, d.z, light.type == LocalLight::Type::Spot ? 1.0f : 0.0f},
+                       {std::cos(outer), std::cos(inner), 0, 0}};
+    }
     GpuBuffer& ubo = frame_ubos[frame_index];
     std::memcpy(ubo.mapped, &u, sizeof(u));
     vmaFlushAllocation(allocator, ubo.allocation, 0, sizeof(u));

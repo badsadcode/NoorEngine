@@ -50,6 +50,7 @@ struct RenderSnapshot {
     struct Marker {
         math::Mat4 world;
         Guid entity;
+        std::optional<math::Vec3> color;  // lights: their colour
     };
     std::vector<Marker> markers;
     using Primitive = game::SceneView::Primitive;  // simple shapes from `primitive` components

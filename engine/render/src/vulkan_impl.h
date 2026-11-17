@@ -9,6 +9,7 @@
 
 #include "noor/foundation/log.h"
 #include "noor/render/renderer.h"
+#include "noor/render/shadows.h"
 
 #include <algorithm>
 #include <array>
@@ -56,8 +57,9 @@ inline constexpr std::uint32_t kFramesInFlight = 2;
 inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
 inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
-// GPU timestamps per frame: start, after the scene, after tonemapping, after the gizmos, end.
-inline constexpr std::uint32_t kTimestampsPerFrame = 5;
+// GPU timestamps per frame: start, after shadows, after the scene, after tonemapping, after the gizmos, end.
+inline constexpr std::uint32_t kTimestampsPerFrame = 6;
+inline constexpr VkFormat kShadowFormat = VK_FORMAT_D32_SFLOAT;
 // The bindless texture table (set 1): slots 0..2 are built in.
 inline constexpr std::uint32_t kMaxTextures = 4096;
 inline constexpr std::uint32_t kTextureWhite = 0;
@@ -120,6 +122,14 @@ struct GpuMaterial {
 static_assert(sizeof(GpuMaterial) == 96);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
 
+// A point or spot light as the shader sees it (mesh.hlsl GpuLight).
+struct GpuLight {
+    math::Vec4 position_range;   // xyz world position, w range (m)
+    math::Vec4 intensity;        // rgb: colour * candela * exposure
+    math::Vec4 direction_type;   // xyz spot direction, w: 0 point, 1 spot
+    math::Vec4 cone;             // x cos(outer), y cos(inner)
+};
+
 // mesh.hlsl's FrameUniforms (set 0, binding 0), one buffer per frame in flight. Radiances are pre-exposed.
 struct FrameUniforms {
     math::Mat4 clip_from_world;
@@ -128,6 +138,13 @@ struct FrameUniforms {
     math::Vec4 sun_radiance;
     math::Vec4 sky_radiance;
     math::Vec4 ground_radiance;
+    math::Mat4 cascades[kShadowCascades];  // world -> shadow map clip space
+    math::Vec4 cascade_splits;             // far end of each cascade (metres along the view)
+    math::Vec4 cascade_texel;              // texel size in metres per cascade
+    math::Vec4 shadow_params;              // x: on, y: shadow map size, z: shadow distance
+    math::Vec4 camera_forward;
+    std::uint32_t light_count[4];
+    GpuLight lights[kMaxLocalLights];
 };
 
 struct PendingCapture {
@@ -201,6 +218,16 @@ struct Renderer::Impl {
     VkImage hdr_image = VK_NULL_HANDLE;
     VmaAllocation hdr_allocation = VK_NULL_HANDLE;
     VkImageView hdr_view = VK_NULL_HANDLE;
+
+    // Sun shadows (vulkan_shadows.cpp): a 2D array, one layer per cascade
+    VkImage shadow_image = VK_NULL_HANDLE;
+    VmaAllocation shadow_allocation = VK_NULL_HANDLE;
+    VkImageView shadow_view = VK_NULL_HANDLE;  // all layers, for sampling
+    std::array<VkImageView, kShadowCascades> shadow_layer_views{};
+    VkSampler shadow_sampler = VK_NULL_HANDLE;  // comparison
+    VkPipeline shadow_pipeline = VK_NULL_HANDLE;
+    std::uint32_t shadow_size = 0;
+    std::array<ShadowCascade, kShadowCascades> cascades{};  // this frame's
 
     // Per-frame lighting uniforms (vulkan_frame.cpp)
     VkDescriptorSetLayout frame_set_layout = VK_NULL_HANDLE;
@@ -303,6 +330,10 @@ struct Renderer::Impl {
     void update_frame_uniforms(const FrameDesc& frame);
     void record_tonemap(VkCommandBuffer cmd, const Lighting& lighting);
     void destroy_frame_resources();
+    // vulkan_shadows.cpp
+    Status ensure_shadows();
+    void record_shadows(VkCommandBuffer cmd, const FrameDesc& frame);
+    void destroy_shadows();
     // vulkan_textures.cpp
     Status ensure_texture_table();
     Result<TextureHandle> create_texture(const TextureDesc& texture, std::uint32_t slot = kAnySlot);

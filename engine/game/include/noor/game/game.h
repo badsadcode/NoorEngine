@@ -77,9 +77,20 @@ struct SceneView {
     // environments (Milestone 5, part 5) it also carries its sky: "sky_color", "sky_luminance" (nits).
     // Exposure and
     // tonemapping from the first `camera` ({"ev100": 15, "tonemapper": "neutral" | "aces" | "none"}).
-    // Without them: render::Lighting's defaults (a clear day).
+    // Without them: render::Lighting's defaults (a clear day). The sun's "shadows" (true) and
+    // "shadow_distance" (80 m) set its shadows.
+    // Point and spot lights: {"type": "point" | "spot", "color": "#FFD9A0", "intensity": 800 (lumens),
+    // "range": 10 (m), "angle": 30 (spot: half-angle of the cone, degrees), "inner_angle": 22}.
+    // A spot shines along its entity's forward (−Z).
     render::Lighting lighting;
     bool has_sun = false;  // false: the default sun is used
+    // Where lights are (the editor draws markers there).
+    struct LightMarker {
+        math::Vec3 position;
+        math::Vec3 color;
+        Guid entity;
+    };
+    std::vector<LightMarker> light_markers;
 };
 
 // Finds a model asset's file from the `mesh` component's asset id.

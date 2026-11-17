@@ -23,6 +23,8 @@ struct RendererDesc {
     // Enable VK_LAYER_KHRONOS_validation if installed. Validation messages go to the log
     // under category "Vulkan" and are counted.
     bool enable_validation = true;
+    // Size of each sun shadow cascade (square, 4 cascades). 2048 is sharp to about 80 m.
+    std::uint32_t shadow_map_size = 2048;
     // Linear RGBA background when Lighting::sky_background is false, shown exactly (the swapchain
     // is sRGB, so the GPU encodes it on write).
     std::array<float, 4> clear_color{0.0f, 0.0f, 0.0f, 1.0f};
@@ -144,6 +146,24 @@ enum class Tonemapper : std::uint8_t {
     None,     // clamp: for debugging exposure
 };
 
+// A point or spot light (Milestone 5, part 4). Intensity is luminous power in lumens, like a
+// bulb's box says (a 60 W-equivalent bulb is about 800 lm): a point light sends it everywhere, a
+// spot into its cone (so a narrower spot of the same lumens is brighter, like a torch). Light
+// fades with the square of the distance and smoothly reaches zero at `range`.
+struct LocalLight {
+    enum class Type : std::uint8_t { Point, Spot } type = Type::Point;
+    math::Vec3 position{0, 0, 0};
+    math::Vec3 direction{0, -1, 0};  // spot: the way it points
+    math::Vec3 color{1, 1, 1};       // linear
+    float lumens = 800.0f;
+    float range = 10.0f;             // metres
+    float outer_angle = 0.6f;        // spot: half-angle of the cone, radians
+    float inner_angle = 0.45f;       // spot: full brightness inside this half-angle
+};
+
+// The shader handles this many local lights per frame (the nearest to the camera are kept).
+inline constexpr std::uint32_t kMaxLocalLights = 16;
+
 struct Lighting {
     math::Vec3 sun_direction = math::normalize(math::Vec3{-0.4f, -0.8f, -0.45f});  // the way sunlight travels
     math::Vec3 sun_color{1.0f, 0.96f, 0.9f};  // linear
@@ -156,6 +176,10 @@ struct Lighting {
     // Where nothing is drawn: the sky (true), or the renderer's clear colour shown exactly as given
     // (not lit, exposed or tonemapped: tests and the editor's empty view).
     bool sky_background = true;
+    // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
+    bool sun_shadows = true;
+    float shadow_distance = 80.0f;
+    std::vector<LocalLight> lights;  // point and spot lights
 
     // The multiplier from scene light to the HDR image: 1 / (1.2 * 2^EV100).
     [[nodiscard]] float exposure() const noexcept;
@@ -169,6 +193,7 @@ struct DrawItem {
     // Overlay items (editor gizmos) are drawn after tonemapping, in front of everything, in their
     // own display colours (not lit, not exposed). They still depth-test against each other.
     bool overlay = false;
+    bool cast_shadow = true;
     MaterialHandle material;          // none: the default material
     std::uint32_t first_index = 0;    // a range of the mesh's indices (a submesh);
     std::uint32_t index_count = 0;    // 0 = the whole mesh
@@ -198,7 +223,7 @@ struct FrameStats {
     // GPU time of the most recent frame whose results are available (lags 1â€“2 frames).
     // Negative when timestamps are unsupported or not available yet.
     double gpu_ms = -1.0;
-    // GPU time per pass of that frame, in order (Scene, Tonemap, Gizmos, HUD); empty when unknown.
+    // GPU time per pass of that frame, in order (Shadows, Scene, Tonemap, Gizmos, HUD); empty when unknown.
     struct Pass {
         const char* name = "";
         double ms = 0.0;

@@ -125,9 +125,11 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
         const bool primitive = e.has("primitive") && e.components["primitive"].is_object();
         const bool mesh = e.has("mesh");
-        const bool sun = !view.has_sun && e.has("light") && e.components["light"].is_object() &&
-                         e.components["light"].value("type", std::string("directional")) == "directional";
-        if (!camera && !primitive && !mesh && !sun) continue;
+        const bool is_light = e.has("light") && e.components["light"].is_object();
+        const std::string light_type = is_light ? e.components["light"].value("type", std::string("directional")) : "";
+        const bool sun = is_light && !view.has_sun && light_type == "directional";
+        const bool local = is_light && (light_type == "point" || light_type == "spot");
+        if (!camera && !primitive && !mesh && !sun && !local) continue;
         const math::Mat4 world = world_of(i, 0);
         if (camera) {
             const auto& cam = e.components["camera"];
@@ -152,7 +154,25 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 view.lighting.sky_color = color_of(sky, view.lighting.sky_color);
             }
             view.lighting.sky_luminance = std::clamp(number(l, "sky_luminance", view.lighting.sky_luminance), 0.0f, 1.0e5f);
+            if (l.contains("shadows") && l["shadows"].is_boolean()) view.lighting.sun_shadows = l["shadows"].get<bool>();
+            view.lighting.shadow_distance = std::clamp(number(l, "shadow_distance", view.lighting.shadow_distance), 5.0f, 2000.0f);
             view.has_sun = true;
+        }
+        if (local) {
+            const auto& l = e.components["light"];
+            render::LocalLight light;
+            light.type = light_type == "spot" ? render::LocalLight::Type::Spot : render::LocalLight::Type::Point;
+            light.position = world.transform_point({0, 0, 0});
+            const math::Vec3 dir = math::transform_vector(world, {0, 0, -1});
+            if (math::length(dir) > 1e-6f) light.direction = math::normalize(dir);
+            light.color = color_of(l, {1, 1, 1});
+            light.lumens = std::clamp(number(l, "intensity", 800.0f), 0.0f, 1.0e7f);
+            light.range = std::clamp(number(l, "range", 10.0f), 0.01f, 1000.0f);
+            const float outer = std::clamp(number(l, "angle", 30.0f), 1.0f, 89.0f);
+            light.outer_angle = math::radians(outer);
+            light.inner_angle = math::radians(std::clamp(number(l, "inner_angle", outer * 0.75f), 0.0f, outer - 0.1f));
+            view.lighting.lights.push_back(light);
+            view.light_markers.push_back({light.position, light.color, e.id});
         }
         if (primitive) {
             const auto& p = e.components["primitive"];

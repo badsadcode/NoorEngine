@@ -50,6 +50,16 @@ public static class EntityTemplates
         // The sun (Milestone 5): shines along the entity's forward (-Z); rotate it to move the sun.
         // Illuminance in lux (100000 = bright sunshine); its sky too, until environments (part 5).
         new(SunTemplateName, () => new JsonObject { ["light"] = Sun() }, new Vec3(0, 10, 0), new Vec3(-50, 30, 0)),
+        // Lamps (Milestone 5, part 4): intensity in lumens (a 60 W-equivalent bulb is ~800 lm),
+        // range in metres. Indoors or at night use a lower camera exposure (ev100 6..9) to see them.
+        new("Point light", () => new JsonObject
+        {
+            ["light"] = new JsonObject { ["type"] = "point", ["color"] = "#FFD9A0", ["intensity"] = 1500, ["range"] = 10 },
+        }, new Vec3(0, 2.5, 0)),
+        new("Spot light", () => new JsonObject
+        {
+            ["light"] = new JsonObject { ["type"] = "spot", ["color"] = "#FFF0D8", ["intensity"] = 3000, ["range"] = 15, ["angle"] = 30 },
+        }, new Vec3(0, 4, 0), new Vec3(-90, 0, 0)),
     ];
 
     // ---- Player (first person): an entity with a character controller and a Lua script, a capsule

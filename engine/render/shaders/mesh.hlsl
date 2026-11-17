@@ -37,6 +37,15 @@ struct GpuMaterial
 };
 [[vk::binding(2, 1)]] StructuredBuffer<GpuMaterial> materials;
 
+// A point or spot light (render::LocalLight), intensity already in candela * exposure.
+struct GpuLight
+{
+    float4 position_range;  // xyz world position, w range (m)
+    float4 intensity;       // rgb
+    float4 direction_type;  // xyz spot direction, w: 0 point, 1 spot
+    float4 cone;            // x cos(outer), y cos(inner)
+};
+
 // Per frame (set 0, binding 0). Radiances are already multiplied by the exposure.
 struct FrameUniforms
 {
@@ -46,8 +55,17 @@ struct FrameUniforms
     float4 sun_radiance;     // rgb: sun colour * illuminance (lux) * exposure
     float4 sky_radiance;     // rgb: sky colour * luminance (nits) * exposure
     float4 ground_radiance;  // rgb: light bounced up from the ground
+    float4x4 cascades[4];    // world -> sun shadow map, per cascade
+    float4 cascade_splits;   // far end of each cascade (metres along the view)
+    float4 cascade_texel;    // a shadow texel's size in metres, per cascade
+    float4 shadow_params;    // x: shadows on, y: shadow map size, z: shadow distance
+    float4 camera_forward;
+    uint4 light_count;       // x: local lights in use
+    GpuLight lights[16];
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2DArray<float> shadow_map;
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerComparisonState shadow_sampler;
 
 struct VertexInput
 {
@@ -142,6 +160,51 @@ float2 env_brdf_approx(float roughness, float n_dot_v)
     return float2(-1.04, 1.04) * a004 + r.zw;
 }
 
+// How much sunlight reaches `world` (1 lit, 0 in shadow): the cascade for this distance, a normal
+// offset against acne, 3x3 hardware-filtered PCF (a soft edge about two texels wide), and a fade
+// over the last 10% of the shadow distance so shadows don't end in a hard line.
+float sun_shadow(float3 world, float3 n)
+{
+    if (frame.shadow_params.x == 0.0) return 1.0;
+    const float view_depth = dot(world - frame.camera_position.xyz, frame.camera_forward.xyz);
+    if (view_depth > frame.cascade_splits.w) return 1.0;
+    uint c = 0;
+    [unroll] for (uint i = 0; i < 3; ++i)
+        if (view_depth > frame.cascade_splits[i]) c = i + 1;
+    const float3 offset = world + n * frame.cascade_texel[c] * 1.5;
+    const float4 s = mul(frame.cascades[c], float4(offset, 1.0));
+    const float2 uv = s.xy * 0.5 + 0.5;
+    const float texel = 1.0 / frame.shadow_params.y;
+    float lit = 0.0;
+    [unroll] for (int y = -1; y <= 1; ++y)
+        [unroll] for (int x = -1; x <= 1; ++x)
+            lit += shadow_map.SampleCmpLevelZero(shadow_sampler, float3(uv + float2(x, y) * texel, c), s.z);
+    lit /= 9.0;
+    const float fade = saturate((view_depth - frame.cascade_splits.w * 0.9) / (frame.cascade_splits.w * 0.1));
+    return lerp(lit, 1.0, fade);
+}
+
+// Light from the point and spot lights: inverse-square falloff that reaches zero smoothly at the
+// light's range (windowed, as in Unreal and Filament), spots masked by a soft cone.
+float3 local_lights(float3 world, float3 n, float3 v, float3 base_color, float metallic, float roughness)
+{
+    float3 sum = 0.0;
+    for (uint i = 0; i < frame.light_count.x; ++i)
+    {
+        const GpuLight light = frame.lights[i];
+        const float3 to_light = light.position_range.xyz - world;
+        const float d2 = max(dot(to_light, to_light), 1e-4);
+        const float range = light.position_range.w;
+        const float window = saturate(1.0 - (d2 * d2) / (range * range * range * range));
+        float falloff = window * window / d2;
+        const float3 l = to_light * rsqrt(d2);
+        if (light.direction_type.w > 0.5)
+            falloff *= smoothstep(light.cone.x, light.cone.y, dot(-l, light.direction_type.xyz));
+        if (falloff > 0.0) sum += brdf_direct(n, v, l, base_color, metallic, roughness, light.intensity.rgb * falloff);
+    }
+    return sum;
+}
+
 float3 hemisphere(float up)
 {
     return lerp(frame.ground_radiance.rgb, frame.sky_radiance.rgb, up * 0.5 + 0.5);
@@ -181,7 +244,9 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const float occlusion = lerp(1.0, textures[mat.tex1.y].Sample(texture_sampler, uv).r, mat.params.w);
     const float3 emissive = mat.emissive_cutoff.rgb * textures[mat.tex1.z].Sample(texture_sampler, uv).rgb;
 
-    float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb);
+    const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0));
+    float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow);
+    color += local_lights(input.world_position, n, v, base_color, metallic, roughness);
     // Ambient until image-based lighting (part 5): a hemisphere from the ground up to the sky.
     // Diffuse: irradiance pi * L times albedo / pi. Specular: the sky seen in the reflection
     // direction, weighted by the environment BRDF (every surface reflects at least ~4% of it).

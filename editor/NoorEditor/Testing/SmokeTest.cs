@@ -176,6 +176,17 @@ internal static class SmokeTest
               $"Create ▸ Sun: a directional light tilted down ({sunPitch:0}°)");
         if (sunId != null) doc.Undo();
 
+        // Milestone 5, part 4: Create ▸ Point light / Spot light.
+        foreach (var (template, type) in new[] { ("Point light", "point"), ("Spot light", "spot") })
+        {
+            var lightId = window.CreateEntity(EntityTemplates.All.First(t => t.Name == template));
+            var light = lightId == null ? null : doc.Scene.Entities.FirstOrDefault(e => e.Id == lightId);
+            Check(light?.Components["light"]?["type"]?.GetValue<string>() == type &&
+                  light.Components["light"]?["intensity"]?.GetValue<double>() > 0, $"Create ▸ {template}: a {type} light in lumens");
+            await Task.Delay(200);  // drawn (the viewport shows a marker in its colour)
+            if (lightId != null) doc.Undo();
+        }
+
         // Milestone 5, part 2: a texture in Assets/ is imported, and Add to scene puts it on a cube.
         var texDir = Path.Combine(doc.ProjectRoot, "Assets", "Textures");
         Directory.CreateDirectory(texDir);

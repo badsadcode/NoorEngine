@@ -449,6 +449,9 @@ Status Renderer::Impl::rebuild_swapchain() {
     if (auto status = ensure_tonemap(surface_format.format); !status) {
         return status;
     }
+    if (auto status = ensure_shadows(); !status) {
+        return status;
+    }
     if (auto status = ensure_overlay(surface_format.format); !status) {
         return std::unexpected(status.error());
     }
@@ -497,7 +500,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                 return b >= a ? static_cast<double>(b - a) * timestamp_period_ns / 1.0e6 : 0.0;
             };
             stats.gpu_ms = ms(ticks[0], ticks[kTimestampsPerFrame - 1]);
-            static constexpr const char* kPassNames[] = {"Scene", "Tonemap", "Gizmos", "HUD"};
+            static constexpr const char* kPassNames[] = {"Shadows", "Scene", "Tonemap", "Gizmos", "HUD"};
             stats.passes.resize(kTimestampsPerFrame - 1);
             for (std::uint32_t i = 0; i + 1 < kTimestampsPerFrame; ++i) stats.passes[i] = {kPassNames[i], ms(ticks[i], ticks[i + 1])};
         }
@@ -535,6 +538,10 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, frame_label.c_str(), {0.42f, 0.25f, 0.85f, 1.0f});  // Noor purple
 
     const VkImage image = images[image_index];
+
+    // ---- Shadow pass: the sun's cascades ----
+    record_shadows(frame.cmd, frame_desc);
+    stamp(1, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
 
     // ---- Scene pass: lit draws into the HDR image ----
     // The HDR image and the depth buffer are shared by frames in flight: wait for the previous
@@ -578,7 +585,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     record_draws(frame.cmd, frame_desc, false);
     vkCmdEndRendering(frame.cmd);
     end_label(frame.cmd);
-    stamp(1, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     // ---- Screen pass: tonemap, then gizmos and the HUD in display colours ----
     image_barrier(frame.cmd, hdr_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -607,9 +614,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
-    stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-    record_draws(frame.cmd, frame_desc, true);
     stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    record_draws(frame.cmd, frame_desc, true);
+    stamp(4, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
     }
@@ -695,6 +702,7 @@ void Renderer::Impl::destroy() {
         if (capture.buffer.buffer != VK_NULL_HANDLE) {
             destroy_buffer(capture.buffer);
         }
+        destroy_shadows();
         destroy_mesh_pipeline();
         destroy_overlay();
         destroy_frame_resources();

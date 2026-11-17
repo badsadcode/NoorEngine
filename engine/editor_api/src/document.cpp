@@ -476,12 +476,13 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         const auto& e = entities[i];
         const math::Mat4 world = expanded.world_matrix(i);
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
-        if (e.has("marker")) snap->markers.push_back({world, e.id});
+        if (e.has("marker")) snap->markers.push_back({world, e.id, std::nullopt});
     }
     // Models, shapes and the game camera: the same view noor_player draws.
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
     snap->primitives = std::move(view.primitives);
     snap->lighting = view.lighting;
+    for (const auto& lm : view.light_markers) snap->markers.push_back({math::translation(lm.position), lm.entity, lm.color});
     snap->texture_cache = project_.root() / ".noor" / "cache" / "textures";
     {
         auto files = std::make_shared<std::unordered_map<Guid, std::filesystem::path>>();

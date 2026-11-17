@@ -506,8 +506,12 @@ void render_thread_main(noor_viewport* vp) {
                     }
                 }
                 if (marker.valid()) {
-                    for (const auto& mk : snap->markers)
-                        scene_draws.push_back({{marker, mk.world * noor::math::scale({0.25f, 0.25f, 0.25f})}, mk.entity, nullptr});
+                    for (const auto& mk : snap->markers) {
+                        noor::render::DrawItem item{marker, mk.world * noor::math::scale({0.25f, 0.25f, 0.25f})};
+                        item.cast_shadow = false;  // editor helpers don't cast shadows
+                        if (mk.color) item.tint = {mk.color->x, mk.color->y, mk.color->z, 1.0f};  // lights: in their colour
+                        scene_draws.push_back({item, mk.entity, nullptr});
+                    }
                 }
                 for (const auto& prim : snap->primitives) {
                     const LoadedMesh* lm = &prim_box;
@@ -804,7 +808,9 @@ void render_thread_main(noor_viewport* vp) {
             if (ground.valid()) {
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
                 const Vec3 c = (scene_lo + scene_hi) * 0.5f;
-                frame_draws.push_back({ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})});
+                noor::render::DrawItem ground_item{ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})};
+                ground_item.cast_shadow = false;
+                frame_draws.push_back(ground_item);
             }
             if (target) {
                 const Mat4 place = noor::math::translation(gizmo_center);
