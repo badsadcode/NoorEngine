@@ -135,7 +135,7 @@ TEST_CASE("character: walks up a kerb-height step, is stopped by a wall") {
     CHECK(g.pos().x > 4.5f);  // got there and stopped
 }
 
-TEST_CASE("character: raycasts and triggers see the character (inner body)") {
+TEST_CASE("character: raycasts and triggers see the character (inner body), ignore skips it") {
     auto sensor = box("Zone", {0, 1, -4}, {2, 2, 1});
     sensor.components["collider"]["trigger"] = true;
     Game g({sensor});
@@ -144,6 +144,10 @@ TEST_CASE("character: raycasts and triggers see the character (inner body)") {
     REQUIRE(hit);
     CHECK(hit->entity == g.hero);
     CHECK(hit->point.z == doctest::Approx(0.3f).epsilon(0.05));  // the capsule's front
+    // Shooting from the character's own eyes: ignoring the character skips its inner body (it used
+    // to hit itself at distance 0).
+    const auto from_eyes = g.physics->raycast({0, 1.6f, 0}, {0, 0, -1}, 20, g.hero);
+    CHECK((!from_eyes || from_eyes->entity != g.hero));
 
     struct Recorder final : runtime::System {
         int enters = 0;

@@ -6,7 +6,7 @@
 file(MAKE_DIRECTORY "${WORK}")
 set(report "${WORK}/report.json")
 file(REMOVE "${report}")
-set(args --frames 120 --no-audio --report "${report}" --log "${WORK}/player.log")
+set(args --frames 120 --no-audio --no-input --report "${report}" --log "${WORK}/player.log")
 if(DEFINED PROJECT)
     list(PREPEND args "${PROJECT}")
 endif()

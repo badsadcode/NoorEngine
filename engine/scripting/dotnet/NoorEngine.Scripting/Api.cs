@@ -11,7 +11,7 @@ namespace NoorEngine;
 public abstract class NoorScript
 {
     /// <summary>The entity this script runs on.</summary>
-    public Entity Entity { get; internal set; }
+    public Entity Entity { get; internal set; } = null!;  // set before OnStart
 
     /// <summary>The script component's params (edit them in the Inspector with + Param).</summary>
     public JsonObject Params { get; internal set; } = new();
@@ -35,8 +35,10 @@ public abstract class NoorScript
 /// An entity in the running scene. Transforms are local (relative to the parent) unless the name
 /// says World; angles are degrees; Euler is the Inspector's (pitch X, yaw Y, roll Z). Calls on an
 /// entity that no longer exists do nothing and return defaults.
+/// A class (a handle; equal when the ids are), so `Entity.Position = v` and
+/// `hit.Entity.Position = v` compile: with a struct, C# refuses to set properties on a copy (CS1612).
 /// </summary>
-public readonly unsafe struct Entity : IEquatable<Entity>
+public sealed unsafe class Entity : IEquatable<Entity>
 {
     internal readonly RtEntity Id;
     internal Entity(RtEntity id) => Id = id;
@@ -136,11 +138,11 @@ public readonly unsafe struct Entity : IEquatable<Entity>
         }
     }
 
-    public bool Equals(Entity other) => Id.Lo == other.Id.Lo && Id.Hi == other.Id.Hi;
+    public bool Equals(Entity? other) => other is not null && Id.Lo == other.Id.Lo && Id.Hi == other.Id.Hi;
     public override bool Equals(object? obj) => obj is Entity e && Equals(e);
     public override int GetHashCode() => HashCode.Combine(Id.Lo, Id.Hi);
-    public static bool operator ==(Entity a, Entity b) => a.Equals(b);
-    public static bool operator !=(Entity a, Entity b) => !a.Equals(b);
+    public static bool operator ==(Entity? a, Entity? b) => a is null ? b is null : a.Equals(b);
+    public static bool operator !=(Entity? a, Entity? b) => !(a == b);
     public override string ToString() => $"Entity({Name})";
 }
 
@@ -190,7 +192,7 @@ public static unsafe class Noor
     {
         RtHit hit;
         var ignored = ignore?.Id ?? default;
-        Engine.A.Raycast(new RtVec3(origin), new RtVec3(direction), maxDistance, ignore.HasValue ? &ignored : null, &hit);
+        Engine.A.Raycast(new RtVec3(origin), new RtVec3(direction), maxDistance, ignore is not null ? &ignored : null, &hit);
         return hit.Hit != 0 ? new RaycastHit(new Entity(hit.Entity), hit.Point.ToVector(), hit.Normal.ToVector(), hit.Distance) : null;
     }
 }

@@ -151,4 +151,23 @@ if(TARGET noor_scripting_managed)
             -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_csharp_game -DCSHARP=ON -DHUD_VERTICES=60
             -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
     set_tests_properties(player.built_csharp_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csharp_game)
+
+    # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
+    # C# scene and its Lua twin play their demo and must score.
+    add_test(NAME cli.build_sample_fps
+        COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/NoorFPS-lite ${CMAKE_CURRENT_BINARY_DIR}/built_sample_fps)
+    set_tests_properties(cli.build_sample_fps PROPERTIES LABELS "cli;sample" TIMEOUT 180 FIXTURES_SETUP built_sample_fps
+                         PASS_REGULAR_EXPRESSION "Built 'NoorFPS-lite'")
+    foreach(variant IN ITEMS csharp lua)
+        set(scene Scenes/Main.noorscene)
+        if(variant STREQUAL "lua")
+            set(scene Scenes/Main_Lua.noorscene)
+        endif()
+        add_test(NAME sample.fps_${variant}
+            COMMAND ${CMAKE_COMMAND}
+                "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_sample_fps/NoorFPS-lite.exe"
+                -DSCENE=${scene} -DWORK=${CMAKE_CURRENT_BINARY_DIR}/sample_fps_${variant}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/sample_fps_check.cmake)
+        set_tests_properties(sample.fps_${variant} PROPERTIES LABELS "gpu;sample" TIMEOUT 90 FIXTURES_REQUIRED built_sample_fps)
+    endforeach()
 endif()

@@ -513,6 +513,9 @@ std::optional<RayHit> PhysicsSystem::raycast(math::Vec3 origin, math::Vec3 direc
     JPH::BodyID ignored;
     if (ignore) {
         if (const auto it = d.bodies.find(*ignore); it != d.bodies.end()) ignored = it->second.id;
+        // A character's body is its controller's inner body (not in `bodies`): a shot from the
+        // player's eyes hit the player at distance 0 until this was here.
+        else if (const auto c = d.characters.find(*ignore); c != d.characters.end()) ignored = c->second.controller->GetInnerBodyID();
     }
     const JPH::IgnoreSingleBodyFilter filter(ignored);
     if (!d.system.GetNarrowPhaseQuery().CastRay(ray, hit, {}, {}, filter)) return std::nullopt;

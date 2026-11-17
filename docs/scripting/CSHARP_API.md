@@ -66,6 +66,10 @@ line); the game keeps running.
 
 ## `Entity`
 
+A handle to an entity (a class, equal when it's the same entity): `Entity.Position = v`,
+`hit.Entity.Position = v` and `Noor.Find("Door")?.Destroy()` all work. Keep entities in fields,
+lists and dictionaries as you like.
+
 Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unless named World.
 
 | | |

@@ -21,7 +21,7 @@ ADR-010 (physics: Jolt), ADR-011 (audio: miniaudio).
 | 5 | Audio (miniaudio): audio assets, sources, listener, buses, 3D; script API | Footsteps and a one-shot sound in 3D. **Done** (one-shots and 3D tested; footsteps come with the sample in part 8) |
 | 6 | `noor_player` + `noor_cli build`: export a runnable build (scene, assets, scripts, runtime); CoreCLR hosting in the player | A build runs outside the editor. **Done** (6a: player, build, File ▸ Build Game; 6b: C# via hostfxr) |
 | 7 | NoorCode MVP (code editor panel: open/edit/save, highlighting, compile errors), gameplay UI (HUD text and shapes), mouse capture for FPS look | Scripts written and fixed inside NoorEditor. **7a done:** HUD (mouse capture was done in part 3b). **7b done:** NoorCode MVP (completion and debugging are later) |
-| 8 | Sample: **NoorFPS-lite** (walk, sprint, jump, look, shoot targets, sounds, HUD) in C# and a Lua twin of its basic behaviours; Milestone 4 review | The gate |
+| 8 | Sample: **NoorFPS-lite** (walk, sprint, jump, look, shoot targets, sounds, HUD) in C# and a Lua twin of its basic behaviours; Milestone 4 review | The gate. **Done:** `samples/NoorFPS-lite`, [M4_REVIEW.md](M4_REVIEW.md) |
 
 ## Highest risks (settle early)
 1. **Input inside an embedded viewport**: keyboard focus and mouse capture for FPS look in a

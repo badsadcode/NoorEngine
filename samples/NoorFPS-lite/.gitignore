@@ -1,0 +1,7 @@
+# Derived data and editor leftovers (NoorEditor and noor_cli recreate them)
+.noor/
+*.bak
+Scripts/bin/
+Scripts/obj/
+Scripts/Scripts.csproj
+Scripts/.gitignore

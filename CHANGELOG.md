@@ -2,7 +2,37 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 4 in progress (scripts and gameplay)
+## [Unreleased] — Milestone 4 complete (scripts and gameplay); Milestone 5 next
+
+### 2026-11-17 — Milestone 4, part 8: NoorFPS-lite and the Milestone 4 review
+**Added**
+- **NoorFPS-lite** (`samples/NoorFPS-lite`): a first-person target shooter made only with the
+  public script API. Walk, sprint, jump, look, shoot gold targets against a one-minute clock,
+  footsteps, shot/hit/round-end sounds (synthesised for the sample), physics crates to knock about,
+  a HUD (score, accuracy, clock, hit marker), pause on Esc, a self-playing demo before the first
+  click. Written in C# (`Scenes/Main.noorscene`) and as a Lua twin (`Scenes/Main_Lua.noorscene`).
+- `noor_player --no-input`: the game gets no keyboard or mouse (tests).
+- The player's `--report` includes the last frame's HUD text (`hud_text`), so tests can read a
+  game's score.
+- **Milestone 4 review** (`docs/milestones/M4_REVIEW.md`): gate passed, exceptions listed.
+
+**Changed (breaking for C# scripts)**
+- C# `Entity` is now a class (a handle, equal by id) instead of a struct: `Entity.Position = v`
+  and `hit.Entity.Position = v` used to fail to compile (CS1612). `Noor.Find`, `Parent` and
+  `Child` still return `Entity?`; drop any `.Value` on them.
+
+**Fixed**
+- `raycast(…, ignore)` didn't skip a character's controller body, so a shot from the player's eyes
+  hit the player at distance 0.
+- A real click on a built game's window could change an automated test's result: the player and
+  sample tests now run with `--no-input`.
+
+**Tests:** `cli.build_sample_fps` builds the sample with noor_cli; `sample.fps_csharp` and
+`sample.fps_lua` run its demo for 15 s with no input and read the score off the HUD (≥ 10; 24 in
+practice). A unit test for raycasts ignoring a character.
+
+**Not yet:** see the review's exceptions: prefab spawning, timers, `require`, gamepad, app-local
+runtimes, NoorCode completion and debugging, rays vs triggers.
 
 ### 2026-11-16 — Milestone 4, part 7b: NoorCode MVP
 **Added**

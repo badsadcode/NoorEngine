@@ -4,12 +4,14 @@
 //   noor_player <project folder>     a project as it is on disk (handy while developing)
 //
 // Options: [--scene <Scenes/X.noorscene>] [--title <text>] [--frames N] [--report <file.json>]
-//          [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]
+//          [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>]
+// --no-input: the game gets no keyboard or mouse (automated tests: a click on the window by
+// whoever sits at the PC must not change the result).
 //
 // --frames runs N frames and exits (tests); the exit code is then 2 if anything logged an error.
 // It's a windowed program (no console): the log is <exe name>.log next to it unless --log says otherwise.
 // --report writes what happened as JSON: frames, play time, each named entity's world position, and
-// the colour of the centre pixel of the last frame.
+// the colour of the centre pixel of the last frame, the HUD's vertex count and its text.
 
 #include "noor/asset/json.h"
 #include "noor/asset/project.h"
@@ -54,6 +56,7 @@ struct Options {
     std::string screenshot;
     std::string log_path;
     bool audio = true;
+    bool input = true;
     bool validation = false;
 };
 
@@ -68,6 +71,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--screenshot" && more) o.screenshot = argv[++i];
         else if (a == "--log" && more) o.log_path = argv[++i];
         else if (a == "--no-audio") o.audio = false;
+        else if (a == "--no-input") o.input = false;
         else if (a == "--validation") o.validation = true;
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
@@ -311,7 +315,7 @@ int run(const Options& o) {
                     // Fixed steps in test runs (--frames) so results don't depend on how busy the machine is.
                     const double dt = o.frames ? 1.0 / 60.0 : now - last;
                     last = now;
-                    auto game_in = game_input(in, captured);
+                    auto game_in = o.input ? game_input(in, captured) : noor::runtime::InputState{};
                     if (ignore_motion > 0) {
                         --ignore_motion;
                         game_in.mouse_delta = {0, 0};
@@ -363,6 +367,11 @@ int run(const Options& o) {
                         report["ui_pixel_40_40"] = {p[0], p[1], p[2]};
                     }
                     report["hud_vertices"] = overlay.size();
+                    // The last frame's HUD text, so a test can read what the game shows (a score, a timer).
+                    Json hud_text = Json::array();
+                    for (const auto& c : (*world)->ui_commands())
+                        if (c.kind == noor::runtime::UiCommand::Kind::Text) hud_text.push_back(c.text);
+                    report["hud_text"] = std::move(hud_text);
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }
@@ -383,7 +392,7 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse(argc, argv, options)) {
         NOOR_LOG_ERROR("Player", "Usage: noor_player [project folder] [--scene <path>] [--title <text>] [--frames N] "
-                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--validation] [--log <file>]");
+                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>]");
         return 64;
     }
     // There's no console (a windowed program): the log goes to a file, by default <exe name>.log
