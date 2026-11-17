@@ -78,6 +78,10 @@ struct TextureData {
 // cache is always safe. An empty `cache_dir` skips the cache.
 [[nodiscard]] Result<TextureData> load_texture(const std::filesystem::path& file, const std::filesystem::path& cache_dir);
 
+// The same for encoded bytes (an image inside a GLB file), cached by the bytes' hash.
+[[nodiscard]] Result<TextureData> load_texture_memory(std::span<const std::uint8_t> encoded, const TextureSettings& settings,
+                                                     std::string_view name, const std::filesystem::path& cache_dir);
+
 // The settings a texture file has in its .noormeta, or the guess.
 [[nodiscard]] TextureSettings texture_settings_for(const std::filesystem::path& file);
 

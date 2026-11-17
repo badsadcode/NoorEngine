@@ -5,9 +5,9 @@
 //          little shading, straight into the sRGB screen.
 // Conventions (ADR-022): column-major matrices, mul(M, v); colours are linear.
 //
-// Surfaces have no materials yet (Milestone 5, part 3): the colour is the vertex colour (or the
-// draw's tint) times an optional base colour texture, with an optional normal map, roughness and
-// metallic from the draw (render::Surface). Textures come from the bindless table (set 1).
+// Surfaces (ADR-030): the draw's material from the material table (set 1, binding 2), its textures
+// from the bindless table (set 1, binding 0). The vertex colour (or the draw's tint) multiplies
+// the base colour.
 
 [[vk::constant_id(0)]] const bool kDisplay = false;
 
@@ -17,15 +17,25 @@ struct PushConstants
     float4 world_row1;
     float4 world_row2;
     float4 tint;        // rgb linear colour, a = how much of it replaces the vertex colour
-    uint4 textures;     // x: base colour slot, y: normal map slot
-    float4 surface;     // x: roughness, y: metallic, z: normal map strength
-    float4 uv;          // xy: scale, zw: offset
+    uint4 ids;          // x: material slot
 };
 [[vk::push_constant]] PushConstants pc;
 
 // The bindless texture table (ADR-012): every texture, indexed by slot; one shared sampler.
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 [[vk::binding(1, 1)]] SamplerState texture_sampler;
+
+// The material table (render::MaterialDesc, vulkan_impl.h GpuMaterial).
+struct GpuMaterial
+{
+    float4 base_color;       // linear rgb, alpha
+    float4 emissive_cutoff;  // emissive rgb, alpha cutoff
+    float4 params;           // metallic, roughness, normal scale, occlusion strength
+    float4 uv;               // scale xy, offset xy
+    uint4 tex0;              // base colour, metallic-roughness (G, B), roughness (R), metallic (R)
+    uint4 tex1;              // normal, occlusion (R), emissive, flags (bit 0: alpha test, bit 2: double-sided)
+};
+[[vk::binding(2, 1)]] StructuredBuffer<GpuMaterial> materials;
 
 // Per frame (set 0, binding 0). Radiances are already multiplied by the exposure.
 struct FrameUniforms
@@ -72,7 +82,7 @@ VertexOutput VSMain(VertexInput input)
     output.normal = to_world_vector(input.normal);  // rotation/uniform scale; non-uniform scale later
     output.tangent = float4(to_world_vector(input.tangent.xyz), input.tangent.w);
     output.color = lerp(input.color, pc.tint.rgb, pc.tint.a);
-    output.uv = input.uv * pc.uv.xy + pc.uv.zw;
+    output.uv = input.uv;
     return output;
 }
 
@@ -138,16 +148,16 @@ float3 hemisphere(float up)
 }
 
 // The normal map (tangent space, OpenGL convention: +Y up the texture) turned into a world normal.
-float3 apply_normal_map(float3 n, float4 tangent, float2 uv)
+float3 apply_normal_map(float3 n, float4 tangent, float2 uv, uint slot, float strength)
 {
-    const float3 sampled = textures[pc.textures.y].Sample(texture_sampler, uv).xyz * 2.0 - 1.0;
+    const float3 sampled = textures[slot].Sample(texture_sampler, uv).xyz * 2.0 - 1.0;
     const float3 t = normalize(tangent.xyz - n * dot(n, tangent.xyz));
     const float3 b = cross(n, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
-    const float3 m = float3(sampled.xy * pc.surface.z, sampled.z);
+    const float3 m = float3(sampled.xy * strength, sampled.z);
     return normalize(t * m.x + b * m.y + n * m.z);
 }
 
-float4 PSMain(VertexOutput input) : SV_Target
+float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
 {
     float3 n = normalize(input.normal);
     if (kDisplay)
@@ -156,11 +166,20 @@ float4 PSMain(VertexOutput input) : SV_Target
         const float diffuse = saturate(dot(n, normalize(float3(0.4, 0.8, 0.45))));
         return float4(input.color * (0.55 + 0.45 * diffuse), 1.0);
     }
-    if (pc.textures.y != 1u) n = apply_normal_map(n, input.tangent, input.uv);  // slot 1: flat, nothing to do
+    const GpuMaterial mat = materials[pc.ids.x];
+    const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
+    const float4 base_sample = textures[mat.tex0.x].Sample(texture_sampler, uv);
+    const float alpha = mat.base_color.a * base_sample.a;
+    if ((mat.tex1.w & 1u) != 0u && alpha < mat.emissive_cutoff.w) discard;  // cutout
+    if (!front) n = -n;  // double-sided: the back face's normal points the other way
+    if (mat.tex1.x != 1u) n = apply_normal_map(n, input.tangent * (front ? 1.0 : -1.0), uv, mat.tex1.x, mat.params.z);
     const float3 v = normalize(frame.camera_position.xyz - input.world_position);
-    const float3 base_color = input.color * textures[pc.textures.x].Sample(texture_sampler, input.uv).rgb;
-    const float roughness = pc.surface.x;
-    const float metallic = pc.surface.y;
+    const float3 base_color = input.color * mat.base_color.rgb * base_sample.rgb;
+    const float3 mr = textures[mat.tex0.y].Sample(texture_sampler, uv).rgb;
+    const float roughness = saturate(mat.params.y * mr.g * textures[mat.tex0.z].Sample(texture_sampler, uv).r);
+    const float metallic = saturate(mat.params.x * mr.b * textures[mat.tex0.w].Sample(texture_sampler, uv).r);
+    const float occlusion = lerp(1.0, textures[mat.tex1.y].Sample(texture_sampler, uv).r, mat.params.w);
+    const float3 emissive = mat.emissive_cutoff.rgb * textures[mat.tex1.z].Sample(texture_sampler, uv).rgb;
 
     float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb);
     // Ambient until image-based lighting (part 5): a hemisphere from the ground up to the sky.
@@ -170,7 +189,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), base_color, metallic);
     const float2 env = env_brdf_approx(roughness, n_dot_v);
     const float3 r = reflect(-v, n);
-    color += base_color * (1.0 - metallic) * hemisphere(n.y);
-    color += (f0 * env.x + env.y) * hemisphere(r.y);
+    color += (base_color * (1.0 - metallic) * hemisphere(n.y) + (f0 * env.x + env.y) * hemisphere(r.y)) * occlusion;
+    color += emissive;  // relative to the exposure (already "exposed"): 1 is about white on screen
     return float4(color, 1.0);  // alpha 1: something was drawn here (tonemap.hlsl)
 }

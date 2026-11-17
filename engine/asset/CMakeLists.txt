@@ -7,6 +7,7 @@ noor_add_module(asset
         src/migration.cpp
         src/file_watcher.cpp
         src/texture.cpp
+        src/material.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json

@@ -7,11 +7,17 @@
 file(MAKE_DIRECTORY "${WORK}")
 set(shot "${WORK}/screenshot.bmp")
 file(REMOVE "${shot}")
-execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames 5 --no-audio --no-input
-                        --screenshot "${shot}" --log "${WORK}/player.log"
+# With Vulkan validation: a picture can look right while the GPU is being misused.
+execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames 5 --no-audio --no-input --validation
+                        --screenshot "${shot}" --report "${WORK}/report.json" --log "${WORK}/player.log"
                 RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
 if(NOT code EQUAL 0 OR NOT EXISTS "${shot}")
     message(FATAL_ERROR "noor_player failed (${code}); see ${WORK}/player.log")
+endif()
+file(READ "${WORK}/report.json" report)
+string(JSON errors GET "${report}" errors)
+if(NOT errors EQUAL 0)
+    message(FATAL_ERROR "${errors} error(s) logged (Vulkan validation or engine); see ${WORK}/player.log")
 endif()
 if("$ENV{NOOR_UPDATE_GOLDEN}" STREQUAL "1")
     execute_process(COMMAND "${COMPARE}" "${shot}" "${REFERENCE}" --update RESULT_VARIABLE code)

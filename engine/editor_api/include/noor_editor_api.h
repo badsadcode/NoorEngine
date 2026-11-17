@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 9u
+#define NOOR_EDITOR_API_VERSION 10u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -101,6 +101,9 @@ NOOR_API void noor_doc_close(noor_doc* doc);
 
 NOOR_API const char* noor_doc_project_info(noor_doc* doc);           /* {id, name, root, engine} */
 NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan); /* [{guid, path, importer, name}] or NULL */
+/* v10: a material from the texture set `texture_path` (project-relative) belongs to, written beside
+   it as <set>.noormat (kept if it exists). Returns {"path", "created", "maps": [{"role", "path"}]} or NULL. */
+NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_path);
 NOOR_API const char* noor_doc_scenes(noor_doc* doc);                 /* ["Scenes/Main.noorscene", ...] */
 
 NOOR_API int32_t noor_doc_open_scene(noor_doc* doc, const char* relative_path);

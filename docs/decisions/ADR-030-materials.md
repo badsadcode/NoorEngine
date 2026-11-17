@@ -1,6 +1,6 @@
 # ADR-030: Materials: assets, instances and how they reach the renderer
 
-**Status:** Proposed · **Date:** 2026-11-17 · **Milestone:** 5
+**Status:** Accepted (part 3 built the format, instances, texture sets, GLB materials and the GPU table; the graph stays future work) · **Date:** 2026-11-17 · **Milestone:** 5
 
 ## Context
 Today a surface's look is a colour: vertex colours from GLB base-colour factors, or a
@@ -60,7 +60,12 @@ graph editor itself is a big tool; the data and renderer side must not paint us 
   NoorMaterial set relate (proposal to the spec, not a silent divergence).
 
 ## Evidence / benchmark
-None yet.
+Part 3: unit tests for fields, instances, loops, texture sets and GLB materials;
+`render.golden_Materials`. Implementation notes: single-channel `roughness_map` / `metallic_map`
+were added next to the glTF packed map, because texture sets often ship them separately and a
+grey roughness map read as glTF-packed would also become metallic. The GLB base colour factor
+stays baked into vertex colours (tools without materials keep their colours), so GLB-derived
+materials have base colour rgb 1. Emissive is exposure-relative until lights get physical units.
 
 ## Migration or reversal strategy
 `noor_material` is versioned with migrations (ADR-005); instances only store overrides, so new

@@ -65,6 +65,8 @@ inline constexpr std::uint32_t kTextureFlatNormal = 1;
 inline constexpr std::uint32_t kTextureMissing = 2;
 inline constexpr std::uint32_t kFirstUserTexture = 3;
 inline constexpr std::uint32_t kAnySlot = ~0u;  // create_texture: the first free user slot
+// The material table (set 1, binding 2): slot 0 is the default material.
+inline constexpr std::uint32_t kMaxMaterials = 4096;
 
 struct FrameSync {
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -101,12 +103,21 @@ struct MeshPushConstants {
     math::Vec4 world_row0;
     math::Vec4 world_row1;
     math::Vec4 world_row2;
-    math::Vec4 tint;              // rgb = linear color, a = blend amount (0 = mesh colors)
-    std::uint32_t textures[4];    // base colour slot, normal map slot, unused, unused
-    math::Vec4 surface;           // roughness, metallic, normal scale, unused
-    math::Vec4 uv;                // scale xy, offset xy
+    math::Vec4 tint;            // rgb = linear color, a = blend amount (0 = mesh colors)
+    std::uint32_t ids[4];       // material slot, unused x3
 };
-static_assert(sizeof(MeshPushConstants) == 112);
+static_assert(sizeof(MeshPushConstants) == 80);
+
+// mesh.hlsl's GpuMaterial (std430), one per material slot.
+struct GpuMaterial {
+    math::Vec4 base_color;       // linear rgb, alpha
+    math::Vec4 emissive_cutoff;  // emissive rgb, alpha cutoff
+    math::Vec4 params;           // metallic, roughness, normal scale, occlusion strength
+    math::Vec4 uv;               // scale xy, offset xy
+    std::uint32_t tex0[4];       // base colour, metallic-roughness, roughness, metallic
+    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bits 0-1 alpha mode, bit 2 double-sided)
+};
+static_assert(sizeof(GpuMaterial) == 96);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
 
 // mesh.hlsl's FrameUniforms (set 0, binding 0), one buffer per frame in flight. Radiances are pre-exposed.
@@ -205,11 +216,17 @@ struct Renderer::Impl {
     std::vector<GpuTexture> textures;  // index = slot
     std::uint64_t texture_bytes = 0;   // user textures only
     float max_anisotropy = 1.0f;
+    // Materials (same set, binding 2): a host-visible storage buffer, and CPU copies for choosing pipelines.
+    GpuBuffer material_buffer;
+    std::vector<MaterialDesc> materials;  // index = slot
+    std::vector<bool> material_alive;
+    bool warned_blend = false;
 
     // Mesh pipelines: the lit scene (into the HDR image) and editor gizmos (into the screen)
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipeline mesh_pipeline = VK_NULL_HANDLE;
     VkPipeline gizmo_pipeline = VK_NULL_HANDLE;
+    VkPipeline double_sided_pipeline = VK_NULL_HANDLE;  // the scene, without back-face culling
     VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;  // the screen's, for the gizmo pipeline
 
     // Tonemapping: HDR image -> screen (vulkan_frame.cpp)
@@ -276,7 +293,7 @@ struct Renderer::Impl {
     Status create_depth_buffer();
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
-    VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out);
+    VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true);
     // vulkan_frame.cpp
     Status create_hdr_target();
     void destroy_hdr_target();
@@ -291,6 +308,7 @@ struct Renderer::Impl {
     Result<TextureHandle> create_texture(const TextureDesc& texture, std::uint32_t slot = kAnySlot);
     void destroy_texture(TextureHandle handle);
     void destroy_textures();
+    void write_material(std::uint32_t slot, const MaterialDesc& desc);
     // vulkan_overlay.cpp
     Status ensure_overlay(VkFormat color_format);
     Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);

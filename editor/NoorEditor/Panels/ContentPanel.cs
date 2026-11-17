@@ -21,6 +21,17 @@ public sealed class ContentPanel : DockPanel
     private readonly TextBlock _summary = new() { FontSize = 11, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center };
 
     public event Action<AssetInfo>? AddRequested;
+    private readonly Button _makeMaterial = new() { Content = "Make material", Classes = { "tool" }, IsEnabled = false };
+
+    /// <summary>Make material (textures): the set's .noormat, then selects it in the list.</summary>
+    public string? MakeMaterial(AssetInfo texture)
+    {
+        var made = _doc.MakeMaterial(texture.Path);
+        if (made is not { } m) return null;
+        Interop.EngineLog.Info("Editor", m.Created ? $"Material {m.Path} made from {m.Maps} texture(s)" : $"{m.Path} already exists: kept as it is");
+        _assets.SelectedItem = _doc.Assets.FirstOrDefault(a => a.Path == m.Path);
+        return m.Path;
+    }
     public event Action<string>? OpenSceneRequested;
 
     public ContentPanel(EditorDocument doc)
@@ -32,17 +43,21 @@ public sealed class ContentPanel : DockPanel
         rescan.Click += (_, _) => _doc.RefreshAssets(rescan: true);
         var add = new Button { Content = "Add to scene", Classes = { "tool" } };
         add.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
+        _makeMaterial.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "texture" } a) MakeMaterial(a); };
+        ToolTip.SetTip(_makeMaterial, "A material from this texture's set (its _albedo, _normal, _orm… files), saved beside it");
+        _assets.SelectionChanged += (_, _) => _makeMaterial.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "texture" };
         var bar = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(6, 6, 6, 4),
-            Children = { _search, rescan, add, _summary },
+            Children = { _search, rescan, add, _makeMaterial, _summary },
         };
         SetDock(bar, Avalonia.Controls.Dock.Top);
         Children.Add(bar);
 
         _scenes.ItemTemplate = new FuncDataTemplate<string>((path, _) => Row("◇", NoorTheme.Cyan, path ?? "", "Scene"));
         _assets.ItemTemplate = new FuncDataTemplate<AssetInfo>((a, _) => a == null ? new TextBlock() :
-            Row(a.Kind switch { "Prefab" => "◆", "Sound" => "♪", _ => "▣" }, a.Kind == "Prefab" ? NoorTheme.Cyan : NoorTheme.Accent, a.Path, a.Kind));
+            Row(a.Kind switch { "Prefab" => "◆", "Sound" => "♪", "Material" => "●", _ => "▣" },
+                a.Kind is "Prefab" or "Material" ? NoorTheme.Cyan : NoorTheme.Accent, a.Path, a.Kind));
         _scenes.DoubleTapped += (_, _) => { if (_scenes.SelectedItem is string s) OpenSceneRequested?.Invoke(s); };
         _assets.DoubleTapped += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
 

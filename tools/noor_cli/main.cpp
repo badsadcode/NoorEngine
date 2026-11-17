@@ -5,6 +5,8 @@
 //   noor_cli info <file.glb>                         summarize a GLB (nodes, meshes, markers)
 //   noor_cli texture <image files...>                how the engine reads each texture: kind (from its
 //                                                    .noormeta or the name), size, mips, GPU memory
+//   noor_cli make-material <project> <texture>       a .noormat from the texture set that texture belongs
+//                                                    to (bricks_albedo/_normal/_orm/...), next to it
 //   noor_cli add-model <project> <asset> <scene>     instantiate an asset into a scene (creates it)
 //   noor_cli validate <project>                      check every scene's references; exit 1 on problems
 //   noor_cli migrate <project> [--dry-run]           upgrade scenes to the current format (keeps .bak)
@@ -20,6 +22,7 @@
 #include "noor/asset/gltf_import.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
+#include "noor/asset/material.h"
 #include "noor/asset/texture.h"
 #include "noor/foundation/log.h"
 #include "noor/scene/prefab.h"
@@ -59,6 +62,7 @@ int usage() {
                "  noor_cli scan <project>\n"
                "  noor_cli info <file.glb>\n"
                "  noor_cli texture <image files...>\n"
+               "  noor_cli make-material <project> <texture path>\n"
                "  noor_cli add-model <project> <asset path> <scene path>\n"
                "  noor_cli validate <project>\n"
                "  noor_cli migrate <project> [--dry-run]\n"
@@ -123,6 +127,39 @@ int cmd_texture(const std::vector<std::string>& a) {
     std::printf("%zu texture(s), %.1f MB of GPU memory uncompressed, %d failed\n", a.size() - static_cast<std::size_t>(failed),
                 static_cast<double>(total) / (1024.0 * 1024.0), failed);
     return failed ? 1 : 0;
+}
+
+// make-material: finds the set around one of its maps, writes <set>.noormat beside the maps (an
+// existing one is kept, not overwritten), and gives it a .noormeta.
+int cmd_make_material(const std::vector<std::string>& a) {
+    if (a.size() != 2) return usage();
+    auto project = asset::Project::open(a[0]);
+    if (!project) return report(project.error());
+    asset::AssetRegistry registry;
+    if (auto s = registry.scan(*project); !s) return report(s.error());
+    const auto texture = project->resolve(a[1]);
+    if (!texture || !std::filesystem::exists(*texture)) {
+        std::fprintf(stderr, "no texture at %s\n", a[1].c_str());
+        return 1;
+    }
+    const auto set = asset::find_texture_set(*texture);
+    const auto out = texture->parent_path() / (set.name + std::string(asset::kMaterialExtension));
+    for (const auto& [role, file] : set.maps)
+        std::printf("  %-18s %s\n", std::string(asset::role_name(role)).c_str(), file.filename().string().c_str());
+    if (std::filesystem::exists(out)) {
+        std::printf("%s already exists: left as it is\n", out.filename().string().c_str());
+        return 0;
+    }
+    const auto json = asset::material_json_for(set, [&](const std::filesystem::path& f) -> std::optional<Guid> {
+        const auto rel = project->relative(f);
+        const auto* rec = rel ? registry.find_path(*rel) : nullptr;
+        return rec ? std::optional(rec->guid) : std::nullopt;
+    });
+    if (auto w = fs::write_file_atomic(out, asset::to_text(json), false); !w) return report(w.error());
+    if (auto s = registry.scan(*project); !s) return report(s.error());
+    const auto rel = project->relative(out);
+    std::printf("Material written: %s\n", rel ? rel->c_str() : out.generic_string().c_str());
+    return 0;
 }
 
 int cmd_info(const std::vector<std::string>& a) {
@@ -660,6 +697,7 @@ int main(int argc, char** argv) {
     if (cmd == "scan") return cmd_scan(args);
     if (cmd == "info") return cmd_info(args);
     if (cmd == "texture") return cmd_texture(args);
+    if (cmd == "make-material") return cmd_make_material(args);
     if (cmd == "add-model") return cmd_add_model(args);
     if (cmd == "validate") return cmd_validate(args);
     if (cmd == "migrate") return cmd_migrate(args);

@@ -51,9 +51,11 @@ The result is cached in `<project>/.noor/cache/textures/`, keyed by the file's c
 settings and the importer version, so a texture is processed once. Deleting the cache is always
 safe. Built games carry the source images and decode them on start (cooking is later).
 
-## Using textures (until materials)
+## Using textures
 
-On a `primitive` component:
+Textures are used by **materials** ([MATERIALS.md](MATERIALS.md)): a `.noormat` names them, and
+**Make material** turns a whole texture set into one. A `primitive` component can also name
+textures directly (the material fields described in place):
 
 ```json
 "primitive": { "shape": "box", "size": [2, 2, 0.4], "color": "#B85A3C",
@@ -73,7 +75,10 @@ All textures live in one **bindless table** (4096 slots, ADR-012): the shader pi
 its slot number, so any mix of textures needs no special shader. Slot 0 is white, 1 a flat normal,
 2 the missing-texture checker. One sampler: trilinear, repeat, 8× anisotropic when supported.
 
+Textures inside GLB files are decoded the same way (their kind follows how the material uses
+them) and cached by content. Changing a texture file or its `.noormeta` reloads it in the editor
+and in running games within half a second.
+
 ## Not yet
-Texture compression (BC7/BC5/BC6H), `.exr` (with environments, part 5), textures inside GLB
-files (with materials, part 3), hot reload when a texture file changes, an import-settings panel
-in the editor, texture streaming.
+Texture compression (BC7/BC5/BC6H), `.exr` (with environments, part 5), an import-settings panel
+in the editor, texture streaming, glTF images in separate files.

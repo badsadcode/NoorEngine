@@ -28,10 +28,14 @@ Geometry make_box(Vec3 color, Vec3 lo, Vec3 hi) {
 }
 
 // A sphere of radius 0.5 (primitives), or a capsule along Y (total height h, radius r) when h > 2r.
-// UVs wrap around (u: 0..1 with the angle from +X towards +Z) and run pole to pole (v: 0..1).
+// UVs wrap around (u: 0..1 with the angle from +X towards +Z) and run from the top pole to the
+// bottom one by distance along the surface (v: 0..1): on a sphere that is the latitude, and a
+// capsule's straight part gets its fair share of the texture.
 Geometry make_round(float radius, float height) {
     constexpr int kRings = 16, kSegments = 24;
     const float half = std::max(0.0f, height * 0.5f - radius);  // cylinder half length
+    const float meridian = math::kPi * radius + 2.0f * half;  // pole-to-pole length over the surface
+    const auto along = [&](float arc) { return arc / meridian; };
     Geometry g;
     // Rings from the top pole to the bottom pole; the upper hemisphere is shifted up by `half`.
     for (int i = 0; i <= kRings; ++i) {
@@ -44,14 +48,14 @@ Geometry make_round(float radius, float height) {
             const float theta = 2.0f * math::kPi * static_cast<float>(j) / kSegments;
             const Vec3 n{std::sin(phi) * std::cos(theta), std::cos(phi), std::sin(phi) * std::sin(theta)};
             const float u = static_cast<float>(j) / kSegments;
-            g.first.push_back({{r * std::cos(theta), y + shift, r * std::sin(theta)}, n, {1, 1, 1}, {u, v},
+            g.first.push_back({{r * std::cos(theta), y + shift, r * std::sin(theta)}, n, {1, 1, 1}, {u, along(phi * radius + (i > kRings / 2 ? 2.0f * half : 0.0f))},
                                {-std::sin(theta), 0, std::cos(theta), 1}});
         }
         if (i == kRings / 2 && half > 0) {  // duplicate the equator ring for the lower hemisphere
             for (int j = 0; j <= kSegments; ++j) {
                 const float theta = 2.0f * math::kPi * static_cast<float>(j) / kSegments;
                 g.first.push_back({{radius * std::cos(theta), -half, radius * std::sin(theta)}, {std::cos(theta), 0, std::sin(theta)}, {1, 1, 1},
-                                   {static_cast<float>(j) / kSegments, 0.5f}, {-std::sin(theta), 0, std::cos(theta), 1}});
+                                   {static_cast<float>(j) / kSegments, along(0.5f * math::kPi * radius + 2.0f * half)}, {-std::sin(theta), 0, std::cos(theta), 1}});
             }
         }
     }

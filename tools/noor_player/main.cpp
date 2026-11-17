@@ -279,7 +279,9 @@ int run(const Options& o) {
                 NOOR_LOG_FATAL("Player", "{}", world.error().describe());
                 exit_code = 1;
             } else {
-                noor::game::SceneRenderer scene_renderer(**renderer, project->root() / ".noor" / "cache" / "textures");
+                noor::game::SceneRenderer scene_renderer(**renderer, project->root() / ".noor" / "cache" / "textures",
+                                                         noor::game::file_resolver(noor::game::registry_asset_path(*project, registry)));
+                double last_refresh = noor::platform::time_seconds();
                 const noor::game::Hud hud;  // the HUD scripts draw (noor.ui / Ui), with the built-in font
                 if (auto s = (*renderer)->set_overlay_atlas(hud.atlas_width(), hud.atlas_height(), hud.atlas()); !s)
                     NOOR_LOG_ERROR("Player", "HUD font: {}", s.error().describe());
@@ -321,6 +323,10 @@ int run(const Options& o) {
                         game_in.mouse_delta = {0, 0};
                     }
                     (*world)->frame(dt, game_in);
+                    if (now - last_refresh > 0.5) {  // materials and textures edited while the game runs
+                        scene_renderer.refresh();
+                        last_refresh = now;
+                    }
 
                     const auto view = noor::game::collect_view((*world)->scene(), asset_path, &(*world)->render_poses());
                     if (!view.camera && !warned_no_camera) {

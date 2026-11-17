@@ -342,19 +342,24 @@ TextureSettings texture_settings_for(const stdfs::path& file) {
 }
 
 Result<TextureData> load_texture(const stdfs::path& file, const stdfs::path& cache_dir) {
-    const TextureSettings settings = texture_settings_for(file);
     auto data = fs::read_file(file, 1ull << 30);
     if (!data) return std::unexpected(data.error());
+    return load_texture_memory({reinterpret_cast<const std::uint8_t*>(data->data()), data->size()}, texture_settings_for(file),
+                               file.filename().string(), cache_dir);
+}
+
+Result<TextureData> load_texture_memory(std::span<const std::uint8_t> encoded, const TextureSettings& settings, std::string_view name,
+                                        const stdfs::path& cache_dir) {
     stdfs::path cached;
     if (!cache_dir.empty()) {
-        const std::string key = Sha256::hex(*data) + settings.to_json().dump() + std::to_string(kTextureImporterVersion);
+        const std::string key = Sha256::hex(std::string_view(reinterpret_cast<const char*>(encoded.data()), encoded.size())) +
+                                settings.to_json().dump() + std::to_string(kTextureImporterVersion);
         cached = cache_dir / (Sha256::hex(key).substr(0, 32) + ".ntex");
         if (auto bytes = fs::read_file(cached, 2ull << 30)) {
             if (auto t = deserialize(*bytes)) return std::move(*t);
         }
     }
-    auto result = import_texture_memory({reinterpret_cast<const std::uint8_t*>(data->data()), data->size()}, settings,
-                                        file.filename().string());
+    auto result = import_texture_memory(encoded, settings, name);
     if (!result) return result;
     if (!cached.empty()) {
         std::error_code ec;

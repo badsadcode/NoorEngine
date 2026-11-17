@@ -195,6 +195,26 @@ internal static class SmokeTest
             Shot(window, "editor_17_texture.png");
             doc.Undo();
         }
+
+        // Milestone 5, part 3: a texture set becomes a material; Add to scene puts it on a ball.
+        foreach (var map in new[] { "tiles_albedo.png", "tiles_normal.png", "tiles_orm.png" })
+            File.Copy(Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Textures", map), Path.Combine(texDir, map), overwrite: true);
+        doc.RefreshAssets(rescan: true);
+        var albedo = doc.Assets.FirstOrDefault(a => a.Path.EndsWith("tiles_albedo.png", StringComparison.Ordinal));
+        var made = albedo == null || window.ContentBrowser == null ? null : window.ContentBrowser.MakeMaterial(albedo);
+        var materialAsset = doc.Assets.FirstOrDefault(a => a.Path == made);
+        Check(made == "Assets/Textures/tiles.noormat" && materialAsset is { Kind: "Material" } &&
+              File.ReadAllText(Path.Combine(doc.ProjectRoot, made)).Contains("metallic_roughness_map"),
+              $"materials: Make material turns the tiles set (albedo, normal, ORM) into {made}");
+        if (materialAsset != null)
+        {
+            window.AddAsset(materialAsset);
+            Check(doc.Selected?.Components["primitive"]?["material"]?.GetValue<string>() == materialAsset.Guid,
+                  "materials: Add to scene puts the material on a ball");
+            await Task.Delay(600);
+            Shot(window, "editor_18_material.png");
+            doc.Undo();
+        }
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.

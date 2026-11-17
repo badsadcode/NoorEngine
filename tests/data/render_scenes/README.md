@@ -6,6 +6,10 @@ noor_player and compared with `tests/golden/<scene>.png` (320x180) by `noor_imag
 - `Daylight`: the default sun and sky, EV 14, Khronos PBR Neutral.
 - `Textured`: a checker texture on the floor (repeated 15x) and a box, a brick normal map on a
   wall and a ball, a shiny metal ball; the sun from the left (Milestone 5, part 2).
+- `Materials`: `.noormat` materials (brick, an instance of it, a glowing one), a tiles texture set
+  turned into a material by `noor_cli make-material` (albedo, normal, ORM) and an instance repeating
+  it on the floor, and a GLB with three materials (embedded texture, gold metal, cutout leaf)
+  (Milestone 5, part 3).
 - `Sunset`: a warm low sun (20,000 lux from the right) under a dim sky (1,200 nits), EV 12, the
   ACES fit.
 

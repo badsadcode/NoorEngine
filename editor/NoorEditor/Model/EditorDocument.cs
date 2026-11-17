@@ -214,6 +214,24 @@ public sealed class EditorDocument : IDisposable
 
     // ---- Snapshots ----
 
+    /// <summary>
+    /// Makes a material (.noormat) from the texture set <paramref name="texturePath"/> belongs to
+    /// (bricks_albedo, bricks_normal, bricks_orm…), beside it. Returns the material's path and
+    /// whether it was new, or null (the error is in the log).
+    /// </summary>
+    public (string Path, bool Created, int Maps)? MakeMaterial(string texturePath)
+    {
+        var json = Native.MakeMaterial(Handle, texturePath);
+        if (json == null)
+        {
+            Interop.EngineLog.Error("Editor", $"Make material: {Native.LastError()}");
+            return null;
+        }
+        var node = JsonNode.Parse(json)!;
+        RefreshAssets(rescan: false);
+        return (node["path"]!.GetValue<string>(), node["created"]!.GetValue<bool>(), (node["maps"] as JsonArray)?.Count ?? 0);
+    }
+
     public void RefreshAssets(bool rescan)
     {
         var json = Native.Assets(_handle, rescan);

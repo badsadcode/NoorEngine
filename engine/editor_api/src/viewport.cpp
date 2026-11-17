@@ -25,6 +25,7 @@
 #include "noor/game/hud.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
+#include "noor/game/material_library.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
 
@@ -234,6 +235,12 @@ struct LoadedMesh {
     Vec3 lo, hi;  // local bounds
     std::vector<Vec3> positions;  // CPU copy for picking
     std::vector<std::uint32_t> indices;
+    // Models: one draw per glTF primitive with its material (empty: the whole mesh, one material).
+    struct Part {
+        std::uint32_t first_index = 0, index_count = 0;
+        noor::render::MaterialHandle material;
+    };
+    std::vector<Part> parts;
 };
 
 void set_state(noor_viewport* vp, noor_viewport_state state) {
@@ -318,7 +325,9 @@ void render_thread_main(noor_viewport* vp) {
     std::unordered_map<std::string, CachedAsset> assets;
     std::shared_ptr<const ed::RenderSnapshot> shown;
     std::optional<noor::game::Hud> hud;  // built on first use (bakes the font atlas)
-    std::optional<noor::game::TextureLibrary> textures;  // primitives' textures, on first use
+    std::optional<noor::game::TextureLibrary> textures;    // textures and materials, made with the first snapshot
+    std::optional<noor::game::MaterialLibrary> materials;
+    auto refresh_clock = std::chrono::steady_clock::now();
     std::vector<noor::render::OverlayVertex> overlay;
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
@@ -420,6 +429,22 @@ void render_thread_main(noor_viewport* vp) {
 
         // New scene state? Load what it needs and rebuild the draw list.
         auto snap = channel ? channel->get() : nullptr;
+        if (snap && !materials) {
+            textures.emplace(r, snap->texture_cache);
+            materials.emplace(r, *textures, noor::asset::AssetFileResolver{});
+        }
+        if (snap && materials && snap != shown) {
+            materials->set_resolver([files = snap->asset_files](const Guid& id) -> std::optional<std::filesystem::path> {
+                if (!files) return std::nullopt;
+                const auto it = files->find(id);
+                return it == files->end() ? std::nullopt : std::optional(it->second);
+            });
+        }
+        // Edited material and texture files show up while the editor is open.
+        if (materials && std::chrono::steady_clock::now() - refresh_clock > 500ms) {
+            refresh_clock = std::chrono::steady_clock::now();
+            materials->refresh();
+        }
         if (snap != shown) {
             shown = snap;
             scene_draws.clear();
@@ -458,6 +483,13 @@ void render_thread_main(noor_viewport* vp) {
                                 lm.indices.assign(mesh.indices.begin(), mesh.indices.end());
                                 loaded.push_back(std::move(lm));
                             }
+                            const auto model_materials = materials->model(m.asset_path, *model);
+                            for (std::size_t mi = 0; mi < model->meshes.size(); ++mi)
+                                for (const auto& sm : model->meshes[mi].submeshes)
+                                    loaded[mi].parts.push_back({sm.first_index, sm.index_count,
+                                                                sm.material >= 0 && sm.material < static_cast<int>(model_materials.size())
+                                                                    ? model_materials[static_cast<std::size_t>(sm.material)]
+                                                                    : noor::render::MaterialHandle{}});
                             cached.meshes = std::move(loaded);
                             if (reload) NOOR_LOG_INFO("Viewport", "Reloaded {}", std::filesystem::path(m.asset_path).filename().string());
                         } else {
@@ -491,8 +523,7 @@ void render_thread_main(noor_viewport* vp) {
                     if (!lm->handle.valid()) continue;
                     noor::render::DrawItem item{lm->handle, prim.world};
                     item.tint = {prim.color.x, prim.color.y, prim.color.z, 1.0f};
-                    if (!textures) textures.emplace(r, snap->texture_cache);
-                    item.surface = noor::game::SceneRenderer::surface(prim, *textures);
+                    item.material = noor::game::SceneRenderer::material(prim, *materials);
                     scene_draws.push_back({item, prim.entity, lm, true});
                     for (int c = 0; c < 8; ++c) {
                         grow(lo, hi, prim.world.transform_point({c & 1 ? lm->hi.x : lm->lo.x, c & 2 ? lm->hi.y : lm->lo.y, c & 4 ? lm->hi.z : lm->lo.z}));
@@ -757,7 +788,18 @@ void render_thread_main(noor_viewport* vp) {
                                            item.tint.z * 0.55f + highlight.z * 0.45f, 1.0f}
                                     : highlight;
                 }
-                frame_draws.push_back(item);
+                const LoadedMesh* lm = scene_draws[i].mesh;
+                if (lm && !lm->parts.empty()) {
+                    for (const auto& part : lm->parts) {  // a model: one draw per material
+                        noor::render::DrawItem piece = item;
+                        piece.first_index = part.first_index;
+                        piece.index_count = part.index_count;
+                        piece.material = part.material;
+                        frame_draws.push_back(piece);
+                    }
+                } else {
+                    frame_draws.push_back(item);
+                }
             }
             if (ground.valid()) {
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
@@ -837,7 +879,8 @@ void render_thread_main(noor_viewport* vp) {
         vp->stats.validation_errors = r.validation_error_count();
     }
 
-    textures.reset();  // GPU textures go before the renderer that owns them
+    materials.reset();  // GPU materials and textures go before the renderer that owns them
+    textures.reset();
     renderer->reset();
     if (vp->stats.state != NOOR_VIEWPORT_FAILED) set_state(vp, NOOR_VIEWPORT_STOPPED);
 }

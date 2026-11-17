@@ -185,6 +185,10 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
             return vk_failure(r, "vkCreateGraphicsPipelines (scene)");
         }
         set_name(VK_OBJECT_TYPE_PIPELINE, mesh_pipeline, "Scene pipeline (lit, HDR)");
+        if (VkResult r = create_mesh_pipeline(kHdrFormat, false, double_sided_pipeline, false); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (scene, double-sided)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, double_sided_pipeline, "Scene pipeline (double-sided)");
     }
     if (gizmo_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
@@ -201,7 +205,7 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
 
 // One pipeline from mesh.hlsl: `display` false = lit scene into the HDR image, true = gizmos in
 // display colours (the shader's kDisplay specialization constant).
-VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out) {
+VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back) {
     const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& module) {
         VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         info.codeSize = size;
@@ -248,7 +252,7 @@ VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool displa
     // triangles stay counter-clockwise in the framebuffer orientation Vulkan uses.
     VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
     raster.polygonMode = VK_POLYGON_MODE_FILL;
-    raster.cullMode = VK_CULL_MODE_BACK_BIT;
+    raster.cullMode = cull_back ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE;
     raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     raster.lineWidth = 1.0f;
 
@@ -304,6 +308,10 @@ void Renderer::Impl::destroy_mesh_pipeline() {
     if (gizmo_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
         gizmo_pipeline = VK_NULL_HANDLE;
+    }
+    if (double_sided_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device, double_sided_pipeline, nullptr);
+        double_sided_pipeline = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
@@ -368,38 +376,46 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos) {
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
-    const auto slot = [&](TextureHandle t, std::uint32_t fallback) {
-        return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
-    };
-    bool bound = false;
+    VkPipeline bound = VK_NULL_HANDLE;
+    bool sets_bound = false;
     for (const DrawItem& item : frame.draws) {
         if (item.overlay != gizmos) continue;
         if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) continue;
-        if (!bound) {
+        const GpuMesh& mesh = meshes[item.mesh.id - 1];
+        const std::uint32_t material = item.material.valid() && item.material.id < materials.size() && material_alive[item.material.id]
+                                           ? item.material.id
+                                           : 0u;
+        const VkPipeline pipeline = gizmos ? gizmo_pipeline : materials[material].double_sided ? double_sided_pipeline : mesh_pipeline;
+        if (!sets_bound) {
             vkCmdSetViewport(cmd, 0, 1, &vp);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gizmos ? gizmo_pipeline : mesh_pipeline);
+        }
+        if (pipeline != bound) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            bound = pipeline;
+        }
+        if (!sets_bound) {
             const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
-            bound = true;
+            sets_bound = true;
         }
-        const GpuMesh& mesh = meshes[item.mesh.id - 1];
+        // A submesh range, clamped to the mesh (draw items may come from imported files).
+        const std::uint32_t first = std::min(item.first_index, mesh.index_count);
+        const std::uint32_t count = item.index_count == 0 ? mesh.index_count - first : std::min(item.index_count, mesh.index_count - first);
+        if (count == 0) continue;
         const math::Mat4& w = item.world_from_object;
-        const Surface& s = item.surface;
         const MeshPushConstants push{{w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
                                      {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
                                      {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
                                      item.tint,
-                                     {slot(s.base_color_texture, kTextureWhite), slot(s.normal_texture, kTextureFlatNormal), 0, 0},
-                                     {std::clamp(s.roughness, 0.0f, 1.0f), std::clamp(s.metallic, 0.0f, 1.0f), s.normal_scale, 0},
-                                     {s.uv_scale.x, s.uv_scale.y, s.uv_offset.x, s.uv_offset.y}};
+                                     {material, 0, 0, 0}};
         vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
         const VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
         vkCmdBindIndexBuffer(cmd, mesh.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, mesh.index_count, 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmd, count, 1, first, 0, 0);
         ++stats.draw_calls;
-        stats.triangles += mesh.index_count / 3;
+        stats.triangles += count / 3;
     }
 }
 

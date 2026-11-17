@@ -200,8 +200,8 @@ Status Renderer::Impl::pick_gpu() {
         VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
         f2.pNext = &f12;
         vkGetPhysicalDeviceFeatures2(candidate, &f2);
-        if (!f13.synchronization2 || !f13.dynamicRendering) {
-            reject("synchronization2/dynamicRendering missing");
+        if (!f13.synchronization2 || !f13.dynamicRendering || !f13.shaderDemoteToHelperInvocation) {
+            reject("synchronization2/dynamicRendering/shaderDemoteToHelperInvocation missing");
             continue;
         }
         // The bindless texture table (ADR-012): descriptor indexing, standard on desktop GPUs.
@@ -265,6 +265,7 @@ Status Renderer::Impl::create_device() {
     VkPhysicalDeviceVulkan13Features f13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     f13.synchronization2 = VK_TRUE;
     f13.dynamicRendering = VK_TRUE;
+    f13.shaderDemoteToHelperInvocation = VK_TRUE;  // `discard` in shaders (cutout materials); required in Vulkan 1.3
     VkPhysicalDeviceVulkan12Features f12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     f12.pNext = &f13;
     f12.runtimeDescriptorArray = VK_TRUE;
@@ -753,6 +754,52 @@ Result<TextureHandle> Renderer::create_texture(const TextureDesc& desc) {
 void Renderer::destroy_texture(TextureHandle texture) { impl_->destroy_texture(texture); }
 std::uint64_t Renderer::texture_memory() const noexcept { return impl_->texture_bytes; }
 TextureHandle Renderer::missing_texture() const noexcept { return TextureHandle{kTextureMissing}; }
+
+Status Renderer::update_texture(TextureHandle texture, const TextureDesc& desc) {
+    if (texture.id < kFirstUserTexture || texture.id >= impl_->textures.size() || !impl_->textures[texture.id].alive)
+        return fail(ErrorCode::InvalidArgument, "update_texture: not a live texture");
+    impl_->destroy_texture(texture);  // waits for the GPU; the slot shows white meanwhile
+    auto h = impl_->create_texture(desc, texture.id);
+    if (!h) return std::unexpected(h.error());
+    // Materials point at the slot, which now holds the new image: rewrite them so the descriptor
+    // indices stay right (they're the same numbers, but a material may have fallen back to white).
+    for (std::uint32_t i = 0; i < impl_->materials.size(); ++i)
+        if (impl_->material_alive[i]) impl_->write_material(i, impl_->materials[i]);
+    return {};
+}
+
+Result<MaterialHandle> Renderer::create_material(const MaterialDesc& desc) {
+    if (auto s = impl_->ensure_texture_table(); !s) return std::unexpected(s.error());
+    std::uint32_t slot = 0;
+    for (std::uint32_t i = 1; i < impl_->materials.size(); ++i)
+        if (!impl_->material_alive[i]) {
+            slot = i;
+            break;
+        }
+    if (slot == 0) {
+        if (impl_->materials.size() >= kMaxMaterials)
+            return fail(ErrorCode::OutOfMemory, std::format("material table full ({} materials)", kMaxMaterials));
+        slot = static_cast<std::uint32_t>(impl_->materials.size());
+        impl_->materials.emplace_back();
+        impl_->material_alive.push_back(false);
+    }
+    impl_->materials[slot] = desc;
+    impl_->material_alive[slot] = true;
+    impl_->write_material(slot, desc);
+    return MaterialHandle{slot};
+}
+
+void Renderer::update_material(MaterialHandle material, const MaterialDesc& desc) {
+    if (!material.valid() || material.id >= impl_->materials.size() || !impl_->material_alive[material.id]) return;
+    impl_->materials[material.id] = desc;
+    impl_->write_material(material.id, desc);
+}
+
+void Renderer::destroy_material(MaterialHandle material) {
+    if (!material.valid() || material.id >= impl_->materials.size()) return;
+    impl_->material_alive[material.id] = false;
+    impl_->materials[material.id] = {};
+}
 void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
 Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) { return impl_->render_frame(frame); }
 void Renderer::request_capture() noexcept {

@@ -3,9 +3,12 @@
 //
 // Imported files are untrusted: the file is size-limited, validated by cgltf, and every index
 // is range-checked before use. Geometry is triangle lists only (other modes are skipped with a
-// warning). Materials contribute their base color (factor × vertex color); textures come later.
+// warning). Each primitive becomes a submesh with its glTF material (ADR-030): the base colour
+// factor is baked into the vertex colours (so tools without materials still see colours); the
+// material carries the textures (embedded images) and the other channels.
 
 #include "noor/asset/json.h"
+#include "noor/asset/material.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
 
@@ -25,10 +28,18 @@ struct MeshVertex {
     math::Vec4 tangent{1, 0, 0, 1};  // TANGENT, or computed from the UVs (w: bitangent handedness)
 };
 
+// A run of a mesh's indices drawn with one material (one glTF primitive).
+struct Submesh {
+    std::uint32_t first_index = 0;
+    std::uint32_t index_count = 0;
+    int material = -1;  // index into ImportedModel::materials, -1: the default material
+};
+
 struct ImportedMesh {
     std::string name;
     std::vector<MeshVertex> vertices;
     std::vector<std::uint32_t> indices;  // triangle list
+    std::vector<Submesh> submeshes;      // cover all indices, in order
     [[nodiscard]] std::uint64_t triangles() const noexcept { return indices.size() / 3; }
 };
 
@@ -45,9 +56,24 @@ struct ImportedNode {
     [[nodiscard]] bool is_marker() const { return noor.is_object() && noor.contains("marker"); }
 };
 
+// An image stored in the GLB (PNG or JPEG bytes), for materials' textures.
+struct ImportedImage {
+    std::string name;
+    std::vector<std::uint8_t> bytes;
+};
+
+struct ImportedMaterial {
+    std::string name;
+    // Textures point at this model's file with embedded_image set. base_color's rgb is 1: the
+    // factor is in the vertex colours (alpha stays here).
+    Material material;
+};
+
 struct ImportedModel {
     std::vector<ImportedNode> nodes;  // parents always come before their children
     std::vector<ImportedMesh> meshes;
+    std::vector<ImportedMaterial> materials;
+    std::vector<ImportedImage> images;
     std::vector<std::string> warnings;
 
     // World matrix of node `i` (parents applied).

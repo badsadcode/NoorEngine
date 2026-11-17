@@ -20,7 +20,7 @@ inline constexpr std::string_view kMetaExtension = ".noormeta";
 struct AssetRecord {
     Guid guid;
     std::string path;           // project-relative, '/' separators
-    std::string importer;       // "gltf", "audio", "prefab", "texture"
+    std::string importer;       // "gltf", "audio", "prefab", "texture", "material"
     std::string source_sha256;  // content hash at last scan
     bool from_interchange = false;  // GUID came from a Noor Interchange manifest
 };

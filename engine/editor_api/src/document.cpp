@@ -1,4 +1,6 @@
 #include "document.h"
+#include "noor/asset/material.h"
+#include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
 #include "noor/game/game.h"
@@ -134,6 +136,33 @@ Json Document::project_info() const {
             {"name", project_.info().name},
             {"root", project_.root().generic_string()},
             {"engine", project_.info().engine_version}};
+}
+
+Result<Json> Document::make_material(std::string_view texture_path) {
+    auto texture = project_.resolve(texture_path);
+    if (!texture) return std::unexpected(texture.error());
+    if (!std::filesystem::exists(*texture)) return fail(ErrorCode::NotFound, std::format("no texture at {}", texture_path));
+    if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+    const auto set = asset::find_texture_set(*texture);
+    const auto out = texture->parent_path() / (set.name + std::string(asset::kMaterialExtension));
+    Json result{{"created", false}, {"maps", Json::array()}};
+    for (const auto& [role, file] : set.maps) {
+        const auto rel = project_.relative(file);
+        result["maps"].push_back({{"role", std::string(asset::role_name(role))}, {"path", rel ? *rel : file.generic_string()}});
+    }
+    if (!std::filesystem::exists(out)) {
+        const auto json = asset::material_json_for(set, [&](const std::filesystem::path& f) -> std::optional<Guid> {
+            const auto rel = project_.relative(f);
+            const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+            return rec ? std::optional(rec->guid) : std::nullopt;
+        });
+        if (auto w = noor::fs::write_file_atomic(out, asset::to_text(json), false); !w) return std::unexpected(w.error());
+        result["created"] = true;
+        if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+    }
+    const auto rel = project_.relative(out);
+    result["path"] = rel ? *rel : out.generic_string();
+    return result;
 }
 
 Result<Json> Document::assets(bool rescan) {
@@ -454,6 +483,12 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     snap->primitives = std::move(view.primitives);
     snap->lighting = view.lighting;
     snap->texture_cache = project_.root() / ".noor" / "cache" / "textures";
+    {
+        auto files = std::make_shared<std::unordered_map<Guid, std::filesystem::path>>();
+        for (const auto& a : registry_.assets())
+            if (auto path = project_.resolve(a.path)) files->emplace(a.guid, *path);
+        snap->asset_files = std::move(files);
+    }
     if (world_) {
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();

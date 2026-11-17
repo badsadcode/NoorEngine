@@ -613,6 +613,15 @@ public sealed class MainWindow : Window
             _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
             return;
         }
+        if (asset.Importer == "material")
+        {
+            // A ball wearing the material, the classic way to look at one.
+            var ball = new System.Text.Json.Nodes.JsonObject { ["shape"] = "sphere", ["radius"] = 0.5, ["material"] = asset.Guid };
+            if (Doc.Create(Path.GetFileNameWithoutExtension(asset.Path), new System.Text.Json.Nodes.JsonObject { ["primitive"] = ball },
+                           new Vec3(0, 0.5, 0)) is { } mid)
+                FrameEntity(mid);
+            return;
+        }
         if (asset.Importer == "texture")
         {
             // A 1 m test cube wearing the texture: as its colour, or as its normal map when the name

@@ -1,0 +1,16 @@
+{
+  "noor_material": 1,
+  "base_color": [
+    0.1,
+    0.1,
+    0.1,
+    1
+  ],
+  "emissive": [
+    1.0,
+    0.55,
+    0.15
+  ],
+  "emissive_strength": 1.5,
+  "roughness": 0.4
+}

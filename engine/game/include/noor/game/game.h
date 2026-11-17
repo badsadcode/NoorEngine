@@ -7,6 +7,7 @@
 //   SceneRenderer   draws a SceneView with the renderer (noor_player; the editor viewport has its own
 //                   drawing with picking and gizmos)
 
+#include "noor/asset/material.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
 #include "noor/foundation/error.h"
@@ -49,18 +50,17 @@ struct SceneView {
         Guid entity;
     };
     // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
-    // Until materials (part 3) a primitive can carry a few surface values itself:
-    //   "base_color_map": <texture asset id>, "normal_map": <texture asset id>, "normal_scale": 1,
-    //   "roughness": 0.5, "metallic": 0, "uv_scale": [1, 1]
+    // Their surface: "material": <.noormat asset id>, or material fields right on the component
+    // (the .noormat names: "base_color_map", "normal_map", "roughness", "metallic", "uv_scale", …).
+    // "color" tints either (with a material file, only when it is given).
     struct Primitive {
         enum class Shape : std::uint8_t { Box, Sphere, Capsule } shape;
         math::Mat4 world;  // box: +-0.5 cube scaled to size; sphere: radius 0.5 scaled; capsule: unscaled
         float radius = 0.5f, height = 2.0f;  // capsule only
         math::Vec3 color;  // linear
         Guid entity;
-        std::filesystem::path base_color_map, normal_map;  // resolved texture files (empty: none)
-        float roughness = 0.5f, metallic = 0.0f, normal_scale = 1.0f;
-        math::Vec2 uv_scale{1, 1};
+        std::filesystem::path material_file;  // the `material` asset's file, if any
+        asset::Material material;             // otherwise: the component's own fields
     };
     // The first entity with a `camera` component ({"fov": 70, "near": 0.05}).
     struct Camera {
@@ -90,6 +90,9 @@ using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid&
 // them this frame; their children (a player's camera) follow.
 [[nodiscard]] SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path,
                                      const std::unordered_map<Guid, math::Mat4>* render_poses = nullptr);
+
+// An AssetPath as an asset::AssetFileResolver (materials resolve textures and parents with it).
+[[nodiscard]] asset::AssetFileResolver file_resolver(const AssetPath& asset_path);
 
 // An AssetPath that looks ids up in a registry.
 [[nodiscard]] AssetPath registry_asset_path(const asset::Project& project, const asset::AssetRegistry& registry);

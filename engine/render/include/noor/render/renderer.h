@@ -90,15 +90,41 @@ struct TextureHandle {
     [[nodiscard]] bool valid() const noexcept { return id != 0; }
 };
 
-// How a draw's surface looks until materials (part 3): textures and a few numbers.
-struct Surface {
-    TextureHandle base_color_texture;  // multiplies the colour; none = white
-    TextureHandle normal_texture;      // tangent-space normal map (OpenGL convention); none = flat
-    float roughness = 0.5f;            // 0 mirror .. 1 matte
+// ---- Materials (ADR-030) -----------------------------------------------------------------
+
+enum class AlphaMode : std::uint8_t {
+    Opaque,
+    Cutout,  // pixels with alpha below alpha_cutoff are not drawn (leaves, fences)
+    Blend,   // see-through blending is not implemented yet: drawn like Cutout (logged once)
+};
+
+// What the shader needs to draw a surface (glTF metallic-roughness, ADR-012). Factors multiply
+// their textures; a texture left empty counts as white (or flat, for the normal map).
+struct MaterialDesc {
+    math::Vec4 base_color{1, 1, 1, 1};  // linear rgb, alpha
     float metallic = 0.0f;
-    float normal_scale = 1.0f;         // strength of the normal map
-    math::Vec2 uv_scale{1, 1};         // texture repeats
+    float roughness = 0.5f;             // 0 mirror .. 1 matte
+    float normal_scale = 1.0f;
+    float occlusion_strength = 1.0f;
+    math::Vec3 emissive{0, 0, 0};       // relative to the exposure: 1 shows about white on screen
+    AlphaMode alpha = AlphaMode::Opaque;
+    float alpha_cutoff = 0.5f;
+    bool double_sided = false;          // draw back faces too (thin leaves, cloth, planes seen from below)
+    math::Vec2 uv_scale{1, 1};
     math::Vec2 uv_offset{0, 0};
+    TextureHandle base_color_texture;          // rgb colour, a alpha
+    TextureHandle metallic_roughness_texture;  // glTF packing: G roughness, B metallic (ORM maps fit)
+    TextureHandle roughness_texture;           // single channel (red)
+    TextureHandle metallic_texture;            // single channel (red)
+    TextureHandle normal_texture;              // tangent space, OpenGL convention
+    TextureHandle occlusion_texture;           // red
+    TextureHandle emissive_texture;            // rgb
+};
+
+// A material in the GPU material table. 0 is the built-in default (white, roughness 0.5).
+struct MaterialHandle {
+    std::uint32_t id = 0;
+    [[nodiscard]] bool valid() const noexcept { return id != 0; }
 };
 
 // ---- Frames -----------------------------------------------------------------------------
@@ -143,7 +169,9 @@ struct DrawItem {
     // Overlay items (editor gizmos) are drawn after tonemapping, in front of everything, in their
     // own display colours (not lit, not exposed). They still depth-test against each other.
     bool overlay = false;
-    Surface surface;
+    MaterialHandle material;          // none: the default material
+    std::uint32_t first_index = 0;    // a range of the mesh's indices (a submesh);
+    std::uint32_t index_count = 0;    // 0 = the whole mesh
 };
 
 // The 2D overlay (HUD), drawn over the 3D scene with alpha blending. Triangle-list vertices in
@@ -212,6 +240,14 @@ public:
     [[nodiscard]] std::uint64_t texture_memory() const noexcept;
     // A magenta-and-black checker for textures that couldn't be loaded (visible on purpose).
     [[nodiscard]] TextureHandle missing_texture() const noexcept;
+    // Replaces a texture's pixels, keeping its handle (so materials using it follow). Waits for the GPU.
+    [[nodiscard]] Status update_texture(TextureHandle texture, const TextureDesc& desc);
+
+    // Materials live in a table of 4096 the shader reads by index. Updating one takes effect
+    // from the next frame; a frame already in flight may still see the old values.
+    [[nodiscard]] Result<MaterialHandle> create_material(const MaterialDesc& desc);
+    void update_material(MaterialHandle material, const MaterialDesc& desc);
+    void destroy_material(MaterialHandle material);
 
     // Draws `frame.draws` from `frame.camera`, lit by `frame.lighting`, then the gizmos and the HUD.
     [[nodiscard]] Result<FrameResult> render_frame(const FrameDesc& frame);

@@ -58,6 +58,8 @@ struct RenderSnapshot {
     std::optional<GameCamera> camera;
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
     std::filesystem::path texture_cache;  // <project>/.noor/cache/textures (decoded textures)
+    // Every asset's file by id (materials find their textures and parents with it).
+    std::shared_ptr<const std::unordered_map<Guid, std::filesystem::path>> asset_files;
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
 };
@@ -89,6 +91,8 @@ public:
 
     [[nodiscard]] asset::Json project_info() const;
     [[nodiscard]] Result<asset::Json> assets(bool rescan);
+    // A .noormat from the texture set a texture belongs to (asset::find_texture_set), beside it.
+    [[nodiscard]] Result<asset::Json> make_material(std::string_view texture_path);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);

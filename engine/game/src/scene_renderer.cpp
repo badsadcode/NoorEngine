@@ -7,8 +7,8 @@
 
 namespace noor::game {
 
-SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache)
-    : renderer_(renderer), textures_(renderer, std::move(texture_cache)) {
+SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache, asset::AssetFileResolver resolve)
+    : renderer_(renderer), textures_(renderer, std::move(texture_cache)), materials_(renderer, textures_, std::move(resolve)) {
     box_ = upload(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
     sphere_ = upload(make_round(0.5f, 1.0f), "Primitive sphere");
 }
@@ -20,9 +20,9 @@ SceneRenderer::~SceneRenderer() {
     destroy(box_);
     destroy(sphere_);
     for (const auto& [key, h] : capsules_) destroy(h);
-    for (const auto& [path, meshes] : models_) {
-        if (meshes)
-            for (const auto h : *meshes) destroy(h);
+    for (const auto& [path, model] : models_) {
+        if (model)
+            for (const auto h : model->meshes) destroy(h);
     }
 }
 
@@ -42,22 +42,33 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         const std::string key = m.asset_path.generic_string();
         auto it = models_.find(key);
         if (it == models_.end()) {
-            std::optional<std::vector<render::MeshHandle>> loaded;
+            std::optional<Model> loaded;
             if (auto model = asset::import_gltf(m.asset_path)) {
                 loaded.emplace();
                 for (const auto& mesh : model->meshes) {
                     auto h = renderer_.create_mesh({{reinterpret_cast<const render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
                                                     mesh.indices, mesh.name});
-                    loaded->push_back(h ? *h : render::MeshHandle{});
+                    loaded->meshes.push_back(h ? *h : render::MeshHandle{});
+                    loaded->submeshes.push_back(mesh.submeshes);
                 }
+                loaded->materials = materials_.model(m.asset_path, *model);
             } else {
                 NOOR_LOG_WARN("Game", "{}", model.error().describe());
             }
             it = models_.emplace(key, std::move(loaded)).first;
         }
-        if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->size())) continue;
-        const auto h = (*it->second)[static_cast<std::size_t>(m.mesh_index)];
-        if (h.valid()) out.push_back({h, m.world});
+        if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->meshes.size())) continue;
+        const auto index = static_cast<std::size_t>(m.mesh_index);
+        const auto h = it->second->meshes[index];
+        if (!h.valid()) continue;
+        for (const auto& sm : it->second->submeshes[index]) {  // one draw per material
+            render::DrawItem item{h, m.world};
+            item.first_index = sm.first_index;
+            item.index_count = sm.index_count;
+            if (sm.material >= 0 && sm.material < static_cast<int>(it->second->materials.size()))
+                item.material = it->second->materials[static_cast<std::size_t>(sm.material)];
+            out.push_back(item);
+        }
     }
     for (const auto& p : view.primitives) {
         render::MeshHandle h = box_;
@@ -72,21 +83,14 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         if (!h.valid()) continue;
         render::DrawItem item{h, p.world};
         item.tint = {p.color.x, p.color.y, p.color.z, 1.0f};
-        item.surface = surface(p, textures_);
+        item.material = material(p, materials_);
         out.push_back(item);
     }
     return out;
 }
 
-render::Surface SceneRenderer::surface(const SceneView::Primitive& p, TextureLibrary& textures) {
-    render::Surface s;
-    s.base_color_texture = textures.get(p.base_color_map);
-    s.normal_texture = textures.get(p.normal_map);
-    s.roughness = p.roughness;
-    s.metallic = p.metallic;
-    s.normal_scale = p.normal_scale;
-    s.uv_scale = p.uv_scale;
-    return s;
+render::MaterialHandle SceneRenderer::material(const SceneView::Primitive& p, MaterialLibrary& materials) {
+    return p.material_file.empty() ? materials.described(p.material) : materials.file(p.material_file);
 }
 
 render::Camera SceneRenderer::camera(const SceneView& view) {

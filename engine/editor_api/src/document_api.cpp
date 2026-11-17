@@ -97,6 +97,18 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_path) {
+    if (!doc || !texture_path) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto r = doc->doc->make_material(texture_path);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
 NOOR_API const char* noor_doc_scenes(noor_doc* doc) {
     if (!doc) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&] { return give(doc->doc->scenes()); });

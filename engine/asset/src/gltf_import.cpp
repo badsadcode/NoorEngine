@@ -120,7 +120,8 @@ void compute_tangents(std::vector<MeshVertex>& vertices, const std::vector<std::
     }
 }
 
-bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vector<std::string>& warnings) {
+bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vector<std::string>& warnings,
+                      const cgltf_material* data_materials) {
     if (prim.type != cgltf_primitive_type_triangles) {
         warnings.push_back(std::format("mesh '{}': skipped a non-triangle primitive", out.name));
         return false;
@@ -229,6 +230,8 @@ bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vecto
         }
     }
     if (!tan) compute_tangents(out.vertices, out.indices, first, index_start);
+    out.submeshes.push_back({static_cast<std::uint32_t>(index_start), static_cast<std::uint32_t>(out.indices.size() - index_start),
+                             prim.material ? static_cast<int>(prim.material - data_materials) : -1});
     return true;
 }
 
@@ -280,12 +283,60 @@ Result<ImportedModel> import_gltf(const stdfs::path& path, std::uint64_t max_fil
     }
 
     ImportedModel model;
+    // Images: the bytes of embedded (buffer view) images; external files are not supported yet.
+    for (cgltf_size i = 0; i < data->images_count; ++i) {
+        const cgltf_image& img = data->images[i];
+        ImportedImage out;
+        out.name = img.name ? img.name : std::format("image_{}", i);
+        if (img.buffer_view && img.buffer_view->buffer && img.buffer_view->buffer->data &&
+            img.buffer_view->offset + img.buffer_view->size <= img.buffer_view->buffer->size) {
+            const auto* bytes = static_cast<const std::uint8_t*>(img.buffer_view->buffer->data) + img.buffer_view->offset;
+            out.bytes.assign(bytes, bytes + img.buffer_view->size);
+        } else {
+            model.warnings.push_back(std::format("image '{}': only images inside the GLB are supported", out.name));
+        }
+        model.images.push_back(std::move(out));
+    }
+    for (cgltf_size i = 0; i < data->materials_count; ++i) {
+        const cgltf_material& src = data->materials[i];
+        ImportedMaterial out;
+        out.name = src.name ? src.name : std::format("material_{}", i);
+        Material& m = out.material;
+        const auto ref = [&](const cgltf_texture_view& view) -> TextureRef {
+            if (!view.texture || !view.texture->image) return {};
+            const auto index = static_cast<int>(cgltf_image_index(data.get(), view.texture->image));
+            if (index < 0 || index >= static_cast<int>(model.images.size()) || model.images[static_cast<std::size_t>(index)].bytes.empty()) return {};
+            if (view.texcoord != 0) model.warnings.push_back(std::format("material '{}': only TEXCOORD_0 is used", out.name));
+            return {path, index};
+        };
+        if (src.has_pbr_metallic_roughness) {
+            const auto& pbr = src.pbr_metallic_roughness;
+            m.base_color = {1, 1, 1, pbr.base_color_factor[3]};  // rgb is in the vertex colours
+            m.metallic = pbr.metallic_factor;
+            m.roughness = pbr.roughness_factor;
+            m.base_color_map = ref(pbr.base_color_texture);
+            m.metallic_roughness_map = ref(pbr.metallic_roughness_texture);
+        }
+        m.normal_map = ref(src.normal_texture);
+        m.normal_scale = src.normal_texture.texture ? src.normal_texture.scale : 1.0f;
+        m.occlusion_map = ref(src.occlusion_texture);
+        m.occlusion_strength = src.occlusion_texture.texture ? src.occlusion_texture.scale : 1.0f;
+        m.emissive = {src.emissive_factor[0], src.emissive_factor[1], src.emissive_factor[2]};
+        m.emissive_map = ref(src.emissive_texture);
+        if (src.has_emissive_strength) m.emissive_strength = src.emissive_strength.emissive_strength;
+        m.alpha = src.alpha_mode == cgltf_alpha_mode_mask ? AlphaMode::Cutout
+                  : src.alpha_mode == cgltf_alpha_mode_blend ? AlphaMode::Blend
+                                                              : AlphaMode::Opaque;
+        m.alpha_cutoff = src.alpha_cutoff;
+        m.double_sided = src.double_sided;
+        model.materials.push_back(std::move(out));
+    }
     model.meshes.reserve(data->meshes_count);
     for (cgltf_size m = 0; m < data->meshes_count; ++m) {
         ImportedMesh mesh;
         mesh.name = data->meshes[m].name ? data->meshes[m].name : std::format("mesh_{}", m);
         for (cgltf_size p = 0; p < data->meshes[m].primitives_count; ++p) {
-            append_primitive(data->meshes[m].primitives[p], mesh, model.warnings);
+            append_primitive(data->meshes[m].primitives[p], mesh, model.warnings, data->materials);
         }
         model.meshes.push_back(std::move(mesh));
     }

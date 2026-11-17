@@ -4,6 +4,49 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
 
+### 2026-11-17 — Milestone 5, part 3: materials
+**Added**
+- **`.noormat` materials** (ADR-030): glTF metallic-roughness channels (base colour, metallic,
+  roughness, packed metallic-roughness/ORM, single roughness and metallic maps, normal, occlusion,
+  emissive), cutout alpha, double-sided, UV scale/offset. **Instances**: a parent plus overrides,
+  chained up to 16 deep, loops refused, `null` removes a map. `asset::load_material`
+  (`noor/asset/material.h`); the registry imports `.noormat` files.
+- **Texture sets to materials**: `asset::find_texture_set` (maps found by name: albedo, normal,
+  ORM/ARM, roughness, metallic, AO, emissive; previews skipped), `material_json_for`;
+  `noor_cli make-material <project> <texture>`; the editor's **Make material** button.
+- **GLB materials**: each glTF primitive is a submesh drawn with its material, including textures
+  embedded in the GLB (`asset::Submesh`, `ImportedMaterial`, `ImportedImage`).
+- Renderer: a **GPU material table** (4096, storage buffer, `create/update/destroy_material`),
+  draws name a material and an index range (`DrawItem::material`, `first_index`, `index_count`),
+  a double-sided pipeline, cutout discard, `update_texture` (same handle, new pixels).
+  `render::Surface` (part 2's stop-gap) is gone.
+- Shader: all channels; occlusion dims the ambient light; emissive relative to the exposure.
+- `game::MaterialLibrary` (files, described-in-place, GLB materials), `TextureLibrary` embedded
+  images; **hot reload** of `.noormat`, texture files and texture settings in the editor and in
+  noor_player (checked twice a second).
+- `primitive` components: `"material": "<id>"`, or material fields in place (same names).
+- Editor: materials in the Content Browser, **Add to scene** on a material makes a ball wearing
+  it. Editor API **v10** (`noor_doc_make_material`).
+
+**Fixed**
+- Shaders using `discard` need Vulkan 1.3's `shaderDemoteToHelperInvocation`, which wasn't
+  enabled: the validation layer flagged it in the diagnostics tests. Enabled (and required).
+- The golden-image tests now run with Vulkan validation and fail on any logged error (they ran
+  without it and missed the above).
+- Capsule UVs: the straight middle used one row of the texture (streaks). v now runs by distance
+  along the surface (spheres unchanged). Found by putting a real bark texture set on a log.
+
+**Tests:** 5 material unit tests (fields and defaults, instances, loops and missing parents,
+texture sets and ORM, GLB submeshes, materials and embedded images); `render.golden_Materials`
+(brick material, an instance, emissive, a texture set made by the CLI with an instance repeating
+it, a GLB with an embedded texture, gold and a double-sided cutout leaf); editor smoke checks for
+Make material and Add to scene. Hot reload checked by hand: a running game turned an emissive
+ball from orange to blue about half a second after its `.noormat` was edited.
+
+**Not yet:** see-through blending (drawn as cutout), the material editor (part 6), graphs, a
+second UV set, glTF images in separate files. Metals look dull until environment reflections
+(part 5).
+
 ### 2026-11-17 — Milestone 5, part 2: textures
 **Added**
 - **Texture assets** (ADR-029): .png (8/16-bit), .jpg, .tga, .bmp, .hdr under `Assets/` get a

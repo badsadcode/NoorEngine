@@ -37,33 +37,37 @@ Status Renderer::Impl::ensure_texture_table() {
     NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &texture_sampler));
     set_name(VK_OBJECT_TYPE_SAMPLER, texture_sampler, "Texture sampler (trilinear, repeat)");
 
-    const VkDescriptorSetLayoutBinding bindings[2] = {
+    const VkDescriptorSetLayoutBinding bindings[3] = {
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &texture_sampler},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // materials
     };
     // Textures are added and removed while earlier frames may still be in flight: slots that
     // frame doesn't use may change (update-after-bind, unused-while-pending), and empty slots are
     // fine (partially bound).
-    const VkDescriptorBindingFlags binding_flags[2] = {
+    const VkDescriptorBindingFlags binding_flags[3] = {
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
             VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
         0,
+        0,
     };
     VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-    flags_info.bindingCount = 2;
+    flags_info.bindingCount = 3;
     flags_info.pBindingFlags = binding_flags;
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layout_info.pNext = &flags_info;
     layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-    layout_info.bindingCount = 2;
+    layout_info.bindingCount = 3;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &texture_set_layout));
 
-    const VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures}, {VK_DESCRIPTOR_TYPE_SAMPLER, 1}};
+    const VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures},
+                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
+                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     pool_info.maxSets = 1;
-    pool_info.poolSizeCount = 2;
+    pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes = sizes;
     NOOR_VK_TRY(vkCreateDescriptorPool(device, &pool_info, nullptr, &texture_pool));
     VkDescriptorSetAllocateInfo set_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
@@ -72,6 +76,20 @@ Status Renderer::Impl::ensure_texture_table() {
     set_info.pSetLayouts = &texture_set_layout;
     NOOR_VK_TRY(vkAllocateDescriptorSets(device, &set_info, &texture_set));
     set_name(VK_OBJECT_TYPE_DESCRIPTOR_SET, texture_set, "Bindless texture table");
+
+    // The material table: persistently mapped, written from the CPU (materials change rarely).
+    auto buffer = create_buffer(sizeof(GpuMaterial) * kMaxMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, false);
+    if (!buffer) return std::unexpected(buffer.error());
+    material_buffer = *buffer;
+    set_name(VK_OBJECT_TYPE_BUFFER, material_buffer.buffer, "Material table");
+    VkDescriptorBufferInfo material_info{material_buffer.buffer, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet material_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    material_write.dstSet = texture_set;
+    material_write.dstBinding = 2;
+    material_write.descriptorCount = 1;
+    material_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    material_write.pBufferInfo = &material_info;
+    vkUpdateDescriptorSets(device, 1, &material_write, 0, nullptr);
 
     // The built-in slots.
     textures.resize(kFirstUserTexture);
@@ -98,7 +116,33 @@ Status Renderer::Impl::ensure_texture_table() {
         if (auto h = create_texture({b.format, {&mip, 1}, b.name}, b.slot); !h) return std::unexpected(h.error());
     }
     texture_bytes = 0;  // the built-ins don't count as "your" textures
+    materials.assign(1, MaterialDesc{});  // slot 0: the default material
+    material_alive.assign(1, true);
+    write_material(0, materials[0]);
     return {};
+}
+
+// ---- materials ----
+
+void Renderer::Impl::write_material(std::uint32_t slot, const MaterialDesc& d) {
+    const auto tex = [&](TextureHandle t, std::uint32_t fallback) {
+        return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
+    };
+    if (d.alpha == AlphaMode::Blend && !warned_blend) {
+        NOOR_LOG_WARN("Render", "See-through (blend) materials are drawn as cutout for now");
+        warned_blend = true;
+    }
+    const std::uint32_t flags = static_cast<std::uint32_t>(d.alpha == AlphaMode::Opaque ? 0 : 1) | (d.double_sided ? 4u : 0u);
+    const GpuMaterial m{d.base_color,
+                        {d.emissive.x, d.emissive.y, d.emissive.z, d.alpha_cutoff},
+                        {d.metallic, d.roughness, d.normal_scale, d.occlusion_strength},
+                        {d.uv_scale.x, d.uv_scale.y, d.uv_offset.x, d.uv_offset.y},
+                        {tex(d.base_color_texture, kTextureWhite), tex(d.metallic_roughness_texture, kTextureWhite),
+                         tex(d.roughness_texture, kTextureWhite), tex(d.metallic_texture, kTextureWhite)},
+                        {tex(d.normal_texture, kTextureFlatNormal), tex(d.occlusion_texture, kTextureWhite),
+                         tex(d.emissive_texture, kTextureWhite), flags}};
+    std::memcpy(static_cast<GpuMaterial*>(material_buffer.mapped) + slot, &m, sizeof(m));
+    vmaFlushAllocation(allocator, material_buffer.allocation, sizeof(GpuMaterial) * slot, sizeof(GpuMaterial));
 }
 
 Result<TextureHandle> Renderer::Impl::create_texture(const TextureDesc& texture, std::uint32_t slot) {
@@ -276,6 +320,9 @@ void Renderer::Impl::destroy_textures() {
     }
     textures.clear();
     texture_bytes = 0;
+    if (material_buffer.buffer != VK_NULL_HANDLE) destroy_buffer(material_buffer);
+    materials.clear();
+    material_alive.clear();
     if (texture_pool) vkDestroyDescriptorPool(device, texture_pool, nullptr);
     if (texture_set_layout) vkDestroyDescriptorSetLayout(device, texture_set_layout, nullptr);
     if (texture_sampler) vkDestroySampler(device, texture_sampler, nullptr);

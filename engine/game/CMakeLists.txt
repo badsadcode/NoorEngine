@@ -6,6 +6,7 @@ noor_add_module(game
         src/hud.cpp
         src/scene_renderer.cpp
         src/texture_library.cpp
+        src/material_library.cpp
     PUBLIC_DEPS
         noor::asset
         noor::scene
