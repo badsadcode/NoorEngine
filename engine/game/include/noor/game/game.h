@@ -3,7 +3,7 @@
 // noor_player, so a game behaves the same in both (ADR-028).
 //
 //   make_world      a runtime::World for a scene, with every engine system a game uses
-//   collect_view    what a running scene shows: models, primitive shapes, the game camera
+//   collect_view    what a running scene shows: models, primitive shapes, the game camera, lighting
 //   SceneRenderer   draws a SceneView with the renderer (noor_player; the editor viewport has its own
 //                   drawing with picking and gizmos)
 
@@ -12,6 +12,7 @@
 #include "noor/foundation/error.h"
 #include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
+#include "noor/render/renderer.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
@@ -65,6 +66,14 @@ struct SceneView {
     std::vector<Mesh> meshes;
     std::vector<Primitive> primitives;
     std::optional<Camera> camera;
+    // The sun: the first entity with a directional `light` ({"type": "directional", "color":
+    // "#FFF4E5", "illuminance": 100000}), shining along the entity's forward (−Z). Until
+    // environments (Milestone 5, part 5) it also carries its sky: "sky_color", "sky_luminance" (nits).
+    // Exposure and
+    // tonemapping from the first `camera` ({"ev100": 15, "tonemapper": "neutral" | "aces" | "none"}).
+    // Without them: render::Lighting's defaults (a clear day).
+    render::Lighting lighting;
+    bool has_sun = false;  // false: the default sun is used
 };
 
 // Finds a model asset's file from the `mesh` component's asset id.

@@ -56,6 +56,7 @@ struct RenderSnapshot {
     std::vector<Primitive> primitives;
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
+    render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
 };

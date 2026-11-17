@@ -16,11 +16,13 @@
 
 namespace noor::asset {
 
-// Same layout as render::Vertex (position, normal, linear color), so it can be uploaded as is.
+// Same layout as render::Vertex, so it can be uploaded as is.
 struct MeshVertex {
     math::Vec3 position;
     math::Vec3 normal;
-    math::Vec3 color;
+    math::Vec3 color{1, 1, 1};       // linear (base colour factor x vertex colour)
+    math::Vec2 uv{0, 0};             // TEXCOORD_0
+    math::Vec4 tangent{1, 0, 0, 1};  // TANGENT, or computed from the UVs (w: bitangent handedness)
 };
 
 struct ImportedMesh {

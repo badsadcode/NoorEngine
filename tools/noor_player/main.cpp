@@ -333,7 +333,7 @@ int run(const Options& o) {
                     overlay.clear();
                     const auto pixels = (*renderer)->swapchain_size();
                     hud.build((*world)->ui_commands(), static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
-                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), draws, overlay});
+                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), view.lighting, draws, overlay});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;
@@ -372,6 +372,9 @@ int run(const Options& o) {
                     for (const auto& c : (*world)->ui_commands())
                         if (c.kind == noor::runtime::UiCommand::Kind::Text) hud_text.push_back(c.text);
                     report["hud_text"] = std::move(hud_text);
+                    Json passes = Json::object();  // GPU milliseconds per pass of a recent frame
+                    for (const auto& pass : (*renderer)->last_frame_stats().passes) passes[pass.name] = pass.ms;
+                    report["gpu_passes"] = std::move(passes);
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }

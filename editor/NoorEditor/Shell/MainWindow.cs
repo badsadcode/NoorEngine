@@ -390,7 +390,7 @@ public sealed class MainWindow : Window
             return null;
         }
         if (Doc.Playing) return null;
-        return Doc.Create(t.Name, t.Components(), t.Position);
+        return Doc.Create(t.Name, t.Components(), t.Position, rotation: t.EulerDegrees is { } e ? Quat.FromEulerDegrees(e) : null);
     }
 
     private Control StatusBar()

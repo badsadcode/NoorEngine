@@ -167,6 +167,14 @@ internal static class SmokeTest
         await NoorCodeChecks(window, results, Check, Shot);
         await AudioChecks(window, results, Check);
         await BuildChecks(window, results, Check, dir);
+
+        // Milestone 5, part 1: Create ▸ Sun makes a directional light pointing down into the scene.
+        var sunId = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.SunTemplateName));
+        var sun = sunId == null ? null : doc.Scene.Entities.FirstOrDefault(e => e.Id == sunId);
+        var sunPitch = sun?.Transform.Rotation.ToEulerDegrees().X ?? 0;
+        Check(sun?.Components["light"]?["type"]?.GetValue<string>() == "directional" && sunPitch < -30,
+              $"Create ▸ Sun: a directional light tilted down ({sunPitch:0}°)");
+        if (sunId != null) doc.Undo();
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.

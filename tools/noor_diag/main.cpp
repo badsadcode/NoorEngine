@@ -300,6 +300,16 @@ bool save_bmp(const noor::render::CapturedFrame& frame, const std::string& path)
     return ok;
 }
 
+// The diagnostic frame: the default sun, and the fixed purple background (not the sky), so the
+// corner pixel checks exact sRGB encoding through the tonemap pass.
+noor::render::FrameDesc diag_frame(const noor::render::Camera& camera, std::span<const noor::render::DrawItem> draws) {
+    noor::render::FrameDesc frame;
+    frame.camera = camera;
+    frame.lighting.sky_background = false;
+    frame.draws = draws;
+    return frame;
+}
+
 // Checks the captured frame. Returns true if everything looks right.
 bool verify_frame(const noor::render::CapturedFrame& frame, const noor::render::Camera& camera) {
     using noor::math::perspective_reverse_z;
@@ -587,7 +597,7 @@ int run(const Options& options) {
         noor::platform::set_live_redraw_callback([&] {
             if (draws.empty()) return;  // nothing built yet
             (*renderer)->notify_resized();
-            if ((*renderer)->render_frame({camera, draws})) ++live_redraws;
+            if ((*renderer)->render_frame(diag_frame(camera, draws))) ++live_redraws;
         });
 
         Lifecycle lifecycle;
@@ -679,7 +689,7 @@ int run(const Options& options) {
                 (*renderer)->request_capture();
             }
 
-            auto frame = (*renderer)->render_frame({camera, draws});
+            auto frame = (*renderer)->render_frame(diag_frame(camera, draws));
             if (!frame) {
                 NOOR_LOG_ERROR("Diag", "Frame failed: {}", frame.error().describe());
                 exit_code = 1;

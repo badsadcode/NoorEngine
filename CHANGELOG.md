@@ -2,7 +2,42 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 4 complete (scripts and gameplay); Milestone 5 next
+## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
+
+### 2026-11-17 — Milestone 5, part 1: the frame foundation
+**Added**
+- The scene is lit into a **16-bit float HDR image** in physical units, then **exposed and
+  tonemapped** to the screen (ADR-012). Editor gizmos and the HUD are drawn after tonemapping in
+  their own display colours. `vulkan_frame.cpp`, `tonemap.hlsl`.
+- **PBR shading core**: GGX / height-correlated Smith / Schlick specular, Lambert diffuse; ambient
+  from a ground-to-sky hemisphere with a specular part. Surfaces are rough dielectrics until
+  materials (part 3). Documented in `docs/rendering/PBR.md`.
+- `render::Lighting`: sun direction, colour and illuminance (lux), sky colour and luminance
+  (nits), exposure (EV100, default 14), tonemapper (Khronos PBR Neutral default, ACES fit, none),
+  sky or fixed background. `FrameDesc::lighting`.
+- A **`light` component** (`"type": "directional"`, `color`, `illuminance`, and for now
+  `sky_color`, `sky_luminance`): the sun shines along its entity's forward. `camera` gains
+  `ev100` and `tonemapper`. **Create ▸ Sun (directional light)** in the editor.
+- Vertices gain **UVs and tangents** (`render::Vertex`, `asset::MeshVertex`, 60 bytes): GLB
+  `TEXCOORD_0` and `TANGENT`, tangents computed from UVs when missing; the built-in box, sphere and
+  capsule have UVs.
+- **GPU time per pass** (`FrameStats::passes`: Scene, Tonemap, Gizmos, HUD); in noor_player's
+  `--report` as `gpu_passes`.
+- **Golden-image render tests**: `noor_image_compare` (shrinks a screenshot, compares it with a
+  PNG reference with a tolerance, writes a diff picture) and `tests/data/render_scenes`
+  (Daylight, Sunset). `NOOR_UPDATE_GOLDEN=1` refreshes references. stb_image and stb_image_write
+  (public domain/MIT, pinned) for reading and writing images.
+
+**Changed**
+- Scenes look different: lit by a real sun and sky instead of a fixed fake light. Very dark
+  colours now look very dark in sunshine (that's physically right; see PBR.md).
+- The player test checks that the centre pixel is the red box by colour, not brightness.
+
+**Tests:** 3 new render tests (two golden images and one that must fail on a changed picture).
+noor_diag's exact-purple background check still passes through the new tonemap pass.
+
+**Not yet:** materials and textures (parts 2–3), shadows (4), HDRI skies (5), MSAA and the
+passes inspector in the editor (7), AgX (licence check), depth pre-pass (when measured).
 
 ### 2026-11-17 — Milestone 4, part 8: NoorFPS-lite and the Milestone 4 review
 **Added**

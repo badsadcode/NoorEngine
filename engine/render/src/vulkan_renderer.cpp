@@ -295,7 +295,7 @@ Status Renderer::Impl::create_frames() {
     if (timestamps_supported) {
         VkQueryPoolCreateInfo query_info{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
         query_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        query_info.queryCount = kFramesInFlight * 2;
+        query_info.queryCount = kFramesInFlight * kTimestampsPerFrame;
         NOOR_VK_TRY(vkCreateQueryPool(device, &query_info, nullptr, &timestamp_pool));
         set_name(VK_OBJECT_TYPE_QUERY_POOL, timestamp_pool, "GPU frame timestamps");
     } else {
@@ -327,6 +327,7 @@ void Renderer::Impl::destroy_swapchain_resources() {
     }
     image_views.clear();
     destroy_depth_buffer();
+    destroy_hdr_target();
 }
 
 Status Renderer::Impl::rebuild_swapchain() {
@@ -422,7 +423,13 @@ Status Renderer::Impl::rebuild_swapchain() {
     if (auto status = create_depth_buffer(); !status) {
         return status;
     }
+    if (auto status = create_hdr_target(); !status) {
+        return status;
+    }
     if (auto status = ensure_mesh_pipeline(surface_format.format); !status) {
+        return status;
+    }
+    if (auto status = ensure_tonemap(surface_format.format); !status) {
         return status;
     }
     if (auto status = ensure_overlay(surface_format.format); !status) {
@@ -465,11 +472,17 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
 
     // This slot's previous frame has finished on the GPU, so its timestamps are ready.
     if (timestamps_supported && timestamps_written[frame_index]) {
-        std::uint64_t ticks[2]{};
-        if (vkGetQueryPoolResults(device, timestamp_pool, frame_index * 2, 2, sizeof(ticks), ticks,
-                                  sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
-            ticks[1] >= ticks[0]) {
-            stats.gpu_ms = static_cast<double>(ticks[1] - ticks[0]) * timestamp_period_ns / 1.0e6;
+        std::uint64_t ticks[kTimestampsPerFrame]{};
+        if (vkGetQueryPoolResults(device, timestamp_pool, frame_index * kTimestampsPerFrame, kTimestampsPerFrame,
+                                  sizeof(ticks), ticks, sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+            ticks[kTimestampsPerFrame - 1] >= ticks[0]) {
+            const auto ms = [&](std::uint64_t a, std::uint64_t b) {
+                return b >= a ? static_cast<double>(b - a) * timestamp_period_ns / 1.0e6 : 0.0;
+            };
+            stats.gpu_ms = ms(ticks[0], ticks[kTimestampsPerFrame - 1]);
+            static constexpr const char* kPassNames[] = {"Scene", "Tonemap", "Gizmos", "HUD"};
+            stats.passes.resize(kTimestampsPerFrame - 1);
+            for (std::uint32_t i = 0; i + 1 < kTimestampsPerFrame; ++i) stats.passes[i] = {kPassNames[i], ms(ticks[i], ticks[i + 1])};
         }
     }
 
@@ -493,33 +506,42 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     NOOR_VK_TRY(vkBeginCommandBuffer(frame.cmd, &begin));
-    if (timestamps_supported) {
-        vkCmdResetQueryPool(frame.cmd, timestamp_pool, frame_index * 2, 2);
-        vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestamp_pool, frame_index * 2);
-    }
+    const auto stamp = [&](std::uint32_t i, VkPipelineStageFlags2 stage) {
+        if (timestamps_supported) vkCmdWriteTimestamp2(frame.cmd, stage, timestamp_pool, frame_index * kTimestampsPerFrame + i);
+    };
+    if (timestamps_supported) vkCmdResetQueryPool(frame.cmd, timestamp_pool, frame_index * kTimestampsPerFrame, kTimestampsPerFrame);
+    stamp(0, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
+    stats.draw_calls = 0;
+    stats.triangles = 0;
+    update_frame_uniforms(frame_desc);
     const std::string frame_label = std::format("NoorEngine frame {}", frames_presented);
     begin_label(frame.cmd, frame_label.c_str(), {0.42f, 0.25f, 0.85f, 1.0f});  // Noor purple
 
     const VkImage image = images[image_index];
 
-    // Color: the acquire semaphore is waited at COLOR_ATTACHMENT_OUTPUT; this barrier chains on it.
-    image_barrier(frame.cmd, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                  VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    // ---- Scene pass: lit draws into the HDR image ----
+    // The HDR image and the depth buffer are shared by frames in flight: wait for the previous
+    // frame's tonemap read (HDR) and depth writes before this frame overwrites them.
+    image_barrier(frame.cmd, hdr_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_ACCESS_2_SHADER_SAMPLED_READ_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-    // Depth: shared across frames in flight, so wait for the previous frame's depth writes.
     image_barrier(frame.cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                   VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
 
-    VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-    color.imageView = image_views[image_index];
-    color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    std::memcpy(color.clearValue.color.float32, desc.clear_color.data(), sizeof(float) * 4);
+    // Where nothing is drawn: the sky (exposed like everything else) with alpha 0, so the tonemap
+    // pass knows it's background (and can show the fixed clear colour instead).
+    const Lighting& lighting = frame_desc.lighting;
+    const math::Vec3 sky = lighting.sky_color * (lighting.sky_luminance * lighting.exposure());
+    VkRenderingAttachmentInfo hdr_color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    hdr_color.imageView = hdr_view;
+    hdr_color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    hdr_color.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    hdr_color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    hdr_color.clearValue.color = {{sky.x, sky.y, sky.z, 0.0f}};
 
     VkRenderingAttachmentInfo depth{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     depth.imageView = depth_view;
@@ -532,11 +554,45 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.renderArea = {{0, 0}, extent};
     rendering.layerCount = 1;
     rendering.colorAttachmentCount = 1;
-    rendering.pColorAttachments = &color;
+    rendering.pColorAttachments = &hdr_color;
     rendering.pDepthAttachment = &depth;
-    begin_label(frame.cmd, "Main pass", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
+    begin_label(frame.cmd, "Scene (lit, HDR)", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
     vkCmdBeginRendering(frame.cmd, &rendering);
-    record_draws(frame.cmd, frame_desc);
+    record_draws(frame.cmd, frame_desc, false);
+    vkCmdEndRendering(frame.cmd);
+    end_label(frame.cmd);
+    stamp(1, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+    // ---- Screen pass: tonemap, then gizmos and the HUD in display colours ----
+    image_barrier(frame.cmd, hdr_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    // The acquire semaphore is waited at COLOR_ATTACHMENT_OUTPUT; this barrier chains on it.
+    image_barrier(frame.cmd, image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                  VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    // Gizmos depth-test against each other only: the depth buffer is cleared again (after the
+    // scene pass finished with it).
+    image_barrier(frame.cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                  VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+
+    VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
+    color.imageView = image_views[image_index];
+    color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;  // the tonemap pass writes every pixel
+    color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    rendering.pColorAttachments = &color;
+    begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
+    vkCmdBeginRendering(frame.cmd, &rendering);
+    record_tonemap(frame.cmd, lighting);
+    stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    record_draws(frame.cmd, frame_desc, true);
+    stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
     }
@@ -556,7 +612,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
 
     end_label(frame.cmd);  // frame
     if (timestamps_supported) {
-        vkCmdWriteTimestamp2(frame.cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, timestamp_pool, frame_index * 2 + 1);
+        stamp(kTimestampsPerFrame - 1, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
         timestamps_written[frame_index] = true;
     }
     NOOR_VK_TRY(vkEndCommandBuffer(frame.cmd));
@@ -624,6 +680,7 @@ void Renderer::Impl::destroy() {
         }
         destroy_mesh_pipeline();
         destroy_overlay();
+        destroy_frame_resources();
         destroy_swapchain_resources();
         if (swapchain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(device, swapchain, nullptr);

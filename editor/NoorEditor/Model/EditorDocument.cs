@@ -164,13 +164,15 @@ public sealed class EditorDocument : IDisposable
     }
 
     /// <summary>Creates an entity (one undo step) and selects it. Returns its id, or null.</summary>
-    public string? Create(string name, JsonObject components, Vec3 position, string? parent = null)
+    public string? Create(string name, JsonObject components, Vec3 position, string? parent = null, Quat? rotation = null)
     {
         var id = Guid.NewGuid().ToString();
+        var transform = new JsonObject { ["position"] = position.ToJson() };
+        if (rotation is { } r) transform["rotation"] = r.ToJson();
         var cmd = new JsonObject
         {
             ["op"] = "create", ["id"] = id, ["name"] = name, ["components"] = components,
-            ["transform"] = new JsonObject { ["position"] = position.ToJson() },
+            ["transform"] = transform,
         };
         if (parent != null) cmd["parent"] = parent;
         if (!Execute(cmd)) return null;

@@ -5,9 +5,17 @@ namespace NoorEditor.Model;
 /// <summary>Ready-made entities for the Create menu, and component presets for the Inspector.</summary>
 public static class EntityTemplates
 {
-    public sealed record Template(string Name, Func<JsonObject> Components, Vec3 Position);
+    public sealed record Template(string Name, Func<JsonObject> Components, Vec3 Position, Vec3? EulerDegrees = null);
 
     private const string Stone = "#8E86A8";
+
+    public const string SunTemplateName = "Sun (directional light)";
+
+    public static JsonObject Sun() => new()
+    {
+        ["type"] = "directional", ["color"] = "#FFF5E6", ["illuminance"] = 100000,
+        ["sky_color"] = "#6B9EFF", ["sky_luminance"] = 8000,
+    };
 
     public static JsonObject Box(double x = 1, double y = 1, double z = 1, string color = Stone) =>
         new() { ["shape"] = "box", ["size"] = new JsonArray(x, y, z), ["color"] = color };
@@ -39,6 +47,9 @@ public static class EntityTemplates
             ["collider"] = new JsonObject { ["shape"] = "sphere", ["radius"] = 0.5 },
             ["rigidbody"] = new JsonObject { ["type"] = "dynamic", ["mass"] = 2, ["restitution"] = 0.6 },
         }, new Vec3(0, 3, 0)),
+        // The sun (Milestone 5): shines along the entity's forward (-Z); rotate it to move the sun.
+        // Illuminance in lux (100000 = bright sunshine); its sky too, until environments (part 5).
+        new(SunTemplateName, () => new JsonObject { ["light"] = Sun() }, new Vec3(0, 10, 0), new Vec3(-50, 30, 0)),
     ];
 
     // ---- Player (first person): an entity with a character controller and a Lua script, a capsule

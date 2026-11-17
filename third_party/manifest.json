@@ -154,6 +154,16 @@
       "purpose": "HUD text: TrueType parsing and signed-distance-field glyphs (engine/game)"
     },
     {
+      "name": "stb_image and stb_image_write",
+      "version": "2.30 / 1.16",
+      "source": "https://github.com/nothings/stb",
+      "commit": "2a34860c372bc520e1521c6aa7e3e4b4138c76f8",
+      "license": "Public domain or MIT (dual)",
+      "linkage": "static (single headers)",
+      "shipped": false,
+      "purpose": "Render tests: reading screenshots and PNG reference images, writing PNGs. Textures (ADR-029) will ship stb_image in the engine"
+    },
+    {
       "name": "Atkinson Hyperlegible Regular",
       "version": "google/fonts 2021-05-07",
       "source": "https://github.com/google/fonts/tree/main/ofl/atkinsonhyperlegible",

@@ -114,6 +114,24 @@ add_library(noor_third_party_stb_truetype INTERFACE)
 target_include_directories(noor_third_party_stb_truetype SYSTEM INTERFACE ${stb_truetype_SOURCE_DIR})
 add_library(stb::truetype ALIAS noor_third_party_stb_truetype)
 
+# --- stb_image / stb_image_write (public domain / MIT, single files): image decoding (textures,
+# ADR-029) and the render tests' image comparison (PNG references) ----------------------------
+FetchContent_Declare(stb_image
+    URL      https://raw.githubusercontent.com/nothings/stb/2a34860c372bc520e1521c6aa7e3e4b4138c76f8/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME stb_image.h)
+FetchContent_MakeAvailable(stb_image)
+FetchContent_Declare(stb_image_write
+    URL      https://raw.githubusercontent.com/nothings/stb/2a34860c372bc520e1521c6aa7e3e4b4138c76f8/stb_image_write.h
+    URL_HASH SHA256=cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME stb_image_write.h)
+FetchContent_MakeAvailable(stb_image_write)
+add_library(noor_third_party_stb_image INTERFACE)
+target_include_directories(noor_third_party_stb_image SYSTEM INTERFACE ${stb_image_SOURCE_DIR} ${stb_image_write_SOURCE_DIR})
+add_library(stb::image ALIAS noor_third_party_stb_image)
+
 # --- Atkinson Hyperlegible (SIL OFL 1.1): the default HUD font, embedded in the engine ------
 FetchContent_Declare(hud_font
     URL      https://raw.githubusercontent.com/google/fonts/1b22086d13bdbbf5ec63d01a39a49246e4ac355f/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf

@@ -164,45 +164,75 @@ void Renderer::Impl::destroy_depth_buffer() {
 // ------------------------------------------------------------------ mesh pipeline
 
 Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
-    if (mesh_pipeline != VK_NULL_HANDLE && pipeline_color_format == color_format) {
+    if (mesh_pipeline != VK_NULL_HANDLE && gizmo_pipeline != VK_NULL_HANDLE && pipeline_color_format == color_format) {
         return {};
     }
-    destroy_mesh_pipeline();
+    if (auto s = ensure_frame_uniforms(); !s) return s;
+    if (pipeline_layout == VK_NULL_HANDLE) {
+        VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants)};
+        VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        layout_info.setLayoutCount = 1;
+        layout_info.pSetLayouts = &frame_set_layout;
+        layout_info.pushConstantRangeCount = 1;
+        layout_info.pPushConstantRanges = &push;
+        NOOR_VK_TRY(vkCreatePipelineLayout(device, &layout_info, nullptr, &pipeline_layout));
+        set_name(VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline_layout, "Mesh pipeline layout");
+    }
+    if (mesh_pipeline == VK_NULL_HANDLE) {  // the HDR format never changes
+        if (VkResult r = create_mesh_pipeline(kHdrFormat, false, mesh_pipeline); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (scene)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, mesh_pipeline, "Scene pipeline (lit, HDR)");
+    }
+    if (gizmo_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device, gizmo_pipeline, nullptr);
+        gizmo_pipeline = VK_NULL_HANDLE;
+    }
+    if (VkResult r = create_mesh_pipeline(color_format, true, gizmo_pipeline); r != VK_SUCCESS) {
+        return vk_failure(r, "vkCreateGraphicsPipelines (gizmos)");
+    }
+    set_name(VK_OBJECT_TYPE_PIPELINE, gizmo_pipeline, "Gizmo pipeline (display colours)");
+    pipeline_color_format = color_format;
+    NOOR_LOG_INFO("Render", "Mesh pipelines built (scene {}, gizmos {})", string_VkFormat(kHdrFormat), string_VkFormat(color_format));
+    return {};
+}
 
-    const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& out) {
+// One pipeline from mesh.hlsl: `display` false = lit scene into the HDR image, true = gizmos in
+// display colours (the shader's kDisplay specialization constant).
+VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out) {
+    const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& module) {
         VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         info.codeSize = size;
         info.pCode = reinterpret_cast<const std::uint32_t*>(code);  // arrays are alignas(4)
-        return vkCreateShaderModule(device, &info, nullptr, &out);
+        return vkCreateShaderModule(device, &info, nullptr, &module);
     };
     VkShaderModule vs = VK_NULL_HANDLE;
     VkShaderModule ps = VK_NULL_HANDLE;
-    NOOR_VK_TRY(make_module(k_mesh_vs, sizeof(k_mesh_vs), vs));
+    if (VkResult r = make_module(k_mesh_vs, sizeof(k_mesh_vs), vs); r != VK_SUCCESS) return r;
     if (VkResult r = make_module(k_mesh_ps, sizeof(k_mesh_ps), ps); r != VK_SUCCESS) {
         vkDestroyShaderModule(device, vs, nullptr);
-        return fail(ErrorCode::GraphicsError, std::format("pixel shader module failed ({})", string_VkResult(r)));
+        return r;
     }
 
-    VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants)};
-    VkPipelineLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    layout_info.pushConstantRangeCount = 1;
-    layout_info.pPushConstantRanges = &push;
-    VkResult result = vkCreatePipelineLayout(device, &layout_info, nullptr, &pipeline_layout);
-
+    const VkBool32 display_value = display ? VK_TRUE : VK_FALSE;
+    const VkSpecializationMapEntry entry{0, 0, sizeof(VkBool32)};
+    const VkSpecializationInfo specialization{1, &entry, sizeof(display_value), &display_value};
     VkPipelineShaderStageCreateInfo stages[2]{};
     stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vs, "VSMain", nullptr};
-    stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, ps, "PSMain", nullptr};
+    stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, ps, "PSMain", &specialization};
 
     const VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    const VkVertexInputAttributeDescription attributes[3] = {
+    const VkVertexInputAttributeDescription attributes[5] = {
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)},
         {2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color)},
+        {3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv)},
+        {4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, tangent)},
     };
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertex_input.vertexBindingDescriptionCount = 1;
     vertex_input.pVertexBindingDescriptions = &binding;
-    vertex_input.vertexAttributeDescriptionCount = 3;
+    vertex_input.vertexAttributeDescriptionCount = 5;
     vertex_input.pVertexAttributeDescriptions = attributes;
 
     VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
@@ -213,7 +243,7 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
     viewport.scissorCount = 1;
 
     // The projection flips Y (ADR-022); with that flip, world-space counter-clockwise
-    // triangles stay counter-clockwise in Vulkan's framebuffer orientation.
+    // triangles stay counter-clockwise in the framebuffer orientation Vulkan uses.
     VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
     raster.polygonMode = VK_POLYGON_MODE_FILL;
     raster.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -258,27 +288,20 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
     pipeline_info.pColorBlendState = &blend;
     pipeline_info.pDynamicState = &dynamic;
     pipeline_info.layout = pipeline_layout;
-    if (result == VK_SUCCESS) {
-        result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &mesh_pipeline);
-    }
-
+    const VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &out);
     vkDestroyShaderModule(device, vs, nullptr);
     vkDestroyShaderModule(device, ps, nullptr);
-    if (result != VK_SUCCESS) {
-        destroy_mesh_pipeline();
-        return fail(ErrorCode::GraphicsError, std::format("Mesh pipeline creation failed ({})", string_VkResult(result)));
-    }
-    pipeline_color_format = color_format;
-    set_name(VK_OBJECT_TYPE_PIPELINE, mesh_pipeline, "Mesh pipeline (lit vertex color)");
-    set_name(VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline_layout, "Mesh pipeline layout");
-    NOOR_LOG_INFO("Render", "Mesh pipeline built for {}", string_VkFormat(color_format));
-    return {};
+    return result;
 }
 
 void Renderer::Impl::destroy_mesh_pipeline() {
     if (mesh_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, mesh_pipeline, nullptr);
         mesh_pipeline = VK_NULL_HANDLE;
+    }
+    if (gizmo_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device, gizmo_pipeline, nullptr);
+        gizmo_pipeline = VK_NULL_HANDLE;
     }
     if (pipeline_layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
@@ -340,30 +363,30 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
     mesh = {};
 }
 
-void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame) {
-    stats.draw_calls = 0;  // timings are set by the frame loop, not here
-    stats.triangles = 0;
-    if (frame.draws.empty()) {
-        return;
-    }
+void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos) {
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
-    vkCmdSetViewport(cmd, 0, 1, &vp);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mesh_pipeline);
-
     const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
     const math::Mat4 clip_from_world =
         math::perspective_reverse_z(frame.camera.fov_y, aspect, frame.camera.near_plane) * frame.camera.view;
-
-    bool has_overlay = false;
-    auto draw = [&](const DrawItem& item) {
-        if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) {
-            return;
+    bool bound = false;
+    for (const DrawItem& item : frame.draws) {
+        if (item.overlay != gizmos) continue;
+        if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) continue;
+        if (!bound) {
+            vkCmdSetViewport(cmd, 0, 1, &vp);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gizmos ? gizmo_pipeline : mesh_pipeline);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &frame_sets[frame_index], 0, nullptr);
+            bound = true;
         }
         const GpuMesh& mesh = meshes[item.mesh.id - 1];
         const math::Mat4& w = item.world_from_object;
-        const MeshPushConstants push{clip_from_world * w, w.m[0], w.m[1], w.m[2], item.tint};
+        const MeshPushConstants push{clip_from_world * w,
+                                     {w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
+                                     {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
+                                     {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
+                                     item.tint};
         vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
         const VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
@@ -371,20 +394,6 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame) {
         vkCmdDrawIndexed(cmd, mesh.index_count, 1, 0, 0, 0);
         ++stats.draw_calls;
         stats.triangles += mesh.index_count / 3;
-    };
-    for (const DrawItem& item : frame.draws) {
-        if (item.overlay) has_overlay = true;
-        else draw(item);
-    }
-    if (!has_overlay) return;
-
-    // Overlay pass: forget the scene's depth (reverse-Z: 0 = far) so overlays draw on top.
-    VkClearAttachment clear{VK_IMAGE_ASPECT_DEPTH_BIT, 0, {}};
-    clear.clearValue.depthStencil = {0.0f, 0};
-    const VkClearRect rect{scissor, 0, 1};
-    vkCmdClearAttachments(cmd, 1, &clear, 1, &rect);
-    for (const DrawItem& item : frame.draws) {
-        if (item.overlay) draw(item);
     }
 }
 

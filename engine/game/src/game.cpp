@@ -78,8 +78,7 @@ float number(const Json& j, const char* key, float fallback) {
     return j.contains(key) && j[key].is_number() ? j[key].get<float>() : fallback;
 }
 
-math::Vec3 color_of(const Json& primitive) {
-    math::Vec3 color{0.55f, 0.52f, 0.62f};
+math::Vec3 color_of(const Json& primitive, math::Vec3 color = {0.55f, 0.52f, 0.62f}) {
     if (!primitive.contains("color") || !primitive["color"].is_string()) return color;
     const std::string hex = primitive["color"].get<std::string>();
     if (hex.size() != 7 || hex[0] != '#') return color;
@@ -126,12 +125,34 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
         const bool primitive = e.has("primitive") && e.components["primitive"].is_object();
         const bool mesh = e.has("mesh");
-        if (!camera && !primitive && !mesh) continue;
+        const bool sun = !view.has_sun && e.has("light") && e.components["light"].is_object() &&
+                         e.components["light"].value("type", std::string("directional")) == "directional";
+        if (!camera && !primitive && !mesh && !sun) continue;
         const math::Mat4 world = world_of(i, 0);
         if (camera) {
             const auto& cam = e.components["camera"];
             view.camera = SceneView::Camera{world, std::clamp(number(cam, "fov", 70.0f), 10.0f, 150.0f),
                                             std::max(0.001f, number(cam, "near", 0.05f)), e.id};
+            view.lighting.ev100 = std::clamp(number(cam, "ev100", view.lighting.ev100), -10.0f, 25.0f);
+            const std::string tm = cam.value("tonemapper", std::string("neutral"));
+            view.lighting.tonemapper = tm == "aces" ? render::Tonemapper::Aces
+                                       : tm == "none" ? render::Tonemapper::None
+                                                      : render::Tonemapper::Neutral;
+        }
+        if (sun) {
+            const auto& l = e.components["light"];
+            const math::Vec3 dir = math::transform_vector(world, {0, 0, -1});
+            if (math::length(dir) > 1e-6f) view.lighting.sun_direction = math::normalize(dir);
+            view.lighting.sun_color = color_of(l, view.lighting.sun_color);
+            view.lighting.sun_illuminance = std::clamp(number(l, "illuminance", view.lighting.sun_illuminance), 0.0f, 1.0e6f);
+            // The sky that goes with this sun, until environments arrive (Milestone 5, part 5).
+            if (l.contains("sky_color")) {
+                Json sky = Json::object();
+                sky["color"] = l["sky_color"];
+                view.lighting.sky_color = color_of(sky, view.lighting.sky_color);
+            }
+            view.lighting.sky_luminance = std::clamp(number(l, "sky_luminance", view.lighting.sky_luminance), 0.0f, 1.0e5f);
+            view.has_sun = true;
         }
         if (primitive) {
             const auto& p = e.components["primitive"];

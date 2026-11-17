@@ -452,6 +452,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     // Models, shapes and the game camera: the same view noor_player draws.
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
     snap->primitives = std::move(view.primitives);
+    snap->lighting = view.lighting;
     if (world_) {
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();

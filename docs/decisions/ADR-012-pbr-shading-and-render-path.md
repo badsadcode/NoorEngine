@@ -1,6 +1,6 @@
 # ADR-012: PBR shading model and render path
 
-**Status:** Proposed (Milestone 5 plan; becomes Accepted when part 1 lands with its tests) · **Date:** 2026-11-17 · **Milestone:** 5
+**Status:** Accepted for what part 1 built (HDR chain, units, BRDF, tonemapping); the rest stays Proposed until its part lands · **Date:** 2026-11-17 · **Milestone:** 5
 
 ## Context
 The renderer today (Milestones 1–4) draws vertex colours with one fixed Lambert light straight
@@ -31,7 +31,9 @@ textures (ADR-029) and materials (ADR-030) have something stable to feed.
    material preview), or none (clipping).
 
 ## Decision
-**1A, 2A, 3A**, AgX by default with PBR Neutral selectable.
+**1A, 2A, 3A**; **Khronos PBR Neutral** by default, the ACES fit selectable. (The first draft
+chose AgX; its curve data comes from Blender's configuration, so it waits for a licence check.
+Neutral's reference code is Apache-2.0 and it keeps authored colours, which suits material work.)
 
 - **BRDF** (documented in `docs/rendering/PBR.md` when part 1 lands): Cook-Torrance specular with
   the GGX distribution, height-correlated Smith visibility, Schlick Fresnel (F0 = 0.04 for
@@ -40,7 +42,8 @@ textures (ADR-029) and materials (ADR-030) have something stable to feed.
 - **Colour**: lighting in scene-linear Rec.709/sRGB primaries into a **16-bit float HDR target**;
   exposure (EV100, manual first, auto-exposure later), then tonemap and sRGB encode at the end.
   The HUD overlay is composited after tonemapping (it stays in display space).
-- **Path**: forward with a depth pre-pass; 4× MSAA baseline. Lights: one directional "sun" with
+- **Path**: forward; a depth pre-pass when shading gets expensive (materials, part 3, measured
+  first); 4× MSAA baseline (part 7). Lights: one directional "sun" with
   **cascaded shadow maps** (4 cascades, PCF); a small fixed number of point/spot lights first,
   clustered light lists when a scene needs hundreds (measured, not assumed).
 - **Image-based lighting**: an HDRI becomes a cubemap; diffuse from spherical harmonics (SH9);
@@ -64,8 +67,17 @@ textures (ADR-029) and materials (ADR-030) have something stable to feed.
   a shared device is listed in the plan.
 
 ## Evidence / benchmark
-None yet. Part 1 adds golden-image render tests (small images compared with a tolerance) so the
-claims above are checked from the start; part 7 measures pass timings on the sample scene.
+Part 1 (2026-11-17): `render.golden_Daylight` and `render.golden_Sunset` draw a test scene with
+the albedo range from #141414 to #F2F2F2 and saturated colours, and compare it with references
+(0.00% difference across repeated runs on the development PC); `render.golden_catches_a_change`
+shows the comparison fails on a different picture. Default exposure was chosen by looking:
+EV 15 ("sunny 16") looked dim with typical game albedos, EV 14 looks like daylight. Pass
+timings are measured (`FrameStats::passes`); the sample-scene numbers come in part 7.
+
+Implementation notes (part 1): the ambient term has a specular part (the sky in the reflection
+direction with an analytic environment-BRDF fit). Without it, dielectrics had no 4% sky
+reflection and PBR Neutral's toe crushed shadowed dark surfaces to black. Until environments
+(part 5), a directional `light` carries its sky's colour and luminance.
 
 ## Migration or reversal strategy
 Forward → deferred would keep the material and texture formats (they describe surfaces, not

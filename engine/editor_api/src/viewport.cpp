@@ -783,6 +783,7 @@ void render_thread_main(noor_viewport* vp) {
             frame.camera.view = noor::math::look_at(basis.eye, basis.eye + basis.forward, basis.up);
             frame.camera.fov_y = basis.fov_y;
             frame.camera.near_plane = view_near;
+            if (shown) frame.lighting = shown->lighting;
             frame.draws = frame_draws;
             // The game's HUD while playing. The font atlas is baked the first time a HUD appears.
             overlay.clear();
@@ -798,6 +799,7 @@ void render_thread_main(noor_viewport* vp) {
             frame.overlay = overlay;
         } else {
             r.set_clear_color(demo_clear_color(pointer, size));
+            frame.lighting.sky_background = false;  // no document: the animated test colour, exactly
         }
 
         auto result = r.render_frame(frame);

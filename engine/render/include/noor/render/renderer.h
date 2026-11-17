@@ -1,6 +1,8 @@
 #pragma once
-// NoorEngine renderer (Milestone 1): Vulkan 1.3 device, swapchain, depth buffer, GPU meshes,
-// one lit mesh pipeline, a camera, and frame capture for automated tests.
+// NoorEngine renderer: Vulkan 1.3 device, swapchain, GPU meshes, a camera and frame capture for
+// automated tests. Milestone 5 (ADR-012): the scene is lit by a sun and a sky in physical units
+// into a 16-bit float HDR image, then exposed, tonemapped and drawn to the screen; editor gizmos
+// and the HUD go on top after tonemapping, in display colours.
 // Vulkan types are hidden behind a pimpl (ADR-002). Conventions: ADR-022.
 
 #include "noor/foundation/error.h"
@@ -21,7 +23,8 @@ struct RendererDesc {
     // Enable VK_LAYER_KHRONOS_validation if installed. Validation messages go to the log
     // under category "Vulkan" and are counted.
     bool enable_validation = true;
-    // Linear-space RGBA clear color. The swapchain is sRGB, so the GPU encodes it on write.
+    // Linear RGBA background when Lighting::sky_background is false, shown exactly (the swapchain
+    // is sRGB, so the GPU encodes it on write).
     std::array<float, 4> clear_color{0.0f, 0.0f, 0.0f, 1.0f};
 };
 
@@ -43,7 +46,9 @@ enum class FrameResult : std::uint8_t {
 struct Vertex {
     math::Vec3 position;
     math::Vec3 normal;
-    math::Vec3 color;  // linear RGB
+    math::Vec3 color{1, 1, 1};       // linear RGB (multiplies the surface colour)
+    math::Vec2 uv{0, 0};             // texture coordinates (glTF convention: origin top-left)
+    math::Vec4 tangent{1, 0, 0, 1};  // xyz along +u, w = handedness of the bitangent (glTF)
 };
 
 struct MeshData {
@@ -66,13 +71,39 @@ struct Camera {
     float near_plane = 0.1f;                   // reverse-Z infinite far plane
 };
 
+// How the scene is lit and exposed (ADR-012). Physical units: the sun in lux, the sky in nits
+// (cd/mÂ˛); the camera's exposure as EV100 (sunny day â‰ 15, overcast â‰ 12, bright room â‰ 8).
+// The defaults are a clear day, so a scene without lights still looks right.
+enum class Tonemapper : std::uint8_t {
+    Neutral,  // Khronos PBR Neutral: keeps material colours as authored (default)
+    Aces,     // the common ACES film fit: more contrast, shifts very bright colours
+    None,     // clamp: for debugging exposure
+};
+
+struct Lighting {
+    math::Vec3 sun_direction = math::normalize(math::Vec3{-0.4f, -0.8f, -0.45f});  // the way sunlight travels
+    math::Vec3 sun_color{1.0f, 0.96f, 0.9f};  // linear
+    float sun_illuminance = 100000.0f;        // lux
+    math::Vec3 sky_color{0.42f, 0.6f, 1.0f};     // linear; the background and the light from above
+    float sky_luminance = 8000.0f;               // nits
+    math::Vec3 ground_color{0.32f, 0.29f, 0.26f};  // linear, relative to the sky: light bounced from below
+    float ev100 = 14.0f;
+    Tonemapper tonemapper = Tonemapper::Neutral;
+    // Where nothing is drawn: the sky (true), or the renderer's clear colour shown exactly as given
+    // (not lit, exposed or tonemapped: tests and the editor's empty view).
+    bool sky_background = true;
+
+    // The multiplier from scene light to the HDR image: 1 / (1.2 * 2^EV100).
+    [[nodiscard]] float exposure() const noexcept;
+};
+
 struct DrawItem {
     MeshHandle mesh;
     math::Mat4 world_from_object = math::Mat4::identity();
     // rgb = linear color, a = how much of it replaces the mesh's own colors (0 = none).
     math::Vec4 tint{0, 0, 0, 0};
-    // Overlay items are drawn after everything else, in front of it (editor gizmos). They
-    // still depth-test against each other.
+    // Overlay items (editor gizmos) are drawn after tonemapping, in front of everything, in their
+    // own display colours (not lit, not exposed). They still depth-test against each other.
     bool overlay = false;
 };
 
@@ -87,6 +118,7 @@ struct OverlayVertex {
 
 struct FrameDesc {
     Camera camera;
+    Lighting lighting;
     std::span<const DrawItem> draws;
     std::span<const OverlayVertex> overlay;
 };
@@ -96,9 +128,15 @@ struct FrameStats {
     std::uint64_t triangles = 0;
     // CPU time spent recording and submitting the frame (excludes waiting for the GPU/vsync).
     double cpu_record_ms = 0.0;
-    // GPU time of the most recent frame whose results are available (lags 1–2 frames).
+    // GPU time of the most recent frame whose results are available (lags 1â€“2 frames).
     // Negative when timestamps are unsupported or not available yet.
     double gpu_ms = -1.0;
+    // GPU time per pass of that frame, in order (Scene, Tonemap, Gizmos, HUD); empty when unknown.
+    struct Pass {
+        const char* name = "";
+        double ms = 0.0;
+    };
+    std::vector<Pass> passes;
 };
 
 // A copy of a presented frame, read back from the GPU. Pixels are tightly packed
@@ -127,10 +165,14 @@ public:
     [[nodiscard]] Result<MeshHandle> create_mesh(const MeshData& data);
     void destroy_mesh(MeshHandle mesh);
 
-    // Clears to the clear color and draws `frame.draws` from `frame.camera`.
+    // Draws `frame.draws` from `frame.camera`, lit by `frame.lighting`, then the gizmos and the HUD.
     [[nodiscard]] Result<FrameResult> render_frame(const FrameDesc& frame);
-    // Clears only.
-    [[nodiscard]] Result<FrameResult> render_frame() { return render_frame(FrameDesc{}); }
+    // Clears to the clear colour only.
+    [[nodiscard]] Result<FrameResult> render_frame() {
+        FrameDesc empty;
+        empty.lighting.sky_background = false;
+        return render_frame(empty);
+    }
 
     // Asks the renderer to copy the next presented frame to CPU memory.
     void request_capture() noexcept;

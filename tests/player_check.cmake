@@ -62,7 +62,10 @@ endif()
 if(hg LESS 200 OR hr GREATER 80 OR hb GREATER 80)
     message(FATAL_ERROR "the HUD's green square isn't at UI (40, 40) (${hr},${hg},${hb})")
 endif()
-# Rendering through the scene's camera: the red box is in the middle of the picture.
-if(r LESS 150 OR g GREATER 90 OR b GREATER 90)
+# Rendering through the scene's camera: the red box is in the middle of the picture. (Which
+# object, not how bright: since Milestone 5 a sun lights it, so the side facing us is a bit darker.)
+math(EXPR g3 "${g} * 3")
+math(EXPR b3 "${b} * 3")
+if(r LESS 100 OR r LESS g3 OR r LESS b3)
     message(FATAL_ERROR "the centre pixel isn't the red box (${r},${g},${b})")
 endif()

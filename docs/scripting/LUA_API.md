@@ -124,6 +124,12 @@ Add them in the Inspector (**Add component ▸ Physics**) or use **Create ▸ Ph
 "camera":    { "fov": 70, "near": 0.05 }
 ```
 
+```json
+"light":     { "type": "directional", "color": "#FFF5E6", "illuminance": 100000 }  // the sun (lux)
+"camera":    { "ev100": 14, "tonemapper": "neutral" }                             // exposure
+```
+The sun shines along its entity's forward; see [docs/rendering/PBR.md](../rendering/PBR.md).
+
 A `character` is a capsule controller with its feet at the entity's origin: it slides along
 walls, walks up steps and slopes, stays on the ground going down, and jumps. While playing, the
 viewport looks through the first entity with a `camera`. **Create ▸ Player (first person)** sets

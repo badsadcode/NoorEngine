@@ -3,6 +3,8 @@
 //   vulkan_renderer.cpp  instance, device, swapchain, frame loop, teardown
 //   vulkan_resources.cpp GPU memory (VMA), meshes, the mesh pipeline
 //   vulkan_capture.cpp   frame readback for automated tests
+//   vulkan_frame.cpp     the HDR image, per-frame lighting uniforms, tonemapping (ADR-012)
+//   vulkan_overlay.cpp   the HUD
 
 #include "noor/foundation/log.h"
 #include "noor/render/renderer.h"
@@ -52,6 +54,9 @@ namespace noor::render {
 inline constexpr std::uint32_t kFramesInFlight = 2;
 inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
 inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
+inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
+// GPU timestamps per frame: start, after the scene, after tonemapping, after the gizmos, end.
+inline constexpr std::uint32_t kTimestampsPerFrame = 5;
 
 struct FrameSync {
     VkCommandPool pool = VK_NULL_HANDLE;
@@ -74,16 +79,25 @@ struct GpuMesh {
 };
 
 // Push constants for mesh.hlsl (must match its PushConstants struct; 128 bytes = guaranteed minimum).
-// Only the 3x3 part of world_from_object is needed (normals), sent as three columns.
+// The model matrix's top three rows (rotation/scale and translation) give world positions and normals.
 struct MeshPushConstants {
     math::Mat4 clip_from_object;
-    math::Vec4 world_col0;
-    math::Vec4 world_col1;
-    math::Vec4 world_col2;
+    math::Vec4 world_row0;
+    math::Vec4 world_row1;
+    math::Vec4 world_row2;
     math::Vec4 tint;  // rgb = linear color, a = blend amount (0 = mesh colors)
 };
 static_assert(sizeof(MeshPushConstants) == 128);
-static_assert(sizeof(Vertex) == 36, "mesh pipeline vertex layout assumes 3 x float3");
+static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
+
+// mesh.hlsl's FrameUniforms (set 0, binding 0), one buffer per frame in flight. Radiances are pre-exposed.
+struct FrameUniforms {
+    math::Vec4 camera_position;
+    math::Vec4 to_sun;
+    math::Vec4 sun_radiance;
+    math::Vec4 sky_radiance;
+    math::Vec4 ground_radiance;
+};
 
 struct PendingCapture {
     GpuBuffer buffer;
@@ -152,10 +166,33 @@ struct Renderer::Impl {
     VmaAllocation depth_allocation = VK_NULL_HANDLE;
     VkImageView depth_view = VK_NULL_HANDLE;
 
-    // Mesh pipeline
+    // HDR image the scene is lit into (one, shared by frames in flight like the depth buffer)
+    VkImage hdr_image = VK_NULL_HANDLE;
+    VmaAllocation hdr_allocation = VK_NULL_HANDLE;
+    VkImageView hdr_view = VK_NULL_HANDLE;
+
+    // Per-frame lighting uniforms (vulkan_frame.cpp)
+    VkDescriptorSetLayout frame_set_layout = VK_NULL_HANDLE;
+    VkDescriptorPool frame_pool = VK_NULL_HANDLE;
+    std::array<VkDescriptorSet, kFramesInFlight> frame_sets{};
+    std::array<GpuBuffer, kFramesInFlight> frame_ubos{};
+
+    // Mesh pipelines: the lit scene (into the HDR image) and editor gizmos (into the screen)
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkPipeline mesh_pipeline = VK_NULL_HANDLE;
-    VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;
+    VkPipeline gizmo_pipeline = VK_NULL_HANDLE;
+    VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;  // the screen's, for the gizmo pipeline
+
+    // Tonemapping: HDR image -> screen (vulkan_frame.cpp)
+    struct Tonemap {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VkDescriptorSet set = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;
+        VkFormat color_format = VK_FORMAT_UNDEFINED;
+    } tonemap;
 
     // Overlay (HUD): vulkan_overlay.cpp
     struct Overlay {
@@ -176,7 +213,7 @@ struct Renderer::Impl {
     std::array<FrameSync, kFramesInFlight> frames{};
     std::uint32_t frame_index = 0;
 
-    // GPU timestamps: two queries (start, end) per frame in flight.
+    // GPU timestamps: kTimestampsPerFrame queries per frame in flight.
     VkQueryPool timestamp_pool = VK_NULL_HANDLE;
     double timestamp_period_ns = 0.0;
     bool timestamps_supported = false;
@@ -210,6 +247,16 @@ struct Renderer::Impl {
     Status create_depth_buffer();
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
+    VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out);
+    // vulkan_frame.cpp
+    Status create_hdr_target();
+    void destroy_hdr_target();
+    Status ensure_frame_uniforms();
+    Status ensure_tonemap(VkFormat color_format);
+    void write_tonemap_descriptor();
+    void update_frame_uniforms(const FrameDesc& frame);
+    void record_tonemap(VkCommandBuffer cmd, const Lighting& lighting);
+    void destroy_frame_resources();
     // vulkan_overlay.cpp
     Status ensure_overlay(VkFormat color_format);
     Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);
@@ -221,7 +268,8 @@ struct Renderer::Impl {
     Status upload_to_device(const void* data, VkDeviceSize size, VkBufferUsageFlags usage, GpuBuffer& out);
     Result<MeshHandle> create_mesh(const MeshData& data);
     void destroy_mesh(MeshHandle handle);
-    void record_draws(VkCommandBuffer cmd, const FrameDesc& frame);
+    // The scene's draws (gizmos = false: lit, into the HDR image) or the editor gizmos (true).
+    void record_draws(VkCommandBuffer cmd, const FrameDesc& frame, bool gizmos);
 
     // vulkan_capture.cpp
     Status record_capture(VkCommandBuffer cmd, VkImage image);

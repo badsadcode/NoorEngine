@@ -7,7 +7,8 @@ namespace noor::game {
 
 using math::Vec3;
 
-// An axis-aligned box from lo to hi, one color, counter-clockwise faces.
+// An axis-aligned box from lo to hi, one color, counter-clockwise faces. Each face has UVs 0..1
+// (u along the face's u axis, v downwards, glTF style) and a tangent along u.
 Geometry make_box(Vec3 color, Vec3 lo, Vec3 hi) {
     struct Face { Vec3 n, u, v; };
     const Face faces[] = {{{0, 1, 0}, {1, 0, 0}, {0, 0, -1}}, {{0, -1, 0}, {1, 0, 0}, {0, 0, 1}},
@@ -17,14 +18,17 @@ Geometry make_box(Vec3 color, Vec3 lo, Vec3 hi) {
     Geometry g;
     for (const Face& f : faces) {
         const auto base = static_cast<std::uint32_t>(g.first.size());
+        const math::Vec2 uvs[] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+        int corner = 0;
         for (const Vec3 p : {f.n - f.u - f.v, f.n + f.u - f.v, f.n + f.u + f.v, f.n - f.u + f.v})
-            g.first.push_back({{c.x + p.x * h.x, c.y + p.y * h.y, c.z + p.z * h.z}, f.n, color});
+            g.first.push_back({{c.x + p.x * h.x, c.y + p.y * h.y, c.z + p.z * h.z}, f.n, color, uvs[corner++], {f.u.x, f.u.y, f.u.z, 1}});
         for (const std::uint32_t i : {0u, 1u, 2u, 0u, 2u, 3u}) g.second.push_back(base + i);
     }
     return g;
 }
 
 // A sphere of radius 0.5 (primitives), or a capsule along Y (total height h, radius r) when h > 2r.
+// UVs wrap around (u: 0..1 with the angle from +X towards +Z) and run pole to pole (v: 0..1).
 Geometry make_round(float radius, float height) {
     constexpr int kRings = 16, kSegments = 24;
     const float half = std::max(0.0f, height * 0.5f - radius);  // cylinder half length
@@ -39,12 +43,15 @@ Geometry make_round(float radius, float height) {
         for (int j = 0; j <= kSegments; ++j) {
             const float theta = 2.0f * math::kPi * static_cast<float>(j) / kSegments;
             const Vec3 n{std::sin(phi) * std::cos(theta), std::cos(phi), std::sin(phi) * std::sin(theta)};
-            g.first.push_back({{r * std::cos(theta), y + shift, r * std::sin(theta)}, n, {1, 1, 1}});
+            const float u = static_cast<float>(j) / kSegments;
+            g.first.push_back({{r * std::cos(theta), y + shift, r * std::sin(theta)}, n, {1, 1, 1}, {u, v},
+                               {-std::sin(theta), 0, std::cos(theta), 1}});
         }
         if (i == kRings / 2 && half > 0) {  // duplicate the equator ring for the lower hemisphere
             for (int j = 0; j <= kSegments; ++j) {
                 const float theta = 2.0f * math::kPi * static_cast<float>(j) / kSegments;
-                g.first.push_back({{radius * std::cos(theta), -half, radius * std::sin(theta)}, {std::cos(theta), 0, std::sin(theta)}, {1, 1, 1}});
+                g.first.push_back({{radius * std::cos(theta), -half, radius * std::sin(theta)}, {std::cos(theta), 0, std::sin(theta)}, {1, 1, 1},
+                                   {static_cast<float>(j) / kSegments, 0.5f}, {-std::sin(theta), 0, std::cos(theta), 1}});
             }
         }
     }
