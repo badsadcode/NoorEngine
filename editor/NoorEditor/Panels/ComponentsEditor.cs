@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using NoorEditor.Model;
 using NoorEditor.Shell;
 
@@ -334,6 +335,37 @@ public sealed class ComponentsEditor : StackPanel
             ToolTip.SetTip(addParam, "Values the script reads as self.params.<name>");
             addParam.Click += async (_, _) => await AddField(type, "params.");
             body.Children.Add(addParam);
+        }
+        else if (type == "csg_model" && _entity != null)
+        {
+            // A CSG model: what it's made of, its collision, and Export (Milestone 6, part 4).
+            var info = _doc.CsgInfo().OfType<JsonObject>().FirstOrDefault(m => m["model"]?.GetValue<string>() == _entity.Id);
+            var triangles = info?["triangles"]?.GetValue<long>() ?? 0;
+            var collides = _entity.Components["collider"] != null;
+            body.Children.Add(new TextBlock
+            {
+                Text = info == null ? "No brushes yet: Create ▸ Brush adds one."
+                     : $"{info["brushes"]} brush(es) · {triangles:N0} triangles · {info["volume"]?.GetValue<double>():0.##} m³\n" +
+                       (collides ? $"Collision: a mesh of the same {triangles:N0} triangles" + (triangles > 20000 ? " (expensive: consider simpler collision)" : "")
+                                 : "No collision (add a collider with shape \"mesh\" to walk on it)"),
+                FontSize = 11, TextWrapping = TextWrapping.Wrap, Classes = { "muted" },
+            });
+            var export = new Button { Content = "Export GLB…", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = info != null };
+            ToolTip.SetTip(export, "A Noor Interchange asset: GLB with embedded textures and a collision node, plus a .noor.json manifest (opens in Blender and Godot)");
+            export.Click += async (_, _) =>
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner || _entity == null) return;
+                var file = await owner.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+                {
+                    Title = "Export CSG model", SuggestedFileName = _entity.Name + ".glb", DefaultExtension = "glb",
+                    FileTypeChoices = [new Avalonia.Platform.Storage.FilePickerFileType("glTF binary") { Patterns = ["*.glb"] }],
+                });
+                var path = file?.TryGetLocalPath();
+                if (path == null) return;
+                var result = _doc.ExportCsg(_entity.Id, path);
+                if (result != null) Interop.EngineLog.Info("Export", $"Exported {_entity.Name} to {path} (+ .noor.json)");
+            };
+            body.Children.Add(export);
         }
         else if (value is JsonObject obj && editable)
         {

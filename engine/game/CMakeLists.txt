@@ -8,6 +8,7 @@ noor_add_module(game
         src/texture_library.cpp
         src/material_library.cpp
         src/environment_library.cpp
+        src/cooked_csg.cpp
     PUBLIC_DEPS
         noor::asset
         noor::scene

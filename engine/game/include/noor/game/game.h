@@ -70,6 +70,13 @@ struct SceneView {
         Guid entity;
     };
     std::vector<Mesh> meshes;
+    // CSG models (`csg_model` entities): drawn from their cooked files (noor/game/cooked_csg.h).
+    struct Csg {
+        Guid entity;
+        math::Mat4 world;
+        std::uint64_t key = 0;  // what the scene says the model is now (a different cooked key: stale)
+    };
+    std::vector<Csg> csg;
     std::vector<Primitive> primitives;
     std::optional<Camera> camera;
     // The sun: the first entity with a directional `light` ({"type": "directional", "color":

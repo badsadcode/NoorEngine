@@ -4,6 +4,31 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 6, part 4: CSG in games (cook, collide, export)
+**Added**
+- **Cooked CSG models** (`noor/game/cooked_csg.h`): `<project>/.noor/cooked/csg/<model>.ncsg` with
+  triangles, one submesh per material id, and the key of the brushes (`game::csg_model_key`,
+  FNV-1a over the brushes' data). The editor cooks on Save and Play; `noor_cli build` cooks into the
+  game; **`noor_cli cook <project>`**. noor_player and Play draw cooked models and report missing
+  or stale ones.
+- `csg::brushes_from_scene` and `csg::cook_model` (`noor/csg/scene_csg.h`): one reader of brush
+  JSON for the editor and the tools.
+- **Collision:** mesh colliders on CSG models use their cooked triangles
+  (`PhysicsSystem::Options::csg_triangles`); new models get `"collider": {"shape": "mesh"}`; the
+  Inspector shows the cost.
+- **Export GLB…** (`asset::export_noor_glb`, Noor Interchange v0.3): GLB with PBR materials,
+  embedded PNG/JPEG maps, baked material UV transforms, tangents, a `-colonly` collision node, and a
+  `.noor.json` manifest. Editor API **v16**: `noor_doc_export_csg`.
+
+**Fixed:** CSG model entities were skipped by `collect_view` (it skipped entities with none of the
+components it drew); a new member of `SceneRenderer` was declared above the material library and
+emptied its resolver (the render goldens caught it: textured materials lost their maps).
+
+**Tests:** `cli.build_csg` + `player.csg_doorway` (a built game: one walker through an arched
+doorway, the other stopped by the wall, the wall drawn, validation clean); unit tests for cooking
+(round trip, damaged file, key) and export (re-imported: collision node, embedded image, triangle
+count, manifest fields and hash); 2 editor smoke checks (save cooks, Export writes GLB + manifest).
+
 ### 2026-11-17 — Milestone 6, part 3: surface materials and UVs
 **Added**
 - Per-face surfaces on brushes: `"faces": [null | {material, uv_scale, uv_offset, uv_rotation,

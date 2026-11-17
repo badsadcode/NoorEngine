@@ -1,4 +1,5 @@
 #include "noor/game/scene_renderer.h"
+#include "noor/game/cooked_csg.h"
 
 #include "noor/asset/gltf_import.h"
 #include "noor/foundation/log.h"
@@ -8,8 +9,8 @@
 namespace noor::game {
 
 SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache, asset::AssetFileResolver resolve)
-    : renderer_(renderer), textures_(renderer, texture_cache), materials_(renderer, textures_, std::move(resolve)),
-      environment_(renderer, std::move(texture_cache)) {
+    : renderer_(renderer), textures_(renderer, texture_cache), materials_(renderer, textures_, resolve),
+      environment_(renderer, std::move(texture_cache)), resolve_(std::move(resolve)) {
     box_ = upload(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
     sphere_ = upload(make_round(0.5f, 1.0f), "Primitive sphere");
 }
@@ -20,6 +21,7 @@ SceneRenderer::~SceneRenderer() {
     };
     destroy(box_);
     destroy(sphere_);
+    for (const auto& [id, c] : cooked_) destroy(c.mesh);
     for (const auto& [key, h] : capsules_) destroy(h);
     for (const auto& [path, model] : models_) {
         if (model)
@@ -69,6 +71,46 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
             item.index_count = sm.index_count;
             if (sm.material >= 0 && sm.material < static_cast<int>(it->second->materials.size()))
                 item.material = it->second->materials[static_cast<std::size_t>(sm.material)];
+            out.push_back(item);
+        }
+    }
+    for (const auto& c : view.csg) {
+        CookedModel& cm = cooked_[c.entity];
+        const auto file = cooked_csg_path(cooked_root_, c.entity);
+        std::error_code ec;
+        const auto time = std::filesystem::last_write_time(file, ec);
+        if (!cm.loaded || (!ec && time != cm.time)) {  // first time, or cooked again (the editor saved)
+            if (cm.mesh.valid()) renderer_.destroy_mesh(cm.mesh);
+            cm = {};
+            cm.loaded = true;
+            cm.time = time;
+            if (auto cooked = read_cooked_csg(file)) {
+                cm.key = cooked->key;
+                if (auto h = renderer_.create_mesh({{cooked->vertices.data(), cooked->vertices.size()}, cooked->indices, "CSG model"})) cm.mesh = *h;
+                NOOR_LOG_DEBUG("Game", "CSG model {}: {} triangles, {} material(s)", c.entity.to_string(), cooked->indices.size() / 3,
+                               cooked->submeshes.size());
+                for (const auto& s : cooked->submeshes) {
+                    cm.ranges.emplace_back(s.first_index, s.index_count);
+                    std::optional<std::filesystem::path> path = s.material && resolve_ ? resolve_(*s.material) : std::nullopt;
+                    cm.materials.push_back(path ? materials_.file(*path) : render::MaterialHandle{});
+                }
+            } else {
+                NOOR_LOG_WARN("Game", "CSG model {} isn't cooked ({}): save its scene in the editor, or run noor_cli cook", c.entity.to_string(),
+                              cooked.error().describe());
+                cm.warned = true;
+            }
+        }
+        if (cm.mesh.valid() && cm.key != c.key && !cm.warned) {
+            NOOR_LOG_WARN("Game", "CSG model {} was cooked before its last change: save its scene in the editor, or run noor_cli cook",
+                          c.entity.to_string());
+            cm.warned = true;
+        }
+        if (!cm.mesh.valid()) continue;
+        for (std::size_t i = 0; i < cm.ranges.size(); ++i) {
+            render::DrawItem item{cm.mesh, c.world};
+            item.first_index = cm.ranges[i].first;
+            item.index_count = cm.ranges[i].second;
+            item.material = cm.materials[i];
             out.push_back(item);
         }
     }

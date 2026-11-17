@@ -36,6 +36,9 @@ public:
     // Reloads changed materials and textures (call a few times a second).
     void refresh() { materials_.refresh(); }
 
+    // Where cooked CSG models are (the project or game folder; files in .noor/cooked/csg).
+    void set_cooked_root(std::filesystem::path root) { cooked_root_ = std::move(root); }
+
 private:
     render::MeshHandle upload(const Geometry& g, const char* name);
 
@@ -51,6 +54,19 @@ private:
     TextureLibrary textures_;
     MaterialLibrary materials_;
     EnvironmentLibrary environment_;
+    // Declared after the libraries: members are built in this order, and materials_ needs `resolve` before it moves here.
+    struct CookedModel {
+        bool loaded = false;
+        std::uint64_t key = 0;
+        std::filesystem::file_time_type time{};
+        render::MeshHandle mesh;
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> ranges;  // (first, count) per submesh
+        std::vector<render::MaterialHandle> materials;               // per submesh
+        bool warned = false;
+    };
+    std::unordered_map<Guid, CookedModel> cooked_;
+    std::filesystem::path cooked_root_;
+    asset::AssetFileResolver resolve_;
 };
 
 } // namespace noor::game

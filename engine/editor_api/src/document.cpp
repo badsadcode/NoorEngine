@@ -2,6 +2,9 @@
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
 #include "noor/csg/csg.h"
+#include "noor/csg/scene_csg.h"
+#include "noor/asset/gltf_export.h"
+#include "noor/game/cooked_csg.h"
 #include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
@@ -103,6 +106,7 @@ Status Document::play() {
     std::scoped_lock lock(play_mutex_);
     if (auto s = require_scene(); !s) return s;
     if (world_) return {};
+    cook_csg();  // Play loads cooked CSG models, like a game
     game::WorldOptions options;
     options.script_host = script_host_;
     options.audio_device = audio_device_;
@@ -313,6 +317,7 @@ Status Document::new_scene(std::string_view relative, std::string_view name) {
 Status Document::save_scene() {
     if (auto s = require_scene(); !s) return s;
     if (auto s = scene_->save(scene_file_); !s) return s;
+    cook_csg();  // games (noor_player on the project) load what was saved
     scene_->migrations_applied.clear();
     history_.mark_saved();
     ++revision_;  // "modified" changed
@@ -589,7 +594,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         auto mesh = build_csg(expanded, i);
         if (!mesh) continue;
         snap->csg.push_back({entities[i].id, expanded.world_matrix(i), mesh});
-        csg_last_.push_back(std::move(mesh));
+        csg_last_.emplace_back(entities[i].id, std::move(mesh));
     }
     for (auto& m : view.meshes) {
         std::string key = m.asset_path.generic_string();
@@ -622,79 +627,29 @@ csg::Shape shape_of(const std::string& name) {
 std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded, std::size_t model_index) {
     const auto& entities = expanded.entities;
     const Guid model_id = entities[model_index].id;
-    // The model's brushes: its direct children with a `brush` component, in order.
-    std::vector<std::size_t> brush_entities;
-    for (std::size_t j = model_index + 1; j < entities.size(); ++j)
-        if (entities[j].parent == model_id && entities[j].has("brush")) brush_entities.push_back(j);
-
-    // What the result depends on, hashed: brush components, local transforms, material files.
-    std::string recipe = model_id.to_string();
-    for (const std::size_t j : brush_entities) {
-        const auto& t = entities[j].transform;
-        recipe += entities[j].id.to_string() + entities[j].components.at("brush").dump();
-        recipe += std::format("{} {} {} {} {} {} {} {} {} {}", t.position.x, t.position.y, t.position.z, t.rotation.x, t.rotation.y,
-                              t.rotation.z, t.rotation.w, t.scale.x, t.scale.y, t.scale.z);
-    }
-    const std::uint64_t key = std::hash<std::string>{}(recipe);
+    const std::uint64_t key = game::csg_model_key(expanded, model_index);
     if (const auto it = csg_cache_.find(model_id); it != csg_cache_.end() && it->second->key == key) return it->second;
 
     const auto start = std::chrono::steady_clock::now();
     auto mesh = std::make_shared<CsgMesh>();
     mesh->key = key;
-    mesh->materials.emplace_back();  // slot 0: the default material
-    std::unordered_map<Guid, std::uint32_t> slot_of;
-    std::vector<csg::Brush> brushes;
-    std::vector<Guid> brush_ids;
-    for (const std::size_t j : brush_entities) {
-        const Json& c = entities[j].components.at("brush");
-        if (!c.is_object()) continue;
-        csg::Brush b;
-        b.shape = shape_of(c.value("shape", std::string("box")));
-        const std::string op = c.value("operation", std::string("add"));
-        b.operation = op == "subtract" ? csg::Operation::Subtract : op == "intersect" ? csg::Operation::Intersect : csg::Operation::Add;
-        if (c.contains("size") && c["size"].is_array() && c["size"].size() == 3)
-            b.size = {c["size"][0].get<float>(), c["size"][1].get<float>(), c["size"][2].get<float>()};
-        b.sides = static_cast<std::uint32_t>(std::clamp(json_float(c, "sides", 16.0f), 3.0f, 256.0f));
-        b.steps = static_cast<std::uint32_t>(std::clamp(json_float(c, "steps", 4.0f), 1.0f, 256.0f));
-        const auto& t = entities[j].transform;
-        b.transform = math::compose(t.position, t.rotation, t.scale);
-        const auto slot = [&](const Guid& id) {
-            auto [it, added] = slot_of.try_emplace(id, static_cast<std::uint32_t>(mesh->materials.size()));
-            if (added) {
-                std::filesystem::path file;
-                if (const auto* rec = registry_.find(id))
-                    if (auto resolved = project_.resolve(rec->path)) file = *resolved;
-                mesh->materials.push_back(std::move(file));
-            }
-            return it->second;
-        };
-        // A surface from JSON: material, UV scale/offset/rotation, alignment; missing keys from `base`.
-        const auto surface = [&](const Json& j, const csg::Surface& base) {
-            csg::Surface s = base;
-            s.scale = json_vec2(j, "uv_scale", base.scale);
-            s.offset = json_vec2(j, "uv_offset", base.offset);
-            s.rotation_degrees = json_float(j, "uv_rotation", base.rotation_degrees);
-            if (j.contains("uv_align") && j["uv_align"].is_string())
-                s.align = j["uv_align"].get<std::string>() == "brush" ? csg::Align::Brush : csg::Align::World;
-            if (j.contains("material")) s.material = j["material"].is_null() ? 0u : asset::guid_field(j, "material") ? slot(*asset::guid_field(j, "material")) : base.material;
-            return s;
-        };
-        b.surface = surface(c, csg::Surface{});
-        // "faces": per logical face, null (= the brush's surface) or an object overriding it.
-        if (c.contains("faces") && c["faces"].is_array())
-            for (std::uint32_t f = 0; f < c["faces"].size() && f < csg::face_count(b.shape); ++f) {
-                const Json& fj = c["faces"][f];
-                b.faces.resize(f + 1, b.surface);
-                if (fj.is_object()) b.faces[f] = surface(fj, b.surface);
-            }
-        if (b.operation != csg::Operation::Add) {
-            const auto bm = csg::brush_mesh(b);
-            CsgMesh::Ghost ghost{entities[j].id, b.operation == csg::Operation::Intersect, {}};
-            for (const auto index : bm.indices) ghost.positions.push_back(bm.positions[index]);
-            mesh->ghosts.push_back(std::move(ghost));
-        }
-        brushes.push_back(std::move(b));
-        brush_ids.push_back(entities[j].id);
+    const csg::SceneModel sm = csg::brushes_from_scene(expanded, model_index);
+    mesh->material_ids = sm.slot_materials;
+    for (const auto& id : sm.slot_materials) {
+        std::filesystem::path file;
+        if (id)
+            if (const auto* rec = registry_.find(*id))
+                if (auto resolved = project_.resolve(rec->path)) file = *resolved;
+        mesh->materials.push_back(std::move(file));
+    }
+    const auto& brushes = sm.brushes;
+    const auto& brush_ids = sm.brush_ids;
+    for (std::size_t i = 0; i < brushes.size(); ++i) {
+        if (brushes[i].operation == csg::Operation::Add) continue;
+        const auto bm = csg::brush_mesh(brushes[i]);
+        CsgMesh::Ghost ghost{brush_ids[i], brushes[i].operation == csg::Operation::Intersect, {}};
+        for (const auto index : bm.indices) ghost.positions.push_back(bm.positions[index]);
+        mesh->ghosts.push_back(std::move(ghost));
     }
     mesh->brush_count = brushes.size();
 
@@ -734,10 +689,66 @@ std::shared_ptr<const CsgMesh> Document::build_csg(const scene::Scene& expanded,
     return mesh;
 }
 
+void Document::cook_csg() {
+    for (const auto& [id, mesh] : csg_last_) {
+        const auto file = game::cooked_csg_path(project_.root(), id);
+        if (auto old = game::read_cooked_csg(file); old && old->key == mesh->key) continue;
+        game::CookedCsg cooked;
+        cooked.key = mesh->key;
+        cooked.vertices = mesh->vertices;
+        cooked.indices = mesh->indices;
+        // The draw parts are runs per (material, brush); games need one run per material.
+        std::vector<CsgMesh::Part> parts;
+        for (const auto& g : mesh->groups) parts.insert(parts.end(), g.parts.begin(), g.parts.end());
+        std::ranges::sort(parts, {}, &CsgMesh::Part::first_index);
+        for (const auto& part : parts) {
+            const auto material = part.slot < mesh->material_ids.size() ? mesh->material_ids[part.slot] : std::nullopt;
+            if (!cooked.submeshes.empty() && cooked.submeshes.back().material == material &&
+                cooked.submeshes.back().first_index + cooked.submeshes.back().index_count == part.first_index)
+                cooked.submeshes.back().index_count += part.index_count;
+            else
+                cooked.submeshes.push_back({part.first_index, part.index_count, material});
+        }
+        if (auto w = game::write_cooked_csg(file, cooked); !w) NOOR_LOG_WARN("CSG", "Couldn't cook {}: {}", id.to_string(), w.error().describe());
+    }
+}
+
+Result<Json> Document::export_csg(const Guid& model, const std::filesystem::path& glb) {
+    const auto it = std::ranges::find_if(csg_last_, [&](const auto& m) { return m.first == model; });
+    if (it == csg_last_.end()) return fail(ErrorCode::NotFound, "no CSG model with that id in the open scene");
+    const CsgMesh& mesh = *it->second;
+    asset::ExportModel em;
+    const auto* entity = scene_ ? [&]() -> const scene::Entity* {
+        for (const auto& e : scene_->entities)
+            if (e.id == model) return &e;
+        return nullptr;
+    }() : nullptr;
+    // A readable, file-safe name: the entity's, else the file's.
+    std::string name = entity && !entity->name.empty() ? entity->name : glb.stem().string();
+    for (char& c : name)
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') c = '_';
+    em.name = name;
+    em.id = model;
+    em.generator_version = project_.info().engine_version;
+    em.vertices.reserve(mesh.vertices.size());
+    for (const auto& v : mesh.vertices) em.vertices.push_back({v.position, v.normal, v.color, v.uv, v.tangent});
+    em.indices = mesh.indices;
+    for (const auto& g : mesh.groups)
+        for (const auto& part : g.parts)
+            em.parts.push_back({part.first_index, part.index_count, part.slot < mesh.materials.size() ? mesh.materials[part.slot] : std::filesystem::path{}});
+    std::ranges::sort(em.parts, {}, &asset::ExportModel::Part::first_index);
+    em.collision = entity && entity->has("collider");
+    std::vector<std::string> warnings;
+    auto manifest = asset::export_noor_glb(em, game::file_resolver(game::registry_asset_path(project_, registry_)), glb, &warnings);
+    if (!manifest) return std::unexpected(manifest.error());
+    for (const auto& w : warnings) NOOR_LOG_WARN("Export", "{}", w);
+    NOOR_LOG_INFO("Export", "Exported {} ({} triangles) to {}", name, mesh.triangles, glb.generic_string());
+    return Json{{"path", glb.generic_string()}, {"manifest", *manifest}, {"warnings", warnings}};
+}
+
 Json Document::csg_info() const {
     Json out = Json::array();
-    for (const auto& [id, mesh] : csg_cache_) {
-        if (std::ranges::find(csg_last_, mesh) == csg_last_.end()) continue;  // not in the scene any more
+    for (const auto& [id, mesh] : csg_last_) {
         Json faces = Json::array();
         for (const auto& f : mesh->faces) {
             const auto& file = f.slot < mesh->materials.size() ? mesh->materials[f.slot] : std::filesystem::path{};

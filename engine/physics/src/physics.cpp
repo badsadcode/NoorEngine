@@ -243,8 +243,11 @@ struct PhysicsSystem::Impl {
         }
         for (const Guid& id : subtree) {
             const scene::Entity* e = world.find(id);
-            if (!e || !e->has("mesh")) continue;
-            auto tris = options.mesh_triangles(e->components["mesh"]);
+            if (!e) continue;
+            std::optional<Triangles> tris;
+            if (e->has("mesh") && options.mesh_triangles) tris = options.mesh_triangles(e->components["mesh"]);
+            else if (e->has("csg_model") && options.csg_triangles) tris = options.csg_triangles(id);
+            else continue;
             const auto mesh_world = api::world_matrix(world, id);
             if (!tris || !mesh_world) continue;
             const auto base = static_cast<std::uint32_t>(out.positions.size());

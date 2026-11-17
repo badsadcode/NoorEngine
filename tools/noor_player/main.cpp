@@ -284,6 +284,7 @@ int run(const Options& o) {
             } else {
                 noor::game::SceneRenderer scene_renderer(**renderer, project->root() / ".noor" / "cache" / "textures",
                                                          noor::game::file_resolver(noor::game::registry_asset_path(*project, registry)));
+                scene_renderer.set_cooked_root(project->root());
                 double last_refresh = noor::platform::time_seconds();
                 const noor::game::Hud hud;  // the HUD scripts draw (noor.ui / Ui), with the built-in font
                 if (auto s = (*renderer)->set_overlay_atlas(hud.atlas_width(), hud.atlas_height(), hud.atlas()); !s)

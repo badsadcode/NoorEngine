@@ -1,7 +1,8 @@
 # CSG brushes
 
-How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, parts 1–3**: the
-kernel and the shapes, brushes in the editor, and materials and UVs per face.
+How NoorEngine builds level geometry from brushes (ADR-016). Status: **Milestone 6, parts 1–4**: the
+kernel and the shapes, brushes in the editor, materials and UVs per face, and CSG in games
+(cooking, collision, GLB export).
 
 ## In the editor
 
@@ -92,14 +93,44 @@ the library Godot's CSG uses. Manifold returns, for every output triangle, which
 which input face it came from; `noor_csg` turns that into materials, normals, UVs and tangents.
 Measured: a wall with 100 windows rebuilds in ~14 ms (release).
 
-## The runtime boundary
+## In games: cooking
 
-`noor_csg` and Manifold are for the editor and for cooking only. Games will load the cooked
-meshes (part 4). The test `boundary.runtime_has_no_editor_code` fails if either ever gets linked
-into `noor_player` or a runtime module.
+Games never run the CSG kernel. A model is **cooked** into a small binary file,
+`<project>/.noor/cooked/csg/<model id>.ncsg`: its triangles, one submesh per material (by asset
+id), and the **key** of the brushes it was made from (a fingerprint of their components and local
+transforms, the same on every machine).
+
+- The **editor** cooks on **Save** and on **Play** (only models whose key changed).
+- **`noor_cli build`** cooks every scene's models fresh into the game (the project's own `.noor`
+  folder isn't packed). **`noor_cli cook <project>`** does it for running `noor_player` on a
+  project.
+- **noor_player** (and Play) draws the cooked file. A missing file, or one whose key doesn't match
+  the scene, is reported once (save the scene, or run `noor_cli cook`).
+
+`noor_csg` and Manifold are for the editor and tools only. The test
+`boundary.runtime_has_no_editor_code` fails if either ever gets linked into `noor_player` or a
+runtime module.
+
+## Collision
+
+New CSG models get `"collider": {"shape": "mesh"}`: a static mesh collider made of the model's
+own cooked triangles (physics asks the host for them, like a GLB mesh collider). The model's
+Inspector shows the triangle count and warns above 20,000. Remove the collider for decoration
+that shouldn't block anything. The test `player.csg_doorway` builds a game with a wall and an
+arched doorway: one character walks through the doorway, another is stopped by the wall.
+
+## Export
+
+**Export GLB…** on a CSG model's Inspector card writes a
+[Noor Interchange](../interchange/NOOR_INTERCHANGE.md) asset: `<name>.glb` (one primitive per
+material, PBR materials made from the `.noormat` files with their PNG/JPEG maps embedded, the
+material's UV scale baked into the UVs, tangents, and a `<name>-colonly` collision node flagged
+`extras.noor.collision = "mesh"`) and `<name>.noor.json` (the model's id, bounds, triangle count,
+the GLB's SHA-256, `"gltf_validator": "not_run"` until the Khronos validator is wired in). Single-
+channel roughness or metallic maps have no glTF slot and are left out (with a warning).
 
 ## Not yet
 Dragging a material from the Content Browser onto a face (the native viewport doesn't take drops
 yet: pick it in the Inspector), triplanar projection, UV tools per triangle, live re-cutting while a
-gizmo is dragged, cooked meshes for games (part 4: the player doesn't draw CSG models yet),
-collision and GLB export (part 4), brush outlines for add brushes, nested models.
+gizmo is dragged, brush outlines for add brushes, nested models, simpler collision shapes for CSG (convex pieces),
+the Khronos glTF validator in the export tests, opening exports in Blender or Godot in CI.

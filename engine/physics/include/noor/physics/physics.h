@@ -8,7 +8,7 @@
 //                {"shape": "mesh"}   static only: the triangles of the entity's own `mesh`
 //                                    component and of the meshes below it (a whole GLB model),
 //                                    or, with "asset" + "mesh_index", that mesh (Noor Interchange
-//                                    collision nodes are imported this way)
+//                                    collision nodes are imported this way; a CSG model: its cooked triangles)
 //                optional: "offset": [x, y, z], "trigger": true (detects, doesn't push)
 //   "rigidbody": {"type": "dynamic" | "kinematic" | "static", "mass": 1, "friction": 0.5,
 //                 "restitution": 0, "linear_damping": 0.05, "gravity_scale": 1}
@@ -51,6 +51,8 @@ public:
         math::Vec3 gravity{0, -9.81f, 0};
         // Triangles of a `mesh` component (for mesh colliders), from the host's asset system.
         std::function<std::optional<Triangles>(const asset::Json& mesh_component)> mesh_triangles;
+        // Triangles of a CSG model (the entity with `csg_model`), in the model's space: cooked data.
+        std::function<std::optional<Triangles>(const Guid& model)> csg_triangles;
     };
 
     explicit PhysicsSystem(Options options);

@@ -3,6 +3,15 @@
 // rotated and non-uniformly scaled brushes, touching boxes, a brush inside another, 100 cuts in one
 // wall. Materials and UVs must follow source faces through the cuts.
 #include "noor/csg/csg.h"
+#include "noor/asset/gltf_export.h"
+#include "noor/asset/project.h"
+#include "noor/asset/registry.h"
+#include "noor/csg/scene_csg.h"
+#include "noor/foundation/file_io.h"
+#include "noor/foundation/sha256.h"
+#include "noor/game/cooked_csg.h"
+#include "noor/game/game.h"
+
 
 #include <ostream>
 #include <doctest/doctest.h>
@@ -11,6 +20,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 
 using namespace noor;
 using csg::Brush;
@@ -200,4 +210,118 @@ TEST_CASE("csg: one face can have its own material, and its texture can turn wit
     }
     CHECK(front == 2);
     CHECK(model.submeshes.size() == 2);
+}
+
+// ---- Milestone 6, part 4: cooking and export ----
+
+
+namespace {
+
+// A scene with one CSG model: a wall (material `wall_material`) with a doorway cut through it.
+scene::Scene wall_scene(const std::optional<Guid>& wall_material) {
+    scene::Scene s;
+    scene::Entity model;
+    model.id = *Guid::parse("c5600000-0002-4000-8000-000000000001");
+    model.name = "House";
+    model.components["csg_model"] = asset::Json::object();
+    model.components["collider"] = {{"shape", "mesh"}};
+    s.entities.push_back(model);
+    scene::Entity wall;
+    wall.id = *Guid::parse("c5600000-0002-4000-8000-000000000002");
+    wall.parent = model.id;
+    wall.transform.position = {0, 1.5f, 0};
+    wall.components["brush"] = {{"shape", "box"}, {"size", {4.0, 3.0, 0.3}},
+                                {"material", wall_material ? asset::Json(wall_material->to_string()) : asset::Json(nullptr)}};
+    s.entities.push_back(wall);
+    scene::Entity door;
+    door.id = *Guid::parse("c5600000-0002-4000-8000-000000000003");
+    door.parent = model.id;
+    door.transform.position = {0, 1.1f, 0};
+    door.components["brush"] = {{"shape", "arch"}, {"operation", "subtract"}, {"size", {1.0, 2.2, 1.0}}};
+    s.entities.push_back(door);
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("csg cooking: a model cooks, reads back the same, and its key follows its brushes") {
+    const auto s = wall_scene(std::nullopt);
+    auto cooked = csg::cook_model(s, 0);
+    REQUIRE(cooked);
+    CHECK(cooked->indices.size() > 36);
+    CHECK(cooked->submeshes.size() == 1);
+    CHECK_FALSE(cooked->submeshes[0].material);
+    CHECK(cooked->key == game::csg_model_key(s, 0));
+
+    const auto dir = std::filesystem::temp_directory_path() / ("noor_cook_" + Guid::generate().to_string());
+    const auto file = game::cooked_csg_path(dir, s.entities[0].id);
+    REQUIRE(game::write_cooked_csg(file, *cooked));
+    auto back = game::read_cooked_csg(file);
+    REQUIRE(back);
+    CHECK(back->key == cooked->key);
+    CHECK(back->indices == cooked->indices);
+    CHECK(std::memcmp(back->vertices.data(), cooked->vertices.data(), cooked->vertices.size() * sizeof(render::Vertex)) == 0);
+    REQUIRE(fs::write_file_atomic(file, "NCSG but not really", false));
+    CHECK_FALSE(game::read_cooked_csg(file));  // damaged files are errors, not crashes
+    std::filesystem::remove_all(dir);
+
+    // The key: the same scene, the same key; a moved doorway, another key.
+    auto moved = s;
+    CHECK(game::csg_model_key(moved, 0) == cooked->key);
+    moved.entities[2].transform.position.x = 1.0f;
+    CHECK(game::csg_model_key(moved, 0) != cooked->key);
+}
+
+TEST_CASE("csg export: a Noor Interchange GLB with embedded textures, a collision node and a manifest") {
+    // The brick material of the render test project (a normal map, PNG).
+    const auto project = asset::Project::open(std::filesystem::path(NOOR_TEST_DATA_DIR) / "render_scenes");
+    REQUIRE(project);
+    asset::AssetRegistry registry;
+    REQUIRE(registry.scan(*project));
+    const Guid brick = *Guid::parse("7e5d0000-3a70-4000-8000-000000000001");
+    const auto s = wall_scene(brick);
+    auto cooked = csg::cook_model(s, 0);
+    REQUIRE(cooked);
+    REQUIRE(cooked->submeshes.size() == 2);  // the brick wall, the doorway's own faces (no material)
+
+    const auto resolve = game::file_resolver(game::registry_asset_path(*project, registry));
+    asset::ExportModel em;
+    em.name = "House";
+    em.id = s.entities[0].id;
+    em.generator_version = "test";
+    for (const auto& v : cooked->vertices) em.vertices.push_back({v.position, v.normal, v.color, v.uv, v.tangent});
+    em.indices = cooked->indices;
+    for (const auto& sm : cooked->submeshes)
+        em.parts.push_back({sm.first_index, sm.index_count, sm.material ? resolve(*sm.material).value_or(std::filesystem::path{}) : std::filesystem::path{}});
+    const auto dir = std::filesystem::temp_directory_path() / ("noor_export_" + Guid::generate().to_string());
+    std::vector<std::string> warnings;
+    auto manifest = asset::export_noor_glb(em, resolve, dir / "House.glb", &warnings);
+    REQUIRE_MESSAGE(manifest, (manifest ? "" : manifest.error().describe()));
+
+    // Read back with our own importer: the visible mesh, the collision node (flagged, "-colonly"),
+    // the brick's normal map embedded.
+    auto model = asset::import_gltf(dir / "House.glb");
+    REQUIRE_MESSAGE(model, (model ? "" : model.error().describe()));
+    CHECK(model->meshes.size() == 2);
+    const auto collision = std::ranges::find_if(model->nodes, [](const auto& n) { return n.is_collision(); });
+    REQUIRE(collision != model->nodes.end());
+    CHECK(collision->name == "House-colonly");
+    CHECK(collision->noor["collision"] == "mesh");
+    CHECK(model->images.size() == 1);
+    std::size_t triangles = 0;
+    for (const auto& sm : model->meshes[0].submeshes) triangles += sm.index_count / 3;
+    CHECK(triangles == cooked->indices.size() / 3);
+
+    // The manifest (spec section 4): version, the model's id, the GLB's hash, honest validation.
+    auto text = fs::read_file(dir / "House.noor.json");
+    REQUIRE(text);
+    const auto json = asset::parse_json(*text, "manifest");
+    REQUIRE(json);
+    CHECK((*json)["noor_interchange"] == "0.3");
+    CHECK((*json)["id"] == s.entities[0].id.to_string());
+    CHECK((*json)["collision"] == "mesh");
+    CHECK((*json)["validation"]["gltf_validator"] == "not_run");
+    CHECK((*json)["files"][0]["sha256"] == Sha256::hex(*fs::read_file(dir / "House.glb", 1u << 26)));
+    CHECK((*json)["lods"][0]["triangles"] == triangles);
+    std::filesystem::remove_all(dir);
 }

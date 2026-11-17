@@ -42,6 +42,7 @@ struct CsgMesh {
     };
     std::vector<Group> groups;
     std::vector<std::filesystem::path> materials;  // per slot; empty: the default material
+    std::vector<std::optional<Guid>> material_ids;  // per slot (what cooked files and exports name)
     // Subtract and intersect brushes as see-through shapes, so they can be seen and clicked.
     struct Ghost {
         Guid brush;
@@ -186,12 +187,17 @@ public:
     [[nodiscard]] Status set_texture_settings(std::string_view texture_path, const asset::Json& settings);
     // The CSG models of the open scene: [{"model", "brushes", "triangles", "volume", "build_ms", "warnings"}].
     [[nodiscard]] asset::Json csg_info() const;
+    // Writes a CSG model as a Noor Interchange GLB + manifest (Milestone 6, part 4).
+    [[nodiscard]] Result<asset::Json> export_csg(const Guid& model, const std::filesystem::path& glb);
 
 private:
     // CSG models built for snapshots, by model entity (rebuilt only when their brushes change).
     std::unordered_map<Guid, std::shared_ptr<const CsgMesh>> csg_cache_;
-    std::vector<std::shared_ptr<const CsgMesh>> csg_last_;  // in the last published snapshot
+    std::vector<std::pair<Guid, std::shared_ptr<const CsgMesh>>> csg_last_;  // models in the last published snapshot
     std::shared_ptr<const CsgMesh> build_csg(const scene::Scene& expanded, std::size_t model);
+    // Writes the cooked file of every CSG model in the open scene whose file is missing or stale
+    // (on save and on Play: what games and Play load; noor/game/cooked_csg.h).
+    void cook_csg();
     explicit Document(asset::Project project);
     [[nodiscard]] Status require_scene() const;
     [[nodiscard]] Status add_asset(const asset::Json& command);

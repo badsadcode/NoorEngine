@@ -1,4 +1,5 @@
 #include "noor/game/game.h"
+#include "noor/game/cooked_csg.h"
 
 #include "noor/asset/gltf_import.h"
 #include "noor/asset/json.h"
@@ -50,6 +51,16 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         physics::Triangles t;
         for (const auto& v : model->meshes[static_cast<std::size_t>(index)].vertices) t.positions.push_back(v.position);
         t.indices = model->meshes[static_cast<std::size_t>(index)].indices;
+        return t;
+    };
+    // CSG models collide with their cooked triangles (written by the editor and noor_cli).
+    physics_options.csg_triangles = [&project](const Guid& model) -> std::optional<physics::Triangles> {
+        auto cooked = read_cooked_csg(cooked_csg_path(project.root(), model));
+        if (!cooked) return std::nullopt;
+        physics::Triangles t;
+        t.positions.reserve(cooked->vertices.size());
+        for (const auto& v : cooked->vertices) t.positions.push_back(v.position);
+        t.indices = std::move(cooked->indices);
         return t;
     };
     world->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
@@ -132,7 +143,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool sun = is_light && !view.has_sun && light_type == "directional";
         const bool local = is_light && (light_type == "point" || light_type == "spot");
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
-        if (!camera && !primitive && !mesh && !sun && !local && !env) continue;
+        if (!camera && !primitive && !mesh && !sun && !local && !env && !e.has("csg_model")) continue;
         if (env) {
             const auto& en = e.components["environment"];
             if (const auto id = asset::guid_field(en, "hdri"); id && asset_path)
@@ -213,6 +224,10 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 prim.world = world * math::scale(size);
             }
             view.primitives.push_back(prim);
+        }
+        if (e.has("csg_model")) {
+            const auto model_index = static_cast<std::size_t>(&e - entities.data());
+            view.csg.push_back({e.id, world, csg_model_key(scene, model_index)});
         }
         if (mesh && asset_path) {
             const auto& m = e.components["mesh"];

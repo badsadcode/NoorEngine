@@ -184,6 +184,18 @@ public sealed class EditorDocument : IDisposable
     public bool Move(string id, string? before) =>
         Execute(new JsonObject { ["op"] = "move", ["entity"] = id, ["before"] = before });
 
+    /// <summary>Exports a CSG model as a Noor Interchange GLB + manifest. Returns the result JSON, or null (logged).</summary>
+    public JsonObject? ExportCsg(string modelId, string glbPath)
+    {
+        var json = Native.ExportCsg(Handle, modelId, glbPath);
+        if (json == null)
+        {
+            EngineLog.Error("Export", Native.LastError());
+            return null;
+        }
+        return JsonNode.Parse(json) as JsonObject;
+    }
+
     /// <summary>The scene's CSG models as the engine built them (noor_doc_csg).</summary>
     public JsonArray CsgInfo() => JsonNode.Parse(Native.Csg(Handle)) as JsonArray ?? [];
 

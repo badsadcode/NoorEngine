@@ -433,7 +433,12 @@ public sealed class MainWindow : Window
                  Doc.Scene.Entities.FirstOrDefault(e => e.Id == p)?.Components["csg_model"] != null) model = p;
         var brush = EntityTemplates.Brush(shape);
         Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "begin", ["label"] = $"Create {shape} brush" });
-        model ??= Doc.Create("CSG model", new System.Text.Json.Nodes.JsonObject { ["csg_model"] = new System.Text.Json.Nodes.JsonObject() }, new Vec3(0, 0, 0));
+        // A new model collides with its own shape (a mesh collider from its cooked triangles).
+        model ??= Doc.Create("CSG model", new System.Text.Json.Nodes.JsonObject
+        {
+            ["csg_model"] = new System.Text.Json.Nodes.JsonObject(),
+            ["collider"] = new System.Text.Json.Nodes.JsonObject { ["shape"] = "mesh" },
+        }, new Vec3(0, 0, 0));
         string? id = null;
         if (model != null)
         {

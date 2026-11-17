@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 15;
+    public const uint ExpectedApiVersion = 16;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -78,6 +78,8 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_doc_assets(IntPtr doc, int rescan);
     [DllImport(Dll)] private static extern IntPtr noor_doc_make_material(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
     [DllImport(Dll)] private static extern IntPtr noor_doc_csg(IntPtr doc);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_export_csg(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string modelId,
+                                                                    [MarshalAs(UnmanagedType.LPUTF8Str)] string glbPath);
     [DllImport(Dll)] private static extern IntPtr noor_doc_texture(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
     [DllImport(Dll)] public static extern int noor_doc_set_texture_settings(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath,
                                                                            [MarshalAs(UnmanagedType.LPUTF8Str)] string settingsJson);
@@ -105,6 +107,7 @@ public static class Native
     public static string? MakeMaterial(IntPtr doc, string texturePath) => Str(noor_doc_make_material(doc, texturePath));
     public static string? Texture(IntPtr doc, string texturePath) => Str(noor_doc_texture(doc, texturePath));
     public static string Csg(IntPtr doc) => Str(noor_doc_csg(doc)) ?? "[]";
+    public static string? ExportCsg(IntPtr doc, string modelId, string glbPath) => Str(noor_doc_export_csg(doc, modelId, glbPath));
     public static string? Scenes(IntPtr doc) => Str(noor_doc_scenes(doc));
     public static string? Scene(IntPtr doc) => Str(noor_doc_scene(doc));
     public static string PollFiles(IntPtr doc) => Str(noor_doc_poll_files(doc)) ?? "[]";

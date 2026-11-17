@@ -29,6 +29,8 @@
 #include "noor/scene/scene.h"
 
 #include "noor/asset/json.h"
+#include "noor/csg/scene_csg.h"
+#include "noor/game/cooked_csg.h"
 
 #include <chrono>
 #include "noor/foundation/file_io.h"
@@ -68,7 +70,8 @@ int usage() {
                "  noor_cli migrate <project> [--dry-run]\n"
                "  noor_cli make-prefab <project> <scene> <entity name> <prefab path>\n"
                "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n"
-               "  noor_cli build <project> <output folder> [--scene <path>]\n",
+               "  noor_cli build <project> <output folder> [--scene <path>]\n"
+               "  noor_cli cook <project>\n",
                stderr);
     return 64;
 }
@@ -212,6 +215,48 @@ int cmd_add_model(const std::vector<std::string>& a) {
     if (auto s = scene.save(*scene_path); !s) return report(s.error());
     std::printf("Added '%s' to %s as entity %s (%zu entities in the scene)\n", rec->path.c_str(), a[2].c_str(),
                 root.to_string().c_str(), scene.entities.size());
+    return 0;
+}
+
+// Cooks every CSG model of every scene (ADR-016) into `root`/.noor/cooked/csg: what games load.
+// Returns the number of models cooked, or -1 if one failed.
+int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root) {
+    int cooked = 0;
+    std::error_code ec;
+    for (auto it = stdfs::recursive_directory_iterator(p.scenes_dir(), ec); !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
+        if (it->path().extension() != ".noorscene") continue;
+        auto scene = scene::Scene::load(it->path());
+        if (!scene) continue;  // validate reports it
+        scene::PrefabLibrary prefabs(p, registry);
+        const auto expanded = scene::expand_prefabs(*scene, prefabs.resolver()).scene;
+        for (std::size_t i = 0; i < expanded.entities.size(); ++i) {
+            if (!expanded.entities[i].has("csg_model")) continue;
+            std::vector<std::string> warnings;
+            auto model = csg::cook_model(expanded, i, nullptr, &warnings);
+            for (const auto& w : warnings) NOOR_LOG_WARN("CLI", "{}: CSG model {}: {}", it->path().filename().string(), expanded.entities[i].name, w);
+            if (!model) {
+                NOOR_LOG_ERROR("CLI", "{}: CSG model {}: {}", it->path().filename().string(), expanded.entities[i].name, model.error().describe());
+                return -1;
+            }
+            if (auto w = game::write_cooked_csg(game::cooked_csg_path(root, expanded.entities[i].id), *model); !w) {
+                report(w.error());
+                return -1;
+            }
+            ++cooked;
+        }
+    }
+    return cooked;
+}
+
+int cmd_cook(const std::vector<std::string>& a) {
+    if (a.size() != 1) return usage();
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    asset::AssetRegistry registry;
+    if (auto r = registry.scan(*p); !r) return report(r.error());
+    const int n = cook_project(*p, registry, p->root());
+    if (n < 0) return 1;
+    std::printf("Cooked %d CSG model(s) into %s\n", n, (p->root() / ".noor" / "cooked" / "csg").generic_string().c_str());
     return 0;
 }
 
@@ -665,6 +710,18 @@ int cmd_build(const std::vector<std::string>& a) {
     stdfs::copy_file(player, out / exe, stdfs::copy_options::overwrite_existing, ec);
     if (ec) return report(Error{ErrorCode::IoError, std::format("can't copy the player: {}", ec.message())});
 
+    // CSG models are cooked fresh into the game (the project's own .noor isn't packed).
+    {
+        asset::AssetRegistry registry;
+        if (auto r = registry.scan(*p); !r) return report(r.error());
+        const int models = cook_project(*p, registry, out / "game");
+        if (models < 0) {
+            NOOR_LOG_ERROR("CLI", "Build stopped: a CSG model couldn't be cooked");
+            return 1;
+        }
+        if (models > 0) std::printf("  %d CSG model(s) cooked\n", models);
+    }
+
     const asset::Json manifest{{"noor_game", 1},
                                {"title", p->info().name},
                                {"project", "game"},
@@ -705,5 +762,6 @@ int main(int argc, char** argv) {
     if (cmd == "make-prefab") return cmd_make_prefab(args);
     if (cmd == "add-prefab") return cmd_add_prefab(args);
     if (cmd == "build") return cmd_build(args);
+    if (cmd == "cook") return cmd_cook(args);
     return usage();
 }

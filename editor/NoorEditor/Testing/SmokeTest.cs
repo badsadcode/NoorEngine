@@ -929,6 +929,16 @@ internal static class SmokeTest
         var path = doc.Scene.Path;
         check(doc.Save() && doc.OpenScene(path) && Math.Abs(Volume() - before) < 1e-6 && doc.Scene.Entities.Count(e => e.Parent == model) == 2,
               "brushes: saved and opened again, the model is the same");
+        // Saving cooked it for games (Milestone 6, part 4), and it exports as a Noor Interchange asset.
+        var cooked = Path.Combine(doc.ProjectRoot, ".noor", "cooked", "csg", model + ".ncsg");
+        check(File.Exists(cooked) && doc.Scene.Entities.First(e => e.Id == model).Components["collider"]?["shape"]?.GetValue<string>() == "mesh",
+              "brushes: saving cooks the model for games; a new model collides as a mesh");
+        var glb = Path.Combine(doc.ProjectRoot, "Exports", "house.glb");
+        var exported = doc.ExportCsg(model, glb);
+        var manifest = File.Exists(Path.ChangeExtension(glb, ".noor.json"))
+            ? JsonNode.Parse(File.ReadAllText(Path.ChangeExtension(glb, ".noor.json"))) : null;
+        check(exported != null && File.Exists(glb) && manifest?["id"]?.GetValue<string>() == model && manifest["collision"]?.GetValue<string>() == "mesh",
+              "brushes: Export GLB writes a Noor Interchange GLB and manifest (id = the model's, with collision)");
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
         check(doc.CsgInfo().Count == 0, "brushes: deleting the model removes it");
         await Task.Delay(300);

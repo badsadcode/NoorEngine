@@ -134,6 +134,17 @@ foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60 FIXTURES_SETUP golden_${name})
 endforeach()
+# CSG in games (Milestone 6, part 4): noor_cli build cooks the model; a character walks through its
+# doorway, another is stopped by the wall (tests/csg_check.cmake).
+add_test(NAME cli.build_csg
+    COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/csg_project ${CMAKE_CURRENT_BINARY_DIR}/built_csg_game)
+set_tests_properties(cli.build_csg PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP built_csg_game
+                     PASS_REGULAR_EXPRESSION "1 CSG model[(]s[)] cooked")
+add_test(NAME player.csg_doorway
+    COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_csg_game/CSG Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_csg
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/csg_check.cmake)
+set_tests_properties(player.csg_doorway PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csg_game)
+
 # The PBR sample (Milestone 5, part 8): the same showroom under the sun and three HDRIs.
 foreach(name IN ITEMS Showroom_Sun Showroom_Studio Showroom_Evening Showroom_Venice)
     add_test(NAME render.golden_${name}

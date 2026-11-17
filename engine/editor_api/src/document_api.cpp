@@ -97,6 +97,23 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API const char* noor_doc_export_csg(noor_doc* doc, const char* model_id, const char* glb_path) {
+    if (!doc || !model_id || !glb_path) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        const auto id = noor::Guid::parse(model_id);
+        if (!id) {
+            fail_with(id.error());
+            return nullptr;
+        }
+        auto r = doc->doc->export_csg(*id, std::filesystem::path(reinterpret_cast<const char8_t*>(glb_path)));
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
 NOOR_API const char* noor_doc_csg(noor_doc* doc) {
     if (!doc) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* { return give(doc->doc->csg_info()); });
