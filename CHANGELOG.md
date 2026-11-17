@@ -2,7 +2,18 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 5 complete (PBR lighting, HDRI and materials)
+## [Unreleased] — Milestone 6 planned (manual creation tools)
+
+### 2026-11-17 — Milestone 6 plan
+- [M6_PLAN.md](docs/milestones/M6_PLAN.md): brushes and CSG, surface materials and UVs, cooking,
+  collision and GLB export, terrain heightfields, sculpting and painting; eight parts, risks first
+  (a CSG robustness spike before any UI).
+- Proposed: [ADR-016](docs/decisions/ADR-016-csg-kernel.md) (CSG kernel: Manifold behind our own
+  interface, decided by a spike) and [ADR-031](docs/decisions/ADR-031-terrain-heightfields.md)
+  (tiled heightfields with a non-destructive layer stack).
+- The ADR index now shows ADR-012, 029 and 030 as accepted.
+
+## Milestone 5 complete (PBR lighting, HDRI and materials)
 
 ### 2026-11-17 — Milestone 5, part 8: the PBR sample and the gate review
 **Added**

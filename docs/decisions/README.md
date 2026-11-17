@@ -15,7 +15,8 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [009](ADR-009-lua-integration.md) | Lua: Luau (sandboxing, types) over Lua 5.4 / LuaJIT | Accepted |
 | [010](ADR-010-physics.md) | Physics: Jolt (MIT), fixed 60 Hz tick, `CharacterVirtual` controller | Accepted |
 | [011](ADR-011-audio.md) | Audio: miniaudio (public domain / MIT-0), buses, 3D sources | Accepted |
-| [012](ADR-012-pbr-shading-and-render-path.md) | PBR: metallic-roughness GGX, forward path, photometric units, HDR + AgX, IBL, bindless textures | Proposed (Milestone 5) |
+| [012](ADR-012-pbr-shading-and-render-path.md) | PBR: metallic-roughness GGX, forward path, photometric units, HDR, PBR Neutral (AgX pending a licence check), IBL, bindless textures | Accepted (Milestone 5) |
+| [016](ADR-016-csg-kernel.md) | CSG: brushes as entities, Manifold booleans (spike first), materials/UVs follow source faces, cooked meshes for runtime | Proposed (Milestone 6) |
 | [019](ADR-019-licensing.md) | MIT license | Accepted |
 | [021](ADR-021-platform-layer-and-dependencies.md) | SDL3 platform layer, pinned-dependency policy | Accepted |
 | [022](ADR-022-math-and-coordinate-conventions.md) | Right-handed, +Y up, meters, column-major, reverse-Z | Accepted |
@@ -25,8 +26,9 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [026](ADR-026-play-mode.md) | Play mode: a runtime copy of the scene, built-in behaviours until scripting, edits refused while playing | Accepted |
 | [027](ADR-027-runtime-and-scripting-api.md) | Runtime module: `World`, frame order, fixed step, input actions, one `noor_rt_*` API for C# and Lua | Accepted |
 | [028](ADR-028-player-and-builds.md) | The `game` module shared by Play and `noor_player`; `noor_cli build` (player + project content + game.json) | Accepted |
-| [029](ADR-029-textures.md) | Textures: stb_image + tinyexr, colour-space kinds in `.noormeta`, linear-light mips, uncompressed first, cache | Proposed (Milestone 5) |
-| [030](ADR-030-materials.md) | Materials: `.noormat` (glTF metallic-roughness channels) + instances; the future graph outputs the same channels | Proposed (Milestone 5) |
+| [029](ADR-029-textures.md) | Textures: stb_image, colour-space kinds in `.noormeta`, linear-light mips, BC7/BC5 compression, cache | Accepted (Milestone 5; .exr/BC6H open) |
+| [030](ADR-030-materials.md) | Materials: `.noormat` (glTF metallic-roughness channels) + instances; the future graph outputs the same channels | Accepted (Milestone 5; graph future) |
+| [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Proposed (Milestone 6) |
 
-Still open from the register: 007 plugin ABI, 013 world coordinates,
-014–018, 020 branding.
+Still open from the register: 007 plugin ABI, 013 world coordinates, 014 procedural graph,
+015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.
