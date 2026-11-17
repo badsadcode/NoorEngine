@@ -133,6 +133,18 @@ foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60 FIXTURES_SETUP golden_${name})
 endforeach()
+# The PBR sample (Milestone 5, part 8): the same showroom under the sun and three HDRIs.
+foreach(name IN ITEMS Showroom_Sun Showroom_Studio Showroom_Evening Showroom_Venice)
+    add_test(NAME render.golden_${name}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${PROJECT_SOURCE_DIR}/samples/PBR-Showroom -DSCENE=Scenes/${name}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    # The first run compresses the sample's textures (cached in samples/PBR-Showroom/.noor after that).
+    set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK pbr_showroom_cache)
+endforeach()
 # The judge must notice a different picture: today's daylight against the sunset reference fails.
 add_test(NAME render.golden_catches_a_change
     COMMAND noor_image_compare ${CMAKE_CURRENT_BINARY_DIR}/render_golden_Daylight/screenshot.bmp

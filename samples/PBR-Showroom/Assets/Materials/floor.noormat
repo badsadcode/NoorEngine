@@ -1,0 +1,10 @@
+{
+  "noor_material": 1,
+  "parent": "b19cd1bc-3b1f-4167-9398-9b775e1cf427",
+  "overrides": {
+    "uv_scale": [
+      6,
+      6
+    ]
+  }
+}

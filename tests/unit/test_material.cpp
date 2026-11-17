@@ -113,6 +113,10 @@ TEST_CASE("material: texture sets are found by name, ORM maps fill both slots") 
     CHECK(asset::texture_role("x_arm.png") == asset::TextureRole::Orm);
     CHECK(asset::texture_role("normal.png") == asset::TextureRole::None);  // no set name before the role
     CHECK(asset::texture_role("preview_x_lit.png") == asset::TextureRole::None);
+    // Set names with role words in them: the last role word is the role.
+    CHECK(asset::texture_role("wooden_rough_planks_arm_1k.jpg") == asset::TextureRole::Orm);
+    CHECK(asset::texture_role("blue_metal_plate_diff_1k.jpg") == asset::TextureRole::BaseColor);
+    CHECK(asset::texture_role("x_base_color.png") == asset::TextureRole::BaseColor);
 
     const auto set = asset::find_texture_set(f.dir / "Bricks_Normal.png");
     CHECK(set.name == "Bricks");
@@ -126,6 +130,18 @@ TEST_CASE("material: texture sets are found by name, ORM maps fill both slots") 
     CHECK(json.contains("normal_map"));
     CHECK(json["metallic_roughness_map"] == json["occlusion_map"]);  // the ORM map in both
     CHECK(json["roughness"].get<double>() == doctest::Approx(1.0));  // factors multiply the map
+
+    for (const char* name : {"wooden_rough_planks_diff_1k.jpg", "wooden_rough_planks_nor_gl_1k.jpg", "wooden_rough_planks_arm_1k.jpg",
+                             "Stone_Base_Color.png", "Stone_Normal.png"})
+        f.touch(name);
+    const auto wood = asset::find_texture_set(f.dir / "wooden_rough_planks_arm_1k.jpg");
+    CHECK(wood.name == "wooden_rough_planks");
+    CHECK(wood.maps.size() == 3);
+    CHECK(wood.find(asset::TextureRole::BaseColor));
+    CHECK(wood.find(asset::TextureRole::Orm));
+    const auto stone = asset::find_texture_set(f.dir / "Stone_Normal.png");
+    CHECK(stone.name == "Stone");
+    CHECK(stone.find(asset::TextureRole::BaseColor));
 }
 
 TEST_CASE("material: GLB primitives become submeshes with their glTF materials and embedded images") {

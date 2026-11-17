@@ -61,14 +61,21 @@ TextureRole role_of_word(const std::string& w, const std::string& next) {
 }
 
 // The role and where the set name ends in the stem; previews and thumbnails have no role.
+// The **last** role word decides: set names can contain role words themselves
+// ("wooden_rough_planks_diff_1k", "blue_metal_plate_arm_1k"), the role comes after them.
 std::pair<TextureRole, std::size_t> role_and_cut(const stdfs::path& file) {
     const std::string stem = file.stem().string();
     const auto words = words_of(stem);
     for (const auto& [w, start] : words)
         if (w == "preview" || w == "thumb" || w == "thumbnail") return {TextureRole::None, 0};
-    for (std::size_t i = 0; i < words.size(); ++i) {
+    for (std::size_t i = words.size(); i-- > 1;) {  // a set name must come first: never word 0
         const auto role = role_of_word(words[i].first, i + 1 < words.size() ? words[i + 1].first : "");
-        if (role != TextureRole::None && i > 0) return {role, words[i].second};  // a set name must come first
+        if (role == TextureRole::None) continue;
+        // "base color": the role starts at "base".
+        if (role == TextureRole::BaseColor && (words[i].first == "color" || words[i].first == "colour") && i > 1 &&
+            words[i - 1].first == "base")
+            return {role, words[i - 1].second};
+        return {role, words[i].second};
     }
     return {TextureRole::None, 0};
 }

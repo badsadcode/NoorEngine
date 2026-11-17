@@ -192,6 +192,16 @@
       "linkage": "static (bc7enc.cpp, bc7decomp.cpp, rgbcx.cpp; each file pinned by SHA-256)",
       "shipped": true,
       "purpose": "Texture compression on the CPU: BC7 (colour, ORM/data) and BC5 (normal maps), and decoding for tests and for GPUs without BC support (ADR-029)"
+    },
+    {
+      "name": "Poly Haven textures (Castle Brick 07, Concrete Floor Worn 001, Wooden Rough Planks, Blue Metal Plate) and HDRIs (Studio Small 09, Kloppenheim 06, Venice Sunset)",
+      "version": "1K JPEG maps and 1K .hdr, unchanged (NoorFPS-lite: the textures shrunk to 512)",
+      "source": "https://polyhaven.com",
+      "commit": null,
+      "license": "CC0 1.0",
+      "linkage": "sample data (samples/PBR-Showroom/Assets, samples/NoorFPS-lite/Assets/Textures)",
+      "shipped": false,
+      "purpose": "The Milestone 5 PBR sample and NoorFPS-lite's textured arena; render tests"
     }
   ]
 }

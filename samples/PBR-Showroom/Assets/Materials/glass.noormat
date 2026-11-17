@@ -1,0 +1,11 @@
+{
+  "noor_material": 1,
+  "base_color": [
+    0.9,
+    0.95,
+    1.0,
+    0.12
+  ],
+  "roughness": 0.03,
+  "alpha": "blend"
+}

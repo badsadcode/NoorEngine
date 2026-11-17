@@ -17,7 +17,9 @@ from the file name the first time:
 | `.hdr` files | `hdr` | 16-bit float |
 
 (Words are split on `_`, `-`, `.` and spaces, so `Rock_Normal_DX.png` is a DirectX normal map and
-`rock_nor_gl_1k.png` an OpenGL one.)
+`rock_nor_gl_1k.png` an OpenGL one. The **last** role word decides, because set names can
+contain role words: `wooden_rough_planks_diff_1k.jpg` is a colour map and `blue_metal_plate_arm_1k.jpg`
+an ORM map. Poly Haven's `<set>_<role>_<size>` names work as they are, with Make material too.)
 
 ```json
 "settings": { "kind": "normal", "normal_convention": "opengl", "mips": true, "max_size": 4096,

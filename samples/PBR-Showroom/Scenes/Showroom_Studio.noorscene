@@ -1,0 +1,943 @@
+{
+  "noor_scene": 2,
+  "id": "5b0e0000-0002-4000-8000-000000000000",
+  "name": "Showroom_Studio",
+  "entities": [
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            20,
+            1,
+            20
+          ],
+          "material": "afb6cbc4-ca29-40e8-8e26-58aa3b16864a"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000002",
+      "name": "Back wall",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2,
+          -3.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            12,
+            4,
+            0.4
+          ],
+          "material": "b0d88486-e35c-4514-a6df-cdd7f50fe170"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000003",
+      "name": "Crate",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -4.4,
+          0.4,
+          -2.2
+        ],
+        "rotation": [
+          0.0,
+          0.13052619222005157,
+          0.0,
+          0.9914448613738104
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "material": "43123861-1ccf-4a21-8e3b-34010253f8d6"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000004",
+      "name": "Crate on top",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -4.3,
+          1.2,
+          -2.3
+        ],
+        "rotation": [
+          0.0,
+          -0.17364817766693033,
+          0.0,
+          0.984807753012208
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.8,
+            0.8,
+            0.8
+          ],
+          "material": "43123861-1ccf-4a21-8e3b-34010253f8d6"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000005",
+      "name": "Metal pedestal",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          4.4,
+          0.35,
+          -2.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1.2,
+            0.7,
+            1.2
+          ],
+          "material": "95ce589b-94c6-4ee5-bc71-115943d73eaf"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000006",
+      "name": "Gold ball on the pedestal",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          4.4,
+          1.1,
+          -2.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "3fad76fb-a5f8-4328-8381-b715d2a2f1b5"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000007",
+      "name": "Gold, roughness 0.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.75,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 0.0
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000008",
+      "name": "Gold, roughness 0.2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.65,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 0.2
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000009",
+      "name": "Gold, roughness 0.4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.5499999999999998,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 0.4
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000a",
+      "name": "Gold, roughness 0.6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.5500000000000003,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000b",
+      "name": "Gold, roughness 0.8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.6500000000000004,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 0.8
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000c",
+      "name": "Gold, roughness 1.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.75,
+          0.4,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            1.0,
+            0.766,
+            0.336,
+            1
+          ],
+          "metallic": 1,
+          "roughness": 1.0
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000d",
+      "name": "White, roughness 0.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.75,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 0.0
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000e",
+      "name": "White, roughness 0.2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.65,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 0.2
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000000f",
+      "name": "White, roughness 0.4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.5499999999999998,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 0.4
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000010",
+      "name": "White, roughness 0.6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.5500000000000003,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000011",
+      "name": "White, roughness 0.8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.6500000000000004,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 0.8
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000012",
+      "name": "White, roughness 1.0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.75,
+          0.4,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "base_color": [
+            0.8,
+            0.8,
+            0.8,
+            1
+          ],
+          "metallic": 0,
+          "roughness": 1.0
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000013",
+      "name": "Copper",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.75,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "5b9959b6-b76c-4996-89b7-a655f13d1ba0"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000014",
+      "name": "Chrome",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.65,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "285bde55-306b-4ff3-acc9-48ea0d7ddb13"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000015",
+      "name": "Red plastic",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.5499999999999998,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "86d43219-ec2b-4904-a744-51db62b65dde"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000016",
+      "name": "Rubber",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.5500000000000003,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "1e639b5a-fcbd-45dd-969c-685a938d9098"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000017",
+      "name": "Glass",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.6500000000000004,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "73c557b6-56b6-41e9-bae8-43b9f270fe30"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000018",
+      "name": "Glow",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.75,
+          0.4,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.4,
+          "material": "8dc7ac3b-42cf-4e93-b546-c28fded5195b"
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-000000000019",
+      "name": "Environment",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "hdri": "d9d55627-be3c-4727-a582-973fc93ad23c",
+          "intensity": 8000,
+          "rotation": 0
+        }
+      }
+    },
+    {
+      "id": "5b0e0000-0002-4000-8000-00000000001a",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          3.4,
+          5.9
+        ],
+        "rotation": [
+          -0.24192189559966773,
+          0.0,
+          0.0,
+          0.9702957262759965
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05,
+          "ev100": 12.5
+        }
+      }
+    }
+  ]
+}

@@ -301,16 +301,31 @@ TextureSettings guess_texture_settings(const stdfs::path& path) {
     auto has = [&](std::initializer_list<std::string_view> any) {
         return std::ranges::any_of(words, [&](const std::string& w) { return std::ranges::find(any, w) != any.end(); });
     };
+    static constexpr std::string_view kColor[] = {"albedo", "basecolor", "basecolour", "diffuse", "diff", "color", "colour", "col"};
+    static constexpr std::string_view kNormal[] = {"normal", "normals", "nrm", "norm", "nor", "normalgl", "normaldx"};
+    static constexpr std::string_view kData[] = {"roughness", "rough", "metallic", "metalness", "metal", "ao", "occlusion",
+                                                 "ambientocclusion", "height", "displacement", "disp", "depth", "mask", "orm", "arm",
+                                                 "rma", "specular", "gloss", "glossiness", "bump", "cavity", "curvature",
+                                                 "translucency", "opacity", "alpha", "wind"};
+    const auto in = [](std::span<const std::string_view> list, const std::string& w) { return std::ranges::find(list, w) != list.end(); };
     if (ext == ".hdr") {
         s.kind = TextureKind::Hdr;
         s.max_size = 8192;
-    } else if (has({"normal", "normals", "nrm", "norm", "nor", "normalgl", "normaldx"})) {
-        s.kind = TextureKind::Normal;
-        s.directx_normals = has({"dx", "directx", "normaldx"});
-    } else if (has({"roughness", "rough", "metallic", "metalness", "metal", "ao", "occlusion", "ambientocclusion", "height",
-                    "displacement", "disp", "depth", "mask", "orm", "arm", "rma", "specular", "gloss", "glossiness", "bump", "cavity",
-                    "curvature", "translucency", "opacity", "alpha", "wind"})) {
-        s.kind = TextureKind::Data;
+        return s;
+    }
+    // The last role word decides: set names can contain role words ("wooden_rough_planks_diff_1k" is
+    // a colour map, "blue_metal_plate_nor_gl_1k" a normal map).
+    for (auto it = words.rbegin(); it != words.rend(); ++it) {
+        if (in(kColor, *it)) return s;
+        if (in(kNormal, *it)) {
+            s.kind = TextureKind::Normal;
+            s.directx_normals = has({"dx", "directx", "normaldx"});
+            return s;
+        }
+        if (in(kData, *it)) {
+            s.kind = TextureKind::Data;
+            return s;
+        }
     }
     return s;
 }

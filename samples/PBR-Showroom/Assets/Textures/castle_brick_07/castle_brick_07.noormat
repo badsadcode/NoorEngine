@@ -1,0 +1,15 @@
+{
+  "noor_material": 1,
+  "base_color": [
+    1,
+    1,
+    1,
+    1
+  ],
+  "metallic": 1.0,
+  "roughness": 1.0,
+  "base_color_map": "4efdefd3-2739-4b17-86ec-f95e9581b64a",
+  "normal_map": "6491e4fc-fb5a-4d5e-abd0-c8f751570aeb",
+  "metallic_roughness_map": "9e593f50-0a0a-444f-a52c-1f06c0e632f6",
+  "occlusion_map": "9e593f50-0a0a-444f-a52c-1f06c0e632f6"
+}

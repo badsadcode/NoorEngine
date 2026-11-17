@@ -294,6 +294,9 @@ int run(const Options& o) {
                 int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
                 bool warned_no_camera = false;
                 std::optional<noor::render::CapturedFrame> last_capture;
+                noor::render::FrameDesc last_frame_desc;  // the final frame, redrawn if its picture was missed
+                std::vector<noor::render::DrawItem> last_draws;
+                std::vector<noor::render::OverlayVertex> last_overlay;
                 double last = noor::platform::time_seconds();
                 while (o.frames == 0 || (*world)->frame_count() < o.frames) {
                     const auto events = noor::platform::pump_events();
@@ -350,6 +353,25 @@ int run(const Options& o) {
                     }
                     if (*frame == noor::render::FrameResult::Skipped && (*window)->is_minimized()) noor::platform::wait_for_events(50);
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
+                    if (last_frame) {
+                        last_draws = draws;
+                        last_overlay = overlay;
+                        last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}};
+                    }
+                }
+                // The last frame wasn't presented (the swapchain was being rebuilt, the window was busy):
+                // draw the same picture again (the game doesn't move on) until it is, so a test's
+                // screenshot and report never go missing. A few tries at most.
+                if (o.frames && (*world)->frame_count() == o.frames && !last_capture && (!o.report.empty() || !o.screenshot.empty())) {
+                    last_frame_desc.draws = last_draws;
+                    last_frame_desc.overlay = last_overlay;
+                    for (int attempt = 0; attempt < 30 && !last_capture; ++attempt) {
+                        (void)noor::platform::pump_events();
+                        (*renderer)->request_capture();
+                        if (auto frame = (*renderer)->render_frame(last_frame_desc); !frame) break;
+                        if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
+                    }
+                    if (last_capture) NOOR_LOG_INFO("Player", "The last frame was drawn again for the screenshot (it wasn't presented the first time)");
                 }
                 if (captured) noor::platform::set_relative_mouse(**window, false);
                 NOOR_LOG_INFO("Player", "Ran {} frames ({:.1f} s of game time)", (*world)->frame_count(), (*world)->time());

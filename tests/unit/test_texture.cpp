@@ -97,6 +97,12 @@ TEST_CASE("texture: settings are guessed from the file name") {
                              "x_depth.png", "x_curvature.png", "x_cavity.png", "x_mask.tga"})
         CHECK_MESSAGE(guess_texture_settings(data).kind == TextureKind::Data, data);
     CHECK(guess_texture_settings("Assets/sky.hdr").kind == TextureKind::Hdr);
+    // The last role word decides (Poly Haven names: <set>_<role>_<resolution>, set names with role words).
+    CHECK(guess_texture_settings("wooden_rough_planks_diff_1k.jpg").kind == TextureKind::Color);
+    CHECK(guess_texture_settings("wooden_rough_planks_arm_1k.jpg").kind == TextureKind::Data);
+    CHECK(guess_texture_settings("blue_metal_plate_nor_gl_1k.jpg").kind == TextureKind::Normal);
+    CHECK(guess_texture_settings("blue_metal_plate_diff_1k.jpg").kind == TextureKind::Color);
+    CHECK(guess_texture_settings("rusty_metal_roughness.png").kind == TextureKind::Data);
     // Round trip through the .noormeta form.
     const TextureSettings s = guess_texture_settings("a_normal_dx.png");
     CHECK(TextureSettings::from_json(s.to_json()) == s);

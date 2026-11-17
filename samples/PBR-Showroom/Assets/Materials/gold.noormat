@@ -1,0 +1,11 @@
+{
+  "noor_material": 1,
+  "base_color": [
+    1.0,
+    0.766,
+    0.336,
+    1
+  ],
+  "metallic": 1,
+  "roughness": 0.25
+}

@@ -2,7 +2,24 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 5 in progress (PBR lighting, HDRI and materials)
+## [Unreleased] — Milestone 5 complete (PBR lighting, HDRI and materials)
+
+### 2026-11-17 — Milestone 5, part 8: the PBR sample and the gate review
+**Added**
+- **PBR-Showroom** (`samples/PBR-Showroom`): gold and white roughness sweeps, copper, chrome, red
+  plastic, rubber, glass and a glowing ball, a brick wall, a concrete floor, wooden crates and a
+  metal pedestal, under the sun and three HDRIs (4 scenes). CC0 textures and HDRIs from Poly Haven.
+- `render.golden_Showroom_Sun/Studio/Evening/Venice`: the sample as render regression tests.
+- **NoorFPS-lite** has a textured arena (brick, concrete, metal, wood; 512² CC0 sets, tiled with
+  material instances).
+- [M5_REVIEW.md](docs/milestones/M5_REVIEW.md): the gate passes, with documented exceptions.
+
+**Fixed**
+- Texture kind and texture-set guessing: the **last** role word in a name decides. Before,
+  `wooden_rough_planks_diff_1k.jpg` was imported as a data map (too dark) and its set was called
+  "wooden".
+- noor_player `--frames` runs: if the last frame wasn't presented, it is drawn again (with its HUD)
+  so the screenshot and report never go missing.
 
 ### 2026-11-17 — Milestone 5: texture compression and import settings
 **Added**

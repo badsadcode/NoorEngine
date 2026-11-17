@@ -31,4 +31,10 @@ reads.
 ## Assets
 
 `Assets/Audio/*.wav` were synthesised for this sample (a noise crack, a metallic ping, a soft
-thud, two tones) and are MIT like the rest of the repository. The arena is plain boxes.
+thud, two tones) and are MIT like the rest of the repository.
+
+Since Milestone 5 the arena is textured: brick walls, a worn concrete floor, concrete cover,
+blue metal pillars and wooden crates. The texture sets are CC0 from [Poly Haven](https://polyhaven.com)
+(Castle Brick 07, Concrete Floor Worn 001, Blue Metal Plate, Wooden Rough Planks), shrunk to
+512² for this sample; the materials were made with **Make material**, and the tiled ones
+(`Assets/Materials`) are instances that only change `uv_scale`.
