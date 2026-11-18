@@ -19,11 +19,13 @@
 #include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -151,6 +153,9 @@ struct NodeContext {
     std::map<std::string, Value> inputs;  // connected inputs only
     asset::Json params;                   // the node's parameters with defaults filled in and ranges applied
     std::uint64_t seed = 0;               // the node's own seed stream root
+    const std::atomic<bool>* cancel = nullptr;
+    // Long nodes check this now and then and return ErrorCode::Cancelled (nothing of theirs is kept).
+    [[nodiscard]] bool cancelled() const noexcept { return cancel && cancel->load(std::memory_order_relaxed); }
     [[nodiscard]] Random stream(std::string_view name) const { return Random(mix(seed ^ hash_text(name))); }
     [[nodiscard]] double number(const char* name) const { return params.at(name).get<double>(); }
     [[nodiscard]] std::int64_t integer(const char* name) const { return params.at(name).get<std::int64_t>(); }
@@ -206,6 +211,7 @@ struct NodeResult {
     std::string message;    // Failed / Skipped: why
     double ms = 0.0;
     std::uint64_t bytes = 0;  // size of the outputs
+    bool cached = false;      // came from the cache instead of running
 };
 
 struct Evaluation {
@@ -213,10 +219,82 @@ struct Evaluation {
     std::map<std::string, NodeResult> nodes;         // by node id
     std::vector<std::string> order;                  // the order nodes ran in
     std::map<std::string, Value> outputs;            // the graph's declared outputs that could be made
+    std::size_t ran = 0, cached = 0;                 // nodes that ran, nodes served from the cache
+    bool cancelled = false;
     [[nodiscard]] std::uint64_t fingerprint() const; // of the outputs (names + value hashes)
 };
 
-// Runs every node that can run, in dependency order (ties by node id, so the order is fixed).
-[[nodiscard]] Evaluation evaluate(const Graph& graph, const Registry& registry = Registry::builtin());
+// ---- Cache (Milestone 7, part 2) ----
+
+// Node results by key. In memory, and (with a folder) in files `<key>.npgc` so they outlive the
+// process. A key covers everything a result depends on, so a hit is always right; a damaged file is
+// a miss (and is replaced). Thread-safe. There is no size limit yet: delete the folder to clear it.
+class Cache {
+public:
+    Cache() = default;                            // memory only
+    explicit Cache(std::filesystem::path folder); // memory and files
+    [[nodiscard]] std::optional<Outputs> get(std::uint64_t key);
+    void put(std::uint64_t key, const Outputs& outputs);
+    void forget_memory();                         // keep the files (tests: a "new process")
+    [[nodiscard]] const std::filesystem::path& folder() const noexcept { return folder_; }
+    [[nodiscard]] std::size_t file_hits() const noexcept { return file_hits_; }
+
+private:
+    std::mutex mutex_;
+    std::map<std::uint64_t, Outputs> memory_;
+    std::filesystem::path folder_;
+    std::size_t file_hits_ = 0;
+};
+
+// Values to and from bytes (cache files, generated files): every bit kept.
+[[nodiscard]] std::string encode(const Value& value);
+[[nodiscard]] Result<Value> decode(std::string_view bytes);
+
+// ---- Running ----
+
+struct Progress {
+    std::size_t done = 0, total = 0;
+    std::string node;   // the node that just finished
+    bool cached = false;
+};
+
+struct EvaluateOptions {
+    Cache* cache = nullptr;
+    unsigned threads = 0;  // 0: one per core (at most one per node); 1: on the calling thread
+    std::function<void(const Progress&)> progress;  // called after each node, one call at a time
+    const std::atomic<bool>* cancel = nullptr;       // set it to stop: running nodes finish or stop, the rest are skipped
+};
+
+// Runs every node that can run. Nodes run on worker threads as soon as their inputs are ready, but
+// results never depend on threads: nodes are pure, and `order` is the fixed dependency order (ties by id).
+[[nodiscard]] Evaluation evaluate(const Graph& graph, const Registry& registry, const EvaluateOptions& options);
+[[nodiscard]] inline Evaluation evaluate(const Graph& graph, const Registry& registry = Registry::builtin()) {
+    return evaluate(graph, registry, EvaluateOptions{});
+}
+
+// ---- Generating files (headless: noor_cli generate, the editor) ----
+
+struct GenerateOptions {
+    std::filesystem::path out;  // the folder for the outputs
+    std::string name;           // the graph's name (its file stem): names the fingerprint file
+    EvaluateOptions run;
+};
+
+struct GenerateReport {
+    Evaluation evaluation;
+    std::vector<std::filesystem::path> files;  // written, the fingerprint file last
+    std::uint64_t fingerprint = 0;
+};
+
+// Evaluates and writes every declared output: fields as `<output>.noorfield`, the other values in
+// `<name>.fingerprint.json` with the graph's hash, its seed, every node's type, version and key, and
+// each output's hash. Same graph and versions: the same bytes, on every run. Nothing is written
+// unless every output was made (a cancelled or failing run leaves the folder as it was).
+[[nodiscard]] Result<GenerateReport> generate(const Graph& graph, const Registry& registry, const GenerateOptions& options);
+
+// A `.noorfield` file: "NFIELD01", u32 version 1, u32 sx, u32 sz, f32 cell, u32 unit, sx*sz f32
+// (little-endian, row by row). Readable by any tool: see docs/procgraph/PROCGRAPH.md.
+[[nodiscard]] Status save_field(const std::filesystem::path& file, const Field& field, Unit unit);
+[[nodiscard]] Result<std::pair<Field, Unit>> load_field(const std::filesystem::path& file);
 
 } // namespace noor::procgraph

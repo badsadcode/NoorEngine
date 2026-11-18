@@ -17,6 +17,7 @@ std::string_view to_string(ErrorCode code) noexcept {
     case ErrorCode::VersionMismatch: return "VersionMismatch";
     case ErrorCode::PlatformError: return "PlatformError";
     case ErrorCode::DeviceLost: return "DeviceLost";
+    case ErrorCode::Cancelled: return "Cancelled";
     case ErrorCode::GraphicsError: return "GraphicsError";
     }
     return "Unknown";

@@ -1,0 +1,115 @@
+{
+  "noor_graph": 1,
+  "seed": 7,
+  "nodes": [
+    {
+      "id": "hills",
+      "type": "noise",
+      "version": 1,
+      "params": {
+        "height": 30,
+        "scale": 120,
+        "octaves": 4
+      },
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "valleys",
+      "type": "noise",
+      "version": 1,
+      "params": {
+        "height": 1,
+        "scale": 300,
+        "octaves": 2
+      },
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "id": "mask",
+      "type": "remap",
+      "version": 1,
+      "params": {
+        "from_min": 0.3,
+        "from_max": 0.7,
+        "unit": "ratio"
+      },
+      "position": [
+        200,
+        200
+      ]
+    },
+    {
+      "id": "flat",
+      "type": "noise",
+      "version": 1,
+      "params": {
+        "height": 2,
+        "scale": 40,
+        "octaves": 1
+      },
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "id": "blend",
+      "type": "combine",
+      "version": 1,
+      "params": {
+        "op": "lerp"
+      },
+      "position": [
+        400,
+        100
+      ]
+    },
+    {
+      "id": "limit",
+      "type": "clamp",
+      "version": 1,
+      "params": {
+        "min": 0,
+        "max": 25
+      },
+      "position": [
+        600,
+        100
+      ]
+    }
+  ],
+  "links": [
+    {
+      "from": "valleys.height",
+      "to": "mask.in"
+    },
+    {
+      "from": "hills.height",
+      "to": "blend.a"
+    },
+    {
+      "from": "flat.height",
+      "to": "blend.b"
+    },
+    {
+      "from": "mask.out",
+      "to": "blend.t"
+    },
+    {
+      "from": "blend.out",
+      "to": "limit.in"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "terrain",
+      "from": "limit.out"
+    }
+  ]
+}

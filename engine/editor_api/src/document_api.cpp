@@ -226,6 +226,23 @@ NOOR_API int32_t noor_doc_terrain_height(noor_doc* doc, const char* terrain_id, 
     });
 }
 
+NOOR_API int32_t noor_doc_generate_start(noor_doc* doc, const char* graph_path, const char* out_dir) {
+    if (!doc || !graph_path) return 0;
+    return guarded<>(int32_t{0}, [&]() -> int32_t {
+        auto s = doc->doc->generate_start(graph_path, out_dir ? std::filesystem::path(reinterpret_cast<const char8_t*>(out_dir)) : std::filesystem::path{});
+        return s ? 1 : fail_with(s.error());
+    });
+}
+
+NOOR_API const char* noor_doc_generate_status(noor_doc* doc) {
+    if (!doc) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* { return give(doc->doc->generate_status()); });
+}
+
+NOOR_API void noor_doc_generate_cancel(noor_doc* doc) {
+    if (doc) doc->doc->generate_cancel();
+}
+
 NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json) {
     if (!doc || !command_json) return 0;
     return guarded<>(int32_t{0}, [&]() -> int32_t {

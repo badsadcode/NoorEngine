@@ -1,9 +1,10 @@
 # The procedural graph
 
 Milestone 7 ([plan](../milestones/M7_PLAN.md), [ADR-014](../decisions/ADR-014-procedural-graph.md)).
-**Part 1 (works):** the graph file, typed nodes in a registry, validation, deterministic evaluation
-with keys. **Planned:** the cache and background jobs (part 2), `noor_cli generate` (part 2),
-terrain as a client (part 3), the graph editor (part 4), scatter (part 7).
+**Works:** the graph file, typed nodes in a registry, validation, deterministic evaluation with keys
+(part 1); the results cache, worker threads with progress and Cancel, `noor_cli generate` and the
+editor API's background runs (part 2). **Planned:** terrain as a client (part 3), the graph editor
+(part 4), scatter (part 7).
 
 ## A graph file (`.noorgraph`, format 1)
 
@@ -74,6 +75,44 @@ in, sorted, so parameter order and explicit defaults don't matter), its seed str
 the nodes feeding it. Change one parameter and exactly that node and everything downstream get new
 keys (tested). Part 2 caches results under these keys.
 
+## Cache (part 2)
+
+Results are stored under their keys, in memory and in `<project>/.noor/cache/procgraph/<key>.npgc`.
+A key covers everything a result depends on, so a cached result is always the right one. Change one
+parameter and exactly that node and its dependants run again; the rest come from the cache (a test
+counts them: 3 run, 3 cached). A damaged cache file is ignored and replaced; cache files are written
+atomically and only for complete results, so a cancelled or crashed run never leaves half of one.
+**There is no size limit yet:** delete `.noor/cache/procgraph` to clear it (it's derived data, like
+the rest of `.noor`).
+
+## Running: threads, progress, Cancel (part 2)
+
+Nodes run on worker threads (one per core, at most one per node) as soon as their inputs are done.
+Threads never change results: nodes are pure, the reported order is the fixed dependency order, and
+issues are listed in that order too (a test compares one thread with eight: same bytes, same order).
+A progress callback reports each finished node. **Cancel** skips every node not yet started; long
+nodes check it as they go (`noise` checks after every row) and stop without keeping anything.
+
+## Generating files, headless (part 2)
+
+```text
+noor_cli generate <project> <graph> [--out <folder>] [--threads <n>] [--no-cache]
+```
+
+Writes every declared output into the folder (default `<project>/Generated/<graph name>/`):
+
+- **fields** as `<output>.noorfield`: `"NFIELD01"`, u32 version 1, u32 sx, u32 sz, f32 cell (metres),
+  u32 unit (0 none, 1 metres, 2 ratio, 3 degrees), then sx × sz f32 samples, row by row (z rows of x),
+  little-endian. Simple enough for any tool (a dozen lines of Python read it);
+- **`<graph>.fingerprint.json`**, written last: the graph's hash, its seed, every node's type,
+  version and key (sorted by id), each output's type, unit and hash (with the value for numbers and
+  the file for fields), and the fingerprint. No timestamps, so the same graph writes the same bytes.
+
+**Nothing is written unless every output was made:** a cancelled run, or one with an output that
+couldn't be made, leaves the folder as it was and says why (issues per node). The editor runs graphs
+through the same function (editor API v20: `noor_doc_generate_start`, `_status`, `_cancel`), and a
+test checks that the editor's files and the CLI's are byte for byte the same.
+
 ## When things go wrong
 
 Mistakes are reported **on the node they concern** (and the pin, when there is one), and the rest of
@@ -90,5 +129,7 @@ the graph still runs:
 ## Where the code is
 
 `engine/procgraph` (`noor_procgraph`, editor and tools only; the runtime-boundary test keeps it out
-of games): `procgraph.h` (types, graph file, registry, validation, evaluation), `nodes.cpp` (the
-built-in nodes). Tests: `tests/unit/test_procgraph.cpp`.
+of games): `procgraph.h` (types, graph file, registry, validation, evaluation, cache, generate),
+`procgraph.cpp` (checking and running), `nodes.cpp` (the built-in nodes), `run.cpp` (bytes, cache,
+files). Tests: `tests/unit/test_procgraph.cpp` (11 cases), `cli.generate`, `api: …a graph runs in
+the background…` and `api.generate_matches_cli`; test data `tests/data/procgraph_project`.

@@ -23,6 +23,7 @@ enum class ErrorCode : std::uint16_t {
     PlatformError,
     GraphicsError,
     DeviceLost,  // the GPU device was lost (driver reset, crash, removal); needs recreation
+    Cancelled,   // stopped on request (a job's Cancel); nothing half-done was kept
 };
 
 [[nodiscard]] std::string_view to_string(ErrorCode code) noexcept;

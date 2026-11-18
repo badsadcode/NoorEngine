@@ -15,6 +15,9 @@
 //   noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw°]]
 //                                                    place an instance of a prefab in a scene
 //   noor_cli build <project> <output folder> [--scene <path>]
+//   noor_cli generate <project> <graph> [--out <folder>] [--threads <n>] [--no-cache]
+//                                                    run a procedural graph (Milestone 7): write its outputs
+//                                                    and a fingerprint file; results cached in .noor/cache/procgraph
 //                                                    a runnable game: the player + the project's content
 //
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
@@ -31,6 +34,7 @@
 #include "noor/asset/json.h"
 #include "noor/csg/scene_csg.h"
 #include "noor/game/cooked_csg.h"
+#include "noor/procgraph/procgraph.h"
 
 #include <chrono>
 #include "noor/foundation/file_io.h"
@@ -71,7 +75,8 @@ int usage() {
                "  noor_cli make-prefab <project> <scene> <entity name> <prefab path>\n"
                "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n"
                "  noor_cli build <project> <output folder> [--scene <path>]\n"
-               "  noor_cli cook <project>\n",
+               "  noor_cli cook <project>\n"
+               "  noor_cli generate <project> <graph path> [--out <folder>] [--threads <n>] [--no-cache]\n",
                stderr);
     return 64;
 }
@@ -743,6 +748,46 @@ int cmd_build(const std::vector<std::string>& a) {
     return 0;
 }
 
+// Runs a graph headless: the same code and the same bytes as the editor (ADR-014).
+int cmd_generate(const std::vector<std::string>& a) {
+    if (a.size() < 2) return usage();
+    auto p = asset::Project::open(a[0]);
+    if (!p) return report(p.error());
+    auto graph_file = p->resolve(a[1]);
+    if (!graph_file) return report(graph_file.error());
+    stdfs::path out = p->root() / "Generated" / graph_file->stem();
+    unsigned threads = 0;
+    bool cache = true;
+    for (std::size_t i = 2; i < a.size(); ++i) {
+        if (a[i] == "--out" && i + 1 < a.size()) out = a[++i];
+        else if (a[i] == "--threads" && i + 1 < a.size()) threads = static_cast<unsigned>(std::max(1, std::atoi(a[++i].c_str())));
+        else if (a[i] == "--no-cache") cache = false;
+        else return usage();
+    }
+    auto graph = procgraph::Graph::load(*graph_file);
+    if (!graph) return report(graph.error());
+    procgraph::Cache results(p->root() / ".noor" / "cache" / "procgraph");
+    procgraph::GenerateOptions opts;
+    opts.out = out;
+    opts.name = graph_file->stem().string();
+    opts.run.cache = cache ? &results : nullptr;
+    opts.run.threads = threads;
+    const auto t0 = std::chrono::steady_clock::now();
+    auto r = procgraph::generate(*graph, procgraph::Registry::builtin(), opts);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    if (!r) {
+        // Show what went wrong on which node, then the reason nothing was written.
+        const auto ev = procgraph::evaluate(*graph, procgraph::Registry::builtin(), opts.run);
+        for (const auto& i : ev.issues) std::printf("  %s%s: %s\n", i.node.empty() ? "(graph)" : i.node.c_str(), i.pin.empty() ? "" : ("." + i.pin).c_str(), i.message.c_str());
+        return report(r.error());
+    }
+    for (const auto& i : r->evaluation.issues) std::printf("  warning: %s: %s\n", i.node.empty() ? "(graph)" : i.node.c_str(), i.message.c_str());
+    std::printf("Generated '%s': %zu node(s) ran, %zu from the cache, %.0f ms\n  fingerprint %016llx\n", opts.name.c_str(), r->evaluation.ran,
+                r->evaluation.cached, ms, static_cast<unsigned long long>(r->fingerprint));
+    for (const auto& f : r->files) std::printf("  %s\n", f.generic_string().c_str());
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -763,5 +808,6 @@ int main(int argc, char** argv) {
     if (cmd == "add-prefab") return cmd_add_prefab(args);
     if (cmd == "build") return cmd_build(args);
     if (cmd == "cook") return cmd_cook(args);
+    if (cmd == "generate") return cmd_generate(args);
     return usage();
 }

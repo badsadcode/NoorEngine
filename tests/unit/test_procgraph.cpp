@@ -1,6 +1,7 @@
 // The procedural graph (Milestone 7, part 1, ADR-014): the file round-trips, every mistake is reported
 // on the node it concerns, evaluation is deterministic (pinned fingerprint), node randomness belongs
 // to the node, and a node's key changes exactly when something it depends on changes.
+#include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
 #include "noor/procgraph/procgraph.h"
 #include "noor/terrain/terrain.h"
@@ -9,7 +10,10 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
+#include <format>
+#include <fstream>
 
 using namespace noor;
 using namespace noor::procgraph;
@@ -239,4 +243,165 @@ TEST_CASE("procgraph: failures while running stay on their node, and what depend
     CHECK(ev.nodes.at("odd").state == NodeResult::State::Failed);
     CHECK(ev.nodes.at("odd").message.find("they must match") != std::string::npos);
     CHECK(ev.outputs.at("five").scalar == 5.0);
+}
+
+// ---- Milestone 7, part 2: cache, threads, cancel, generate ----
+
+namespace {
+std::filesystem::path temp_folder(const char* what) {
+    auto dir = std::filesystem::temp_directory_path() / (std::string(what) + "_" + Guid::generate().to_string());
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+std::size_t count_files(const std::filesystem::path& dir) {
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec)) return 0;
+    return static_cast<std::size_t>(std::distance(std::filesystem::directory_iterator(dir), std::filesystem::directory_iterator()));
+}
+} // namespace
+
+TEST_CASE("procgraph: values round-trip through bytes, every bit") {
+    const auto ev = evaluate(hills());
+    for (const auto& [id, r] : ev.nodes)
+        for (const auto& [name, v] : r.outputs) {
+            auto back = decode(encode(v));
+            REQUIRE(back);
+            CHECK(back->hash() == v.hash());
+        }
+    Value seeds;
+    seeds.type = PinType::Seed;
+    seeds.seed = 18446744073709551615ull;
+    CHECK(decode(encode(seeds))->seed == 18446744073709551615ull);
+    CHECK_FALSE(decode("nonsense"));
+}
+
+TEST_CASE("procgraph: only changed nodes and what depends on them run again, from memory or from files") {
+    const auto dir = temp_folder("noor_pgcache");
+    Cache cache(dir);
+    EvaluateOptions opts;
+    opts.cache = &cache;
+    const auto first = evaluate(hills(), Registry::builtin(), opts);
+    CHECK(first.ran == 6);
+    CHECK(first.cached == 0);
+    CHECK(count_files(dir) == 6);
+    const auto second = evaluate(hills(), Registry::builtin(), opts);
+    CHECK(second.ran == 0);
+    CHECK(second.cached == 6);
+    CHECK(second.fingerprint() == first.fingerprint());
+
+    // One parameter changed: that node and its two dependants run; the other three come from the cache.
+    Graph g = hills();
+    for (auto& n : g.nodes)
+        if (n.id == "flat") n.params["height"] = 3;
+    const auto edited = evaluate(g, Registry::builtin(), opts);
+    CHECK(edited.ran == 3);
+    CHECK(edited.cached == 3);
+    for (const char* id : {"flat", "blend", "limit"}) CHECK_FALSE(edited.nodes.at(id).cached);
+    for (const char* id : {"hills", "valleys", "mask"}) CHECK(edited.nodes.at(id).cached);
+
+    // A new process (memory empty): the files serve it, with the same bytes as computing it.
+    cache.forget_memory();
+    const auto from_files = evaluate(hills(), Registry::builtin(), opts);
+    CHECK(from_files.cached == 6);
+    CHECK(cache.file_hits() == 6);
+    CHECK(from_files.fingerprint() == first.fingerprint());
+
+    // A damaged cache file is a miss: computed again (same result) and replaced.
+    cache.forget_memory();
+    const auto victim = dir / std::format("{:016x}.npgc", first.nodes.at("limit").key);
+    REQUIRE(std::filesystem::exists(victim));
+    { std::ofstream(victim, std::ios::binary | std::ios::trunc) << "NPGCACHE garbage"; }
+    const auto repaired = evaluate(hills(), Registry::builtin(), opts);
+    CHECK_FALSE(repaired.nodes.at("limit").cached);
+    CHECK(repaired.fingerprint() == first.fingerprint());
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("procgraph: threads change nothing: one thread and many give the same bytes and order") {
+    EvaluateOptions one, many;
+    one.threads = 1;
+    many.threads = 8;
+    std::size_t progress_calls = 0;
+    many.progress = [&](const Progress& p) {
+        ++progress_calls;
+        CHECK(p.total == 6);
+    };
+    const auto a = evaluate(hills(), Registry::builtin(), one), b = evaluate(hills(), Registry::builtin(), many);
+    CHECK(a.fingerprint() == b.fingerprint());
+    CHECK(a.order == b.order);
+    CHECK(progress_calls == 6);
+    for (const auto& [id, r] : a.nodes) CHECK(r.key == b.nodes.at(id).key);
+}
+
+TEST_CASE("procgraph: cancelling stops the run, keeps no half results, and generate writes nothing") {
+    const auto cache_dir = temp_folder("noor_pgcancel");
+    const auto out = temp_folder("noor_pgout");
+    Cache cache(cache_dir);
+    std::atomic<bool> cancel{false};
+    GenerateOptions opts;
+    opts.out = out;
+    opts.name = "hills";
+    opts.run.cache = &cache;
+    opts.run.threads = 1;
+    opts.run.cancel = &cancel;
+    opts.run.progress = [&](const Progress& p) {
+        if (p.done == 2) cancel = true;  // stop after two nodes
+    };
+    auto r = generate(hills(), Registry::builtin(), opts);
+    REQUIRE_FALSE(r);
+    CHECK(r.error().code == ErrorCode::Cancelled);
+    CHECK(count_files(out) == 0);         // nothing half-written in the output folder
+    CHECK(count_files(cache_dir) == 2);   // only the two finished nodes were cached
+
+    // The next run picks up where it stopped: those two from the cache, the rest computed.
+    cancel = false;
+    opts.run.progress = nullptr;
+    auto done = generate(hills(), Registry::builtin(), opts);
+    REQUIRE(done);
+    CHECK(done->evaluation.cached == 2);
+    CHECK(done->evaluation.ran == 4);
+    CHECK(done->fingerprint == PROCGRAPH_HILLS_FINGERPRINT);
+    std::filesystem::remove_all(cache_dir);
+    std::filesystem::remove_all(out);
+}
+
+TEST_CASE("procgraph: generate writes the same bytes every time, files another tool can read") {
+    const auto a = temp_folder("noor_pgen_a"), b = temp_folder("noor_pgen_b");
+    GenerateOptions opts;
+    opts.name = "hills";
+    opts.out = a;
+    auto first = generate(hills(), Registry::builtin(), opts);  // no cache
+    REQUIRE(first);
+    Cache cache;
+    opts.out = b;
+    opts.run.cache = &cache;
+    opts.run.threads = 4;
+    auto second = generate(hills(), Registry::builtin(), opts);
+    REQUIRE(second);
+    REQUIRE(first->files.size() == 2);  // terrain.noorfield, hills.fingerprint.json
+    for (std::size_t i = 0; i < first->files.size(); ++i) {
+        CHECK(first->files[i].filename() == second->files[i].filename());
+        CHECK(fs::read_file(first->files[i], 1u << 28).value() == fs::read_file(second->files[i], 1u << 28).value());
+    }
+    // The field file: a plain format with its unit, readable without the graph.
+    auto field = load_field(a / "terrain.noorfield");
+    REQUIRE(field);
+    CHECK(field->second == Unit::Metres);
+    CHECK(field->first.sx == 257);
+    CHECK(field->first.v == first->evaluation.outputs.at("terrain").field->v);
+    // The fingerprint file says what made it.
+    const auto fp = asset::parse_json(fs::read_file(a / "hills.fingerprint.json").value(), "fp");
+    REQUIRE(fp);
+    CHECK((*fp)["fingerprint"] == std::format("{:016x}", PROCGRAPH_HILLS_FINGERPRINT));
+    CHECK((*fp)["nodes"]["hills"]["type"] == "noise");
+    CHECK((*fp)["outputs"]["terrain"]["file"] == "terrain.noorfield");
+    // A graph whose output can't be made writes nothing.
+    Graph broken = hills();
+    broken.nodes.push_back({"oops", "clamp", 1, Json::object(), {}, Json::object()});
+    broken.outputs.push_back({"bad", {"oops", "out"}});
+    const auto c = temp_folder("noor_pgen_c");
+    opts.out = c;
+    CHECK_FALSE(generate(broken, Registry::builtin(), opts));
+    CHECK(count_files(c) == 0);
+    for (const auto& d : {a, b, c}) std::filesystem::remove_all(d);
 }

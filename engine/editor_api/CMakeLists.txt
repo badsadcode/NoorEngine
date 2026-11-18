@@ -7,5 +7,5 @@ add_library(noor_editor_api SHARED
     src/viewport_tools.cpp)
 target_include_directories(noor_editor_api PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_compile_definitions(noor_editor_api PRIVATE NOOR_EDITOR_API_BUILD)
-target_link_libraries(noor_editor_api PRIVATE noor::foundation noor::platform noor::render noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit)
+target_link_libraries(noor_editor_api PRIVATE noor::foundation noor::platform noor::render noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph)
 noor_set_target_options(noor_editor_api)

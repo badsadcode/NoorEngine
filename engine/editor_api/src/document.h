@@ -13,8 +13,12 @@
 #include "noor/scene/history.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
+#include "noor/procgraph/procgraph.h"
 #include "noor/terrain/terrain.h"
 #include "noor/terrain_edit/brush.h"
+
+#include <atomic>
+#include <thread>
 
 #include <cstdint>
 #include <filesystem>
@@ -168,6 +172,7 @@ public:
 
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
+    ~Document();
 
     [[nodiscard]] asset::Json project_info() const;
     [[nodiscard]] Result<asset::Json> assets(bool rescan);
@@ -227,8 +232,21 @@ public:
     [[nodiscard]] Result<asset::Json> sculpt(const asset::Json& command);
     // The ground height of a terrain entity at world (x, z), with its sculpting (saved or not).
     [[nodiscard]] Result<float> terrain_height(const Guid& terrain, float x, float z);
+    // Running a procedural graph in the background (Milestone 7, part 2), one at a time: the same
+    // procgraph::generate as `noor_cli generate`, so the same bytes. `out` empty: <project>/Generated/<stem>.
+    [[nodiscard]] Status generate_start(std::string_view graph, const std::filesystem::path& out);
+    [[nodiscard]] asset::Json generate_status();
+    void generate_cancel();
 
 private:
+    struct GenerateJob {
+        std::thread thread;
+        std::atomic<bool> cancel{false};
+        std::mutex mutex;
+        asset::Json status;
+    };
+    std::unique_ptr<GenerateJob> job_;
+    std::unique_ptr<procgraph::Cache> graph_cache_;  // <project>/.noor/cache/procgraph, shared by runs
     // Terrains with hand-made layers, by entity (loaded on first use, saved with the scene).
     std::unordered_map<Guid, std::shared_ptr<TerrainEdit>> terrain_edits_;
     // The live edit of a terrain entity with these layer assets and settings (rebuilt on a new base).

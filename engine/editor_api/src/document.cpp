@@ -1154,4 +1154,84 @@ Result<float> Document::terrain_height(const Guid& terrain, float x, float z) {
     return fail(ErrorCode::NotFound, "no terrain entity with that id");
 }
 
+// ---- Procedural graphs (Milestone 7, part 2) ----
+
+Document::~Document() {
+    if (job_ && job_->thread.joinable()) {
+        job_->cancel = true;  // closing the document stops a running graph; nothing half-written is kept
+        job_->thread.join();
+    }
+}
+
+Status Document::generate_start(std::string_view graph_path, const std::filesystem::path& out_dir) {
+    if (job_) {
+        {
+            std::scoped_lock lock(job_->mutex);
+            if (job_->status.value("running", false)) return fail(ErrorCode::InvalidArgument, "a graph is already running: wait, or cancel it");
+        }
+        if (job_->thread.joinable()) job_->thread.join();
+    }
+    auto file = project_.resolve(graph_path);
+    if (!file) return std::unexpected(file.error());
+    auto graph = procgraph::Graph::load(*file);
+    if (!graph) return std::unexpected(graph.error());
+    if (!graph_cache_) graph_cache_ = std::make_unique<procgraph::Cache>(project_.root() / ".noor" / "cache" / "procgraph");
+    job_ = std::make_unique<GenerateJob>();
+    job_->status = Json{{"running", true}, {"graph", std::string(graph_path)}, {"done", 0}, {"total", graph->nodes.size()}, {"node", ""}};
+    procgraph::GenerateOptions opts;
+    opts.out = out_dir.empty() ? project_.root() / "Generated" / file->stem() : out_dir;
+    opts.name = file->stem().string();
+    opts.run.cache = graph_cache_.get();
+    opts.run.cancel = &job_->cancel;
+    GenerateJob* job = job_.get();
+    opts.run.progress = [job](const procgraph::Progress& p) {
+        std::scoped_lock lock(job->mutex);
+        job->status["done"] = p.done;
+        job->status["total"] = p.total;
+        job->status["node"] = p.node;
+    };
+    const auto root = project_.root();
+    job_->thread = std::thread([job, opts, g = std::move(*graph), root]() {
+        auto r = procgraph::generate(g, procgraph::Registry::builtin(), opts);
+        Json done{{"running", false}, {"cancelled", !r && r.error().code == ErrorCode::Cancelled}};
+        if (r) {
+            done["ok"] = true;
+            done["fingerprint"] = std::format("{:016x}", r->fingerprint);
+            done["ran"] = r->evaluation.ran;
+            done["cached"] = r->evaluation.cached;
+            Json files = Json::array();
+            for (const auto& f : r->files) {
+                std::error_code ec;
+                const auto rel = stdfs::relative(f, root, ec);
+                files.push_back(!ec && !rel.empty() && *rel.begin() != ".." ? rel.generic_string() : f.generic_string());
+            }
+            done["files"] = std::move(files);
+        } else {
+            done["ok"] = false;
+            done["error"] = r.error().message;
+        }
+        // The issues, on their nodes (from a run's own report when there is one, else validation).
+        const auto issues = r ? r->evaluation.issues : procgraph::validate(g, procgraph::Registry::builtin());
+        Json list = Json::array();
+        for (const auto& i : issues) list.push_back({{"node", i.node}, {"pin", i.pin}, {"message", i.message}});
+        done["issues"] = std::move(list);
+        std::scoped_lock lock(job->mutex);
+        done["graph"] = job->status.value("graph", std::string());
+        done["done"] = job->status.value("done", 0);
+        done["total"] = job->status.value("total", 0);
+        job->status = std::move(done);
+    });
+    return {};
+}
+
+Json Document::generate_status() {
+    if (!job_) return Json{{"running", false}, {"graph", nullptr}};
+    std::scoped_lock lock(job_->mutex);
+    return job_->status;
+}
+
+void Document::generate_cancel() {
+    if (job_) job_->cancel = true;
+}
+
 } // namespace noor::editor

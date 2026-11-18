@@ -6,9 +6,11 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <format>
 #include <functional>
 #include <set>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -456,7 +458,7 @@ std::uint64_t Evaluation::fingerprint() const {
     return h.h;
 }
 
-Evaluation evaluate(const Graph& graph, const Registry& registry) {
+Evaluation evaluate(const Graph& graph, const Registry& registry, const EvaluateOptions& options) {
     Evaluation ev;
     ev.issues = validate(graph, registry);
     const Index ix(graph, registry);
@@ -473,45 +475,109 @@ Evaluation evaluate(const Graph& graph, const Registry& registry) {
             ++waiting[l.to.node];
             next[l.from.node].push_back(l.to.node);
         }
-    std::set<std::string> ready;
-    for (const auto& [id, count] : waiting)
-        if (count == 0) ready.insert(id);
-    while (!ready.empty()) {
-        const std::string id = *ready.begin();
-        ready.erase(ready.begin());
-        ev.order.push_back(id);
-        for (const auto& to : next[id])
-            if (--waiting[to] == 0) ready.insert(to);
+    {
+        auto count = waiting;
+        std::set<std::string> ready;
+        for (const auto& [id, c] : count)
+            if (c == 0) ready.insert(id);
+        while (!ready.empty()) {
+            const std::string id = *ready.begin();
+            ready.erase(ready.begin());
+            ev.order.push_back(id);
+            for (const auto& to : next[id])
+                if (--count[to] == 0) ready.insert(to);
+        }
     }
 
+    // Plan: parameters, seed and key per node, in order (a key needs only its inputs' keys, not their
+    // results). Nodes that can't run are decided here.
+    struct Plan {
+        const Node* node = nullptr;
+        const NodeType* type = nullptr;
+        Json params;
+        std::uint64_t seed = 0;
+        bool runnable = false;
+    };
+    std::map<std::string, Plan> plans;
     for (const auto& id : ev.order) {
         NodeResult& res = ev.nodes[id];
-        const Node& node = *ix.nodes.at(id);
+        Plan& plan = plans[id];
+        plan.node = ix.nodes.at(id);
         if (const auto b = broken.find(id); b != broken.end()) {
             res.state = NodeResult::State::Failed;
             res.message = b->second;
             continue;
         }
-        const NodeType& type = *ix.types.at(id);
-        NodeContext ctx{node, {}, fill_params(type, node, nullptr), mix(graph.seed ^ hash_text(node.id))};
-        // The key: everything the result depends on.
+        plan.type = ix.types.at(id);
+        plan.params = fill_params(*plan.type, *plan.node, nullptr);
+        plan.seed = mix(graph.seed ^ hash_text(id));
         Hasher key;
-        key.text(type.name);
-        key.u32(type.version);
-        key.text(nlohmann::json(ctx.params).dump());  // sorted keys: the same parameters always hash the same
-        key.u64(ctx.seed);
+        key.text(plan.type->name);
+        key.u32(plan.type->version);
+        key.text(nlohmann::json(plan.params).dump());  // sorted keys: the same parameters always hash the same
+        key.u64(plan.seed);
         bool ok = true;
-        for (const auto& in : type.inputs) {
+        for (const auto& in : plan.type->inputs) {
             key.text(in.name);
             const auto link = ix.into.find({id, in.name});
             if (link == ix.into.end()) {
                 key.u64(0);
                 continue;
             }
-            const NodeResult& up = ev.nodes[link->second->from.node];
-            if (up.state != NodeResult::State::Done || !up.outputs.contains(link->second->from.pin)) {
+            const auto& up_plan = plans[link->second->from.node];
+            if (!up_plan.runnable) {
                 res.state = NodeResult::State::Skipped;
                 res.message = std::format("input \"{}\" has nothing: {} didn't run", in.name, link->second->from.node);
+                ok = false;
+                break;
+            }
+            key.u64(ev.nodes[link->second->from.node].key);
+            key.text(link->second->from.pin);
+        }
+        if (!ok) continue;
+        res.key = key.h;
+        plan.runnable = true;
+    }
+
+    // Run: workers take nodes whose inputs are done. Results are written under the lock; a node reads
+    // its inputs only after they're complete (the lock orders it), and nodes are pure, so threads
+    // can't change any result.
+    std::mutex mutex;
+    std::condition_variable wake;
+    std::map<std::string, int> left;  // runnable inputs still to finish
+    std::set<std::string> ready;
+    std::size_t total = 0, finished = 0;
+    for (const auto& id : ev.order) {
+        if (!plans[id].runnable) continue;
+        ++total;
+        int n = 0;
+        for (const auto& l : graph.links)
+            if (l.to.node == id && plans.contains(l.from.node) && plans[l.from.node].runnable) ++n;
+        left[id] = n;
+        if (n == 0) ready.insert(id);
+    }
+    std::map<std::string, std::vector<Issue>> run_issues;
+    const auto is_cancelled = [&] { return options.cancel && options.cancel->load(std::memory_order_relaxed); };
+
+    auto process = [&](const std::string& id) {
+        const Plan& plan = plans.at(id);
+        NodeResult res = ev.nodes.at(id);  // a copy: key, state so far (read-only lookups: no thread changes a map's shape)
+        std::vector<Issue> issues;
+        NodeContext ctx{*plan.node, {}, plan.params, plan.seed, options.cancel};
+        bool ok = true;
+        if (is_cancelled()) {
+            res.state = NodeResult::State::Skipped;
+            res.message = "cancelled";
+            ok = false;
+        }
+        for (const auto& in : plan.type->inputs) {
+            if (!ok) break;
+            const auto link = ix.into.find({id, in.name});
+            if (link == ix.into.end()) continue;
+            const NodeResult& up = ev.nodes.at(link->second->from.node);  // complete: it finished before we were ready
+            if (up.state != NodeResult::State::Done || !up.outputs.contains(link->second->from.pin)) {
+                res.state = NodeResult::State::Skipped;
+                res.message = up.message == "cancelled" ? "cancelled" : std::format("input \"{}\" has nothing: {} didn't run", in.name, link->second->from.node);
                 ok = false;
                 break;
             }
@@ -520,20 +586,17 @@ Evaluation evaluate(const Graph& graph, const Registry& registry) {
             if (in.unit != Unit::Any && incoming.unit != in.unit) {
                 res.state = NodeResult::State::Failed;
                 res.message = std::format("input \"{}\" takes {}, but {} gave {}", in.name, unit_name(in.unit), link->second->from.text(), unit_name(incoming.unit));
-                ev.issues.push_back({id, in.name, res.message});
+                issues.push_back({id, in.name, res.message});
                 ok = false;
                 break;
             }
-            key.u64(up.key);
-            key.text(link->second->from.pin);
             ctx.inputs[in.name] = incoming;
         }
-        if (!ok) continue;
-        // Inputs that must share a unit, now that every unit is known (a plain number goes with anything).
-        {
+        if (ok) {
+            // Inputs that must share a unit, now that every unit is known (a plain number goes with anything).
             const Value* first = nullptr;
             std::string first_name;
-            for (const auto& name : type.same_units) {
+            for (const auto& name : plan.type->same_units) {
                 const Value* v = ctx.input(name);
                 if (!v || v->unit == Unit::None) continue;
                 if (!first) {
@@ -542,48 +605,93 @@ Evaluation evaluate(const Graph& graph, const Registry& registry) {
                 } else if (v->unit != first->unit) {
                     res.state = NodeResult::State::Failed;
                     res.message = std::format("\"{}\" is in {} but \"{}\" is in {}: they must match", name, unit_name(v->unit), first_name, unit_name(first->unit));
-                    ev.issues.push_back({id, name, res.message});
+                    issues.push_back({id, name, res.message});
                     ok = false;
                     break;
                 }
             }
         }
-        if (!ok) continue;
-        res.key = key.h;
-        const auto t0 = std::chrono::steady_clock::now();
-        auto out = type.run(ctx);
-        res.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        if (!out) {
-            res.state = NodeResult::State::Failed;
-            res.message = out.error().message;
-            ev.issues.push_back({id, "", res.message});
-            continue;
-        }
-        // Every declared output, with its declared type and resolved unit.
-        for (const auto& spec : type.outputs) {
-            auto it = out->find(spec.name);
-            if (it == out->end() || it->second.type != spec.type) {
-                res.state = NodeResult::State::Failed;
-                res.message = std::format("the node didn't produce its output \"{}\" (an engine bug)", spec.name);
-                break;
+        if (ok) {
+            const auto t0 = std::chrono::steady_clock::now();
+            std::optional<Outputs> hit = options.cache ? options.cache->get(res.key) : std::nullopt;
+            if (hit) {
+                res.outputs = std::move(*hit);
+                res.cached = true;
+                res.state = NodeResult::State::Done;
+                for (const auto& [name, v] : res.outputs) res.bytes += value_bytes(v);
+            } else {
+                auto out = plan.type->run(ctx);
+                if (!out) {
+                    res.state = out.error().code == ErrorCode::Cancelled ? NodeResult::State::Skipped : NodeResult::State::Failed;
+                    res.message = out.error().code == ErrorCode::Cancelled ? "cancelled" : out.error().message;
+                    if (res.state == NodeResult::State::Failed) issues.push_back({id, "", res.message});
+                } else {
+                    // Every declared output, with its declared type and resolved unit.
+                    for (const auto& spec : plan.type->outputs) {
+                        auto it = out->find(spec.name);
+                        if (it == out->end() || it->second.type != spec.type) {
+                            res.state = NodeResult::State::Failed;
+                            res.message = std::format("the node didn't produce its output \"{}\" (an engine bug)", spec.name);
+                            issues.push_back({id, "", res.message});
+                            break;
+                        }
+                        if (spec.unit == Unit::SameAs) it->second.unit = ctx.input(spec.same_as) ? ctx.input(spec.same_as)->unit : Unit::None;
+                        else if (spec.unit != Unit::Any) it->second.unit = spec.unit;  // Any: the node chose (constant, remap)
+                        res.bytes += value_bytes(it->second);
+                    }
+                    if (res.message.empty()) {
+                        res.outputs = std::move(*out);
+                        res.state = NodeResult::State::Done;
+                        if (options.cache) options.cache->put(res.key, res.outputs);  // only complete results
+                    }
+                }
             }
-            if (spec.unit == Unit::SameAs) it->second.unit = ctx.input(spec.same_as) ? ctx.input(spec.same_as)->unit : Unit::None;
-            else if (spec.unit != Unit::Any) it->second.unit = spec.unit;  // Any: the node chose (constant, remap)
-            res.bytes += value_bytes(it->second);
+            res.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         }
-        if (!res.message.empty()) {
-            ev.issues.push_back({id, "", res.message});
-            continue;
+        std::scoped_lock lock(mutex);
+        ev.nodes.at(id) = std::move(res);
+        if (!issues.empty()) run_issues[id] = std::move(issues);
+        ++finished;
+        for (const auto& to : next[id])
+            if (left.contains(to) && --left[to] == 0) ready.insert(to);
+        if (options.progress) options.progress({finished, total, id, ev.nodes.at(id).cached});
+        wake.notify_all();
+    };
+
+    auto worker = [&] {
+        for (;;) {
+            std::string id;
+            {
+                std::unique_lock lock(mutex);
+                wake.wait(lock, [&] { return !ready.empty() || finished == total; });
+                if (ready.empty()) return;  // everything finished
+                id = *ready.begin();
+                ready.erase(ready.begin());
+            }
+            process(id);
         }
-        res.outputs = std::move(*out);
-        res.state = NodeResult::State::Done;
+    };
+    unsigned threads = options.threads != 0 ? options.threads : std::max(1u, std::thread::hardware_concurrency());
+    threads = static_cast<unsigned>(std::min<std::size_t>(threads, std::max<std::size_t>(1, total)));
+    if (threads <= 1) {
+        worker();
+    } else {
+        std::vector<std::jthread> pool;
+        for (unsigned t = 0; t < threads; ++t) pool.emplace_back(worker);
     }
+
     // Nodes that never became ready are on a cycle (validation said so).
     for (const auto& n : graph.nodes)
         if (!ev.nodes.contains(n.id)) {
             ev.nodes[n.id].state = NodeResult::State::Failed;
             ev.nodes[n.id].message = broken.contains(n.id) ? broken[n.id] : "part of a cycle";
         }
+    for (const auto& id : ev.order)  // in the fixed order, whatever order threads finished in
+        if (const auto it = run_issues.find(id); it != run_issues.end()) ev.issues.insert(ev.issues.end(), it->second.begin(), it->second.end());
+    for (const auto& [id, r] : ev.nodes) {
+        if (r.state == NodeResult::State::Done) ++(r.cached ? ev.cached : ev.ran);
+        if (r.message == "cancelled") ev.cancelled = true;
+    }
     for (const auto& o : graph.outputs) {
         const auto it = ev.nodes.find(o.from.node);
         if (it != ev.nodes.end() && it->second.state == NodeResult::State::Done && it->second.outputs.contains(o.from.pin))

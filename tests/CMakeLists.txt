@@ -156,6 +156,19 @@ add_test(NAME player.csg_doorway
         -P ${CMAKE_CURRENT_SOURCE_DIR}/csg_check.cmake)
 set_tests_properties(player.csg_doorway PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csg_game)
 
+# Procedural graphs headless (Milestone 7, part 2): noor_cli generate writes the pinned fingerprint, and the
+# editor API's run of the same graph writes the same bytes (api.generate_matches_cli compares the files).
+add_test(NAME cli.generate
+    COMMAND $<TARGET_FILE:noor_cli> generate ${CMAKE_CURRENT_SOURCE_DIR}/data/procgraph_project Assets/Graphs/hills.noorgraph
+            --out ${CMAKE_CURRENT_BINARY_DIR}/generated_cli --no-cache)
+set_tests_properties(cli.generate PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP generated_cli
+                     PASS_REGULAR_EXPRESSION "fingerprint 193a309d3ece274d")
+if(WIN32)
+    add_test(NAME api.generate_matches_cli COMMAND noor_editor_api_tests "--test-case=*matches the CLI*")
+    set_tests_properties(api.generate_matches_cli PROPERTIES LABELS "api" FIXTURES_REQUIRED generated_cli
+                         ENVIRONMENT "NOOR_CLI_GENERATED=${CMAKE_CURRENT_BINARY_DIR}/generated_cli" FAIL_REGULAR_EXPRESSION "${NOOR_NOTHING_RAN}")
+endif()
+
 # Terrain in games (Milestone 6, part 5): a character walks up a heightmap ramp in a built game.
 add_test(NAME cli.build_terrain
     COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/terrain_project ${CMAKE_CURRENT_BINARY_DIR}/built_terrain_game)

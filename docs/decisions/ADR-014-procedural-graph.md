@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7; part 1 done, part 2 settles the cache and jobs) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Proposed (Milestone 7; parts 1–2 done: core, cache, jobs, headless) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds
@@ -70,6 +70,18 @@ BadBuilding) are separate .NET programs connected by files.
 - **Evaluation** is single-threaded in part 1 (jobs come in part 2); the order is fixed by dependencies
   then node id.
 - **Fingerprint** of the test graph identical in Debug and Release (MSVC x64), pinned in CI.
+
+## What part 2 settled (2026-11-18)
+- **Keys first, then running:** a key needs only its inputs' keys, so all keys (and which nodes can't
+  run) are worked out before any node runs; workers then take nodes whose inputs are done. Results are
+  written under one lock; issues are reported in the fixed dependency order, so threads change nothing.
+- **Cache:** memory plus `<key>.npgc` files, written atomically, only for complete results; a damaged
+  file is a miss. No size limit yet (exception, tracked in the plan).
+- **Cancel** is cooperative: unstarted nodes are skipped; long nodes poll it and return
+  `ErrorCode::Cancelled` (a new foundation error code). `generate` writes nothing unless every output
+  exists, and writes the fingerprint file last.
+- **One path:** the editor (a background thread in the document, API v20) and `noor_cli generate` both
+  call `procgraph::generate`; a test compares their files byte for byte.
 
 ## Consequences
 - Easier: reproducibility tests are hash comparisons; invalidation is "which keys changed"; the CLI

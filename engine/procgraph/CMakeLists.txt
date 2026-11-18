@@ -4,6 +4,7 @@ noor_add_module(procgraph
     SOURCES
         src/procgraph.cpp
         src/nodes.cpp
+        src/run.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset

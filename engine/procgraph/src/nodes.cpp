@@ -97,11 +97,13 @@ const Registry& Registry::builtin() {
                    const std::uint64_t seed = c.stream("noise").next();
                    f->v.resize(static_cast<std::size_t>(f->sx) * f->sz);
                    // The same sums as terrain::Heights::build, so a terrain with this seed matches bit for bit.
-                   for (std::uint32_t z = 0; z < f->sz; ++z)
+                   for (std::uint32_t z = 0; z < f->sz; ++z) {
+                       if (c.cancelled()) return fail(ErrorCode::Cancelled, "cancelled");  // a row at a time
                        for (std::uint32_t x = 0; x < f->sx; ++x) {
                            const double px = static_cast<double>(x) * f->cell / scale, pz = static_cast<double>(z) * f->cell / scale;
                            f->v[static_cast<std::size_t>(z) * f->sx + x] = (terrain::fractal_noise(px, pz, seed, octaves) * 0.5f + 0.5f) * static_cast<float>(height);
                        }
+                   }
                    return Outputs{{"height", field(std::move(f))}};
                }});
 

@@ -17,6 +17,8 @@
 #include <chrono>
 #include <filesystem>
 #include <algorithm>
+#include <cstdlib>
+#include <thread>
 #include <string>
 
 namespace stdfs = std::filesystem;
@@ -488,6 +490,68 @@ TEST_CASE("document api: the Hillside sample opens, and its house exports as a G
     for (const auto& sm : model->meshes[0].submeshes) triangles += sm.index_count / 3;
     CHECK(triangles == csg[0]["triangles"].get<std::size_t>());
     CHECK(model->meshes[0].submeshes.size() >= 2);  // runs of brick and planks (one or more per brush)
+    noor_doc_close(doc);
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
+}
+
+// Milestone 7, part 2: a graph runs in the background with progress and Cancel, and the editor writes
+// the same bytes as noor_cli generate (api.generate_matches_cli gives this case the CLI's folder).
+TEST_CASE("document api: a graph runs in the background, can be cancelled, and matches the CLI") {
+    const stdfs::path src = kData / "procgraph_project";
+    const stdfs::path dir = stdfs::temp_directory_path() / ("noor_graphdoc_" + noor::Guid::generate().to_string());
+    stdfs::create_directories(dir);
+    stdfs::copy(src, dir, stdfs::copy_options::recursive);
+    noor_doc* doc = noor_doc_open_project(dir.string().c_str());
+    REQUIRE(doc != nullptr);
+    auto wait = [&]() {
+        Json s;
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+        do {
+            s = json(noor_doc_generate_status(doc));
+            if (!s["running"].get<bool>()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        } while (std::chrono::steady_clock::now() < until);
+        return s;
+    };
+
+    // Cancel at once: nothing is written.
+    REQUIRE(noor_doc_generate_start(doc, "Assets/Graphs/hills.noorgraph", nullptr) == 1);
+    noor_doc_generate_cancel(doc);
+    Json s = wait();
+    CHECK(s["running"] == false);
+    CHECK(s["cancelled"] == true);
+    CHECK_FALSE(stdfs::exists(dir / "Generated" / "hills" / "hills.fingerprint.json"));
+
+    // A full run: progress counts the nodes, the fingerprint is the pinned one.
+    REQUIRE(noor_doc_generate_start(doc, "Assets/Graphs/hills.noorgraph", nullptr) == 1);
+    s = wait();
+    INFO(s.dump());
+    REQUIRE(s["ok"] == true);
+    CHECK(s["fingerprint"] == "193a309d3ece274d");
+    CHECK(s["done"] == 6);
+    CHECK(s["total"] == 6);
+    CHECK(s["files"].size() == 2);
+    // Again: everything from the cache.
+    REQUIRE(noor_doc_generate_start(doc, "Assets/Graphs/hills.noorgraph", nullptr) == 1);
+    s = wait();
+    CHECK(s["cached"] == 6);
+    CHECK(s["ran"] == 0);
+    CHECK(noor_doc_generate_start(doc, "Assets/Graphs/missing.noorgraph", nullptr) == 0);
+
+    // The CLI's files, when the ctest wrapper ran it first: byte for byte the same.
+    if (const char* cli = std::getenv("NOOR_CLI_GENERATED")) {
+        for (const char* f : {"terrain.noorfield", "hills.fingerprint.json"}) {
+            INFO(f);
+            const auto mine = noor::fs::read_file(dir / "Generated" / "hills" / f, 1u << 28);
+            const auto theirs = noor::fs::read_file(stdfs::path(cli) / f, 1u << 28);
+            REQUIRE(mine);
+            REQUIRE(theirs);
+            CHECK(*mine == *theirs);
+        }
+    } else {
+        MESSAGE("NOOR_CLI_GENERATED isn't set: the CLI comparison runs as api.generate_matches_cli");
+    }
     noor_doc_close(doc);
     std::error_code ec;
     stdfs::remove_all(dir, ec);

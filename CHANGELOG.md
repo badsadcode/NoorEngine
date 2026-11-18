@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 7, part 2: cache, jobs and noor_cli generate
+**Added**
+- **Results cache** (`procgraph::Cache`): node results under their keys, in memory and in
+  `<project>/.noor/cache/procgraph/<key>.npgc` (atomic writes, complete results only, damaged files
+  recomputed). Only changed nodes and their dependants run again.
+- **Worker threads** with a progress callback and cooperative **Cancel** (`ErrorCode::Cancelled`, new);
+  results and reported order independent of threads.
+- **`procgraph::generate`** and **`noor_cli generate <project> <graph> [--out] [--threads] [--no-cache]`**:
+  fields as `.noorfield` files (a documented little binary format), a `<graph>.fingerprint.json` with
+  what made them; nothing written unless every output was made.
+- Editor API **v20**: `noor_doc_generate_start`, `noor_doc_generate_status`, `noor_doc_generate_cancel`
+  (a background run in the document; closing it cancels and waits).
+- Value encoding (`encode`/`decode`), `save_field`/`load_field`.
+
+**Tests:** 5 more `test_procgraph` cases (bytes round trip; 3 run + 3 cached after one edit, from memory
+and from files; a damaged cache file; 1 thread vs 8 identical; cancel writes nothing and caches only
+finished nodes; generate byte-identical and readable), `cli.generate` (the pinned fingerprint from the
+command line), an API background-run test (cancel, progress, cache) and `api.generate_matches_cli` (the
+editor's files equal the CLI's).
+
 ### 2026-11-18 — Milestone 7, part 1: procedural graph core
 **Added**
 - **`noor_procgraph`** (editor/tools only; the runtime-boundary test forbids it in games;
