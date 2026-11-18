@@ -239,8 +239,17 @@ public:
     void generate_cancel();
     // A preview of one node output of the last run: fields as an 8-bit greyscale picture (base64), numbers as a value.
     [[nodiscard]] Result<asset::Json> generate_preview(std::string_view node, std::string_view pin, int size);
+    // Everything known about one asset (Milestone 7, part 5): its file, and for a model with a Noor
+    // Interchange manifest, the manifest (generator, recipe, seed, family, wind...) and each level of
+    // detail opened and compared with it. Cached until the files change.
+    [[nodiscard]] Result<asset::Json> asset_details(const Guid& asset);
 
 private:
+    struct DetailsCache {
+        std::string key;  // the files' sizes and times: a change makes it stale
+        asset::Json json;
+    };
+    std::unordered_map<Guid, DetailsCache> details_;
     struct GenerateJob {
         std::thread thread;
         std::atomic<bool> cancel{false};

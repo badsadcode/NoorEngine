@@ -658,3 +658,36 @@ TEST_CASE("document api: the graph editor's calls: node types, check, node resul
     std::error_code ec;
     stdfs::remove_all(dir, ec);
 }
+
+TEST_CASE("document api: asset details tell a NoorForm oak's story, and notice a changed level") {
+    TempDoc t;
+    const stdfs::path trees = t.dir / "Assets" / "Trees";
+    stdfs::create_directories(trees);
+    for (const auto& e : stdfs::directory_iterator(kData / "noorform_oak")) stdfs::copy_file(e.path(), trees / e.path().filename());
+    REQUIRE(noor_doc_assets(t.doc, 1) != nullptr);
+
+    const char* oak = "719beb3e-327d-56ed-8d54-be8882f405fd";
+    Json d = json(noor_doc_asset_details(t.doc, oak));
+    CHECK(d["path"] == "Assets/Trees/Oak_01.glb");
+    const Json& m = d["interchange"];
+    REQUIRE(m.is_object());
+    CHECK(m["recipe"]["seed"] == 1);
+    CHECK(m["family"]["count"] == 9);
+    CHECK(m["issues"].empty());
+    REQUIRE(m["levels"].size() == 4);
+    CHECK(m["levels"][0]["max_distance"].get<double>() == doctest::Approx(29.01));
+    CHECK(m["levels"][3]["max_distance"].is_null());
+    CHECK(m["levels"][3]["billboard"] == true);
+    for (const auto& l : m["levels"]) CHECK(l["issues"].empty());
+
+    // An older manifest (BadBuilding, v0.2) reads too; an unknown id is an error, not a crash.
+    Json b = json(noor_doc_asset_details(t.doc, kBuilding));
+    CHECK(b["interchange"]["kind"] == "building");
+    CHECK(noor_doc_asset_details(t.doc, "00000000-0000-0000-0000-000000000000") == nullptr);
+
+    // The cache notices a level file changing behind the editor's back.
+    stdfs::remove(trees / "Oak_01.lod2.glb");
+    d = json(noor_doc_asset_details(t.doc, oak));
+    CHECK(d["interchange"]["levels"][2]["exists"] == false);
+    CHECK_FALSE(d["interchange"]["issues"].empty());
+}

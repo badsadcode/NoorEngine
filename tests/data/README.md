@@ -20,3 +20,19 @@ Deliberately **not** included, to keep the repository small: `.lod1.glb`, `.lod2
 
 The footprint comes from OpenStreetMap (© OpenStreetMap contributors, ODbL); see BadBuilding's
 `samples/warsaw.json` for attribution.
+
+## `noorform_oak/`
+One oak from NoorMD's NoorForm (Bad Ideas Works, MIT), "Oak 01" (seed 1) from a nine-oak NoorForm variety pack,
+**converted** into the NoorEngine export layout ([guide](../../docs/interchange/NOORMD_NOORENGINE_EXPORT.md))
+because NoorMD doesn't write that layout yet:
+
+```bash
+python tools/interchange/noormd_engine_export.py test_tree "Oak 01" tests/data/noorform_oak
+```
+
+- `Oak_01.glb` + `Oak_01.lod1.glb` … `.lod3.glb`: four levels (15,268 / 12,256 / 5,178 / 8 triangles;
+  level 3 is a billboard), JPEG textures (PNG where alpha matters), a trunk capsule in level 0
+- `Oak_01.noor.json`: the v0.4 manifest (id `719beb3e-327d-56ed-8d54-be8882f405fd`, the UUID v5 the guide predicts)
+- `Oak_01.recipe.json`: NoorForm's recipe, unchanged
+
+6.5 MB in all. When NoorMD's export mode exists, its own export of this oak replaces these files.

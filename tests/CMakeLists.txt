@@ -29,6 +29,7 @@ add_executable(noor_unit_tests
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
     unit/test_procgraph.cpp
+    unit/test_interchange.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -163,6 +164,13 @@ add_test(NAME cli.generate
             --out ${CMAKE_CURRENT_BINARY_DIR}/generated_cli --no-cache)
 set_tests_properties(cli.generate PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP generated_cli
                      PASS_REGULAR_EXPRESSION "fingerprint 193a309d3ece274d")
+# Generated assets in (Milestone 7, part 5): noor_cli info reads a NoorForm oak's manifest and checks all four
+# levels (a level that disagrees with the manifest prints "problem:" and fails).
+add_test(NAME cli.info_interchange
+    COMMAND $<TARGET_FILE:noor_cli> info ${CMAKE_CURRENT_SOURCE_DIR}/data/noorform_oak/Oak_01.glb)
+set_tests_properties(cli.info_interchange PROPERTIES LABELS "cli" TIMEOUT 60
+                     PASS_REGULAR_EXPRESSION "LOD3 Oak_01[.]lod3[.]glb +8 triangles.*no limit, billboard"
+                     FAIL_REGULAR_EXPRESSION "problem:|error ")
 if(WIN32)
     add_test(NAME api.generate_matches_cli COMMAND noor_editor_api_tests "--test-case=*matches the CLI*")
     set_tests_properties(api.generate_matches_cli PROPERTIES LABELS "api" FIXTURES_REQUIRED generated_cli

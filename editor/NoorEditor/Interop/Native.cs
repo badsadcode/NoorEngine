@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 21;
+    public const uint ExpectedApiVersion = 22;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -76,6 +76,7 @@ public static class Native
     [DllImport(Dll)] public static extern void noor_doc_close(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_project_info(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_assets(IntPtr doc, int rescan);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_asset_details(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string assetId);
     [DllImport(Dll)] private static extern IntPtr noor_doc_make_material(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
     [DllImport(Dll)] private static extern IntPtr noor_doc_csg(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_sculpt(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
@@ -113,6 +114,7 @@ public static class Native
     private static string? Str(IntPtr p) => p == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(p);
     public static string? ProjectInfo(IntPtr doc) => Str(noor_doc_project_info(doc));
     public static string? Assets(IntPtr doc, bool rescan) => Str(noor_doc_assets(doc, rescan ? 1 : 0));
+    public static string? AssetDetails(IntPtr doc, string assetId) => Str(noor_doc_asset_details(doc, assetId));
     public static string? MakeMaterial(IntPtr doc, string texturePath) => Str(noor_doc_make_material(doc, texturePath));
     public static string? Texture(IntPtr doc, string texturePath) => Str(noor_doc_texture(doc, texturePath));
     public static string Csg(IntPtr doc) => Str(noor_doc_csg(doc)) ?? "[]";

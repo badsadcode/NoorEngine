@@ -345,6 +345,9 @@ public sealed class EditorDocument : IDisposable
         return (node["path"]!.GetValue<string>(), node["created"]!.GetValue<bool>(), (node["maps"] as JsonArray)?.Count ?? 0);
     }
 
+    /// <summary>Everything the engine knows about one asset: its manifest and levels for a Noor Interchange model (Milestone 7, part 5).</summary>
+    public JsonObject? AssetDetails(string guid) => Native.AssetDetails(_handle, guid) is { } json ? JsonNode.Parse(json) as JsonObject : null;
+
     public void RefreshAssets(bool rescan)
     {
         var json = Native.Assets(_handle, rescan);

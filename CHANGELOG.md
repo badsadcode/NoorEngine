@@ -2,7 +2,41 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 6 in progress (manual creation tools)
+## [Unreleased] — Milestone 7 in progress (procedural graph and first generation tools)
+
+### 2026-11-18 — Milestone 7, part 5: generated assets in (Noor Interchange)
+**Added**
+- **Manifest reader** (`noor/asset/interchange.h`): reads a `<name>.noor.json` (v0.4 and older) into the
+  generator, recipe and seed (unsigned 64-bit, never a float), bounds, files, levels of detail with their
+  `max_distance` and billboard flag, collision, family, wind (kept, unused), tags, licence, validation,
+  provenance and the tool's own block. Every mistake is an issue on its field: a float or negative seed,
+  the wrong space, a path out of the folder, gaps in the levels, distances that don't grow, missing or
+  changed files (SHA-256), a newer major version.
+- **Level checks** (`check_levels`): every level file opened and compared with the manifest (triangles,
+  the root node's level / distance / billboard, collision only in level 0).
+- **Content Browser ▸ Details**: what an asset is; for a Noor Interchange asset, where it came from
+  (generator, recipe, seed, family), each level (triangles, size, distance, billboard), collision, wind,
+  licence and any problems. Editor API **v22**: `noor_doc_asset_details` (cached until the files change).
+- **`noor_cli info`** prints a manifest and checks every level; **`noor_cli validate`** checks every
+  manifest in a project (errors fail it, warnings are printed).
+- **`tools/interchange/noormd_engine_export.py`**: converts a NoorForm pack into the NoorEngine export
+  layout (the guide's rules: names, `extras.noor`, parts, a trunk capsule, JPEG and smaller far-level
+  maps, a UUID v5 id, a v0.4 manifest), until NoorMD writes it itself. Outside the engine.
+- **Test fixture** `tests/data/noorform_oak`: Oak 01 (four levels, 6.5 MB) converted from a NoorMD variety pack.
+
+**Fixed:** a collision node's `radius`, `height` and `size` (Noor Interchange 3.5) now reach the collider
+when a model is placed; a trunk capsule used to get the default 0.3 m × 1.8 m.
+
+**Found (for NoorMD, in the export guide's section 8):** the oak's trunk stands about 1.1 m from its
+pivot; geometry is now half of the file size (quantization would help); the guide's 4 MB per oak is
+really about 6.5 MB.
+
+**Not yet:** switching levels by distance (part 6: today level 0 is drawn at every distance); `convex`
+collision in the physics (rocks); a live reload when only a `.lodN.glb` changes.
+
+**Tests:** four unit tests (one asset with four levels, the capsule, mistakes as issues, an older
+manifest), `cli.info_interchange`, an API test (details, a level deleted behind the editor's back) and three
+editor smoke checks (one asset, the Details pane, placed and drawn with its capsule).
 
 ### 2026-11-18 — Milestone 7, part 4: the graph editor
 **Added**

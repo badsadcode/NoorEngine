@@ -8,6 +8,7 @@
 #include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/interchange.h"
 #include "noor/game/game.h"
 #include "noor/foundation/log.h"
 
@@ -278,6 +279,64 @@ Result<Json> Document::assets(bool rescan) {
                         {"from_interchange", a.from_interchange}});
     }
     return list;
+}
+
+Result<Json> Document::asset_details(const Guid& id) {
+    const auto* a = registry_.find(id);
+    if (!a) return fail(ErrorCode::NotFound, std::format("no asset {}", id.to_string()));
+    auto full = project_.resolve(a->path);
+    if (!full) return std::unexpected(full.error());
+    const stdfs::path manifest = asset::manifest_path_for_model(*full);
+    const bool model = a->importer == "gltf";
+    const bool interchange = model && a->from_interchange && stdfs::exists(manifest);
+
+    // Stale when any file it read changed (size or time); the level files are listed in the manifest.
+    auto stamp = [](const stdfs::path& p) {
+        std::error_code ec;
+        const auto size = stdfs::file_size(p, ec);
+        const auto time = stdfs::last_write_time(p, ec);
+        return ec ? std::string("-") : std::format("{}@{}", size, time.time_since_epoch().count());
+    };
+    std::string key = a->path + "|" + stamp(*full);
+    std::optional<asset::ManifestRead> read;
+    std::string read_error;
+    if (interchange) {
+        key += "|" + stamp(manifest);
+        auto r = asset::read_manifest(manifest);
+        if (r) {
+            for (const auto& f : r->manifest.files) key += "|" + stamp(manifest.parent_path() / stdfs::path(f.path));
+            read = std::move(*r);
+        } else {
+            read_error = r.error().message;
+        }
+    }
+    if (const auto it = details_.find(id); it != details_.end() && it->second.key == key) return it->second.json;
+
+    std::error_code ec;
+    Json j{{"guid", id.to_string()}, {"path", a->path}, {"importer", a->importer}, {"name", stdfs::path(a->path).stem().string()},
+           {"bytes", stdfs::file_size(*full, ec)}, {"interchange", nullptr}};
+    if (interchange) {
+        if (read) {
+            Json m = asset::to_json(*read);
+            const auto levels = asset::check_levels(*read, manifest.parent_path());
+            m["levels"] = asset::to_json(levels);
+            m["manifest"] = stdfs::path(manifest).filename().generic_string();
+            std::uint64_t total = 0;
+            for (const auto& l : levels) total += l.bytes;
+            m["level_bytes"] = total;
+            j["interchange"] = std::move(m);
+        } else {
+            j["interchange"] = {{"manifest", manifest.filename().generic_string()},
+                                {"issues", Json::array({{{"field", ""}, {"message", read_error}, {"error", true}}})}};
+        }
+    } else if (model) {
+        if (auto m = asset::import_gltf(*full)) {
+            j["model"] = {{"triangles", m->render_triangles()}, {"materials", m->materials.size()}, {"images", m->images.size()},
+                          {"nodes", m->nodes.size()}};
+        }
+    }
+    details_[id] = {key, j};
+    return j;
 }
 
 Json Document::scenes() const {

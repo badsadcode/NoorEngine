@@ -23,6 +23,7 @@
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/interchange.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
 #include "noor/asset/material.h"
@@ -189,7 +190,35 @@ int cmd_info(const std::vector<std::string>& a) {
                 static_cast<unsigned long long>(m->collision_triangles()), collision);
     for (const auto& [type, count] : markers) std::printf("  marker %s: %d\n", type.c_str(), count);
     for (const auto& w : m->warnings) std::printf("  warning: %s\n", w.c_str());
-    return 0;
+
+    // A Noor Interchange asset (Milestone 7, part 5): the manifest and every level, checked.
+    const stdfs::path manifest = asset::manifest_path_for_model(a[0]);
+    std::error_code ec;
+    if (!stdfs::exists(manifest, ec)) return 0;
+    auto read = asset::read_manifest(manifest);
+    if (!read) {
+        std::printf("  manifest %s: %s\n", manifest.filename().generic_string().c_str(), read.error().message.c_str());
+        return 1;
+    }
+    const auto& mf = read->manifest;
+    std::printf("  manifest %s (Noor Interchange %s)\n    id %s, %s \"%s\"\n", manifest.filename().generic_string().c_str(),
+                mf.version.c_str(), mf.id.to_string().c_str(), mf.kind.c_str(), mf.name.c_str());
+    std::printf("    made by %s %s%s%s (determinism: %s)\n", mf.generator.tool.c_str(), mf.generator.version.c_str(),
+                mf.generator.commit.empty() ? "" : ", commit ", mf.generator.commit.c_str(), mf.generator.determinism.c_str());
+    if (!mf.recipe.file.empty() || mf.recipe.seed)
+        std::printf("    recipe %s, seed %s\n", mf.recipe.file.c_str(), mf.recipe.seed ? std::to_string(*mf.recipe.seed).c_str() : "?");
+    if (mf.family) std::printf("    family %s, variant %s of %d\n", mf.family->name.c_str(), mf.family->variant.c_str(), mf.family->count);
+    if (!mf.collision.empty()) std::printf("    collision %s\n", mf.collision.c_str());
+    if (!mf.wind.is_null()) std::printf("    wind data: %s (kept, not used yet)\n", mf.wind.dump().c_str());
+    for (const auto& l : asset::check_levels(*read, manifest.parent_path())) {
+        const std::string distance = l.max_distance ? std::format("up to {:.1f} m", *l.max_distance) : std::string("no limit");
+        std::printf("    LOD%d %-22s %8llu triangles %7.2f MB  %s%s\n", l.level, l.file.c_str(), static_cast<unsigned long long>(l.triangles),
+                    static_cast<double>(l.bytes) / 1e6, distance.c_str(), l.billboard ? ", billboard" : "");
+        for (const auto& i : l.issues) std::printf("      problem: %s\n", i.c_str());
+    }
+    for (const auto& i : read->issues)
+        std::printf("    %s %s: %s\n", i.error ? "error" : "warning", i.field.c_str(), i.message.c_str());
+    return read->has_errors() ? 1 : 0;
 }
 
 int cmd_add_model(const std::vector<std::string>& a) {
@@ -315,6 +344,25 @@ int cmd_validate(const std::vector<std::string>& a) {
     int scenes = 0;
     int problems = static_cast<int>(r->warnings.size());
     std::error_code ec;
+    // Noor Interchange manifests (Milestone 7, part 5): errors are problems, warnings are printed.
+    for (const auto& asset : registry.assets()) {
+        if (!asset.from_interchange) continue;
+        auto source = p->resolve(asset.path);
+        if (!source) continue;
+        // A model moved without its manifest keeps its id in its .noormeta: nothing to check.
+        const stdfs::path manifest = asset::manifest_path_for_model(*source);
+        if (std::error_code missing; !stdfs::exists(manifest, missing)) continue;
+        auto read = asset::read_manifest(manifest);
+        if (!read) {
+            std::printf("FAIL %s: %s\n", asset.path.c_str(), read.error().message.c_str());
+            ++problems;
+            continue;
+        }
+        for (const auto& i : read->issues) {
+            std::printf("%s %s: manifest %s: %s\n", i.error ? "FAIL" : "     warning:", asset.path.c_str(), i.field.c_str(), i.message.c_str());
+            if (i.error) ++problems;
+        }
+    }
     for (auto it = stdfs::recursive_directory_iterator(p->scenes_dir(), ec);
          !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
         if (it->path().extension() != ".noorscene") continue;

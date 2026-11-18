@@ -213,6 +213,10 @@ Guid instantiate_model(Scene& scene, const Guid& asset, const asset::ImportedMod
             e.components["collider"] = {{"shape", node.noor.value("collision", std::string("mesh"))},
                                         {"asset", asset.to_string()},
                                         {"mesh_index", node.mesh}};
+            // A primitive's size comes with it (Noor Interchange 3.5): a trunk capsule's radius and height.
+            for (const char* key : {"radius", "height", "size"}) {
+                if (const auto v = node.noor.find(key); v != node.noor.end()) e.components["collider"][key] = *v;
+            }
         } else if (node.mesh >= 0) {
             e.components["mesh"] = {{"asset", asset.to_string()}, {"mesh_index", node.mesh}};
         }

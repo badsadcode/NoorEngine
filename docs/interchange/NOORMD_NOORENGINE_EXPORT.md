@@ -205,6 +205,34 @@ All optional, so v0.3 files stay valid (details in [NOOR_INTERCHANGE.md](NOOR_IN
 - `wind` (`channels`): where wind data lives in the vertex attributes;
 - vegetation pivots: the base of the trunk on the ground; roots may go below y = 0.
 
+## 8. What converting Oak 01 taught us (2026-11-18)
+
+NoorEngine now imports this layout (Milestone 7, part 5; [IMPORTING.md](IMPORTING.md)). To have real
+files before NoorMD writes them, `tools/interchange/noormd_engine_export.py` converts today's oak pack
+following this guide; its output is NoorEngine's test fixture (`tests/data/noorform_oak`). Doing that
+turned up four things for whoever implements the mode:
+
+1. **The id works.** `noorform:tree:Oak 01:1` under the namespace above really gives
+   `719beb3e-327d-56ed-8d54-be8882f405fd` (Python's `uuid.uuid5`), and the engine keeps it.
+2. **About 6.5 MB per oak, not 4.** With JPEG and smaller far levels the textures shrink as hoped
+   (LOD0's six maps: 4.5 MB → 1.5 MB). The geometry is now the other half: LOD0 has 1.5 MB of plain
+   floats (position, normal, tangent, three UV sets, `COLOR_0`). `KHR_mesh_quantization` (allowed by
+   the spec without asking) would roughly halve that: 16-bit normals, tangents and UVs, 8-bit
+   colours. Worth it for nine-oak packs. The billboard level (LOD3) is 0.86 MB of PNG even at half size.
+3. **The trunk doesn't stand at the origin.** In Oak 01 the trunk between 1.5 m and 2.5 m is centred
+   at about (-0.18, -1.14) in x/z: over a metre from the pivot that both the pack manifest and the spec
+   put "at the base of the trunk". Either the trunk really grows from there (lean, roots or flare
+   moving it) or the pivot is computed from something else. Please check `TreeExport`'s pivot; a
+   placed tree should stand on its trunk. (The converter fits the collision capsule to where the trunk
+   really is, so it's right either way.)
+4. **A trunk capsule from the mesh is fiddly.** The `Trunk` mesh holds the roots (below about 1.5 m)
+   and merged branches (above about 2.5 m), so the converter fits the capsule to the clean stretch in
+   between: radius 0.68 m, which matches the recipe's `trunkRadius` 0.69. NoorForm knows the trunk's
+   real curve and radius, so writing the capsule from the recipe is better than measuring the mesh.
+
+And one confirmation: `COLOR_0` in the oak is a genuine tint (0.66–1.0, a darkening toward the inside
+of the crown), with wind in the UV channels, so this mode can keep it as it is.
+
 ## Checklist for the implementation
 
 - [ ] "NoorEngine" in the export dialog's For list (`GameProfile.Engine = "noorengine"`).
@@ -214,5 +242,7 @@ All optional, so v0.3 files stay valid (details in [NOOR_INTERCHANGE.md](NOOR_IN
 - [ ] Manifest per asset with a stable UUID v5 id (namespace above), real generator version, recipe hash.
 - [ ] JPEG for opaque maps, smaller maps on far levels.
 - [ ] No wind data in `COLOR_0` in this mode.
-- [ ] Validator result in the manifest; a fixture in NoorMD's tests.
+- [ ] Validator result in the manifest; a fixture in NoorMD's tests (NoorEngine's converted one,
+      `tests/data/noorform_oak`, shows the expected result).
+- [ ] *(Suggested, section 8)* `KHR_mesh_quantization`; the pivot at the trunk; the trunk capsule from the recipe.
 - [ ] The hand-off note (`GameProfiles.Handoff`) lists the new file names in this mode.

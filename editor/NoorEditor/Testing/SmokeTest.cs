@@ -254,6 +254,7 @@ internal static class SmokeTest
         await SculptChecks(window, Check, Shot);
         await PaintChecks(window, Check, Shot);
         await GraphChecks(window, Check, Shot);
+        await OakChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -1043,6 +1044,60 @@ internal static class SmokeTest
         doc.SetSculpting(false);
         Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
+        await Task.Delay(300);
+    }
+
+    // Milestone 7, part 5: a tree from NoorMD (NoorForm), in the Noor Interchange layout: one asset with
+    // four levels, its manifest's story in the Content Browser's details, placed with its trunk capsule.
+    private static async Task OakChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var trees = Path.Combine(doc.ProjectRoot, "Assets", "Trees");
+        Directory.CreateDirectory(trees);
+        foreach (var f in Directory.GetFiles(Path.Combine(Program.Options.TestData!, "noorform_oak")))
+            File.Copy(f, Path.Combine(trees, Path.GetFileName(f)), overwrite: true);
+        doc.RefreshAssets(true);
+        var oak = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Trees/Oak_01.glb");
+        check(oak != null && oak.Guid == "719beb3e-327d-56ed-8d54-be8882f405fd" && !doc.Assets.Any(a => a.Path.Contains(".lod")),
+              "NoorMD oak: one asset (its .lod files belong to it), with the id from its manifest");
+        var browser = window.ContentBrowser;
+        if (oak == null || browser == null) return;
+
+        window.DockFactory.SetActiveDockable(window.FindDockable("Content")!);
+        long Drawn() => VulkanViewport.Active?.RenderStats() is { } st && JsonNode.Parse(st) is JsonObject o ? o["triangles"]?.GetValue<long>() ?? 0 : 0;
+        await Task.Delay(700);
+        var before = Drawn();
+        browser.Select(oak);
+        var levels = browser.Details?["interchange"]?["levels"] as JsonArray;
+        var text = browser.DetailsText;
+        check(levels?.Count == 4 && levels.All(l => l?["exists"]?.GetValue<bool>() == true && (l["issues"] as JsonArray)?.Count == 0) &&
+              text.Contains("seed 1") && text.Contains("NoorForm") && text.Contains("15,268 triangles") && text.Contains("up to 29 m") && text.Contains("billboard") && text.Contains("Oak, variant A of 9"),
+              "NoorMD oak: the Content Browser shows its four levels, distances, recipe, seed and family");
+
+        window.AddAsset(oak);
+        var root = doc.SelectedId;
+        var capsule = doc.Scene.Entities.FirstOrDefault(e => e.Name == "Trunk-colonly");
+        var collider = capsule?.Components["collider"];
+        check(root != null && capsule != null && collider?["shape"]?.GetValue<string>() == "capsule" &&
+              Math.Abs((collider["radius"]?.GetValue<double>() ?? 0) - 0.682) < 1e-3 && capsule.Components["mesh"] == null,
+              "NoorMD oak: placed, its trunk capsule is a collider (radius 0.682 m) and nothing drawn");
+        // Out of the building at the origin, onto the floor PhysicsChecks made (around x = -25).
+        if (root != null && doc.Scene.Entities.FirstOrDefault(e => e.Id == root) is { } placed)
+            doc.SetTransform(root, placed.Transform with { Position = new Vec3(-25, 0, -6) }, "Move oak");
+        // The viewport loads the model (and compresses its textures) on its own thread: wait until it draws it.
+        var drawn = await WaitFor(() => (long?)Drawn(), t => t >= before + 15000, 60);
+        check(drawn >= before + 15000, $"NoorMD oak: the viewport draws it (LOD0: {drawn - before} more triangles; 15,268 expected)");
+        var bottom = window.FindDock("Bottom");
+        var height = bottom?.Proportion ?? 0.28;
+        if (bottom != null) bottom.Proportion = 0.5;  // room for the details in the screenshot
+        await Task.Delay(400);
+        if (root != null) window.ViewportView?.Viewport.Frame(doc.Subtree(root));
+        await Task.Delay(1000);
+        shot(window, "editor_30_noorform_oak.png");
+        if (bottom != null) bottom.Proportion = height;
+        doc.Undo();
+        doc.Undo();
+        window.DockFactory.SetActiveDockable(window.ViewportDockable);
         await Task.Delay(300);
     }
 
