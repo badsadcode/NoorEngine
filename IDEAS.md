@@ -18,16 +18,47 @@ This file makes sure **no idea is lost** and **no idea derails the current miles
 
 | Idea | From | Date |
 |---|---|---|
-| **Alden Wayfarer is NoorEngine's mascot**, the "first citizen" and first explorer of Bad Ideas Works worlds, carried over from Thornwake where it all started. Possible uses: hero of the sample games (NoorFPS-lite, third-person sample), default name of Create ▸ Player, devlog/website art, splash screen. Concept sheet exists (blocky low-poly explorer: teal tunic, gold buckle, backpack with bedroll, walking staff; poses exploring/resting/map check/discovering/victory/looking; a mossy statue "He went first because somebody had to"; tablet "Explore · Test · Break · Repeat"). Next: a GLB of him (NoorMD or hand-made) for samples and the editor. Public: introduced in devlog #015 (approved by Tom). | Tom & Noor | 2026-11-15 |
-| **Fluid "parkour" FPS movement** (Titanfall 2 feel): crouch-slide, wall-running, wall-jumping, momentum, camera tilt and FOV kick. Possible as a script on today's API for the camera side; the movement needs character-controller additions: full 3D velocity control (not only horizontal), gravity scale per character, crouch (capsule resize with a ceiling check), ground normal/info, shape casts (sphere/capsule) for wall and ledge detection. Then lots of feel tuning by hand. Could become a NoorFPS-lite "movement lab" scene. | Tom | 2026-11-17 |
-| **The first real game on NoorEngine: The Uncounted, Chapter Two** (sequel to github.com/badsadcode/TheUncounted, Tom's data-driven first-person action RPG on raylib/C++20: JSON content, dialogue, quests, combat, save/load, mods, a level editor). Uncle Wispr will be in it: an old, almost deaf uncle with a bronze ear trumpet who mishears everything. "No rush." (Textured walls will be needed.) Before planning: read its HANDOFF.md and docs/ARCHITECTURE.md to see which systems (dialogue, quests, inventory, combat, saves, content validation) the engine needs and what can be carried over as data. | Tom | 2026-11-17 |
-| **NoorSky: environment presets and authoring** ("beautiful defaults for beginners, full creative freedom for everyone else"). A `.noorenv` asset that sets sky, sun/moon/stars, clouds, fog and aerial perspective, horizon silhouettes, lighting and exposure together; a gallery of 12 presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Stormy Coast, Moonlit Night, Fantasy Crisp, Cold Morning, Autumn Afternoon, Rainy Grey, Desert Haze, Alien World) to apply in one click, duplicate and edit; build your own from scratch; time of day and weather blending later; graph/Lua drivers later. Phases A (six presets, procedural sky, simple layered clouds, editor gallery) → B (horizon layers, blending, more presets) → C (volumetrics, weather, alien skies). Brief + 12 mood references (concept art, not skyboxes): `NoorSky_Sage_Package.zip`, kept outside the repo for now. **Sage's notes:** builds on what exists (the environment entity with HDRI or procedural sky → prefiltered cubemap + SH irradiance, the sun light with cascaded shadows, exposure presets). Missing pieces: fog/aerial perspective (none today), a real atmosphere model (sun-driven, so time of day works), clouds, a night sky, an environment asset rather than per-scene settings. Biggest risk: the "environment rebuild" is CPU-side and cached today (fine for presets, too slow for a moving sun), so time of day needs GPU prefiltering or blending between baked states. Fits well as a milestone after M7 (Hillside + forest would be the showcase scene the brief asks for). | Tom & Noor | 2026-11-18 |
-| **2D sprites and directional billboards**: sprite-sheet assets (grid, frames, named animations, 8 viewing directions), sprite rendering in 2D and as camera-facing billboards in 3D (Doom-style enemies), animation playback from scripts. Test data offered: a character sheet from The Uncounted (8 directions × idle, walk, run, attack, hurt, plus death poses). | Tom | 2026-11-17 |
 
 ## Triaged
 
+*First triage: 2026-11-18, after Milestone 7 (Sage). Rows keep their original text; the line under each
+table says where it goes and what it waits on. Moving into a milestone still needs the roadmap or an ADR.*
+
 ### Foundation
 ### First-class
+
+| Idea | From | Date |
+|---|---|---|
+| **NoorSky: environment presets and authoring** ("beautiful defaults for beginners, full creative freedom for everyone else"). A `.noorenv` asset that sets sky, sun/moon/stars, clouds, fog and aerial perspective, horizon silhouettes, lighting and exposure together; a gallery of 12 presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Stormy Coast, Moonlit Night, Fantasy Crisp, Cold Morning, Autumn Afternoon, Rainy Grey, Desert Haze, Alien World) to apply in one click, duplicate and edit; build your own from scratch; time of day and weather blending later; graph/Lua drivers later. Phases A (six presets, procedural sky, simple layered clouds, editor gallery) → B (horizon layers, blending, more presets) → C (volumetrics, weather, alien skies). Brief + 12 mood references (concept art, not skyboxes): `NoorSky_Sage_Package.zip`, kept outside the repo for now. **Sage's notes:** builds on what exists (the environment entity with HDRI or procedural sky → prefiltered cubemap + SH irradiance, the sun light with cascaded shadows, exposure presets). Missing pieces: fog/aerial perspective (none today), a real atmosphere model (sun-driven, so time of day works), clouds, a night sky, an environment asset rather than per-scene settings. Biggest risk: the "environment rebuild" is CPU-side and cached today (fine for presets, too slow for a moving sun), so time of day needs GPU prefiltering or blending between baked states. Fits well as a milestone after M7 (Hillside + forest would be the showcase scene the brief asks for). | Tom & Noor | 2026-11-18 |
+| **The first real game on NoorEngine: The Uncounted, Chapter Two** (sequel to github.com/badsadcode/TheUncounted, Tom's data-driven first-person action RPG on raylib/C++20: JSON content, dialogue, quests, combat, save/load, mods, a level editor). Uncle Wispr will be in it: an old, almost deaf uncle with a bronze ear trumpet who mishears everything. "No rush." (Textured walls will be needed.) Before planning: read its HANDOFF.md and docs/ARCHITECTURE.md to see which systems (dialogue, quests, inventory, combat, saves, content validation) the engine needs and what can be carried over as data. | Tom | 2026-11-17 |
+| **2D sprites and directional billboards**: sprite-sheet assets (grid, frames, named animations, 8 viewing directions), sprite rendering in 2D and as camera-facing billboards in 3D (Doom-style enemies), animation playback from scripts. Test data offered: a character sheet from The Uncounted (8 directions × idle, walk, run, attack, hurt, plus death poses). | Tom | 2026-11-17 |
+
+- **NoorSky** → the roadmap's Milestone 8 "sky/weather" group. Waits on: fog and aerial perspective in the
+  renderer, a sun-driven atmosphere, and environment lighting rebuilt on the GPU (today it's baked on the
+  CPU, too slow for a moving sun). Hillside with its forest is the showcase scene. Phase A first.
+- **The Uncounted, Chapter Two** → the first real game, so it should steer the order of what comes next
+  (read 2026-11-18: its HANDOFF.md). Chapter Zero draws creatures and NPCs as **8-direction pre-rendered
+  billboard sprites**, blends **zones of atmosphere and weather** (fog, rain, dust, music crossfades), and
+  uses particles and emitters; its gameplay (dialogue, quests, inventory, combat, saves) is data plus code
+  that a game on NoorEngine would carry over as data and scripts. It needs sprites, atmosphere/weather and
+  particles before it needs skeletal animation. Waits on: the items above and below, then a
+  gameplay-framework pass (dialogue/quest/save as engine-side helpers or as a game template: to decide).
+- **2D sprites and directional billboards** → needed by The Uncounted, so first-class. Builds on instancing
+  (ADR-032 batches thousands of billboards) and the texture pipeline (atlases). Waits on: a sprite-sheet
+  asset type and an animation-playback API for scripts. Small enough to be one part of a milestone.
+
 ### Expansion
+
+| Idea | From | Date |
+|---|---|---|
+| **Fluid "parkour" FPS movement** (Titanfall 2 feel): crouch-slide, wall-running, wall-jumping, momentum, camera tilt and FOV kick. Possible as a script on today's API for the camera side; the movement needs character-controller additions: full 3D velocity control (not only horizontal), gravity scale per character, crouch (capsule resize with a ceiling check), ground normal/info, shape casts (sphere/capsule) for wall and ledge detection. Then lots of feel tuning by hand. Could become a NoorFPS-lite "movement lab" scene. | Tom | 2026-11-17 |
+| **Alden Wayfarer is NoorEngine's mascot**, the "first citizen" and first explorer of Bad Ideas Works worlds, carried over from Thornwake where it all started. Possible uses: hero of the sample games (NoorFPS-lite, third-person sample), default name of Create ▸ Player, devlog/website art, splash screen. Concept sheet exists (blocky low-poly explorer: teal tunic, gold buckle, backpack with bedroll, walking staff; poses exploring/resting/map check/discovering/victory/looking; a mossy statue "He went first because somebody had to"; tablet "Explore · Test · Break · Repeat"). Next: a GLB of him (NoorMD or hand-made) for samples and the editor. Public: introduced in devlog #015 (approved by Tom). | Tom & Noor | 2026-11-15 |
+
+- **Parkour movement** → expansion; the character controller additions it lists (3D velocity, gravity scale,
+  crouch with a ceiling check, ground info, shape casts) are useful to every game and could land with a
+  gameplay pass; the feel tuning is a sample's job ("movement lab").
+- **Alden Wayfarer** → expansion (the identity is settled; the work is an asset). Waits on: a GLB of him
+  (NoorMD or by hand); his poses want skeletal animation (Milestone 8's animation group) or a pose library.
+
 ### Research
 ### Bonfire 🔥
