@@ -11,7 +11,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 
 ## Honest status
 
-**Milestones 0–3 done** ([M1](docs/milestones/M1_REVIEW.md), [M2](docs/milestones/M2_REVIEW.md), [M3](docs/milestones/M3_REVIEW.md) reviews); **Milestone 4 (scripts and gameplay) in progress** ([plan](docs/milestones/M4_PLAN.md)). What exists today:
+**Milestones 0–6 done** ([M1](docs/milestones/M1_REVIEW.md), [M2](docs/milestones/M2_REVIEW.md), [M3](docs/milestones/M3_REVIEW.md), [M4](docs/milestones/M4_REVIEW.md), [M5](docs/milestones/M5_REVIEW.md), [M6](docs/milestones/M6_REVIEW.md) reviews, each with its accepted exceptions); **Milestone 7 (procedural graph) planned** ([plan](docs/milestones/M7_PLAN.md)). What exists today:
 
 | Piece | Status |
 |---|---|
@@ -21,7 +21,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 | `platform`: input (keyboard, mouse, relative mouse mode) | Works; used by the fly camera |
 | `render`: Vulkan 1.3 device, swapchain, depth buffer, meshes, lit mesh pipeline, camera, fly camera, GPU timing, frame capture | Works; smoke, GPU pixel, 2,500-cube stress and window lifecycle tests with validation; debug labels for RenderDoc. Device loss reported, not recovered; high-DPI >100% untested |
 | `noor_diag`: diagnostics app (fly camera, `--cubes N` stress grid, timings, `--verify-render`, `--screenshot`) | Works |
-| `editor_api`: C API DLL (v9): engine viewports in a foreign window + editable documents ([ADR-025](docs/decisions/ADR-025-editor-engine-boundary.md)) | Works; API tests run in CI. Not a stable plugin ABI yet (ADR-007) |
+| `editor_api`: C API DLL (v19): engine viewports in a foreign window + editable documents ([ADR-025](docs/decisions/ADR-025-editor-engine-boundary.md)) | Works; API tests run in CI. Not a stable plugin ABI yet (ADR-007) |
 | **NoorEditor** ([editor/NoorEditor](editor/NoorEditor)): project hub, docked viewport (click to select, fly camera, move/rotate/scale gizmos with snapping, highlight), scene tree, inspector (name/transform/components), content browser with live reload, console, preferences, play/stop, undo/redo, save, remembered layout | **Milestone 3 complete.** Works; 61-check end-to-end smoke test drives real clicks, drags and keys (GPU, local). HiDPI checked by hand at 150%; no multi-select |
 | `asset`: projects, `.noormeta` GUIDs, registry (survives renames/moves), GLB import with Noor Interchange data | Works, unit-tested with a real BadBuilding block |
 | `scene`: entities + components (layers, tags), prefabs (overrides, nesting, variants), deterministic save/load, format migrations, undo/redo, validation | Works, unit-tested (incl. randomized undo/redo invariant) |

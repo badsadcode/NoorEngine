@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 7 plan: procedural graph and first generation tools
+- [docs/milestones/M7_PLAN.md](docs/milestones/M7_PLAN.md): eight parts toward the gate (reproducible
+  outputs, overrides that survive regeneration, region-limited invalidation, outputs used outside the
+  generator), risks first (determinism with threads and caches), scope listed as later work, three
+  open questions for Tom.
+- [ADR-014](docs/decisions/ADR-014-procedural-graph.md) (Proposed): `.noorgraph` assets, typed
+  registered nodes, pure evaluation with a content-addressed cache (per tile for tiled data), override
+  layers, headless `noor_cli generate`, games load outputs.
+- Trees and rocks stay NoorMD's job: NoorEngine imports them as files and places them (scatter,
+  instancing and LOD are engine work); ADR-007 (plugins) stays open.
+- **Fixed:** README's status headline still said "Milestone 4 in progress" and listed editor API v9;
+  it now says Milestones 0–6 are done (with links to every review) and API v19.
+
 ### 2026-11-18 — Milestone 6, part 8: the Hillside sample and the gate review
 **Added**
 - **`samples/Hillside`**: a sculpted, painted landscape (meadow, rock, a dirt path) and a brick

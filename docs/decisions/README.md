@@ -16,6 +16,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [010](ADR-010-physics.md) | Physics: Jolt (MIT), fixed 60 Hz tick, `CharacterVirtual` controller | Accepted |
 | [011](ADR-011-audio.md) | Audio: miniaudio (public domain / MIT-0), buses, 3D sources | Accepted |
 | [012](ADR-012-pbr-shading-and-render-path.md) | PBR: metallic-roughness GGX, forward path, photometric units, HDR, PBR Neutral (AgX pending a licence check), IBL, bindless textures | Accepted (Milestone 5) |
+| [014](ADR-014-procedural-graph.md) | Procedural graph: `.noorgraph` assets, registered typed nodes, pure evaluation cached by content hash (per tile for tiled data), override layers never written by graphs, headless `noor_cli generate` | Proposed (Milestone 7) |
 | [016](ADR-016-csg-kernel.md) | CSG: brushes as entities, Manifold booleans (spike first), materials/UVs follow source faces, cooked meshes for runtime | Accepted (Milestone 6, part 1) |
 | [019](ADR-019-licensing.md) | MIT license | Accepted |
 | [021](ADR-021-platform-layer-and-dependencies.md) | SDL3 platform layer, pinned-dependency policy | Accepted |
@@ -30,5 +31,5 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [030](ADR-030-materials.md) | Materials: `.noormat` (glTF metallic-roughness channels) + instances; the future graph outputs the same channels | Accepted (Milestone 5; graph future) |
 | [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Accepted (Milestone 6, part 5) |
 
-Still open from the register: 007 plugin ABI, 013 world coordinates, 014 procedural graph,
+Still open from the register: 007 plugin ABI, 013 world coordinates,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.
