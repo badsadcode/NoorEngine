@@ -18,6 +18,8 @@ This file makes sure **no idea is lost** and **no idea derails the current miles
 
 | Idea | From | Date |
 |---|---|---|
+| **An animation studio inside the engine**: NoorEngine's own animation rig that reads imported animations (Rigify and other rigs) and helps edit them: pose, key, adjust and fix animations in the editor rather than only in Blender. "That would be awesome." **Sage's notes:** builds on 8C (skeletons, playback, the humanoid bone map and retargeting); a natural follow-up group after 8C, with an IK solver, a timeline and curve editing as its core. | Tom | 2026-11-18 |
+| **FBX import** ("if we can use FBX, that's awesome; if not, oh well"). **Sage's notes:** Autodesk's FBX SDK is proprietary (closed binaries, its own licence terms); **ufbx** (MIT, a single-file C library that reads FBX, used by Godot) avoids that. Research item for 8C: licence check, robustness on Blender/Mixamo/Unreal FBX files, and converting to the same skeletons and clips as glTF. glTF stays the main path. | Tom | 2026-11-18 |
 
 ## Triaged
 

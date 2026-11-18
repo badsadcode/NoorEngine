@@ -75,6 +75,10 @@ export mode).
 2. Underwater environments are planned with 8D (they need a water surface); is a "deep sea" scene without
    any surface (a submarine game) wanted earlier? It would fit in 8A part 5 as an environment mode.
 
+## Noted for 8C (from the ideas inbox, 2026-11-18)
+- **FBX import** through ufbx (MIT), if its licence check and robustness tests pass; glTF stays the main path.
+- **An animation studio in the engine** (our own rig, posing, keys, curves, IK) as a follow-up group after 8C.
+
 ## Not in 8A (planned later)
 Volumetric clouds and fog, lightning and storms, rain and snow (need 8B's particles), wet surfaces,
 seasons, the remaining six presets (phase B: Cold Morning, Autumn Afternoon, Rainy Grey, Desert Haze,
