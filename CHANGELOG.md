@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 7, part 4: the graph editor
+**Added**
+- **Graph editor** (`Panels/GraphPanel.cs`): a tab for `.noorgraph` files (Content Browser double-click,
+  File ▸ New Procedural Graph…): nodes on a canvas with typed coloured pins and wires, add / move / link /
+  delete, a side panel for parameters, graph outputs and the graph's seed, runs in the background after
+  each change (Run, Cancel, progress), per-node results (time, cached, tiles) and previews (thumbnails and
+  a 256 px view), issues on their nodes, Ctrl+Z / Ctrl+Y, saved at once in the engine's file format.
+- Editor API **v21**: `noor_graph_node_types`, `noor_graph_check` (issues + canonical text), per-node
+  results and `written` in the run status, `noor_doc_generate_preview`. Graphs without outputs run too.
+- Background runs resolve asset files from a snapshot taken when they start (a Rescan can't race them).
+
+**Changed:** graph edits are file edits with the tab's own undo (like the material editor), not scene
+commands as the plan said (ADR-014 part 4 notes say why).
+
+**Tests:** an API test (node types, check, per-node results, previews); 5 editor smoke checks (run, add and
+link a node and make it an output, only dependants rerun after a change, an issue on an unconnected node,
+undo saved).
+
 ### 2026-11-18 — Milestone 7, part 3: terrain as a graph client
 **Added**
 - **Tiles as regions**: tile-local field nodes (`run_tile`) are keyed, cached and recomputed tile by

@@ -237,6 +237,8 @@ public:
     [[nodiscard]] Status generate_start(std::string_view graph, const std::filesystem::path& out);
     [[nodiscard]] asset::Json generate_status();
     void generate_cancel();
+    // A preview of one node output of the last run: fields as an 8-bit greyscale picture (base64), numbers as a value.
+    [[nodiscard]] Result<asset::Json> generate_preview(std::string_view node, std::string_view pin, int size);
 
 private:
     struct GenerateJob {
@@ -244,6 +246,7 @@ private:
         std::atomic<bool> cancel{false};
         std::mutex mutex;
         asset::Json status;
+        std::shared_ptr<const procgraph::Evaluation> evaluation;  // the last finished run (previews)
     };
     std::unique_ptr<GenerateJob> job_;
     std::unique_ptr<procgraph::Cache> graph_cache_;  // <project>/.noor/cache/procgraph, shared by runs

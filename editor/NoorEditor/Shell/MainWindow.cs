@@ -42,6 +42,8 @@ public sealed class MainWindow : Window
     public IReadOnlyList<MaterialDocument> OpenMaterials => _materials;
     private readonly List<TextureDocument> _textures = new();
     public IReadOnlyList<TextureDocument> OpenTextures => _textures;
+    private readonly List<GraphDocument> _graphs = new();
+    public IReadOnlyList<GraphDocument> OpenGraphs => _graphs;
 
     private readonly EditorSettings _settings;
     private readonly TextBlock _statusLeft = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
@@ -118,6 +120,7 @@ public sealed class MainWindow : Window
             if (e.Dockable is ScriptDocument closed) _scripts.Remove(closed);
             if (e.Dockable is MaterialDocument closedMaterial) _materials.Remove(closedMaterial);
             if (e.Dockable is TextureDocument closedTexture) _textures.Remove(closedTexture);
+            if (e.Dockable is GraphDocument closedGraph) _graphs.Remove(closedGraph);
         };
         _fileTimer.Start();
         timer.Start();
@@ -176,6 +179,7 @@ public sealed class MainWindow : Window
                 ContentBrowser.EditRequested += a =>
                 {
                     if (a.Importer == "texture") OpenTexture(a.Path);
+                    else if (a.Importer == "procgraph") OpenGraph(a.Path);
                     else OpenMaterial(a.Path);
                 };
                 return ContentBrowser;
@@ -207,6 +211,7 @@ public sealed class MainWindow : Window
         foreach (var script in _scripts) DockFactory.AddDockable(documents, script);  // a layout rebuild keeps open scripts
         foreach (var material in _materials) DockFactory.AddDockable(documents, material);
         foreach (var texture in _textures) DockFactory.AddDockable(documents, texture);
+        foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
         Fill(bottom, content, console, render);
@@ -280,6 +285,11 @@ public sealed class MainWindow : Window
     private Control MenuBar()
     {
         var newScene = new MenuItem { Header = "_New Scene…" };
+        var newGraph = new MenuItem { Header = "New Procedural _Graph…" };
+        newGraph.Click += async (_, _) =>
+        {
+            if (await Dialogs.Prompt(this, "New procedural graph", "Name (saved as Assets/Graphs/<name>.noorgraph):", "Terrain") is { } name) NewGraph(name);
+        };
         newScene.Click += async (_, _) => await NewScene();
         _save.Click += (_, _) => Save();
         var rescan = new MenuItem { Header = "_Rescan Assets" };
@@ -339,7 +349,7 @@ public sealed class MainWindow : Window
             FontSize = 12,
             Items =
             {
-                new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), rescan, new Separator(), buildGame, new Separator(), closeProject, exit } },
+                new MenuItem { Header = "_File", Items = { newScene, _openScene, _save, new Separator(), newGraph, new Separator(), rescan, new Separator(), buildGame, new Separator(), closeProject, exit } },
                 new MenuItem { Header = "_Edit", Items = { _undo, _redo, new Separator(), delete, frame, moveUp, moveDown, new Separator(),
                                                          Tool("_Select tool", "Q", EditorTool.Select), Tool("_Move tool", "W", EditorTool.Move),
                                                          Tool("_Rotate tool", "E", EditorTool.Rotate), Tool("Sc_ale tool", "R", EditorTool.Scale),
@@ -748,7 +758,7 @@ public sealed class MainWindow : Window
         }
         if (asset.Importer == "procgraph")
         {
-            _ = Dialogs.Ask(this, "A procedural graph", "Graphs make things (terrain, masks, and later forests) rather than being placed themselves. The graph editor comes in Milestone 7, part 4, and noor_cli generate in part 2.", "OK");
+            OpenGraph(asset.Path);  // graphs make things rather than being placed: open it in the graph editor
             return;
         }
         if (Doc.AddAsset(asset, new Vec3(0, 0, 0)) && Doc.SelectedId is { } id) FrameEntity(id);
@@ -959,6 +969,46 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>Opens a texture's import settings (project-relative path) as a tab.</summary>
+    /// <summary>Opens a procedural graph in the graph editor (a tab; Milestone 7, part 4).</summary>
+    public GraphDocument? OpenGraph(string relativePath)
+    {
+        var graph = _graphs.FirstOrDefault(g => string.Equals(g.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        if (graph == null)
+        {
+            if (!File.Exists(Path.Combine(Doc.ProjectRoot, relativePath)))
+            {
+                EngineLog.Warn("Graphs", $"{relativePath} doesn't exist");
+                return null;
+            }
+            graph = new GraphDocument(Doc, relativePath) { CreateView = g => new GraphPanel(g) };
+            _graphs.Add(graph);
+            var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
+            if (documents != null) DockFactory.AddDockable(documents, graph);
+        }
+        if (graph.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(graph);
+            DockFactory.SetFocusedDockable(owner, graph);
+        }
+        return graph;
+    }
+
+    /// <summary>File > New Procedural Graph: Assets/Graphs/name.noorgraph, empty, opened.</summary>
+    public GraphDocument? NewGraph(string name)
+    {
+        var safe = string.Concat(name.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        if (safe.Length == 0) return null;
+        var relative = $"Assets/Graphs/{safe}.noorgraph";
+        var full = Path.Combine(Doc.ProjectRoot, relative);
+        if (!File.Exists(full))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, GraphDocument.NewGraph().ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            Doc.RefreshAssets(true);
+        }
+        return OpenGraph(relative);
+    }
+
     public TextureDocument? OpenTexture(string relativePath)
     {
         var texture = _textures.FirstOrDefault(t => string.Equals(t.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
@@ -1075,6 +1125,7 @@ public sealed class MainWindow : Window
         var inCode = (focused as Visual)?.FindAncestorOfType<CodePanel>(includeSelf: true);
         var inText = focused is TextBox || inCode != null;
         var inMaterial = (focused as Visual)?.FindAncestorOfType<MaterialPanel>(includeSelf: true);
+        var inGraph = (focused as Visual)?.FindAncestorOfType<GraphPanel>(includeSelf: true);
         // While playing, keys typed into the viewport belong to the game: only Ctrl shortcuts
         // (Ctrl+P stop, Ctrl+S save) reach the editor.
         if (Doc.Playing && ViewportHasFocus() && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -1100,6 +1151,13 @@ public sealed class MainWindow : Window
                 break;
             case Key.Down when e.KeyModifiers == KeyModifiers.Alt && !inText:
                 MoveSelected(1);
+                break;
+            case Key.Z when ctrl && !shift && !inText && inGraph != null:
+                inGraph.Graph.Undo();
+                break;
+            case Key.Y when ctrl && !inText && inGraph != null:
+            case Key.Z when ctrl && shift && !inText && inGraph != null:
+                inGraph.Graph.Redo();
                 break;
             case Key.Z when ctrl && !shift && !inText && inMaterial != null:
                 inMaterial.Material.Undo();

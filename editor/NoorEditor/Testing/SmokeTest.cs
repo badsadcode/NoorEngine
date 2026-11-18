@@ -253,6 +253,7 @@ internal static class SmokeTest
         await TerrainChecks(window, Check, Shot);
         await SculptChecks(window, Check, Shot);
         await PaintChecks(window, Check, Shot);
+        await GraphChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -1042,6 +1043,76 @@ internal static class SmokeTest
         doc.SetSculpting(false);
         Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
+        await Task.Delay(300);
+    }
+
+    // Milestone 7, part 4: the graph editor: open a graph, run it, add and link a node, change a setting
+    // (only what depends on it reruns), see an issue on a node, undo.
+    private static async Task GraphChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var file = Path.Combine(doc.ProjectRoot, "Assets", "Graphs", "smoke.noorgraph");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, """
+            { "noor_graph": 1, "seed": 7,
+              "nodes": [
+                {"id": "hills", "type": "noise", "params": {"height": 30, "scale": 120, "octaves": 4}, "position": [40, 40]},
+                {"id": "valleys", "type": "noise", "params": {"height": 1, "scale": 300, "octaves": 2}, "position": [40, 260]},
+                {"id": "mask", "type": "remap", "params": {"from_min": 0.3, "from_max": 0.7, "unit": "ratio"}, "position": [300, 260]},
+                {"id": "flat", "type": "noise", "params": {"height": 2, "scale": 40, "octaves": 1}, "position": [40, 480]},
+                {"id": "blend", "type": "combine", "params": {"op": "lerp"}, "position": [560, 120]},
+                {"id": "limit", "type": "clamp", "params": {"min": 0, "max": 25}, "position": [820, 120]}
+              ],
+              "links": [
+                {"from": "valleys.height", "to": "mask.in"}, {"from": "hills.height", "to": "blend.a"},
+                {"from": "flat.height", "to": "blend.b"}, {"from": "mask.out", "to": "blend.t"}, {"from": "blend.out", "to": "limit.in"}
+              ],
+              "outputs": [{"name": "terrain", "from": "limit.out"}] }
+            """);
+        doc.RefreshAssets(true);
+        var graph = window.OpenGraph("Assets/Graphs/smoke.noorgraph");
+        if (graph == null)
+        {
+            check(false, "graph editor: the graph opens in a tab");
+            return;
+        }
+        await Task.Delay(400);
+        graph.Run();
+        var ran = await graph.WaitForRun();
+        var nodes = graph.LastRun?["nodes"] as JsonObject;
+        check(ran && graph.LastRun?["ok"]?.GetValue<bool>() == true && nodes?.Count == 6 && graph.Preview("hills", "height", 96) != null,
+              $"graph editor: Run evaluates all six nodes and shows previews ({graph.LastRun?["ran"]} ran)");
+
+        // Add a terrace after the clamp, link it, make it an output.
+        var terrace = graph.AddNode("terrace", 1080, 120);
+        graph.Connect("limit", "out", terrace, "in");
+        graph.SetOutput(terrace, "out", "stepped");
+        await graph.WaitForRun();
+        var saved = File.ReadAllText(file);
+        check(graph.Result(terrace)?["state"]?.GetValue<string>() == "done" && graph.LastRun?["written"]?.GetValue<bool>() == true &&
+              saved.Contains("\"terrace\"") && saved.Contains("\"stepped\""),
+              "graph editor: a new node linked in runs, becomes an output, and the file is saved");
+
+        // A setting changed upstream: only that node and what depends on it run (the rest from the cache).
+        graph.SetParam("hills", "height", JsonValue.Create(45.0));
+        await graph.WaitForRun();
+        check(graph.LastRun?["ran"]?.GetValue<int>() == 4 && graph.LastRun?["cached"]?.GetValue<int>() == 3,
+              $"graph editor: changing hills reruns hills, blend, limit and terrace only ({graph.LastRun?["ran"]} ran, {graph.LastRun?["cached"]} cached)");
+
+        // An unconnected node shows its issue; undo takes it away, and again the setting.
+        var lonely = graph.AddNode("clamp", 600, 480);
+        await graph.WaitForRun();
+        check(graph.IssuesFor(lonely).Any(i => i.Contains("isn't connected")), "graph editor: an unconnected node shows its issue on the node");
+        graph.Select("blend");
+        await Task.Delay(500);
+        shot(window, "editor_29_graph.png");
+        graph.Undo();
+        graph.Undo();
+        await graph.WaitForRun();
+        var after = File.ReadAllText(file);
+        check(graph.Node(lonely) == null && !after.Contains("45"), "graph editor: undo removes the node, then the setting change (saved too)");
+        window.DockFactory.CloseDockable(graph);
+        window.DockFactory.SetActiveDockable(window.ViewportDockable);
         await Task.Delay(300);
     }
 

@@ -1193,36 +1193,76 @@ Status Document::generate_start(std::string_view graph_path, const std::filesyst
         job->status["total"] = p.total;
         job->status["node"] = p.node;
     };
+    // Asset files as they are now: the run is on another thread and a Rescan may change the registry meanwhile.
+    opts.run.resolve = [files = asset_files()](const Guid& id) -> std::optional<stdfs::path> {
+        const auto it = files->find(id);
+        return it == files->end() ? std::nullopt : std::optional(it->second);
+    };
     const auto root = project_.root();
     job_->thread = std::thread([job, opts, g = std::move(*graph), root]() {
-        auto r = procgraph::generate(g, procgraph::Registry::builtin(), opts);
-        Json done{{"running", false}, {"cancelled", !r && r.error().code == ErrorCode::Cancelled}};
-        if (r) {
-            done["ok"] = true;
-            done["fingerprint"] = std::format("{:016x}", r->fingerprint);
-            done["ran"] = r->evaluation.ran;
-            done["cached"] = r->evaluation.cached;
-            Json files = Json::array();
-            for (const auto& f : r->files) {
-                std::error_code ec;
-                const auto rel = stdfs::relative(f, root, ec);
-                files.push_back(!ec && !rel.empty() && *rel.begin() != ".." ? rel.generic_string() : f.generic_string());
-            }
-            done["files"] = std::move(files);
-        } else {
+        // Evaluate first (kept for per-node results and previews), then write files when every declared
+        // output was made: the second pass is all cache hits.
+        auto ev = std::make_shared<const procgraph::Evaluation>(procgraph::evaluate(g, procgraph::Registry::builtin(), opts.run));
+        Json done{{"running", false}, {"cancelled", ev->cancelled}, {"ran", ev->ran}, {"cached", ev->cached},
+                  {"tiles_run", ev->tiles_run}, {"tiles_cached", ev->tiles_cached}, {"tiles_passed", ev->tiles_passed}, {"written", false}};
+        bool complete = !g.outputs.empty() && !ev->cancelled;
+        for (const auto& o : g.outputs) complete = complete && ev->outputs.contains(o.name);
+        if (ev->cancelled) {
             done["ok"] = false;
-            done["error"] = r.error().message;
+            done["error"] = "cancelled: nothing was written";
+        } else if (complete) {
+            auto r = procgraph::generate(g, procgraph::Registry::builtin(), opts);
+            done["ok"] = r.has_value();
+            if (r) {
+                done["written"] = true;
+                done["fingerprint"] = std::format("{:016x}", r->fingerprint);
+                Json files = Json::array();
+                for (const auto& f : r->files) {
+                    std::error_code ec;
+                    const auto rel = stdfs::relative(f, root, ec);
+                    files.push_back(!ec && !rel.empty() && *rel.begin() != ".." ? rel.generic_string() : f.generic_string());
+                }
+                done["files"] = std::move(files);
+            } else {
+                done["error"] = r.error().message;
+                done["cancelled"] = r.error().code == ErrorCode::Cancelled;
+            }
+        } else {
+            done["ok"] = g.outputs.empty();  // a graph without outputs only shows its nodes
+            done["files"] = Json::array();
+            if (!g.outputs.empty()) done["error"] = "not every output could be made (see the issues): nothing was written";
         }
-        // The issues, on their nodes (from a run's own report when there is one, else validation).
-        const auto issues = r ? r->evaluation.issues : procgraph::validate(g, procgraph::Registry::builtin());
         Json list = Json::array();
-        for (const auto& i : issues) list.push_back({{"node", i.node}, {"pin", i.pin}, {"message", i.message}});
+        for (const auto& i : ev->issues) list.push_back({{"node", i.node}, {"pin", i.pin}, {"message", i.message}});
         done["issues"] = std::move(list);
+        // Every node: how it went, and a summary of each output (previews: noor_doc_generate_preview).
+        Json nodes = Json::object();
+        for (const auto& [id, r] : ev->nodes) {
+            Json n{{"state", r.state == procgraph::NodeResult::State::Done ? "done" : r.state == procgraph::NodeResult::State::Failed ? "failed" : "skipped"},
+                   {"message", r.message}, {"ms", r.ms}, {"cached", r.cached}, {"tiles_run", r.tiles_run}, {"tiles_cached", r.tiles_cached},
+                   {"tiles_passed", r.tiles_passed}};
+            Json outs = Json::object();
+            for (const auto& [pin, v] : r.outputs) {
+                Json o{{"type", std::string(procgraph::type_name(v.type))}, {"unit", std::string(procgraph::unit_name(v.unit))}};
+                if (v.type == procgraph::PinType::Scalar) o["value"] = v.scalar;
+                if (v.field && !v.field->v.empty()) {
+                    const auto [lo, hi] = std::ranges::minmax(v.field->v);
+                    o["min"] = lo;
+                    o["max"] = hi;
+                    o["samples"] = {v.field->sx, v.field->sz};
+                }
+                outs[pin] = std::move(o);
+            }
+            n["outputs"] = std::move(outs);
+            nodes[id] = std::move(n);
+        }
+        done["nodes"] = std::move(nodes);
         std::scoped_lock lock(job->mutex);
         done["graph"] = job->status.value("graph", std::string());
         done["done"] = job->status.value("done", 0);
         done["total"] = job->status.value("total", 0);
         job->status = std::move(done);
+        job->evaluation = std::move(ev);
     });
     return {};
 }
@@ -1235,6 +1275,64 @@ Json Document::generate_status() {
 
 void Document::generate_cancel() {
     if (job_) job_->cancel = true;
+}
+
+namespace {
+std::string base64(const std::vector<std::uint8_t>& in) {
+    static constexpr char kTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((in.size() + 2) / 3 * 4);
+    for (std::size_t i = 0; i < in.size(); i += 3) {
+        const std::uint32_t n = (static_cast<std::uint32_t>(in[i]) << 16) | (i + 1 < in.size() ? static_cast<std::uint32_t>(in[i + 1]) << 8 : 0u) |
+                                (i + 2 < in.size() ? static_cast<std::uint32_t>(in[i + 2]) : 0u);
+        out.push_back(kTable[(n >> 18) & 63]);
+        out.push_back(kTable[(n >> 12) & 63]);
+        out.push_back(i + 1 < in.size() ? kTable[(n >> 6) & 63] : '=');
+        out.push_back(i + 2 < in.size() ? kTable[n & 63] : '=');
+    }
+    return out;
+}
+} // namespace
+
+Result<Json> Document::generate_preview(std::string_view node, std::string_view pin, int size) {
+    std::shared_ptr<const procgraph::Evaluation> ev;
+    if (job_) {
+        std::scoped_lock lock(job_->mutex);
+        ev = job_->evaluation;
+    }
+    if (!ev) return fail(ErrorCode::NotFound, "no graph has run yet");
+    const auto it = ev->nodes.find(std::string(node));
+    if (it == ev->nodes.end()) return fail(ErrorCode::NotFound, std::format("the last run has no node \"{}\"", node));
+    const auto out = it->second.outputs.find(std::string(pin));
+    if (out == it->second.outputs.end()) return fail(ErrorCode::NotFound, std::format("node \"{}\" has no result for \"{}\" (it didn't run, or no such output)", node, pin));
+    const auto& v = out->second;
+    Json j{{"type", std::string(procgraph::type_name(v.type))}, {"unit", std::string(procgraph::unit_name(v.unit))}};
+    if (!v.field) {
+        if (v.type == procgraph::PinType::Scalar) j["value"] = v.scalar;
+        return j;
+    }
+    // A greyscale picture, `size` pixels on its longer side (nearest sample), black = min, white = max
+    // (masks: always 0..1), rows from -z to +z like the field.
+    const auto& f = *v.field;
+    size = std::clamp(size, 8, 1024);
+    const int w = f.sx >= f.sz ? size : std::max(1, static_cast<int>(static_cast<long long>(size) * f.sx / f.sz));
+    const int h = f.sz >= f.sx ? size : std::max(1, static_cast<int>(static_cast<long long>(size) * f.sz / f.sx));
+    auto [lo, hi] = std::ranges::minmax(f.v);
+    if (v.unit == procgraph::Unit::Ratio) lo = 0.0f, hi = 1.0f;
+    std::vector<std::uint8_t> px(static_cast<std::size_t>(w) * h);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const auto sx = static_cast<std::uint32_t>((static_cast<long long>(x) * (f.sx - 1) + (w - 1) / 2) / std::max(1, w - 1));
+            const auto sz = static_cast<std::uint32_t>((static_cast<long long>(y) * (f.sz - 1) + (h - 1) / 2) / std::max(1, h - 1));
+            const float t = hi > lo ? (f.at(std::min(sx, f.sx - 1), std::min(sz, f.sz - 1)) - lo) / (hi - lo) : 0.0f;
+            px[static_cast<std::size_t>(y) * w + x] = static_cast<std::uint8_t>(std::clamp(t, 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+    j["width"] = w;
+    j["height"] = h;
+    j["min"] = lo;
+    j["max"] = hi;
+    j["pixels"] = base64(px);
+    return j;
 }
 
 void Document::cook_graphs(const scene::Scene& expanded, bool force) {

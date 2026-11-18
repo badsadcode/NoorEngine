@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7; parts 1–3 done: core, cache, jobs, headless, tiles, terrain) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Proposed (Milestone 7; parts 1–4 done: core, cache, jobs, headless, tiles, terrain, graph editor) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds
@@ -92,6 +92,16 @@ BadBuilding) are separate .NET programs connected by files.
 - **Terrains on graphs read cooked fields** (`.noor/cooked/graphs/<id>/`), written by the editor (graph
   changed, or Save) and noor_cli build/cook; games link no graph code. Unchanged files aren't rewritten.
 - The pinned fingerprint didn't move when the nodes became tiled: same bytes as whole-field evaluation.
+
+## What part 4 settled (2026-11-18)
+- **Graph edits are file edits, not scene commands** (a change from the plan, which said "document
+  commands"): graphs are assets like materials, so the graph editor follows the material editor's
+  pattern: it edits the `.noorgraph` directly with its own undo, saving each change. The engine keeps
+  the authority that matters: it checks the graph, formats the file (so the editor and noor_cli write
+  the same bytes), lists the node types and runs everything. A scene-level command history for asset
+  edits would be a larger, separate decision (all asset editors at once).
+- **A run keeps its evaluation** (per-node states and outputs) for the editor: per-node results in the
+  status, previews as small greyscale pictures. Files are still written only when every output exists.
 
 ## Consequences
 - Easier: reproducibility tests are hash comparisons; invalidation is "which keys changed"; the CLI

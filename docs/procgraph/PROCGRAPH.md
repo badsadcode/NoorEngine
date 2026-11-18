@@ -4,7 +4,7 @@ Milestone 7 ([plan](../milestones/M7_PLAN.md), [ADR-014](../decisions/ADR-014-pr
 **Works:** the graph file, typed nodes in a registry, validation, deterministic evaluation with keys
 (part 1); the results cache, worker threads with progress and Cancel, `noor_cli generate` and the
 editor API's background runs (part 2); tiles as regions, terrain nodes, terrains built on graphs
-(part 3). **Planned:** the graph editor (part 4), scatter (part 7).
+(part 3); the graph editor (part 4). **Planned:** scatter (part 7).
 
 ## A graph file (`.noorgraph`, format 1)
 
@@ -97,6 +97,34 @@ A cooked file whose bytes wouldn't change isn't rewritten, so terrains don't reb
 graph that hasn't been cooked yet is reported plainly ("hasn't been generated yet: save the scene,
 or run noor_cli cook"). Cooking runs on the editor's UI thread for now (fast with the cache; the
 first run of a big terrain graph takes a moment).
+
+## The graph editor (part 4)
+
+Double-click a `.noorgraph` in the Content Browser (or **File ▸ New Procedural Graph…**) to open it in
+a tab next to the viewport:
+
+- **+ Node** adds any node type (the list and each node's help come from the engine).
+- **Drag a node's title** to move it. **Drag from an output's dot to an input's dot** to link them; an
+  input takes one link, so a new one replaces the old. **Click a wire** and press Delete to remove it;
+  select a node and press Delete (or Delete node) to remove it with its links.
+- **The side panel** edits the selected node's parameters (left at the default: greyed), names an
+  output as a **graph output** (written to a file, usable as a terrain's base), and shows the last run:
+  time or "from the cache", tiles computed / cached / passed, the value range and a 256 px preview.
+  With no node selected it edits the graph's seed.
+- **Runs after each change** (in the background, a quarter of a second after you stop editing; turn it
+  off and use Run). Cancel stops a run. Thanks to the cache only what changed reruns.
+- **Issues** (unconnected inputs, wrong units, cycles…) show on their node: a red border and ✕, the
+  message in the tooltip and the side panel.
+- **Ctrl+Z / Ctrl+Y** undo and redo inside the tab. Every change is saved at once, in the engine's own
+  file format (the editor asks the engine to format the file), so a graph saved by the editor is byte
+  for byte what `noor_cli` would write.
+- Pin colours: fields cyan, numbers gold, the rest grey.
+
+Like the material editor, the graph editor edits its file directly (with its own undo) rather than
+through the scene's command history; the engine does all the checking, formatting and running
+(editor API v21: `noor_graph_node_types`, `noor_graph_check`, the run's per-node results,
+`noor_doc_generate_preview`). Not there yet: zoom, subgraphs, comments and groups, renaming nodes
+(an id is also the node's seed), copy and paste.
 
 ## Determinism
 

@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 20;
+    public const uint ExpectedApiVersion = 21;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -79,6 +79,13 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_doc_make_material(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
     [DllImport(Dll)] private static extern IntPtr noor_doc_csg(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_sculpt(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
+    // Procedural graphs (Milestone 7): background runs, previews, node types, checks.
+    [DllImport(Dll)] public static extern int noor_doc_generate_start(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string graphPath, [MarshalAs(UnmanagedType.LPUTF8Str)] string? outDir);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_generate_status(IntPtr doc);
+    [DllImport(Dll)] public static extern void noor_doc_generate_cancel(IntPtr doc);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_generate_preview(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string node, [MarshalAs(UnmanagedType.LPUTF8Str)] string pin, int size);
+    [DllImport(Dll)] private static extern IntPtr noor_graph_node_types();
+    [DllImport(Dll)] private static extern IntPtr noor_graph_check([MarshalAs(UnmanagedType.LPUTF8Str)] string graph);
     [DllImport(Dll)] public static extern void noor_viewport_set_brush(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? brush);
     [DllImport(Dll)] private static extern IntPtr noor_doc_export_csg(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string modelId,
                                                                     [MarshalAs(UnmanagedType.LPUTF8Str)] string glbPath);
@@ -111,6 +118,10 @@ public static class Native
     public static string Csg(IntPtr doc) => Str(noor_doc_csg(doc)) ?? "[]";
     public static string? ExportCsg(IntPtr doc, string modelId, string glbPath) => Str(noor_doc_export_csg(doc, modelId, glbPath));
     public static string? Sculpt(IntPtr doc, string command) => Str(noor_doc_sculpt(doc, command));
+    public static string? GenerateStatus(IntPtr doc) => Str(noor_doc_generate_status(doc));
+    public static string? GeneratePreview(IntPtr doc, string node, string pin, int size) => Str(noor_doc_generate_preview(doc, node, pin, size));
+    public static string? GraphNodeTypes() => Str(noor_graph_node_types());
+    public static string? GraphCheck(string graph) => Str(noor_graph_check(graph));
     public static string? Scenes(IntPtr doc) => Str(noor_doc_scenes(doc));
     public static string? Scene(IntPtr doc) => Str(noor_doc_scene(doc));
     public static string PollFiles(IntPtr doc) => Str(noor_doc_poll_files(doc)) ?? "[]";

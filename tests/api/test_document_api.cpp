@@ -605,3 +605,56 @@ TEST_CASE("document api: a terrain on a graph base cooks itself, and its sculpti
     std::error_code ec;
     stdfs::remove_all(dir, ec);
 }
+
+// Milestone 7, part 4: what the graph editor asks the engine: node types, a check without running,
+// per-node results of a run, and previews.
+TEST_CASE("document api: the graph editor's calls: node types, check, node results and previews") {
+    const Json types = json(noor_graph_node_types());
+    auto type = [&](const std::string& name) -> const Json* {
+        for (const auto& t : types)
+            if (t["name"] == name) return &t;
+        return nullptr;
+    };
+    REQUIRE(type("stamp") != nullptr);
+    CHECK((*type("stamp"))["tiled"] == true);
+    CHECK((*type("slope"))["tiled"] == false);
+    CHECK((*type("noise"))["outputs"][0]["unit"] == "metres");
+    CHECK((*type("remap"))["params"].size() == 5);
+
+    // A check: issues on nodes, and the graph in the engine's own format.
+    const Json broken{{"noor_graph", 1}, {"nodes", Json::array({{{"id", "c"}, {"type", "clamp"}}})}};
+    const Json checked = json(noor_graph_check(broken.dump().c_str()));
+    REQUIRE(checked["issues"].size() == 1);
+    CHECK(checked["issues"][0]["node"] == "c");
+    CHECK(checked["text"].get<std::string>().find("\"noor_graph\": 1") != std::string::npos);
+    CHECK(noor_graph_check("not json") == nullptr);
+
+    // A run's per-node results, and a preview of a field.
+    const stdfs::path dir = stdfs::temp_directory_path() / ("noor_grapheditor_" + noor::Guid::generate().to_string());
+    stdfs::create_directories(dir);
+    stdfs::copy(kData / "procgraph_project", dir, stdfs::copy_options::recursive);
+    noor_doc* doc = noor_doc_open_project(dir.string().c_str());
+    REQUIRE(doc != nullptr);
+    CHECK(noor_doc_generate_preview(doc, "hills", "height", 64) == nullptr);  // nothing has run yet
+    REQUIRE(noor_doc_generate_start(doc, "Assets/Graphs/hills.noorgraph", nullptr) == 1);
+    Json s;
+    for (int i = 0; i < 12000; ++i) {
+        s = json(noor_doc_generate_status(doc));
+        if (!s["running"].get<bool>()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(s["ok"] == true);
+    CHECK(s["written"] == true);
+    CHECK(s["nodes"]["hills"]["state"] == "done");
+    CHECK(s["nodes"]["mask"]["outputs"]["out"]["unit"] == "ratio (0..1)");
+    CHECK(s["nodes"]["limit"]["outputs"]["out"]["max"].get<double>() <= 25.0);
+    const Json preview = json(noor_doc_generate_preview(doc, "hills", "height", 64));
+    CHECK(preview["width"] == 64);
+    CHECK(preview["height"] == 64);
+    CHECK(preview["pixels"].get<std::string>().size() == (64 * 64 + 2) / 3 * 4);  // base64 of 4096 bytes
+    CHECK(preview["unit"] == "metres");
+    CHECK(noor_doc_generate_preview(doc, "hills", "nope", 64) == nullptr);
+    noor_doc_close(doc);
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
+}

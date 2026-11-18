@@ -4,6 +4,7 @@
 #include "noor_editor_api.h"
 
 #include "api_internal.h"
+#include "noor/procgraph/procgraph.h"
 #include "noor/foundation/log.h"
 #include "document.h"
 #include "noor/scripting/csharp_scripts.h"
@@ -241,6 +242,67 @@ NOOR_API const char* noor_doc_generate_status(noor_doc* doc) {
 
 NOOR_API void noor_doc_generate_cancel(noor_doc* doc) {
     if (doc) doc->doc->generate_cancel();
+}
+
+NOOR_API const char* noor_doc_generate_preview(noor_doc* doc, const char* node, const char* pin, int32_t size) {
+    if (!doc || !node || !pin) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto r = doc->doc->generate_preview(node, pin, size);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
+// ---- Procedural graphs without a document (Milestone 7, part 4): what the graph editor needs ----
+
+NOOR_API const char* noor_graph_node_types(void) {
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        using namespace noor::procgraph;
+        noor::asset::Json list = noor::asset::Json::array();
+        auto pins = [](const std::vector<PinSpec>& specs) {
+            noor::asset::Json out = noor::asset::Json::array();
+            for (const auto& p : specs)
+                out.push_back({{"name", p.name}, {"type", std::string(type_name(p.type))}, {"unit", std::string(unit_name(p.unit))}, {"optional", p.optional}});
+            return out;
+        };
+        for (const auto& [name, t] : Registry::builtin().all()) {
+            noor::asset::Json params = noor::asset::Json::array();
+            for (const auto& p : t.params) {
+                const char* kind = p.kind == ParamSpec::Kind::Number ? "number" : p.kind == ParamSpec::Kind::Integer ? "integer" : p.kind == ParamSpec::Kind::Choice ? "choice"
+                                 : p.kind == ParamSpec::Kind::Text ? "text" : "flag";
+                noor::asset::Json pj{{"name", p.name}, {"kind", kind}, {"default", p.fallback}, {"help", p.help}};
+                if (p.kind == ParamSpec::Kind::Number || p.kind == ParamSpec::Kind::Integer) pj["min"] = p.min, pj["max"] = p.max;
+                if (p.kind == ParamSpec::Kind::Choice) pj["choices"] = p.choices;
+                params.push_back(std::move(pj));
+            }
+            list.push_back({{"name", name}, {"version", t.version}, {"help", t.help}, {"inputs", pins(t.inputs)}, {"outputs", pins(t.outputs)},
+                            {"params", std::move(params)}, {"tiled", static_cast<bool>(t.run_tile)}});
+        }
+        return give(list);
+    });
+}
+
+NOOR_API const char* noor_graph_check(const char* graph_json) {
+    if (!graph_json) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(graph_json, "graph");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto g = noor::procgraph::Graph::from_json(*json);
+        if (!g) {
+            fail_with(g.error());
+            return nullptr;
+        }
+        noor::asset::Json list = noor::asset::Json::array();
+        for (const auto& i : noor::procgraph::validate(*g, noor::procgraph::Registry::builtin()))
+            list.push_back({{"node", i.node}, {"pin", i.pin}, {"message", i.message}});
+        return give(noor::asset::Json{{"issues", std::move(list)}, {"text", noor::asset::to_text(g->to_json())}});
+    });
 }
 
 NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json) {

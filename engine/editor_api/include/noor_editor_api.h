@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 20u
+#define NOOR_EDITOR_API_VERSION 21u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -162,6 +162,22 @@ NOOR_API int32_t noor_doc_terrain_height(noor_doc* doc, const char* terrain_id, 
 NOOR_API int32_t noor_doc_generate_start(noor_doc* doc, const char* graph_path, const char* out_dir);
 NOOR_API const char* noor_doc_generate_status(noor_doc* doc);
 NOOR_API void noor_doc_generate_cancel(noor_doc* doc);
+/* v21 (the graph editor, Milestone 7 part 4): the status of a finished run also has "nodes": {id: {"state":
+   "done" | "failed" | "skipped", "message", "ms", "cached", "tiles_run", "tiles_cached", "tiles_passed",
+   "outputs": {pin: {"type", "unit", "value" (numbers), "min", "max", "samples" (fields)}}}}, "written" (files
+   were written: only when every declared output was made) and the run's tile counts. A graph with no
+   outputs runs too (for its previews). noor_doc_generate_preview: one node output of the last run as
+   {"type", "unit", "width", "height", "min", "max", "pixels": base64 of 8-bit greyscale (black = min, white
+   = max; masks 0..1), rows from -z to +z} or {"value"} for numbers; `size` is the longer side. */
+NOOR_API const char* noor_doc_generate_preview(noor_doc* doc, const char* node, const char* pin, int32_t size);
+/* v21: every node type the engine has: [{"name", "version", "help", "tiled", "inputs"/"outputs": [{"name",
+   "type", "unit", "optional"}], "params": [{"name", "kind" (number, integer, choice, text, flag), "default",
+   "min", "max", "choices", "help"}]}]. */
+NOOR_API const char* noor_graph_node_types(void);
+/* v21: checks a graph (its JSON) without running it: {"issues": [{"node", "pin", "message"}], "text": the graph
+   in the engine's own file format (save that, so files are the same whoever writes them)}. NULL if it can't be
+   read at all (noor_last_error). */
+NOOR_API const char* noor_graph_check(const char* graph_json);
 /* {"terrain": entity id | null (off), "radius": metres}. While set, the gizmo and click-to-select
    are off in the viewport. */
 NOOR_API void noor_viewport_set_brush(noor_viewport* viewport, const char* brush_json);
