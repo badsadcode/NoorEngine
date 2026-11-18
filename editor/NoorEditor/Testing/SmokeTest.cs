@@ -247,6 +247,7 @@ internal static class SmokeTest
             await MaterialEditorChecks(window, materialAsset, Check, Shot);
         }
         await RenderPanelChecks(window, settings, Check, Shot);
+        await EnvironmentGalleryChecks(window, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
@@ -821,6 +822,47 @@ internal static class SmokeTest
         await Task.Delay(300);
         check(window.OpenMaterials.Count == 0 && VulkanViewport.Active is { IsPreview: false },
               "material editor: closing the tabs leaves the scene viewport");
+    }
+
+    // Milestone 8A, part 6: the environment gallery. Applying a preset makes the scene point at a project copy of it, and
+    // the scene viewport draws it (the live sky's GPU pass runs); one undo puts the old environment back.
+    private static async Task EnvironmentGalleryChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        if (window.FindDockable("Environments") is not { } dockable)
+        {
+            check(false, "environments: the gallery has a panel");
+            return;
+        }
+        window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<EnvironmentPanel>().FirstOrDefault();
+        var doc = window.Doc;
+        if (panel == null || !doc.Scene.Open)
+        {
+            check(false, "environments: the gallery shows with a scene open");
+            return;
+        }
+        JsonNode? Component() => doc.Scene.Entities.Select(e => e.Components["environment"]).FirstOrDefault(c => c != null);
+        var before = Component()?.ToJsonString();
+        panel.Select("Foggy Dawn", null);
+        var applied = panel.Apply();
+        var guid = applied?["guid"]?.GetValue<string>();
+        check(guid != null && Component()?["asset"]?.GetValue<string>() == guid &&
+              File.Exists(Path.Combine(doc.ProjectRoot, "Assets", "Environments", "Foggy Dawn.noorenv")),
+              "environments: applying Foggy Dawn copies it into Assets/Environments and the scene points at it");
+        // The scene viewport now draws the live sky: its Environment pass shows up with a time.
+        double env = 0;
+        for (var i = 0; i < 25 && env <= 0; ++i)
+        {
+            await Task.Delay(200);
+            var stats = VulkanViewport.Active?.RenderStats() is { } text ? JsonNode.Parse(text) : null;
+            env = (stats?["passes"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(p => p["name"]?.GetValue<string>() == "Environment")?["ms"]?.GetValue<double>() ?? 0;
+        }
+        check(env > 0, $"environments: the viewport draws the applied environment (live sky pass {env:0.000} ms)");
+        check(panel.ProjectEnvironments.Count >= 1, $"environments: the project lists its environment ({panel.ProjectEnvironments.Count})");
+        shot(window, "editor_23_environment_gallery.png");
+        doc.Undo();
+        check(Component()?.ToJsonString() == before, "environments: one undo puts the old environment back");
     }
 
     // Milestone 5, part 7: the Render panel's numbers, and anti-aliasing switched from Preferences.

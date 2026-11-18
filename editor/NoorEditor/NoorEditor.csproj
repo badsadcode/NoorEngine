@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Shell\Highlighting\*.xshd" LogicalName="NoorEditor.Highlighting.%(Filename).xshd" />
+    <EmbeddedResource Include="Shell\Environments\*.png" LogicalName="NoorEditor.Environments.%(Filename).png" />
   </ItemGroup>
 
   <ItemGroup>

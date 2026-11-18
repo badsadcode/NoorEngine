@@ -33,6 +33,8 @@ public sealed class MainWindow : Window
     public InspectorPanel? Inspector { get; private set; }
     public HierarchyPanel? Hierarchy { get; private set; }
     public ContentPanel? ContentBrowser { get; private set; }
+    /// <summary>The environment gallery (Milestone 8A, part 6), once shown.</summary>
+    public EnvironmentPanel? Environments { get; private set; }
     public ViewportPanel? ViewportView { get; private set; }
 
     // NoorCode: the scripts open as tabs next to the viewport (they outlive layout rebuilds).
@@ -187,6 +189,11 @@ public sealed class MainWindow : Window
         };
         var console = new PanelTool { Id = "Console", Title = "Console", CanClose = false, CreateView = () => new ConsolePanel(Doc.ProjectRoot, l => OpenScript(l.RelativePath, l.Line)) };
         var render = new PanelTool { Id = "Render", Title = "Render", CanClose = false, CreateView = () => new RenderPanel() };
+        var environments = new PanelTool
+        {
+            Id = "Environments", Title = "Environments", CanClose = false,
+            CreateView = () => Environments = new EnvironmentPanel(Doc),
+        };
 
         DockFactory
             .DocumentDock(out var documents, d => d.WithId("Documents").WithIsCollapsable(false))
@@ -214,7 +221,7 @@ public sealed class MainWindow : Window
         foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
-        Fill(bottom, content, console, render);
+        Fill(bottom, content, console, render, environments);
 
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };

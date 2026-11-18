@@ -1,6 +1,6 @@
 # ADR-033: Environments and atmosphere
 
-**Status:** Proposed (Milestone 8A; parts 1-5 implemented: the atmosphere sky on the GPU, time of day, fog, aerial perspective, clouds, night and space) · **Date:** 2026-11-18 · **Milestone:** 8
+**Status:** Proposed (Milestone 8A; parts 1-6 implemented: the atmosphere sky on the GPU, time of day, fog, aerial perspective, clouds, night, space, environment assets and presets) · **Date:** 2026-11-18 · **Milestone:** 8
 
 ## Context
 Milestone 8A ([plan](../milestones/M8_PLAN.md), [NoorSky brief](../ideas/NOORSKY.md)) wants skies that
@@ -99,6 +99,20 @@ must agree, or the picture falls apart.
   deterministic, no histogram, no adaptation over time (yet). The live sky's images are scaled by
   `live_sky_scale` (larger at night) so half floats keep their precision. References and tests:
   `asset/atmosphere.h` (moon), `render/stars.h`, `render/exposure.h`.
+- **Environment assets** (part 6): a `.noorenv` file (`asset/environment_asset.h`: `{"noor_environment": 1, "name",
+  "preset"?, "environment": {...}}`) holds every setting of the environment component; a scene's component points at
+  one with `{"asset": id}` and may override any field beside it. An environment may set `ev100` (a number or
+  "auto"): the environment's exposure wins over the camera's, so a preset changes sky, light, fog and exposure
+  together. Six **presets** are built into the engine (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit
+  Night, Stormy Coast); they are never written: applying one copies it into the project's Assets/Environments
+  (kept, with its edits, once there), and Reset puts a copy back to the preset it remembers. Editor API v24:
+  `noor_environment_presets`, `noor_doc_environment` (list, read, apply, duplicate, reset, save). The editor's
+  **Environments** tab: a gallery with pictures (rendered from the engine's own presets by
+  `tools/samples/render_environment_thumbnails.py`), Apply (double-click), Duplicate, Edit (every field, saved as
+  you go) and Reset.
+- **Clouds and light through them** (part 6 correction): a cloud's diffuse transmission now depends on its
+  thickness (the two-stream approximation, 1 / (1 + 0.75 tau (1 - g)), g 0.85), in its shading and in automatic
+  exposure alike: thick clouds go dark underneath, and overcast days are metered with the light the clouds pass on.
 - **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
   the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
   hour angle from the time; no equation of time or refraction).
@@ -117,6 +131,11 @@ must agree, or the picture falls apart.
   GPU is clocked down), the tables a fraction of a millisecond once; dragging the time from 5:00 to
   21:00 rebuilds every frame at 60 FPS (`render.day_cycle`). Spreading the work over several frames,
   which the plan expected to need, wasn't.
+- **Environment assets** (part 6): applying a preset changes what a game draws (sky, sun, fog, exposure) in one
+  undo step; duplicating, editing and resetting never touch the built-in presets; an edited environment saves,
+  reopens and builds into a game that draws it identically (tests: `noor_editor_api_tests` "environment api",
+  `cli.environment_builds_identically`, the editor smoke test's gallery checks). Thumbnails are of the presets only:
+  a project's own environments show their preset's picture marked "edited", or a plain gradient.
 - **Night and space** (part 5): goldens `Hillside_Night` (the house and trees against the moonlit sky) and `Space`
   (a ringed planet with a lit and a dark side and its shadow on the rings, two suns). Bodies are untextured yet.
 - **Clouds cost** 26-28 µs a frame at 1280×720 (fastest frames, two layers, against the same scene without),
@@ -133,6 +152,8 @@ must agree, or the picture falls apart.
 - Old scenes are unchanged: `sky` is new and optional; the gradient and HDRI paths are untouched.
 
 ## Unresolved
+- Thumbnails rendered for a project's own environments (needs an offscreen render path in the editor API).
+- The presets are a first pass: their look is to be tuned (Stormy Coast is more grey than dramatic).
 - Textured celestial bodies, eclipses, the moon's own shadow on the ground at an eclipse, real lunar calendars.
 - Exposure that adapts over time (eye adaptation) as an option on top of the metered value.
 - The `.noorenv` asset format and overrides (part 6), and blending two atmospheres (part 7: blend

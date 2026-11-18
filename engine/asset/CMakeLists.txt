@@ -14,6 +14,7 @@ noor_add_module(asset
         src/material.cpp
         src/environment.cpp
         src/atmosphere.cpp
+        src/environment_asset.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json

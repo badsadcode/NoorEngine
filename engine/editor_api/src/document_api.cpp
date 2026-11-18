@@ -1,6 +1,7 @@
 // C ABI for documents (ADR-025). Thin wrappers: parse/serialize JSON, turn errors into
 // noor_last_error(), never let a C++ exception cross the DLL boundary.
 
+#include "noor/asset/environment_asset.h"
 #include "noor_editor_api.h"
 
 #include "api_internal.h"
@@ -190,6 +191,32 @@ NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_p
     if (!doc || !texture_path) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
         auto r = doc->doc->make_material(texture_path);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
+NOOR_API const char* noor_environment_presets(void) {
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        noor::asset::Json list = noor::asset::Json::array();
+        for (const auto& p : noor::asset::environment_presets())
+            list.push_back({{"name", p.name}, {"description", p.description}, {"environment", p.environment}});
+        return give(list);
+    });
+}
+
+NOOR_API const char* noor_doc_environment(noor_doc* doc, const char* command) {
+    if (!doc || !command) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(command, "environment command");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto r = doc->doc->environment(*json);
         if (!r) {
             fail_with(r.error());
             return nullptr;

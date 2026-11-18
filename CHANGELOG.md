@@ -4,6 +4,25 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-18 — Milestone 8A, part 6: environment assets and presets
+**Added**
+- **`.noorenv` environment assets** (`asset/environment_asset.h`): every environment setting in a file (importer
+  `environment`); a scene's environment component `{"asset": id, ...overrides}`; an environment's `ev100` (number or
+  "auto") wins over the camera's.
+- **Six built-in presets**: Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast (never
+  written; applied as project copies that remember their preset).
+- **Editor API v24**: `noor_environment_presets`, `noor_doc_environment` (list, read, apply, duplicate, reset, save).
+- **Editor**: the **Environments** tab (gallery with pictures, Apply, Duplicate, Edit, Reset);
+  `tools/samples/render_environment_thumbnails.py` renders the presets' pictures from the engine.
+
+**Changed:** clouds let light through by their thickness (`render::cloud_diffuse_transmittance`, the two-stream
+approximation), in their shading and in automatic exposure (overcast scenes were metered as if the blocked sunlight
+vanished); golden `Atmosphere_Clouds` updated.
+
+**Tests:** `noor_editor_api_tests` "environment api" (apply changes sky, sun, fog and exposure in one undo step;
+duplicate/edit/reset leave the presets alone; save and reopen), `cli.environment_builds_identically` (pixel-identical
+in a built game), the editor smoke test's gallery checks, `cloud_diffuse_transmittance`.
+
 ### 2026-11-18 — Milestone 8A, part 5: night and space
 **Added**
 - **The moon** (`asset::lunar_direction`, `moon_illuminance`, `default_moon_phase`): drawn as a lit sphere, its

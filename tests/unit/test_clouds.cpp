@@ -124,3 +124,10 @@ TEST_CASE("clouds: far away the fine detail fades to its average, never past it"
     CHECK(far_spread < near_spread);
     CHECK(far_mean / 400 == doctest::Approx(0.5).epsilon(0.1));
 }
+
+TEST_CASE("clouds: thick clouds let less light through, diffused (two-stream, g = 0.85)") {
+    CHECK(render::cloud_diffuse_transmittance(0.0f) == 1.0f);
+    CHECK(render::cloud_diffuse_transmittance(8.0f) == doctest::Approx(1.0f / 1.9f));    // an overcast deck: about half
+    CHECK(render::cloud_diffuse_transmittance(40.0f) == doctest::Approx(1.0f / 5.5f));   // a storm cloud: under a fifth
+    CHECK(render::cloud_diffuse_transmittance(40.0f) < render::cloud_diffuse_transmittance(8.0f));
+}

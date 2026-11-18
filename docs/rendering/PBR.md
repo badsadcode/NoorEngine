@@ -90,6 +90,17 @@ that from an **environment**: an HDRI photo, or a procedural sky when the scene 
 - **The sun**: an HDRI already contains its sun, so a scene with an HDRI and no `light` entity gets
   no default sun. Add a directional light (pointing like the photo's sun) for sharp sun shadows.
 
+### Environment assets and presets (Milestone 8A, part 6)
+
+An environment can live in its own file, `Assets/Environments/<name>.noorenv`, and a scene can point at it:
+`"environment": {"asset": "<id>"}`; any field written beside `"asset"` overrides the file's. The editor's
+**Environments** tab (bottom dock) shows six built-in presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn,
+Moonlit Night, Stormy Coast) and the project's own environments: **Apply** (or double-click) points the scene at one
+(a preset is copied into the project first, once; one undo step), **Duplicate** copies a project environment,
+**Edit** shows every setting (changes are saved as you type and the scene follows), **Reset** puts a copy back to the
+preset it came from. The built-in presets themselves never change. An environment can set the exposure
+(`"ev100": "auto"` or a number), which then wins over the camera's: the presets all meter automatically.
+
 ### The atmosphere sky (Milestone 8A, [ADR-033](../decisions/ADR-033-environments-and-atmosphere.md))
 
 ```json

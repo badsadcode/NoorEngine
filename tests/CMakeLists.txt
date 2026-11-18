@@ -59,10 +59,10 @@ doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit" FAIL_REGULAR_EXP
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
     # The viewport maths is internal to the DLL, so its source is compiled into the test too.
-    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp
+    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
-    target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph doctest::doctest)
+    target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph noor::game doctest::doctest)
     target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data" NOOR_SAMPLES_DIR="${PROJECT_SOURCE_DIR}/samples")
     noor_set_target_options(noor_editor_api_tests)
     set_target_properties(noor_editor_api_tests PROPERTIES FOLDER "Tests")
@@ -161,6 +161,12 @@ add_test(NAME render.day_cycle
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/day_cycle_check -P ${CMAKE_CURRENT_SOURCE_DIR}/day_cycle_check.cmake)
 set_tests_properties(render.day_cycle PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+# Environment assets (Milestone 8A, part 6): a custom .noorenv goes into a built game and looks the same there.
+add_test(NAME cli.environment_builds_identically
+    COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/environment_build
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/environment_build_check.cmake)
+set_tests_properties(cli.environment_builds_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 180)
 # Clouds (Milestone 8A, part 4): what they cost against the same scene without them.
 add_test(NAME render.clouds_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes

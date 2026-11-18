@@ -1,5 +1,6 @@
 #include "noor/game/game.h"
 
+#include "noor/asset/environment_asset.h"
 #include "noor/render/exposure.h"
 #include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
@@ -17,7 +18,9 @@
 #include <map>
 #include <cmath>
 #include <string>
+#include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace noor::game {
 
@@ -179,6 +182,48 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
 
 namespace {
 
+// Logs a warning once per distinct message (a broken reference is read every frame).
+void warn_once(const std::string& message) {
+    static std::mutex mutex;
+    static std::unordered_set<std::string> said;
+    std::scoped_lock lock(mutex);
+    if (said.insert(message).second) NOOR_LOG_WARN("Game", "{}", message);
+}
+
+// A scene's environment component with its asset (Milestone 8A, part 6): {"asset": id} reads the .noorenv
+// (cached by file and time, so edits to it show at once), and the component's other fields override it.
+Json resolved_environment(const Json& component, const AssetPath& asset_path) {
+    const auto id = component.contains("asset") ? asset::guid_field(component, "asset") : std::nullopt;
+    if (!id || !asset_path) return component;
+    const auto file = asset_path(*id);
+    if (!file) {
+        warn_once(std::format("environment asset {} not found: the component's own fields only", id->to_string()));
+        return component;
+    }
+    struct Cached {
+        std::filesystem::file_time_type time;
+        Json environment;
+    };
+    static std::mutex mutex;
+    static std::unordered_map<std::string, Cached> cache;
+    std::error_code ec;
+    const auto time = std::filesystem::last_write_time(*file, ec);
+    const std::string key = file->generic_string();
+    {
+        std::scoped_lock lock(mutex);
+        if (const auto it = cache.find(key); it != cache.end() && it->second.time == time) return asset::merge_environment(it->second.environment, component);
+    }
+    auto loaded = asset::load_environment_file(*file);
+    if (!loaded) {
+        warn_once(std::format("environment asset {}: {}", file->filename().string(), loaded.error().describe()));
+        return component;
+    }
+    Json environment = (*loaded)["environment"];
+    std::scoped_lock lock(mutex);
+    cache[key] = {time, environment};
+    return asset::merge_environment(environment, component);
+}
+
 float number(const Json& j, const char* key, float fallback) {
     return j.contains(key) && j[key].is_number() ? j[key].get<float>() : fallback;
 }
@@ -208,6 +253,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     float env_intensity = 8000.0f;
     bool sun_color_given = false;
     bool auto_exposure = false;
+    std::optional<Json> environment_ev100;  // an environment's own exposure wins over the camera's (part 6)
     std::vector<render::CelestialBody> bodies;  // celestial_body entities (part 5)
     struct NightSky {
         bool moon = true, stars = true;
@@ -288,7 +334,8 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             !e.has("terrain"))
             continue;
         if (env) {
-            const auto& en = e.components["environment"];
+            const Json en = resolved_environment(e.components["environment"], asset_path);
+            if (en.contains("ev100") && (en["ev100"].is_number() || en["ev100"].is_string())) environment_ev100 = en["ev100"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
             render::FogParams& fog = view.lighting.fog;
             fog.density = std::clamp(number(en, "fog_density", 0.0f), 0.0f, 1.0f);
@@ -624,15 +671,30 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     }
     sky_objects.bodies = std::move(bodies);
     if (sky_objects.bodies.size() > render::kMaxCelestialBodies) sky_objects.bodies.resize(render::kMaxCelestialBodies);
+    if (environment_ev100) {
+        if (environment_ev100->is_number()) {
+            view.lighting.ev100 = std::clamp(environment_ev100->get<float>(), -10.0f, 25.0f);
+            auto_exposure = false;
+        } else if (environment_ev100->get<std::string>() == "auto") {
+            auto_exposure = true;
+        }
+    }
     // Automatic exposure (part 5): meter the light falling on level ground, like an incident light meter.
     if (auto_exposure) {
         const auto luminance = [](math::Vec3 v) { return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z; };
-        // Clouds take their share of the direct light: the covered fraction lets through e^-density.
-        float cloud_t = 1.0f;
+        // Clouds take their share of the direct light (the covered fraction lets through e^-density) and send part
+        // of it down diffused (render::cloud_diffuse_transmittance: the same model the clouds are shaded with).
+        float cloud_t = 1.0f, diffused = 1.0f;
         for (const auto& layer : view.lighting.clouds)
-            if (layer.enabled) cloud_t *= 1.0f - layer.coverage + layer.coverage * std::exp(-layer.density);
+            if (layer.enabled) {
+                cloud_t *= 1.0f - layer.coverage + layer.coverage * std::exp(-layer.density);
+                diffused *= render::cloud_diffuse_transmittance(layer.density);
+            }
         const float light_up = std::max(0.0f, -view.lighting.sun_direction.y);
-        float lux = view.lighting.sun_illuminance * luminance(view.lighting.sun_color) * light_up * cloud_t;
+        const float direct = view.lighting.sun_illuminance * luminance(view.lighting.sun_color) * light_up;
+        // Clouds don't destroy the light they block: part of it comes down through them, diffused, which is why an
+        // overcast day is still bright.
+        float lux = direct * cloud_t + direct * (1.0f - cloud_t) * diffused;
         for (const auto& l : view.lighting.lights)
             if (l.type == render::LocalLight::Type::Directional) lux += l.lux * luminance(l.color) * std::max(0.0f, -l.direction.y);
         if (view.environment.atmosphere) {

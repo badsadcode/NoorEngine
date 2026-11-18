@@ -89,6 +89,9 @@ float cloud_sun_transmittance(CloudLayer layers[2], float3 world, float3 to_sun)
     return exp(-tau);
 }
 
+// clouds.h cloud_diffuse_transmittance: the two-stream approximation for a thick cloud (g 0.85).
+float cloud_diffuse_transmittance(float tau) { return 1.0 / (1.0 + 0.75 * max(0.0, tau) * 0.15); }
+
 float cloud_phase(float c, float g)
 {
     const float g2 = g * g;
@@ -125,10 +128,12 @@ float3 cloud_layer_shade(CloudLayer layer, float3 eye_km, float planet_km, float
     const float self = exp(-cover_sun * layer.density * 0.5);
     const float c = dot(view, to_sun);
     const float phase = (0.7 * cloud_phase(c, 0.6) + 0.3 * cloud_phase(c, -0.3)) * 4.0 * 3.14159265;  // 1 = even
-    // Direct light through the thin parts, light that has bounced around inside (it keeps thick clouds from
-    // going black), light from the sunlit ground under the base, and the sky above.
-    const float3 lit = sun * (phase * 0.25 * self + 0.06 * (1.0 - self) + 0.02);
-    return 0.9 * (lit + ambient * (1.0 - 0.3 * cover));
+    // Direct light through the thin parts, light diffused through the cloud's thickness (thick clouds go dark
+    // underneath: cloud_diffuse_transmittance), a little from the sunlit ground under the base, and the sky above
+    // seen through the cloud.
+    const float through = cloud_diffuse_transmittance(tau);
+    const float3 lit = sun * (phase * 0.25 * self + 0.12 * through + 0.01);
+    return 0.9 * (lit + ambient * through);
 }
 
 #endif

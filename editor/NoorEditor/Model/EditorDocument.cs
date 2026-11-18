@@ -381,6 +381,30 @@ public sealed class EditorDocument : IDisposable
         return (node["path"]!.GetValue<string>(), node["created"]!.GetValue<bool>(), (node["maps"] as JsonArray)?.Count ?? 0);
     }
 
+    /// <summary>The built-in environment presets (Milestone 8A, part 6): [{name, description, environment}].</summary>
+    public static JsonArray EnvironmentPresets() => Native.EnvironmentPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
+
+    /// <summary>
+    /// One environment command (noor_doc_environment: list, read, apply, duplicate, reset, save). Changes refresh
+    /// the scene and the asset list; a failure is logged and gives null.
+    /// </summary>
+    public JsonNode? Environment(JsonObject command)
+    {
+        var json = Native.Environment(_handle, command.ToJsonString());
+        var op = command["op"]?.GetValue<string>() ?? "";
+        if (json == null)
+        {
+            Interop.EngineLog.Error("Editor", $"Environment {op}: {Native.LastError()}");
+            return null;
+        }
+        if (op is "apply" or "duplicate" or "reset" or "save")
+        {
+            RefreshAssets(rescan: false);
+            Refresh();
+        }
+        return JsonNode.Parse(json);
+    }
+
     /// <summary>Everything the engine knows about one asset: its manifest and levels for a Noor Interchange model (Milestone 7, part 5).</summary>
     public JsonObject? AssetDetails(string guid) => Native.AssetDetails(_handle, guid) is { } json ? JsonNode.Parse(json) as JsonObject : null;
 

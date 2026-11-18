@@ -92,6 +92,11 @@ inline float cloud_value_noise(float x, float y, std::uint32_t seed) noexcept {
     return t * t * (3.0f - 2.0f * t);
 }
 
+// The light that gets through a cloud of optical depth `tau` scattered (diffuse), the two-stream approximation for a
+// thick cloud: 1 / (1 + 0.75 tau (1 - g)), with cloud droplets' g of 0.85. An overcast deck (tau 8) lets through about
+// half, a storm cloud (tau 40) under a fifth: why thick clouds are dark underneath, yet overcast days stay bright.
+[[nodiscard]] inline float cloud_diffuse_transmittance(float tau) noexcept { return 1.0f / (1.0f + 0.75f * std::max(0.0f, tau) * 0.15f); }
+
 // The direct sunlight that gets through the layers to a point of the scene (metres, +Y up) for a sun
 // towards `to_sun` (unit): exp(-optical depth) of the cloud each layer has where the sun ray crosses it.
 // Below the horizon: 1 (the sun is off anyway).

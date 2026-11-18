@@ -1,4 +1,6 @@
 #include "document.h"
+
+#include "noor/asset/environment_asset.h"
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
 #include "noor/csg/csg.h"
@@ -261,6 +263,138 @@ Result<Json> Document::make_material(std::string_view texture_path) {
     const auto rel = project_.relative(out);
     result["path"] = rel ? *rel : out.generic_string();
     return result;
+}
+
+// ------------------------------------------------------------------ environment assets (part 6)
+
+namespace {
+
+// A file name made from an environment's name (letters, digits, spaces, dashes, underscores kept).
+std::string environment_file_name(std::string_view name) {
+    std::string out;
+    for (const char c : name) out += (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_') ? c : '_';
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return (out.empty() ? std::string("Environment") : out) + std::string(asset::kEnvironmentExtension);
+}
+
+} // namespace
+
+Result<Json> Document::environment(const Json& command) {
+    if (!command.is_object() || !command.contains("op") || !command["op"].is_string())
+        return fail(ErrorCode::InvalidArgument, "environment: the command needs an \"op\"");
+    const std::string op = command["op"];
+    const stdfs::path folder = project_.assets_dir() / "Environments";
+    const auto rescan = [&]() -> Status {
+        if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+        return {};
+    };
+    const auto describe = [&](const stdfs::path& file) -> Result<Json> {
+        auto json = asset::load_environment_file(file);
+        if (!json) return std::unexpected(json.error());
+        const auto rel = project_.relative(file);
+        const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+        Json out{{"path", rel ? *rel : file.generic_string()}, {"guid", rec ? rec->guid.to_string() : std::string()},
+                 {"name", json->value("name", file.stem().string())}, {"preset", json->value("preset", std::string())},
+                 {"environment", (*json)["environment"]}};
+        return out;
+    };
+    const auto file_of = [&](const Json& c) -> Result<stdfs::path> {
+        if (!c.contains("asset") || !c["asset"].is_string()) return fail(ErrorCode::InvalidArgument, "environment: \"asset\" (a project path) is needed");
+        auto file = project_.resolve(c["asset"].get<std::string>());
+        if (!file) return std::unexpected(file.error());
+        if (!stdfs::exists(*file)) return fail(ErrorCode::NotFound, std::format("no environment at {}", c["asset"].get<std::string>()));
+        return *file;
+    };
+    const auto write = [&](const stdfs::path& file, const Json& json) -> Status {
+        std::error_code ec;
+        stdfs::create_directories(file.parent_path(), ec);
+        return noor::fs::write_file_atomic(file, asset::to_text(json), false);
+    };
+
+    if (op == "list") {
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        Json list = Json::array();
+        for (const auto& rec : registry_.assets())
+            if (rec.importer == "environment")
+                if (auto d = describe(project_.root() / rec.path)) list.push_back(*d);
+        return list;
+    }
+    if (op == "read") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "save") {  // edit: new settings (and optionally a new name); the preset it came from is kept
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (!command.contains("environment") || !command["environment"].is_object())
+            return fail(ErrorCode::InvalidArgument, "environment save: \"environment\" (an object) is needed");
+        auto old = asset::load_environment_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string name = command.value("name", old->value("name", file->stem().string()));
+        if (auto w = write(*file, asset::environment_file_json(name, command["environment"], old->value("preset", std::string()))); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "duplicate") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = asset::load_environment_file(*file);
+        if (!old) return std::unexpected(old.error());
+        std::string base = command.value("name", old->value("name", file->stem().string()) + " copy");
+        stdfs::path target = file->parent_path() / environment_file_name(base);
+        for (int n = 2; stdfs::exists(target); ++n) target = file->parent_path() / environment_file_name(std::format("{} {}", base, n));
+        const std::string name = target.stem().string();
+        if (auto w = write(target, asset::environment_file_json(name, (*old)["environment"], old->value("preset", std::string()))); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(target);
+    }
+    if (op == "reset") {  // back to the built-in preset it came from (the presets themselves are never written)
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = asset::load_environment_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const auto* preset = asset::find_environment_preset(old->value("preset", std::string()));
+        if (!preset) return fail(ErrorCode::InvalidArgument, std::format("{} didn't come from a preset: nothing to reset it to", file->filename().string()));
+        if (auto w = write(*file, asset::environment_file_json(old->value("name", preset->name), preset->environment, preset->name)); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "apply") {  // the scene's environment becomes {"asset": id}: one undo step
+        if (auto s = require_editable(); !s) return std::unexpected(s.error());
+        stdfs::path file;
+        if (command.contains("preset")) {
+            const auto* preset = asset::find_environment_preset(command.value("preset", std::string()));
+            if (!preset) return fail(ErrorCode::NotFound, std::format("no environment preset \"{}\"", command.value("preset", std::string())));
+            file = folder / environment_file_name(preset->name);
+            if (!stdfs::exists(file))  // a project copy, kept (with its edits) once made
+                if (auto w = write(file, asset::environment_file_json(preset->name, preset->environment, preset->name)); !w)
+                    return std::unexpected(w.error());
+        } else {
+            auto f = file_of(command);
+            if (!f) return std::unexpected(f.error());
+            file = *f;
+        }
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        auto d = describe(file);
+        if (!d) return std::unexpected(d.error());
+        const Json component{{"asset", (*d)["guid"]}};
+        const scene::Entity* holder = nullptr;
+        for (const auto& e : scene_->entities)
+            if (e.has("environment")) {
+                holder = &e;
+                break;
+            }
+        Status applied = holder ? execute({{"op", "set_component"}, {"entity", holder->id.to_string()}, {"type", "environment"}, {"value", component}})
+                                : execute({{"op", "create"}, {"name", "Environment"}, {"components", {{"environment", component}}}});
+        if (!applied) return std::unexpected(applied.error());
+        return d;
+    }
+    return fail(ErrorCode::InvalidArgument, std::format("environment: unknown op \"{}\"", op));
 }
 
 Result<Json> Document::assets(bool rescan) {

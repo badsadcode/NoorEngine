@@ -197,6 +197,9 @@ public:
     [[nodiscard]] Result<asset::Json> assets(bool rescan);
     // A .noormat from the texture set a texture belongs to (asset::find_texture_set), beside it.
     [[nodiscard]] Result<asset::Json> make_material(std::string_view texture_path);
+    // Environment assets (Milestone 8A, part 6): {"op": "list" | "apply" | "duplicate" | "reset" | "read" | "save", ...}
+    // (noor_doc_environment in noor_editor_api.h).
+    [[nodiscard]] Result<asset::Json> environment(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);

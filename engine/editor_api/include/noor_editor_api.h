@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 23u
+#define NOOR_EDITOR_API_VERSION 24u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -128,6 +128,19 @@ NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_p
    "hdri": "Assets/sky.hdr" or "" (procedural sky), "ev100": 14, "intensity": 8000, "rotation": 0,
    "reload": n (a new number reloads materials and textures at once)}. Returns 1 or 0. */
 NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json);
+/* v24: environment assets (Milestone 8A, part 6). noor_environment_presets: the built-in presets,
+   [{"name", "description", "environment"}] (never written to). noor_doc_environment runs one command:
+     {"op": "list"}                               -> [{"path", "guid", "name", "preset", "environment"}]
+     {"op": "read", "asset": "Assets/Environments/x.noorenv"}  -> that object
+     {"op": "apply", "preset": "Golden Evening"} or {"op": "apply", "asset": path}: a preset is first copied into
+        Assets/Environments (kept, with its edits, once there); the scene's environment component becomes
+        {"asset": id} (one undo step; a new "Environment" entity if the scene has none)  -> the asset's object
+     {"op": "duplicate", "asset": path, "name"?}  -> the new asset's object (same settings, same preset)
+     {"op": "reset", "asset": path}               -> back to the built-in preset it came from
+     {"op": "save", "asset": path, "environment": {...}, "name"?}  -> its object
+   NULL on error (noor_last_error). */
+NOOR_API const char* noor_environment_presets(void);
+NOOR_API const char* noor_doc_environment(noor_doc* doc, const char* command);
 /* v13: a texture's import settings and what they make of it (from the image header):
    {"settings": {"kind", "normal_convention", "mips", "max_size", "compression"},
     "source_width", "source_height", "width", "height", "mips", "format" ("BC7 sRGB", "BC5", "RGBA8"...),
