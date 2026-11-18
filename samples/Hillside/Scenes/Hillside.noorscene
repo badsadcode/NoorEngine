@@ -664,6 +664,40 @@
           "color": "#F2C14E"
         }
       }
+    },
+    {
+      "id": "fd23f5f7-a595-44d9-9f5b-189410bf6cc5",
+      "name": "Forest",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "scatter": {
+          "graph": "6ce16dc2-726d-4e70-a560-17127dc3798f",
+          "output": "trees",
+          "ground": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+          "removed": [],
+          "added": []
+        }
+      }
     }
   ]
 }

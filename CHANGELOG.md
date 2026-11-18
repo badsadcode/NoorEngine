@@ -2,7 +2,25 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 7 in progress (procedural graph and first generation tools)
+## [Unreleased] — Milestone 7 complete (procedural graph and first generation tools)
+
+### 2026-11-18 — Milestone 7, part 8: Hillside's forest and the Milestone 7 review
+**Added**
+- **`paint_mask` node**: a terrain paint layer's weight for one material as a mask.
+- **Trunk collision for scattered trees**: each model's capsule collision node becomes a static capsule
+  per instance in games and Play (`PhysicsSystem::Options::scatter_capsules`); drawing and physics share one
+  placement (`game::place_scatter`), so the trunks are where the trees are.
+- **Hillside grows a forest**: 142 oaks (NoorForm Oak 01, 04, 07, converted to the export layout) placed by
+  `Assets/Graphs/forest.noorgraph` on the painted meadow, off the path, out of the house's yard and the
+  camera's view; `tools/samples/add_hillside_forest.py` adds it through the editor API. Golden updated.
+- **Milestone 7 review** (`docs/milestones/M7_REVIEW.md`): the gate passes; ADR-014 and ADR-032 accepted.
+
+**Fixed:** `noor_cli generate` couldn't find assets (no resolver), so graphs reading an asset (paint mask,
+heightmap) failed on the command line only.
+
+**Tests:** trunk collision in a game (rays hit trunks, the ground beside them), `cli.cook_hillside`,
+`cli.generate_hillside_forest` (pinned; Debug = Release), `gate.hillside_forest_generate_equals_cook`;
+the Hillside golden and the built game's walk run on the forest.
 
 ### 2026-11-18 — Milestone 7, part 7: scatter
 **Added**

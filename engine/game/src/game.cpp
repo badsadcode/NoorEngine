@@ -85,6 +85,61 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
             }
         return tiles;
     };
+    // Scattered trees collide by their trunks (Milestone 7, part 8): each model's collision capsule (a
+    // `capsule` collision node, Noor Interchange 3.5) at every instance, standing on the same ground the
+    // renderer puts them on. Models without a capsule don't collide.
+    physics_options.scatter_capsules = [&project, &registry, cache, live = options.terrain_heights](const scene::Entity& entity,
+                                                                                                  const runtime::World& w) {
+        std::vector<physics::StaticCapsule> out;
+        const auto& comp = entity.components["scatter"];
+        const auto items = scatter_items(comp, project.root());
+        std::shared_ptr<const terrain::Heights> ground;
+        math::Vec3 ground_at{};
+        if (const auto gid = asset::guid_field(comp, "ground")) {
+            for (std::size_t i = 0; i < w.scene().entities.size(); ++i) {
+                const auto& t = w.scene().entities[i];
+                if (t.id != *gid || !t.has("terrain") || !t.components["terrain"].is_object()) continue;
+                const auto settings = terrain_settings(t.components["terrain"], file_resolver(registry_asset_path(project, registry)), project.root());
+                Result<std::shared_ptr<const terrain::Heights>> h = live ? live(t.components["terrain"], settings) : nullptr;
+                if (!*h) h = terrain::Heights::shared(settings);
+                if (h) ground = *h;
+                ground_at = w.scene().world_matrix(i).transform_point({0, 0, 0});
+            }
+        }
+        math::Mat4 world_m = math::Mat4::identity();
+        for (std::size_t i = 0; i < w.scene().entities.size(); ++i)
+            if (w.scene().entities[i].id == entity.id) world_m = w.scene().world_matrix(i);
+        struct Trunk {
+            bool known = false;
+            std::optional<physics::StaticCapsule> local;  // in the model's space
+        };
+        std::map<Guid, Trunk> trunks;
+        for (const auto& placed : place_scatter(items, world_m, ground.get(), ground_at)) {
+            Trunk& t = trunks[placed.asset];
+            if (!t.known) {
+                t.known = true;
+                const auto* rec = registry.find(placed.asset);
+                auto path = rec ? project.resolve(rec->path) : Result<stdfs::path>(fail(ErrorCode::NotFound, "unknown asset"));
+                if (path) {
+                    auto& model = (*cache)[path->generic_string()];
+                    if (!model)
+                        if (auto imported = asset::import_gltf(*path)) model = std::make_shared<asset::ImportedModel>(std::move(*imported));
+                    if (model)
+                        for (std::size_t n = 0; n < model->nodes.size(); ++n) {
+                            const auto& node = model->nodes[n];
+                            if (!node.is_collision() || node.noor.value("collision", std::string()) != "capsule") continue;
+                            t.local = physics::StaticCapsule{model->world_matrix(n).transform_point({0, 0, 0}), node.noor.value("radius", 0.3f),
+                                                             node.noor.value("height", 2.0f)};
+                            break;
+                        }
+                }
+            }
+            if (!t.local) continue;
+            const float s = math::length(math::Vec3{placed.world.m[0].x, placed.world.m[0].y, placed.world.m[0].z});
+            out.push_back({placed.world.transform_point(t.local->centre), t.local->radius * s, t.local->height * s});
+        }
+        return out;
+    };
     world->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
 
     // A sound clip is an asset id or a project-relative path.
@@ -354,18 +409,12 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             }
         }
         std::map<Guid, std::size_t> group_of;
-        for (const auto& it : items) {
-            const auto& path = asset_path ? asset_file(it.asset) : std::optional<std::filesystem::path>{};
+        for (const auto& placed : place_scatter(items, world, ground.get(), ground_at)) {
+            const auto& path = asset_path ? asset_file(placed.asset) : std::optional<std::filesystem::path>{};
             if (!path) continue;
-            auto [g, fresh] = group_of.try_emplace(it.asset, sv.groups.size());
+            auto [g, fresh] = group_of.try_emplace(placed.asset, sv.groups.size());
             if (fresh) sv.groups.push_back({*path, {}});
-            math::Vec3 p = world.transform_point(it.position);
-            if (ground) p.y = ground_at.y + ground->height(p.x - ground_at.x, p.z - ground_at.z);
-            // The entity's rotation and scale apply to the instance too; its position is where the set starts.
-            const math::Mat4 local = math::compose({0, 0, 0}, it.rotation, {it.scale, it.scale, it.scale});
-            math::Mat4 m = world * local;
-            m.m[3] = {p.x, p.y, p.z, 1.0f};
-            sv.groups[g->second].worlds.push_back(m);
+            sv.groups[g->second].worlds.push_back(placed.world);
             ++sv.count;
         }
         view.scatters.push_back(std::move(sv));

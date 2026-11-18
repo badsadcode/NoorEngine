@@ -18,6 +18,7 @@
 #include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
 #include "noor/scene/scene.h"
+#include "noor/terrain/terrain.h"
 
 #include <filesystem>
 #include <memory>
@@ -45,6 +46,15 @@ struct ScatterItem {
 // A missing output (not cooked yet) gives just the added ones and the reason in `warning`.
 [[nodiscard]] std::vector<ScatterItem> scatter_items(const asset::Json& component, const std::filesystem::path& project_root,
                                                      std::string* warning = nullptr);
+
+// Where each instance is in the world: the entity's transform applied, standing on `ground` (a
+// terrain's heights, its centre at `ground_at`) when given. The same for drawing and for physics.
+struct PlacedInstance {
+    Guid asset;
+    math::Mat4 world;
+};
+[[nodiscard]] std::vector<PlacedInstance> place_scatter(const std::vector<ScatterItem>& items, const math::Mat4& entity_world,
+                                                        const terrain::Heights* ground, math::Vec3 ground_at);
 
 // The graphs a scene needs cooked: terrains on a graph base and scatter components.
 [[nodiscard]] std::vector<Guid> graphs_used(const scene::Scene& scene);

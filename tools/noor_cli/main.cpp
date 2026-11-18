@@ -861,6 +861,11 @@ int cmd_generate(const std::vector<std::string>& a) {
     opts.name = graph_file->stem().string();
     opts.run.cache = cache ? &results : nullptr;
     opts.run.threads = threads;
+    // Nodes that read assets (heightmap, paint_mask) find them through the project's registry, like the
+    // editor and `cook` (this was missing until Milestone 7, part 8: such graphs failed here only).
+    asset::AssetRegistry registry;
+    if (auto s = registry.scan(*p); !s) return report(s.error());
+    opts.run.resolve = game::registry_asset_path(*p, registry);
     const auto t0 = std::chrono::steady_clock::now();
     auto r = procgraph::generate(*graph, procgraph::Registry::builtin(), opts);
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();

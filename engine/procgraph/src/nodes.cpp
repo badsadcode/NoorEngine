@@ -405,6 +405,50 @@ const Registry& Registry::builtin() {
                    if (!file || !std::filesystem::exists(*file, ec)) return "missing";
                    return std::format("{} {}", std::filesystem::file_size(*file, ec), std::filesystem::last_write_time(*file, ec).time_since_epoch().count());
                }});
+        // ---- Masks from hand-made layers (part 8) ----
+
+        auto paint_params = size_params();
+        paint_params.push_back(text("paint", "A terrain's paint layer (the .noorpaint asset's id)"));
+        paint_params.push_back(integer("layer", 0, 0, 3, "Which material layer: 0 is the ground underneath, 1-3 the painted ones"));
+        r.add({.name = "paint_mask", .version = 1,
+               .help = "A mask from a terrain's paint: how much of one material layer each sample has (0..1). Plant where the meadow "
+                       "was painted, and nowhere on the path or the rock. The field matches the terrain when its tiles and cell size do.",
+               .outputs = {{"mask", PinType::Field, Unit::Ratio, false, ""}},
+               .params = paint_params,
+               .run = [](const NodeContext& c) -> Result<Outputs> {
+                   const auto id = Guid::parse(c.choice("paint"));
+                   if (!id) return fail(ErrorCode::InvalidArgument, "\"paint\" isn't an asset id: pick the terrain's paint layer");
+                   const auto file = c.resolve ? c.resolve(*id) : std::nullopt;
+                   if (!file) return fail(ErrorCode::NotFound, std::format("the paint layer {} isn't in the project", id->to_string()));
+                   auto paint = terrain::PaintLayer::load(*file);
+                   if (!paint) return std::unexpected(paint.error());
+                   const auto tx = static_cast<std::uint32_t>(c.integer("tiles_x")), tz = static_cast<std::uint32_t>(c.integer("tiles_z"));
+                   if (paint->tiles_x() != tx || paint->tiles_z() != tz)
+                       return fail(ErrorCode::InvalidArgument, std::format("the paint layer has {} x {} tiles; this node says {} x {}", paint->tiles_x(),
+                                                                           paint->tiles_z(), tx, tz));
+                   const auto layer = static_cast<std::uint32_t>(c.integer("layer"));
+                   auto f = std::make_shared<Field>();
+                   f->sx = tx * kTileCells + 1;
+                   f->sz = tz * kTileCells + 1;
+                   f->cell = static_cast<float>(c.number("cell_size"));
+                   f->v.resize(static_cast<std::size_t>(f->sx) * f->sz);
+                   for (std::uint32_t z = 0; z < f->sz; ++z)
+                       for (std::uint32_t x = 0; x < f->sx; ++x)
+                           f->v[static_cast<std::size_t>(z) * f->sx + x] = terrain::PaintLayer::weight(paint->get(x, z), layer);
+                   Value v = field_value(std::move(f));
+                   v.unit = Unit::Ratio;
+                   return Outputs{{"mask", v}};
+               },
+               .shape = shape_from_params,
+               .extra_key = [](const NodeContext& c) -> std::string {
+                   // The paint file's size and time: painting more is a new result.
+                   const auto id = Guid::parse(c.choice("paint"));
+                   const auto file = id && c.resolve ? c.resolve(*id) : std::nullopt;
+                   std::error_code ec;
+                   if (!file || !std::filesystem::exists(*file, ec)) return "missing";
+                   return std::format("{} {}", std::filesystem::file_size(*file, ec), std::filesystem::last_write_time(*file, ec).time_since_epoch().count());
+               }});
+
         // ---- Scatter (part 7): instance sets ----
 
         auto exclude_params = size_params();

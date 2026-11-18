@@ -48,6 +48,14 @@ struct HeightTile {
     std::vector<float> heights;  // samples x samples, row by row (z rows of x samples)
 };
 
+// A static capsule in world space (a scattered tree's trunk, Milestone 7, part 8): upright, `height`
+// from end to end (caps included), centred on `centre`.
+struct StaticCapsule {
+    math::Vec3 centre;
+    float radius = 0.3f;
+    float height = 2.0f;
+};
+
 struct RayHit {
     Guid entity;
     math::Vec3 point;
@@ -65,6 +73,8 @@ public:
         std::function<std::optional<Triangles>(const Guid& model)> csg_triangles;
         // Height field tiles of a `terrain` component.
         std::function<std::vector<HeightTile>(const asset::Json& terrain_component)> terrain_tiles;
+        // Trunks of a `scatter` entity's instances (their models' collision capsules), in world space.
+        std::function<std::vector<StaticCapsule>(const scene::Entity& scatter, const runtime::World& world)> scatter_capsules;
     };
 
     explicit PhysicsSystem(Options options);

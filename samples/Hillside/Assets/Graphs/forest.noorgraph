@@ -1,0 +1,185 @@
+{
+  "noor_graph": 1,
+  "seed": 2026,
+  "nodes": [
+    {
+      "id": "meadow",
+      "type": "paint_mask",
+      "params": {
+        "tiles_x": 1,
+        "tiles_z": 1,
+        "cell_size": 1,
+        "paint": "29fa667a-5a59-40ad-bdc8-8d1554a33c77",
+        "layer": 0
+      },
+      "position": [
+        40,
+        40
+      ]
+    },
+    {
+      "id": "grassy",
+      "type": "remap",
+      "params": {
+        "from_min": 0.6,
+        "from_max": 0.95,
+        "to_min": 0,
+        "to_max": 1,
+        "unit": "ratio"
+      },
+      "position": [
+        300,
+        40
+      ]
+    },
+    {
+      "id": "clear",
+      "type": "exclude",
+      "params": {
+        "tiles_x": 1,
+        "tiles_z": 1,
+        "cell_size": 1,
+        "paths": "20,-75 20,-4; 33,-24 14,8",
+        "width": 10,
+        "circles": "20,0,13",
+        "soft": 4
+      },
+      "position": [
+        40,
+        260
+      ]
+    },
+    {
+      "id": "where",
+      "type": "combine",
+      "params": {
+        "op": "multiply"
+      },
+      "position": [
+        560,
+        140
+      ]
+    },
+    {
+      "id": "oak_01",
+      "type": "scatter",
+      "params": {
+        "asset": "719beb3e-327d-56ed-8d54-be8882f405fd",
+        "density": 0.12,
+        "spacing": 12,
+        "scale_min": 0.8,
+        "scale_max": 1.15,
+        "width": 256,
+        "depth": 256
+      },
+      "position": [
+        820,
+        40
+      ]
+    },
+    {
+      "id": "oak_04",
+      "type": "scatter",
+      "params": {
+        "asset": "f30c19d9-db1c-5a3e-a549-03d5fd55438b",
+        "density": 0.12,
+        "spacing": 12,
+        "scale_min": 0.8,
+        "scale_max": 1.15,
+        "width": 256,
+        "depth": 256
+      },
+      "position": [
+        820,
+        260
+      ]
+    },
+    {
+      "id": "oak_07",
+      "type": "scatter",
+      "params": {
+        "asset": "42a0716e-e412-5cfb-b48f-17a87d97e338",
+        "density": 0.12,
+        "spacing": 12,
+        "scale_min": 0.8,
+        "scale_max": 1.15,
+        "width": 256,
+        "depth": 256
+      },
+      "position": [
+        820,
+        480
+      ]
+    },
+    {
+      "id": "mix",
+      "type": "merge",
+      "params": {
+        "spacing": 9
+      },
+      "position": [
+        1080,
+        140
+      ]
+    },
+    {
+      "id": "all",
+      "type": "merge",
+      "params": {
+        "spacing": 9
+      },
+      "position": [
+        1340,
+        240
+      ]
+    }
+  ],
+  "links": [
+    {
+      "from": "meadow.mask",
+      "to": "grassy.in"
+    },
+    {
+      "from": "grassy.out",
+      "to": "where.a"
+    },
+    {
+      "from": "clear.mask",
+      "to": "where.b"
+    },
+    {
+      "from": "where.out",
+      "to": "oak_01.mask"
+    },
+    {
+      "from": "where.out",
+      "to": "oak_04.mask"
+    },
+    {
+      "from": "where.out",
+      "to": "oak_07.mask"
+    },
+    {
+      "from": "oak_01.instances",
+      "to": "mix.a"
+    },
+    {
+      "from": "oak_04.instances",
+      "to": "mix.b"
+    },
+    {
+      "from": "mix.instances",
+      "to": "all.a"
+    },
+    {
+      "from": "oak_07.instances",
+      "to": "all.b"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "trees",
+      "from": "all.instances"
+    }
+  ]
+}

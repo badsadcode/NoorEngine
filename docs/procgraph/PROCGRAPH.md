@@ -67,6 +67,7 @@ migration yet) and that node doesn't run.
 | `height_band` | `in` (metres) → `out` (mask) | `min`, `max`, `soft` (fade width at each edge, m) |
 | `slope` | `in` (metres) → `out` (mask) | `min_degrees`, `max_degrees`: 0 flatter than min, 1 steeper than max (its angle thresholds use a cosine made of + − × only) |
 | `heightmap` | → `height` (metres) | `image` (a picture asset's id), `min_height`, `max_height`, `tiles_x`, `tiles_z`, `cell_size`: the terrain's own heightmap reading |
+| `paint_mask` | → `mask` (ratio) | `paint` (a terrain's `.noorpaint` asset id), `layer` (0: the ground underneath, 1–3 painted), `tiles_x`, `tiles_z`, `cell_size`: how much of that material each sample has (part 8: plant on the painted meadow, not on the path) |
 
 ## Scatter: instance sets (part 7)
 
@@ -132,9 +133,11 @@ code); the test `tools.instance_reader` runs it on the test forest.
   `added`. Each stroke is one undo step. Regenerating (a new seed, new settings) never touches
   these lists: planted trees stay; a removed tree stays removed (with another seed it doesn't exist
   anyway, and if the seed comes back, it's still removed).
-- **Not yet:** trunk collision for scattered trees (scattered instances have no colliders); moving a
-  single tree (remove it and plant one); a live preview while sculpting the ground under a forest
-  (the trees follow when it's saved).
+- **Collision** (part 8): each model's capsule collision node (a NoorForm trunk) becomes a static
+  capsule at every instance in games and Play, where the trunk really stands; leaves don't collide.
+  Models without a capsule don't collide.
+- **Not yet:** moving a single tree (remove it and plant one); trees following live (unsaved)
+  sculpting under them; convex collision (rocks).
 
 ## Tiles: regions that change alone (part 3)
 

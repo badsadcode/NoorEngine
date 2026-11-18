@@ -228,7 +228,22 @@ add_test(NAME render.golden_Hillside
         -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside.png
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
-set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache)
+set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
+                     FIXTURES_REQUIRED hillside_cooked)
+# Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
+# (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).
+add_test(NAME cli.cook_hillside COMMAND $<TARGET_FILE:noor_cli> cook ${PROJECT_SOURCE_DIR}/samples/Hillside)
+set_tests_properties(cli.cook_hillside PROPERTIES LABELS "cli;sample" TIMEOUT 120 FIXTURES_SETUP hillside_cooked RESOURCE_LOCK hillside_cache
+                     PASS_REGULAR_EXPRESSION "Cooked 1 graph[(]s[)]")
+add_test(NAME cli.generate_hillside_forest
+    COMMAND $<TARGET_FILE:noor_cli> generate ${PROJECT_SOURCE_DIR}/samples/Hillside Assets/Graphs/forest.noorgraph
+            --out ${CMAKE_CURRENT_BINARY_DIR}/generated_hillside_forest --no-cache)
+set_tests_properties(cli.generate_hillside_forest PROPERTIES LABELS "cli;sample" TIMEOUT 120 PASS_REGULAR_EXPRESSION "fingerprint d94d55ed79c3e3b3" FIXTURES_SETUP hillside_generated)
+# The gate's "the CLI and the editor produce identical bytes", on the sample: generate's file = cook's file.
+add_test(NAME gate.hillside_forest_generate_equals_cook
+    COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/generated_hillside_forest/trees.instances.json
+            ${PROJECT_SOURCE_DIR}/samples/Hillside/.noor/cooked/graphs/6ce16dc2-726d-4e70-a560-17127dc3798f/trees.instances.json)
+set_tests_properties(gate.hillside_forest_generate_equals_cook PROPERTIES LABELS "cli;sample" FIXTURES_REQUIRED "hillside_cooked;hillside_generated")
 # Instancing and levels of detail (Milestone 7, part 6): the test forest (tests/data/forest_project,
 # built by tools/samples/build_forest.py), its golden render and its draw/LOD numbers.
 add_test(NAME render.golden_Forest

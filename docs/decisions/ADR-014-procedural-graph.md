@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7; parts 1–7 done: core, cache, jobs, headless, tiles, terrain, graph editor, scatter) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Accepted (Milestone 7 review, [M7_REVIEW.md](../milestones/M7_REVIEW.md)) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds

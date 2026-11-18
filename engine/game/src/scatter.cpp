@@ -80,6 +80,21 @@ std::vector<ScatterItem> scatter_items(const Json& component, const stdfs::path&
     return out;
 }
 
+std::vector<PlacedInstance> place_scatter(const std::vector<ScatterItem>& items, const math::Mat4& entity_world, const terrain::Heights* ground,
+                                          math::Vec3 ground_at) {
+    std::vector<PlacedInstance> out;
+    out.reserve(items.size());
+    for (const auto& it : items) {
+        math::Vec3 p = entity_world.transform_point(it.position);
+        if (ground) p.y = ground_at.y + ground->height(p.x - ground_at.x, p.z - ground_at.z);
+        // The entity's rotation and scale apply to the instance too; its position is where the set starts.
+        math::Mat4 m = entity_world * math::compose({0, 0, 0}, it.rotation, {it.scale, it.scale, it.scale});
+        m.m[3] = {p.x, p.y, p.z, 1.0f};
+        out.push_back({it.asset, m});
+    }
+    return out;
+}
+
 std::vector<Guid> graphs_used(const scene::Scene& scene) {
     std::vector<Guid> out;
     const auto add = [&](const std::optional<Guid>& g) {

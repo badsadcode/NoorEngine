@@ -1,6 +1,6 @@
 # ADR-032: Instanced drawing and levels of detail
 
-**Status:** Proposed (implemented and measured in Milestone 7, part 6; to accept at the Milestone 7 review) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Accepted (Milestone 7 review; implemented and measured in part 6) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Milestone 7 places forests: thousands of copies of a few NoorMD trees, each with four levels of

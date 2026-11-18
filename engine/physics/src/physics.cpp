@@ -135,7 +135,7 @@ struct PhysicsSystem::Impl {
         bool sensor;
     };
     std::unordered_map<Guid, Body> bodies;
-    std::unordered_map<Guid, std::vector<JPH::BodyID>> terrain_bodies;  // height field tiles per terrain entity
+    std::unordered_map<Guid, std::vector<JPH::BodyID>> terrain_bodies;  // static bodies per entity: terrain tiles, scattered trunks
     struct Character {
         JPH::Ref<JPH::CharacterVirtual> controller;
         float step_height = 0.4f;
@@ -367,6 +367,27 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
             d.entity_of.push_back(entity.id);
             settings.mUserData = d.entity_of.size();
             const JPH::BodyID id = d.system.GetBodyInterface().CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+            if (id.IsInvalid()) {
+                NOOR_LOG_ERROR("Physics", "'{}': too many physics bodies", entity.name);
+                break;
+            }
+            d.terrain_bodies[entity.id].push_back(id);
+        }
+    }
+    // Scattered instances (Milestone 7, part 8): a static capsule per trunk, all belonging to the scatter entity.
+    if (const auto sc = entity.components.find("scatter"); sc != entity.components.end() && sc->is_object() && impl_->options.scatter_capsules) {
+        auto& d = *impl_;
+        auto& bi = d.system.GetBodyInterface();
+        const auto capsules = impl_->options.scatter_capsules(entity, world);
+        if (!capsules.empty()) d.entity_of.push_back(entity.id);
+        for (const auto& cap : capsules) {
+            const float r = std::max(0.01f, cap.radius);
+            auto shape = JPH::CapsuleShapeSettings(std::max(0.001f, cap.height * 0.5f - r), r).Create();
+            if (shape.HasError()) continue;
+            JPH::BodyCreationSettings settings(shape.Get(), to_j(cap.centre), JPH::Quat::sIdentity(), JPH::EMotionType::Static, layers::kStatic);
+            settings.mFriction = 0.6f;
+            settings.mUserData = d.entity_of.size();
+            const JPH::BodyID id = bi.CreateAndAddBody(settings, JPH::EActivation::DontActivate);
             if (id.IsInvalid()) {
                 NOOR_LOG_ERROR("Physics", "'{}': too many physics bodies", entity.name);
                 break;

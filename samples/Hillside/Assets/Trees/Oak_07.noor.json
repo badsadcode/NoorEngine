@@ -1,0 +1,122 @@
+{
+  "noor_interchange": "0.4",
+  "id": "42a0716e-e412-5cfb-b48f-17a87d97e338",
+  "name": "Oak_07",
+  "kind": "vegetation.tree",
+  "generator": {
+    "tool": "NoorForm",
+    "version": "unknown",
+    "determinism": "same_platform"
+  },
+  "recipe": {
+    "file": "Oak_07.recipe.json",
+    "seed": 47515,
+    "sha256": "b54f0a582649d5daba0dbe654b70cf3b5a330b5514e4c9e115551dc77a214ca7"
+  },
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      -7.559,
+      -2.082,
+      -6.739
+    ],
+    "max": [
+      6.628,
+      13.824,
+      7.832
+    ]
+  },
+  "files": [
+    {
+      "path": "Oak_07.glb",
+      "role": "model",
+      "sha256": "7000b5cd234b7dcafbf7f44af6a84ce0936a876d810c15c35d7c9d598ccbb923"
+    },
+    {
+      "path": "Oak_07.lod1.glb",
+      "role": "lod",
+      "sha256": "ca77ca82c43d8f03f0bc1a353626303a030e17427ffc6d969b75cae33e27c4d4",
+      "lod": 1
+    },
+    {
+      "path": "Oak_07.lod2.glb",
+      "role": "lod",
+      "sha256": "7eb54f3384f64f80c96b89088d5b68a6616ac6b640f1d6867ba9dfa2e83b6607",
+      "lod": 2
+    },
+    {
+      "path": "Oak_07.lod3.glb",
+      "role": "lod",
+      "sha256": "af521bea1ffe8baac68e767bfb17825f2b4453733ef14b47dd38223ebf950d79",
+      "lod": 3
+    },
+    {
+      "path": "Oak_07.recipe.json",
+      "role": "recipe"
+    }
+  ],
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 18432,
+      "max_distance": 34.56
+    },
+    {
+      "level": 1,
+      "triangles": 12444,
+      "max_distance": 86.4
+    },
+    {
+      "level": 2,
+      "triangles": 5088,
+      "max_distance": 216
+    },
+    {
+      "level": 3,
+      "triangles": 8,
+      "billboard": true
+    }
+  ],
+  "collision": "capsule",
+  "family": {
+    "name": "Oak",
+    "variant": "G",
+    "count": 9
+  },
+  "tags": [
+    "oak",
+    "broadleaf"
+  ],
+  "license": {
+    "spdx": "MIT",
+    "author": "Bad Ideas Works",
+    "attribution": ""
+  },
+  "validation": {
+    "gltf_validator": "not_run"
+  },
+  "noorform": {
+    "species": "oak",
+    "height": 13.824,
+    "texture": {
+      "size": 1024,
+      "sampling": "linear",
+      "pixelArt": false
+    },
+    "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says)",
+    "converted_from": "Oak.manifest.json + Oak_07_LOD0.glb, Oak_07_LOD1.glb, Oak_07_LOD2.glb, Oak_07_LOD3.glb (a NoorForm pack from before the NoorEngine export mode; its NoorMD version isn't recorded)"
+  },
+  "wind": {
+    "channels": {
+      "bend": "TEXCOORD_1.x",
+      "flutter": "TEXCOORD_1.y",
+      "phase": "TEXCOORD_2.x",
+      "sway": "TEXCOORD_2.y"
+    }
+  }
+}

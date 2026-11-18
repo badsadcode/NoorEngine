@@ -2,11 +2,15 @@
 // the scatter component's hand-made layer surviving regeneration with another seed (the gate's
 // "a local override survives regeneration", for instances).
 
+#include "noor/asset/gltf_import.h"
 #include "noor/asset/instance_set.h"
 #include "noor/asset/json.h"
 #include "noor/game/game.h"
 #include "noor/game/scatter.h"
 #include "noor/procgraph/procgraph.h"
+#include "noor/physics/physics.h"
+#include "noor/scene/prefab.h"
+#include "noor/asset/registry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -203,4 +207,62 @@ TEST_CASE("scatter component: the graphs a scene needs cooked") {
     const auto used = game::graphs_used(s);
     REQUIRE(used.size() == 2);
     CHECK(used[0] == kGraph);
+}
+
+TEST_CASE("scatter component: scattered trees collide by their trunks in a game") {
+    const stdfs::path src = stdfs::path(NOOR_TEST_DATA_DIR) / "forest_project";
+    const auto dir = stdfs::temp_directory_path() / ("noor_trunks_" + Guid::generate().to_string());
+    stdfs::create_directories(dir);
+    for (const char* part : {"Assets", "Scenes"}) stdfs::copy(src / part, dir / part, stdfs::copy_options::recursive);
+    stdfs::copy_file(src / "Forest.noorproj", dir / "Forest.noorproj");
+    auto project = asset::Project::open(dir);
+    REQUIRE(project);
+    asset::AssetRegistry registry;
+    REQUIRE(registry.scan(*project));
+    const Guid graph = *Guid::parse("59de2071-f6e9-54bd-8215-beac941677ed");
+    procgraph::Cache cache;
+    REQUIRE(procgraph::cook(dir / "Assets" / "Graphs" / "forest.noorgraph", game::cooked_graph_folder(dir, graph), &cache,
+                            game::registry_asset_path(*project, registry)));
+    auto scene = scene::Scene::load(dir / "Scenes" / "Scattered.noorscene");
+    REQUIRE(scene);
+    scene::PrefabLibrary prefabs(*project, registry);
+    game::WorldOptions options;
+    options.audio_device = false;
+    auto world = game::make_world(*project, registry, prefabs, *scene, options);
+    REQUIRE(world);
+    (*world)->frame(1.0 / 60.0, {});
+    auto* physics = (*world)->system<physics::PhysicsSystem>();
+    REQUIRE(physics != nullptr);
+    const auto forest = std::ranges::find(scene->entities, std::string("Forest"), &scene::Entity::name)->id;
+    const auto hills = std::ranges::find(scene->entities, std::string("Hills"), &scene::Entity::name)->id;
+    const Json comp = std::ranges::find(scene->entities, forest, &scene::Entity::id)->components["scatter"];
+    const auto items = game::scatter_items(comp, dir);
+    REQUIRE(items.size() > 100);
+    // Straight down onto a trunk: its capsule (owned by the scatter entity) is hit before the ground. The
+    // oak's trunk stands about a metre from its pivot (a NoorMD finding), so aim at the capsule node.
+    auto oak = asset::import_gltf(dir / "Assets" / "Trees" / "Oak_01.glb");
+    REQUIRE(oak);
+    std::optional<math::Vec3> trunk_local;
+    for (std::size_t n = 0; n < oak->nodes.size(); ++n)
+        if (oak->nodes[n].is_collision()) trunk_local = oak->world_matrix(n).transform_point({0, 0, 0});
+    REQUIRE(trunk_local);
+    int trunks = 0, beside = 0;
+    for (std::size_t i = 0; i < 10; ++i) {
+        const auto& t = items[i * items.size() / 10];
+        const math::Vec3 at = math::compose(t.position, t.rotation, {t.scale, t.scale, t.scale}).transform_point(*trunk_local);
+        const auto hit = physics->raycast({at.x, 200.0f, at.z}, {0, -1, 0}, 400.0f);
+        trunks += hit && hit->entity == forest ? 1 : 0;
+        // 3 m to the side of the trunk (under the leaves, which don't collide): the ground.
+        const auto off = physics->raycast({at.x + 3.0f, 200.0f, at.z}, {0, -1, 0}, 400.0f);
+        beside += off && off->entity == hills ? 1 : 0;
+    }
+    CHECK(trunks == 10);
+    CHECK(beside >= 8);  // (a neighbour's trunk could be there, rarely)
+    // In the clearing (16 m around (25, 45)): the ground.
+    const auto ground = physics->raycast({25.0f, 200.0f, 45.0f}, {0, -1, 0}, 400.0f);
+    REQUIRE(ground);
+    CHECK(ground->entity == hills);
+    world->reset();
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
 }
