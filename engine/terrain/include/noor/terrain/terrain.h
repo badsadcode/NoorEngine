@@ -10,7 +10,10 @@
 //     "heightmap": <texture id>, "min_height": 0, "max_height": 50,   a greyscale PNG (16-bit best)
 //     "flat_height": 0,
 //     "sculpt": <.noorsculpt id>,                             hand-made offsets (SculptLayer), optional
-//     "material": <.noormat id>, "collision": true }
+//     "material": <.noormat id>,                              the ground (layer 0) without "layers"
+//     "layers": [{"material": <id>, "tiling": 1}, ...],       up to four materials, blended by...
+//     "paint": <.noorpaint id>,                               ...their painted weights (PaintLayer)
+//     "collision": true }
 // The terrain is centred on its entity (x and z); its transform's rotation and scale are ignored.
 // Right-handed, +Y up, metres. Neighbouring tiles share their edge samples, so they meet exactly.
 #include "noor/asset/json.h"
@@ -47,6 +50,7 @@ struct Settings {
     float min_height = 0.0f, max_height = 50.0f;
     float flat_height = 0.0f;
     std::filesystem::path sculpt;  // resolved .noorsculpt file (empty: none)
+    std::filesystem::path paint;   // resolved .noorpaint file (empty: all layer 0)
 
     // From a `terrain` component; `resolve` finds the heightmap's and the sculpt layer's files.
     [[nodiscard]] static Settings from_json(const asset::Json& component, const asset::AssetFileResolver& resolve);
@@ -54,10 +58,11 @@ struct Settings {
     [[nodiscard]] std::string key() const;
     [[nodiscard]] float width() const noexcept { return static_cast<float>(tiles_x * kTileCells) * cell_size; }
     [[nodiscard]] float depth() const noexcept { return static_cast<float>(tiles_z * kTileCells) * cell_size; }
-    // The same settings without the sculpt layer: the generated base alone.
+    // The same settings without the sculpt and paint layers: the generated base alone.
     [[nodiscard]] Settings base_only() const {
         Settings s = *this;
         s.sculpt.clear();
+        s.paint.clear();
         return s;
     }
 };
@@ -74,37 +79,71 @@ struct SampleRect {
     }
 };
 
-// Hand-made height offsets (metres) added to the generated base (Milestone 6, part 6). Sparse: only
-// tiles that were touched are stored, each 257 x 257 like the heights (edge samples are kept equal in
-// both neighbours). A `.noorsculpt` file:
-//   "NSCULPT1", u32 version (1), u32 tiles_x, u32 tiles_z, u32 tile count,
-//   per tile: u32 tx, u32 tz, 257 x 257 f32 (little-endian, row by row)
-class SculptLayer {
+// Per-sample values stored sparsely by tile: only tiles that were touched exist, each 257 x 257 like
+// the heights (a sample on a tile edge is kept equal in every tile that shares it). Untouched samples
+// read as `fill`. Files: an 8-byte magic, u32 version (1), u32 tiles_x, u32 tiles_z, u32 tile count,
+// then per tile u32 tx, u32 tz and 257 x 257 values of 4 bytes (little-endian, row by row).
+template <class T>
+class TileLayer {
 public:
-    static constexpr std::string_view kExtension = ".noorsculpt";
-    SculptLayer() = default;
-    SculptLayer(std::uint32_t tiles_x, std::uint32_t tiles_z) : tiles_x_(tiles_x), tiles_z_(tiles_z) {}
-    [[nodiscard]] static Result<SculptLayer> load(const std::filesystem::path& file);
-    [[nodiscard]] Status save(const std::filesystem::path& file) const;
+    static_assert(sizeof(T) == 4);
+    TileLayer() = default;
+    TileLayer(std::uint32_t tiles_x, std::uint32_t tiles_z, T fill) : tiles_x_(tiles_x), tiles_z_(tiles_z), fill_(fill) {}
 
     [[nodiscard]] std::uint32_t tiles_x() const noexcept { return tiles_x_; }
     [[nodiscard]] std::uint32_t tiles_z() const noexcept { return tiles_z_; }
-    // The terrain changed size: offsets keep their tile; tiles outside are kept but not used.
+    // The terrain changed size: values keep their tile; tiles outside are kept but not used.
     void resize(std::uint32_t tiles_x, std::uint32_t tiles_z) noexcept {
         tiles_x_ = tiles_x;
         tiles_z_ = tiles_z;
     }
-    // Offset at a sample (terrain sample coordinates); 0 where nothing was sculpted.
-    [[nodiscard]] float offset(std::uint32_t x, std::uint32_t z) const noexcept;
+    [[nodiscard]] T get(std::uint32_t x, std::uint32_t z) const noexcept;
     // Sets a sample (in every tile that shares it). Samples outside the terrain are ignored.
-    void set(std::uint32_t x, std::uint32_t z, float value);
+    void set(std::uint32_t x, std::uint32_t z, T value);
     [[nodiscard]] bool empty() const noexcept { return tiles_.empty(); }
     [[nodiscard]] std::size_t tile_count() const noexcept { return tiles_.size(); }
     [[nodiscard]] std::uint64_t hash() const noexcept;
 
+protected:
+    [[nodiscard]] Status save_as(const std::filesystem::path& file, std::string_view magic) const;
+    [[nodiscard]] static Result<TileLayer> load_as(const std::filesystem::path& file, std::string_view magic, std::string_view what, T fill);
+
 private:
     std::uint32_t tiles_x_ = 0, tiles_z_ = 0;
-    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<float>> tiles_;
+    T fill_{};
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<T>> tiles_;
+};
+
+// Hand-made height offsets (metres) added to the generated base (Milestone 6, part 6): a
+// `.noorsculpt` file, magic "NSCULPT1", f32 values.
+class SculptLayer : public TileLayer<float> {
+public:
+    static constexpr std::string_view kExtension = ".noorsculpt";
+    SculptLayer() = default;
+    SculptLayer(std::uint32_t tiles_x, std::uint32_t tiles_z) : TileLayer(tiles_x, tiles_z, 0.0f) {}
+    explicit SculptLayer(TileLayer<float>&& base) : TileLayer(std::move(base)) {}
+    [[nodiscard]] static Result<SculptLayer> load(const std::filesystem::path& file);
+    [[nodiscard]] Status save(const std::filesystem::path& file) const { return save_as(file, "NSCULPT1"); }
+    // Offset at a sample (terrain sample coordinates); 0 where nothing was sculpted.
+    [[nodiscard]] float offset(std::uint32_t x, std::uint32_t z) const noexcept { return get(x, z); }
+};
+
+// How much of each of a terrain's four material layers covers a sample (Milestone 6, part 7): a
+// `.noorpaint` file, magic "NPAINT01", one u32 per sample: byte i (from the lowest) is layer i's
+// weight 0..255, and the four add up to 255. Unpainted samples are all layer 0.
+class PaintLayer : public TileLayer<std::uint32_t> {
+public:
+    static constexpr std::string_view kExtension = ".noorpaint";
+    static constexpr std::uint32_t kLayers = 4;
+    static constexpr std::uint32_t kUnpainted = 0x000000FFu;
+    PaintLayer() : TileLayer(0, 0, kUnpainted) {}
+    PaintLayer(std::uint32_t tiles_x, std::uint32_t tiles_z) : TileLayer(tiles_x, tiles_z, kUnpainted) {}
+    explicit PaintLayer(TileLayer<std::uint32_t>&& base) : TileLayer(std::move(base)) {}
+    [[nodiscard]] static Result<PaintLayer> load(const std::filesystem::path& file);
+    [[nodiscard]] Status save(const std::filesystem::path& file) const { return save_as(file, "NPAINT01"); }
+    [[nodiscard]] static float weight(std::uint32_t packed, std::uint32_t layer) noexcept {
+        return static_cast<float>((packed >> (8 * layer)) & 0xFFu) / 255.0f;
+    }
 };
 
 // Deterministic gradient noise (fractal, in -1..1): only + - * /, floor and integer hashing, so the
@@ -121,6 +160,13 @@ public:
     // The base plus a sculpt layer, everywhere or (recompose) in one rectangle.
     [[nodiscard]] static Heights compose(const Heights& base, const SculptLayer& layer);
     void recompose(const Heights& base, const SculptLayer& layer, const SampleRect& rect);
+    // Material weights (PaintLayer packing), everywhere or in one rectangle.
+    void repaint(const PaintLayer& paint);
+    void repaint(const PaintLayer& paint, const SampleRect& rect);
+    // A sample's packed weights (all layer 0 when nothing was painted).
+    [[nodiscard]] std::uint32_t weights(std::uint32_t x, std::uint32_t z) const noexcept {
+        return w_.empty() ? PaintLayer::kUnpainted : w_[static_cast<std::size_t>(z) * sx_ + x];
+    }
 
     [[nodiscard]] std::uint32_t samples_x() const noexcept { return sx_; }
     [[nodiscard]] std::uint32_t samples_z() const noexcept { return sz_; }
@@ -148,10 +194,12 @@ private:
     std::uint32_t sx_ = 0, sz_ = 0;
     float cell_ = 1.0f;
     std::vector<float> h_;
+    std::vector<std::uint32_t> w_;  // packed material weights per sample; empty: all layer 0
 };
 
 // A tile as a render mesh: 257 x 257 vertices (UVs in metres: materials tile with their uv_scale),
-// 2 x 256 x 256 triangles, in the terrain's space.
+// 2 x 256 x 256 triangles, in the terrain's space. The vertex colour carries the weights of material
+// layers 1, 2 and 3 (layer 0 gets the rest): terrains are drawn as splats (render::DrawItem::splat).
 struct TileMesh {
     std::vector<render::Vertex> vertices;
     std::vector<std::uint32_t> indices;

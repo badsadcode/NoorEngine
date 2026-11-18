@@ -8,6 +8,7 @@
 #include "noor_editor_api.h"
 
 #include "noor/asset/json.h"
+#include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
 #include "noor/scene/prefab.h"
 #include "noor/terrain/terrain.h"
@@ -349,7 +350,90 @@ TEST_CASE("document api: sculpting raises a hill, undoes as one step, saves a la
     // The saved layer alone would give 6.5 m: Play used the unsaved sculpting.
     CHECK(ball_y == doctest::Approx(8.5).epsilon(0.02));
 
+    // A fast stroke (the pointer jumped 40 m between two frames) leaves a line, not two dots: the
+    // middle, where the pointer never was, is raised too.
+    {
+        const Json begin{{"terrain", id}, {"phase", "begin"}, {"tool", "raise"}, {"radius", 4}, {"strength", 4},
+                         {"dabs", Json::array({{{"point", {-10, 2, 30}}, {"seconds", 0.1}}})}};
+        REQUIRE(noor_doc_sculpt(t.doc, begin.dump().c_str()) != nullptr);
+        const Json end_cmd{{"terrain", id}, {"phase", "end"}, {"dabs", Json::array({{{"point", {30, 2, 30}}, {"seconds", 0.1}}})}};
+        REQUIRE(noor_doc_sculpt(t.doc, end_cmd.dump().c_str()) != nullptr);
+        REQUIRE(noor_doc_save_scene(t.doc) == 1);
+        CHECK(saved_heights().height(0, 30) > 2.01f);   // the terrain is at x = 10: world x = 10 is local 0
+        CHECK(saved_heights().height(0, 40) == doctest::Approx(2.0f));  // beside the line: untouched
+    }
+
     // Bad input.
     CHECK(noor_doc_sculpt(t.doc, R"({"terrain": "not-an-id", "phase": "begin"})") == nullptr);
     CHECK(noor_doc_sculpt(t.doc, (Json{{"terrain", id}, {"phase", "begin"}, {"tool", "melt"}}).dump().c_str()) == nullptr);
+}
+
+// Milestone 6, part 7: painting materials onto a terrain through the editor API.
+TEST_CASE("document api: painting adds material layers to a terrain, one undo step per stroke, saved as a paint layer") {
+    TempDoc t;
+    stdfs::create_directories(t.dir / "Assets" / "Materials");
+    for (const char* name : {"grass", "rock", "dirt", "sand", "snow"})
+        REQUIRE(noor::fs::write_file_atomic(t.dir / "Assets" / "Materials" / (std::string(name) + ".noormat"), R"({"noor_material": 1, "base_color": [0.5, 0.5, 0.5, 1]})", false));
+    const Json assets = json(noor_doc_assets(t.doc, 1));
+    auto material = [&](const std::string& name) {
+        for (const auto& a : assets)
+            if (a["path"] == "Assets/Materials/" + name + ".noormat") return a["guid"].get<std::string>();
+        FAIL("no material " << name);
+        return std::string();
+    };
+    REQUIRE(noor_doc_new_scene(t.doc, "Scenes/Paint.noorscene", "Paint") == 1);
+    REQUIRE(t.exec({{"op", "create"}, {"name", "Field"}, {"components", {{"terrain", {{"tiles", {1, 1}}, {"base", "flat"}, {"material", material("grass")}}}}}}));
+    const std::string id = (*find_entity(t.scene(), "Field"))["id"];
+    auto paint = [&](const std::string& mat, const char* phase = "begin") {
+        const Json cmd{{"terrain", id}, {"phase", phase}, {"tool", "paint"}, {"material", mat}, {"radius", 6}, {"strength", 4}, {"falloff", 0.3},
+                       {"dabs", Json::array({{{"point", {0, 0, 0}}, {"seconds", 0.25}}})}};
+        const char* r = noor_doc_sculpt(t.doc, cmd.dump().c_str());
+        return r ? Json::parse(r) : Json();
+    };
+    auto end = [&] { REQUIRE(noor_doc_sculpt(t.doc, (Json{{"terrain", id}, {"phase", "end"}}).dump().c_str()) != nullptr); };
+
+    // Rock onto a grass terrain: grass stays layer 0, rock becomes layer 1.
+    const Json r = paint(material("rock"));
+    REQUIRE(r.is_object());
+    CHECK(r["layer"] == 1);
+    end();
+    Json comp = (*find_entity(t.scene(), "Field"))["components"]["terrain"];
+    REQUIRE(comp["layers"].size() == 2);
+    CHECK(comp["layers"][0]["material"] == material("grass"));
+    CHECK(comp["layers"][1]["material"] == material("rock"));
+    CHECK(comp["paint"] == r["paint"]);
+    CHECK(t.scene()["undo_label"] == "Paint: rock");
+
+    // Saved: the paint file has the rock under the brush.
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    auto layer = noor::terrain::PaintLayer::load(t.dir / "Assets" / "Terrain" / "Field.noorpaint");
+    REQUIRE(layer);
+    CHECK(noor::terrain::PaintLayer::weight(layer->get(128, 128), 1) == doctest::Approx(1.0f));
+
+    // Grass painted back over it uses layer 0; two more materials fill the layers; a fifth is refused.
+    CHECK(paint(material("grass"))["layer"] == 0);
+    end();
+    CHECK(paint(material("dirt"))["layer"] == 2);
+    end();
+    CHECK(paint(material("sand"))["layer"] == 3);
+    end();
+    CHECK(paint(material("snow")).is_null());
+    CHECK(std::string(noor_last_error()).find("four materials") != std::string::npos);
+
+    // Undo the three strokes after the rock (sand, dirt, grass): rock in the middle again, two layers.
+    for (int i = 0; i < 3; ++i) REQUIRE(noor_doc_undo(t.doc) == 1);
+    CHECK((*find_entity(t.scene(), "Field"))["components"]["terrain"]["layers"].size() == 2);
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    layer = noor::terrain::PaintLayer::load(t.dir / "Assets" / "Terrain" / "Field.noorpaint");
+    REQUIRE(layer);
+    CHECK(noor::terrain::PaintLayer::weight(layer->get(128, 128), 1) == doctest::Approx(1.0f));
+    // And the rock stroke itself: no layers, no paint layer named, nothing painted when saved.
+    REQUIRE(noor_doc_undo(t.doc) == 1);
+    comp = (*find_entity(t.scene(), "Field"))["components"]["terrain"];
+    CHECK_FALSE(comp.contains("layers"));
+    CHECK_FALSE(comp.contains("paint"));
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    layer = noor::terrain::PaintLayer::load(t.dir / "Assets" / "Terrain" / "Field.noorpaint");
+    REQUIRE(layer);
+    CHECK(noor::terrain::PaintLayer::weight(layer->get(128, 128), 0) == doctest::Approx(1.0f));
 }

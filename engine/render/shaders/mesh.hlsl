@@ -7,7 +7,8 @@
 //
 // Surfaces (ADR-030): the draw's material from the material table (set 1, binding 2), its textures
 // from the bindless table (set 1, binding 0). The vertex colour (or the draw's tint) multiplies
-// the base colour.
+// the base colour, except for splats (terrains, Milestone 6 part 7): there the vertex colour holds
+// the weights of material layers 1-3 (layer 0 gets the rest) and the four materials are blended.
 
 [[vk::constant_id(0)]] const bool kDisplay = false;
 
@@ -17,7 +18,8 @@ struct PushConstants
     float4 world_row1;
     float4 world_row2;
     float4 tint;        // rgb linear colour, a = how much of it replaces the vertex colour
-    uint4 ids;          // x: material slot
+    uint4 ids;          // x: material slot (splat layer 0); y: 0x80000000 | layer 1 for a splat; z, w: layers 2, 3
+    float4 splat_tiling;  // UV multiplier per splat layer
 };
 [[vk::push_constant]] PushConstants pc;
 
@@ -91,7 +93,10 @@ struct VertexOutput
     [[vk::location(2)]] float3 world_position : POSITION1;
     [[vk::location(3)]] float2 uv : TEXCOORD0;
     [[vk::location(4)]] float4 tangent : TANGENT;
+    [[vk::location(5)]] float3 weights : TEXCOORD1;  // splats: layers 1-3
 };
+
+bool is_splat() { return (pc.ids.y & 0x80000000u) != 0u; }
 
 float3 to_world_vector(float3 v)
 {
@@ -106,7 +111,8 @@ VertexOutput VSMain(VertexInput input)
     output.position = mul(frame.clip_from_world, float4(output.world_position, 1.0));
     output.normal = to_world_vector(input.normal);  // rotation/uniform scale; non-uniform scale later
     output.tangent = float4(to_world_vector(input.tangent.xyz), input.tangent.w);
-    output.color = lerp(input.color, pc.tint.rgb, pc.tint.a);
+    output.color = lerp(is_splat() ? float3(1.0, 1.0, 1.0) : input.color, pc.tint.rgb, pc.tint.a);
+    output.weights = is_splat() ? input.color : float3(0.0, 0.0, 0.0);
     output.uv = input.uv;
     return output;
 }
@@ -239,6 +245,35 @@ float3 apply_normal_map(float3 n, float4 tangent, float2 uv, uint slot, float st
     return normalize(t * m.x + b * m.y + n * m.z);
 }
 
+// One material's surface at a pixel: everything the lighting needs.
+struct Surface
+{
+    float3 base_color;
+    float alpha;
+    float3 normal;
+    float roughness;
+    float metallic;
+    float occlusion;
+    float3 emissive;
+};
+
+Surface sample_surface(uint slot, float2 surface_uv, float3 n, float4 tangent)
+{
+    const GpuMaterial mat = materials[slot];
+    const float2 uv = surface_uv * mat.uv.xy + mat.uv.zw;
+    const float4 base_sample = textures[mat.tex0.x].Sample(texture_sampler, uv);
+    Surface s;
+    s.alpha = mat.base_color.a * base_sample.a;
+    s.base_color = mat.base_color.rgb * base_sample.rgb;
+    s.normal = mat.tex1.x != 1u ? apply_normal_map(n, tangent, uv, mat.tex1.x, mat.params.z) : n;
+    const float3 mr = textures[mat.tex0.y].Sample(texture_sampler, uv).rgb;
+    s.roughness = saturate(mat.params.y * mr.g * textures[mat.tex0.z].Sample(texture_sampler, uv).r);
+    s.metallic = saturate(mat.params.x * mr.b * textures[mat.tex0.w].Sample(texture_sampler, uv).r);
+    s.occlusion = lerp(1.0, textures[mat.tex1.y].Sample(texture_sampler, uv).r, mat.params.w);
+    s.emissive = mat.emissive_cutoff.rgb * textures[mat.tex1.z].Sample(texture_sampler, uv).rgb;
+    return s;
+}
+
 float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
 {
     float3 n = normalize(input.normal);
@@ -249,19 +284,59 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
         return float4(input.color * (0.55 + 0.45 * diffuse), 1.0);
     }
     const GpuMaterial mat = materials[pc.ids.x];
-    const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
-    const float4 base_sample = textures[mat.tex0.x].Sample(texture_sampler, uv);
-    const float alpha = mat.base_color.a * base_sample.a;
-    if ((mat.tex1.w & 1u) != 0u && alpha < mat.emissive_cutoff.w) discard;  // cutout
+    if (!is_splat())
+    {
+        const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
+        if ((mat.tex1.w & 1u) != 0u && mat.base_color.a * textures[mat.tex0.x].Sample(texture_sampler, uv).a < mat.emissive_cutoff.w) discard;  // cutout
+    }
     if (!front) n = -n;  // double-sided: the back face's normal points the other way
-    if (mat.tex1.x != 1u) n = apply_normal_map(n, input.tangent * (front ? 1.0 : -1.0), uv, mat.tex1.x, mat.params.z);
+    const float4 tangent = input.tangent * (front ? 1.0 : -1.0);
+    Surface surf;
+    if (is_splat())
+    {
+        // Four layers blended by weight (layers with almost no weight are skipped).
+        const float4 w = float4(saturate(1.0 - input.weights.x - input.weights.y - input.weights.z), saturate(input.weights));
+        const uint slots[4] = {pc.ids.x, pc.ids.y & 0x7FFFFFFFu, pc.ids.z, pc.ids.w};
+        surf.base_color = 0.0;
+        surf.alpha = 1.0;
+        surf.normal = 0.0;
+        surf.roughness = 0.0;
+        surf.metallic = 0.0;
+        surf.occlusion = 0.0;
+        surf.emissive = 0.0;
+        float total = 0.0;
+        [unroll] for (uint i = 0; i < 4; ++i)
+        {
+            if (w[i] < 0.004) continue;
+            const Surface s = sample_surface(slots[i], input.uv * pc.splat_tiling[i], n, tangent);
+            surf.base_color += s.base_color * w[i];
+            surf.normal += s.normal * w[i];
+            surf.roughness += s.roughness * w[i];
+            surf.metallic += s.metallic * w[i];
+            surf.occlusion += s.occlusion * w[i];
+            surf.emissive += s.emissive * w[i];
+            total += w[i];
+        }
+        const float k = 1.0 / max(total, 1e-4);
+        surf.base_color *= k;
+        surf.normal = normalize(surf.normal + n * 1e-4);
+        surf.roughness *= k;
+        surf.metallic *= k;
+        surf.occlusion *= k;
+        surf.emissive *= k;
+    }
+    else
+    {
+        surf = sample_surface(pc.ids.x, input.uv, n, tangent);
+    }
+    n = surf.normal;
+    const float alpha = surf.alpha;
     const float3 v = normalize(frame.camera_position.xyz - input.world_position);
-    const float3 base_color = input.color * mat.base_color.rgb * base_sample.rgb;
-    const float3 mr = textures[mat.tex0.y].Sample(texture_sampler, uv).rgb;
-    const float roughness = saturate(mat.params.y * mr.g * textures[mat.tex0.z].Sample(texture_sampler, uv).r);
-    const float metallic = saturate(mat.params.x * mr.b * textures[mat.tex0.w].Sample(texture_sampler, uv).r);
-    const float occlusion = lerp(1.0, textures[mat.tex1.y].Sample(texture_sampler, uv).r, mat.params.w);
-    const float3 emissive = mat.emissive_cutoff.rgb * textures[mat.tex1.z].Sample(texture_sampler, uv).rgb;
+    const float3 base_color = input.color * surf.base_color;
+    const float roughness = surf.roughness;
+    const float metallic = surf.metallic;
+    const float occlusion = surf.occlusion;
+    const float3 emissive = surf.emissive;
 
     const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0));
     float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow);

@@ -94,12 +94,9 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
                 NOOR_LOG_WARN("Game", "Terrain {}: {}", t.entity.to_string(), heights.error().describe());
             }
         }
-        const auto material = t.material_file.empty() ? render::MaterialHandle{} : materials_.file(t.material_file);
         for (const auto h : tm.tiles) {
             if (!h.valid()) continue;
-            render::DrawItem item{h, math::translation(t.position)};
-            item.material = material;
-            out.push_back(item);
+            out.push_back(terrain_draw(t, h, [&](const std::filesystem::path& f) { return materials_.file(f); }));
         }
     }
     for (const auto& c : view.csg) {

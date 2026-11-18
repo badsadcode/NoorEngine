@@ -35,4 +35,13 @@ struct Brush {
 std::optional<terrain::SampleRect> apply(const terrain::Heights& current, terrain::SculptLayer& layer, const Brush& brush,
                                          math::Vec2 centre, float seconds);
 
+// One dab of paint (Milestone 6, part 7): moves the samples under the brush towards material layer
+// `layer` (0..3) by strength x seconds x the brush weight (1 = all the way), taking the rest from the
+// other layers in proportion. `heights` gives the terrain's frame. Returns the samples it changed.
+std::optional<terrain::SampleRect> paint(const terrain::Heights& heights, terrain::PaintLayer& paint, const Brush& brush,
+                                         std::uint32_t layer, math::Vec2 centre, float seconds);
+
+// Mixes packed weights towards `layer` by `amount` (0..1); the result still adds up to 255.
+[[nodiscard]] std::uint32_t mix_weights(std::uint32_t packed, std::uint32_t layer, float amount);
+
 } // namespace noor::terrain_edit

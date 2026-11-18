@@ -19,6 +19,7 @@
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -86,8 +87,12 @@ struct SceneView {
         Guid entity;
         math::Vec3 position;  // the terrain's centre (rotation and scale are ignored)
         terrain::Settings settings;
-        std::filesystem::path material_file;  // empty: the default material
+        // Material layers (Milestone 6, part 7): up to four, blended by the paint weights. Layer 0 is
+        // `layers[0].material` or the component's `material`; empty: the default material.
+        std::array<std::filesystem::path, 4> layer_files;
+        math::Vec4 tiling{1, 1, 1, 1};        // per layer: multiplies the terrain's UVs (metres)
         std::optional<Guid> sculpt;           // its sculpt layer asset, if it has one
+        std::optional<Guid> paint;            // its paint layer asset, if it has one
         // The editor: live heights (sculpting not saved yet) and a version per tile (row by row) that
         // changes when that tile's heights do. Null: generate from the settings.
         std::shared_ptr<const terrain::Heights> heights;
@@ -135,6 +140,10 @@ using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid&
 // them this frame; their children (a player's camera) follow.
 [[nodiscard]] SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path,
                                      const std::unordered_map<Guid, math::Mat4>* render_poses = nullptr);
+
+// A terrain tile as a draw item: a splat of its material layers (`material` resolves a layer's file).
+[[nodiscard]] render::DrawItem terrain_draw(const SceneView::Terrain& terrain, render::MeshHandle tile,
+                                            const std::function<render::MaterialHandle(const std::filesystem::path&)>& material);
 
 // An AssetPath as an asset::AssetFileResolver (materials resolve textures and parents with it).
 [[nodiscard]] asset::AssetFileResolver file_resolver(const AssetPath& asset_path);

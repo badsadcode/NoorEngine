@@ -625,12 +625,12 @@ void render_thread_main(noor_viewport* vp) {
                         if (heights) tg.heights = heights;
                     }
                     tg.position = t.position;
-                    const auto material = t.material_file.empty() ? noor::render::MaterialHandle{} : materials->file(t.material_file);
                     for (auto& lm : tg.tiles) {
                         if (!lm.handle.valid()) continue;
-                        lm.parts = {{0, static_cast<std::uint32_t>(lm.indices.size()), material}};
-                        const Mat4 world = noor::math::translation(t.position);
-                        scene_draws.push_back({{lm.handle, world}, t.entity, &lm});
+                        const auto item = noor::game::terrain_draw(t, lm.handle, [&](const std::filesystem::path& f) { return materials->file(f); });
+                        lm.parts = {{0, static_cast<std::uint32_t>(lm.indices.size()), item.material}};
+                        const Mat4 world = item.world_from_object;
+                        scene_draws.push_back({item, t.entity, &lm});
                         for (int c = 0; c < 8; ++c) {
                             grow(lo, hi, world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));
                             any = true;

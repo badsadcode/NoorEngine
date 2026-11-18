@@ -2,7 +2,7 @@
 
 Milestone 6, part 5 ([ADR-031](../decisions/ADR-031-terrain-heightfields.md)). What works today:
 heightfield terrain generated from a seed or a heightmap picture, **sculpted by hand** (part 6), drawn
-in the editor and in games, collided with by Jolt. Painting (part 7) is **planned**, not here yet.
+in the editor and in games, collided with by Jolt, and **painted with up to four materials** (part 7).
 
 ## The `terrain` component
 
@@ -15,7 +15,9 @@ in the editor and in games, collided with by Jolt. Painting (part 7) is **planne
   "heightmap": "<asset guid>", "min_height": 0, "max_height": 50,  // heightmap: black..white
   "flat_height": 0,         // flat
   "sculpt": "<.noorsculpt guid>",  // hand-sculpted offsets: made by the first stroke (see Sculpting)
-  "material": "<.noormat guid or null>",
+  "material": "<.noormat guid or null>",  // the ground, when there are no "layers"
+  "layers": [{"material": "<guid>", "tiling": 1}, ...],  // up to four materials (layer 0 first)
+  "paint": "<.noorpaint guid>",    // how much of each layer covers each sample (see Painting)
   "collision": true
 }
 ```
@@ -100,6 +102,33 @@ stay where they were, on top of the new ground. (That's the "non-destructive" pa
 ~33 ms in Debug (2.3 ms in Release), and a brush on a tile corner rebuilds four tiles. Only changed
 tiles are rebuilt; updating part of a tile is a later optimisation.
 
+## Painting (Milestone 6, part 7)
+
+Select a terrain, press **Paint** in its Inspector card, pick a material and drag. The material is
+blended in under the brush; strength is how far towards it per second (1 = all the way in a second),
+radius and falloff as for sculpting. Each stroke is one undo step ("Paint: grass").
+
+- **Layers:** a terrain has up to four materials. Layer 0 is the ground underneath (the component's
+  `material`); painting a material that isn't a layer yet adds it as the next one. With four, paint
+  with one of them or change a layer's material in the **Material layers** list (which also sets each
+  layer's **tiling**: how many times its material repeats per metre of the material's own size).
+- **Weights** are stored per height sample (1 m apart with the default cells): four bytes that add up
+  to 255, in `Assets/Terrain/<entity name>.noorpaint` (made by the first paint stroke, written on
+  Save; sparse by tile like the sculpt layer, `"NPAINT01"`, 264 KB per painted tile). Unpainted ground
+  is all layer 0.
+- **Drawing:** each tile is one splat draw (`render::DrawItem::splat`). The weights ride in the vertex
+  colour (layers 1–3; layer 0 gets the rest), so they blend smoothly between samples, and the shader
+  blends the four materials' colour, normal, roughness, metalness, occlusion and glow by weight
+  (layers with no weight at a pixel aren't sampled). Opaque only: see-through and cutout materials act
+  opaque as terrain layers.
+- **The same tool on CSG faces:** with Paint on and a brush selected, a click on a face gives it the
+  material (the brush's Faces list shows the result; its UV settings stay).
+- **Fast strokes** are filled in: when the pointer jumps further than a quarter of the radius between
+  frames, dabs are added along the way. The time is shared between them, so a fast stroke paints (or
+  sculpts) thinner than a slow one, like an airbrush.
+- Not yet: weights finer than the height samples (a sharp path edge is about one cell wide), blending by
+  height (rocks poking through grass), triplanar mapping on cliffs, more than four materials.
+
 ## Where the code is
 
 - `engine/terrain` (`noor_terrain`, runtime-safe): `Settings`, `Heights` (with a shared cache keyed by
@@ -107,7 +136,8 @@ tiles are rebuilt; updating part of a tile is a later optimisation.
 - `engine/game`: the scene view lists terrains; `SceneRenderer` draws them; physics gets one static
   `HeightFieldShape` body per tile.
 - `engine/terrain_edit` (`noor_terrain_edit`, editor and tools only, kept out of games by the
-  runtime-boundary test): the brushes.
+  runtime-boundary test): the sculpt brushes, the paint brush and weight mixing.
+- `engine/render/shaders/mesh.hlsl`: the splat blend (`sample_surface` per layer).
 - `engine/editor_api`: `Document::sculpt` (strokes, the undo command, the live layer per sculpt asset,
   saving), `viewport.cpp` (tile meshes rebuilt per changed tile, the brush circle, stroke events).
 
@@ -125,7 +155,13 @@ layer, survives a new base, Play collides with unsaved sculpting); `cli.build_sc
 `player.sculpted_hill` (a built game: a character walks over a hill that exists only in the sculpt
 layer, feet within 1 cm of it); editor smoke checks (a test pointer drags the Raise brush, undo, save).
 
+Painting: unit tests (weights add up to 255 and every dab makes progress, the paint brush, file round
+trip, weights in the tile mesh's vertex colours); `api: …painting adds material layers…` (layers added
+and limited to four, one undo step per stroke, saved weights, undo back to no paint) and a fast-stroke
+test; `render.golden_TerrainPaint` (a path and a glowing pool painted on hills, reviewed by eye);
+editor smoke checks (a paint stroke adds a layer and is saved; a click paints a CSG face).
+
 ## Not yet
 
-Painting, holes, LOD, streaming, triplanar texturing for cliffs, partial tile updates while
-sculpting.
+Holes, LOD, streaming, triplanar texturing for cliffs, height-based blending, partial tile updates
+while sculpting or painting.

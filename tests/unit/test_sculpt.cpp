@@ -203,3 +203,59 @@ TEST_CASE("sculpt: a ray finds the ground under the pointer") {
     CHECK_FALSE(terrain::raycast(*h, {0, 100, 0}, {0, 1, 0}));
     CHECK_FALSE(terrain::raycast(*h, {1000, 100, 0}, {0, -1, 0}));
 }
+
+// ---- Painting (Milestone 6, part 7) ----
+
+TEST_CASE("paint: weights always add up to 255, and every dab makes progress") {
+    using terrain::PaintLayer;
+    auto sum = [](std::uint32_t w) { return (w & 0xFF) + ((w >> 8) & 0xFF) + ((w >> 16) & 0xFF) + (w >> 24); };
+    std::uint32_t w = PaintLayer::kUnpainted;
+    CHECK(PaintLayer::weight(w, 0) == 1.0f);
+    w = terrain_edit::mix_weights(w, 2, 0.5f);
+    CHECK(sum(w) == 255);
+    CHECK(PaintLayer::weight(w, 2) == doctest::Approx(0.5f).epsilon(0.01));
+    CHECK(PaintLayer::weight(w, 0) == doctest::Approx(0.5f).epsilon(0.01));
+    w = terrain_edit::mix_weights(w, 1, 0.5f);  // the others give way in proportion
+    CHECK(sum(w) == 255);
+    CHECK(PaintLayer::weight(w, 0) == doctest::Approx(PaintLayer::weight(w, 2)).epsilon(0.02));
+    // Tiny dabs (a high frame rate) still reach full coverage.
+    std::uint32_t t = PaintLayer::kUnpainted;
+    for (int i = 0; i < 2000; ++i) t = terrain_edit::mix_weights(t, 3, 0.001f);
+    CHECK(((t >> 24) & 0xFF) == 255);
+    CHECK(sum(t) == 255);
+}
+
+TEST_CASE("paint: a brush paints a material layer, the file round-trips, the mesh carries the weights") {
+    auto base = Heights::build(flat_settings());
+    REQUIRE(base);
+    terrain::PaintLayer paint(2, 2);
+    Brush b;
+    b.radius = 6;
+    b.strength = 4;  // full coverage in a quarter of a second
+    b.falloff = 0.3f;
+    REQUIRE(terrain_edit::paint(*base, paint, b, 1, {0.0f, 0.0f}, 0.5f));
+    CHECK(terrain::PaintLayer::weight(paint.get(256, 256), 1) == 1.0f);   // the centre: all layer 1
+    CHECK(terrain::PaintLayer::weight(paint.get(256 + 10, 256), 0) == 1.0f);  // outside: untouched
+    CHECK(paint.tile_count() == 4);  // a corner of four tiles
+    CHECK_FALSE(terrain_edit::paint(*base, paint, b, 4, {0.0f, 0.0f}, 0.5f));  // there are four layers
+
+    const auto dir = temp_dir();
+    const auto file = dir / "ground.noorpaint";
+    REQUIRE(paint.save(file));
+    auto back = terrain::PaintLayer::load(file);
+    REQUIRE(back);
+    CHECK(back->hash() == paint.hash());
+    CHECK_FALSE(SculptLayer::load(file));  // a paint file isn't a sculpt file
+
+    auto settings = flat_settings();
+    settings.paint = file;
+    auto built = Heights::build(settings);
+    REQUIRE(built);
+    CHECK(built->weights(256, 256) == paint.get(256, 256));
+    const auto mesh = terrain::tile_mesh(*built, 0, 0);
+    const auto& corner = mesh.vertices[256 * terrain::kTileSamples + 256];  // sample (256, 256)
+    CHECK(corner.color.x == doctest::Approx(1.0f));  // layer 1's weight
+    CHECK(corner.color.y == 0.0f);
+    CHECK(mesh.vertices[0].color.x == 0.0f);  // unpainted: all layer 0 (no weight for 1..3)
+    std::filesystem::remove_all(dir);
+}

@@ -66,6 +66,18 @@ Built and tested; where it differs from the proposal above, this wins.
   touched rectangle's before/after offsets (region undo, as planned).
 - **Brushes live in `noor_terrain_edit`**, which the runtime-boundary test keeps out of games.
 
+## What part 7 settled (2026-11-18)
+- **Weights per height sample, carried in the vertex colour**, rather than a separate weight texture
+  per tile. No new textures, pipelines or descriptor work: the splat is a flag and three more material
+  slots in the draw's push constants, and the blend happens in the existing mesh shader. The cost is
+  resolution: a painted edge is about one cell (1 m) wide. A per-tile weight texture (finer than the
+  heights) is the upgrade path when samples are too coarse; the `.noorpaint` file would not change.
+- **One `.noorpaint` per terrain**, sparse by tile like the sculpt layer; four bytes per sample, the
+  four weights add up to 255.
+- **Terrains are always drawn as splats** (unpainted ground is all layer 0), so there is one path to test.
+- **One edit per terrain entity** in the document holds both layers (sculpt and paint), replacing the
+  per-asset edit of part 6.
+
 ## Consequences
 - Easier: sculpt/paint as image-like operations on tiles; region undo; partial saves and rebuilds.
 - Harder: no overhangs, caves or vertical cliffs (steep slopes stretch textures until triplanar

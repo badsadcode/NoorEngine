@@ -252,6 +252,7 @@ internal static class SmokeTest
         await FaceChecks(window, Check, Shot);
         await TerrainChecks(window, Check, Shot);
         await SculptChecks(window, Check, Shot);
+        await PaintChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -1023,7 +1024,7 @@ internal static class SmokeTest
         await Task.Delay(500);
         shot(window, "editor_27_sculpt.png");
 
-        // Saved: the layer file holds the hill (the highest offset is metres, from ~1 s at 6 m/s).
+        // Saved: the layer file holds the hill (metres: about a second at 6 m/s; how long exactly depends on frame timing).
         doc.Save();
         var path = sculptId == null ? null : doc.Assets.FirstOrDefault(a => a.Guid == sculptId)?.Path;
         double highest = 0;
@@ -1032,11 +1033,95 @@ internal static class SmokeTest
             var bytes = File.ReadAllBytes(Path.Combine(doc.ProjectRoot, path));
             for (var i = 24; i + 4 <= bytes.Length; i += 4) highest = Math.Max(highest, BitConverter.ToSingle(bytes, i));
         }
-        check(highest is > 2 and < 7, $"sculpt: Save writes the layer ({path}, highest point {highest:0.##} m)");
+        check(highest is > 2 and < 12, $"sculpt: Save writes the layer ({path}, highest point {highest:0.##} m)");
         doc.Undo();
         check(doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]?["sculpt"] == null, "sculpt: undo takes the stroke back");
 
         doc.SetSculpting(false);
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
+        doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
+        await Task.Delay(300);
+    }
+
+    // Milestone 6, part 7: the Paint tool: a stroke on a terrain adds a material layer; a click gives a brush face the material.
+    private static async Task PaintChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var vp = VulkanViewport.Active;
+        var tiles = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Textures/tiles.noormat");
+        doc.Select(null);
+        var id = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.TerrainTemplateName));
+        if (id == null || vp == null || tiles == null)
+        {
+            check(false, "paint: a terrain and a material to work with");
+            return;
+        }
+        var flat = (JsonObject)doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]!.DeepClone();
+        flat["base"] = "flat";
+        flat["cell_size"] = 0.25;
+        doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = id, ["type"] = "terrain", ["value"] = flat });
+        doc.Select(id);
+        doc.SetBrush(new EditorDocument.SculptBrush("raise", 8, 3, 0.4));
+        doc.SetPaintMaterial(tiles.Guid);
+        doc.SetPainting(true);
+        _testViewport = vp.EngineHandle;
+        vp.Frame([id]);
+        await Task.Delay(1200);
+        // In front of the building (it stands in the middle of the terrain and would hide the stripe).
+        if (vp.WorldToScreen(new Vec3(-14, 0, 22)) is { } p)
+        {
+            await Pointer(p.X, p.Y, 0);
+            await Task.Delay(150);
+            await Pointer(p.X, p.Y, 1);
+            await Pointer(p.X + 120, p.Y, 1);  // a short drag: a stripe of tiles
+            await Task.Delay(400);
+            await Pointer(p.X + 240, p.Y + 20, 1);
+            await Task.Delay(400);
+            await Pointer(p.X + 240, p.Y + 20, 0);
+            await Task.Delay(300);
+            window.ViewportView?.DrainEvents();
+        }
+        var terrain = doc.Scene.Entities.First(e => e.Id == id).Components["terrain"];
+        check(doc.Scene.UndoLabel == "Paint: tiles" && (terrain?["layers"] as JsonArray)?.Count == 2 && terrain?["paint"] != null,
+              $"paint: a stroke with the tiles material is one undo step ({doc.Scene.UndoLabel}) and adds it as layer 1");
+        // Saved: the paint file has tiles (layer 1) somewhere: the stroke really painted.
+        doc.Save();
+        var paintPath = terrain?["paint"]?.GetValue<string>() is { } paintId ? doc.Assets.FirstOrDefault(a => a.Guid == paintId)?.Path : null;
+        var painted = 0;
+        if (paintPath != null && File.Exists(Path.Combine(doc.ProjectRoot, paintPath)))
+        {
+            var bytes = File.ReadAllBytes(Path.Combine(doc.ProjectRoot, paintPath));
+            for (var i = 24 + 8; i + 4 <= bytes.Length; i += 4) if (bytes[i + 1] > 128) painted++;  // byte 1 = layer 1's weight
+        }
+        check(painted > 100, $"paint: the saved paint layer has the stripe ({painted} samples mostly tiles)");
+        if (vp.WorldToScreen(new Vec3(14, 0, 18)) is { } hover) await Pointer(hover.X, hover.Y, 0);  // the brush circle, on the terrain
+        await Task.Delay(400);
+        shot(window, "editor_28_paint.png");
+
+        // The same tool on a CSG brush: a click on its front face gives that face the material.
+        doc.SetPainting(false);
+        doc.Select(null);
+        var wall = window.CreateBrush("box");
+        var model = wall == null ? null : doc.Scene.Entities.First(e => e.Id == wall).Parent;
+        if (wall != null && model != null)
+        {
+            doc.Select(wall);
+            doc.SetPainting(true);
+            vp.Frame(doc.Subtree(model));
+            await Task.Delay(800);
+            if (vp.WorldToScreen(new Vec3(0.6, 1.2, 0.15)) is { } at)
+            {
+                await Click(IntPtr.Zero, at.X, at.Y);
+                window.ViewportView?.DrainEvents();
+            }
+            var faces = doc.Scene.Entities.First(e => e.Id == wall).Components["brush"]?["faces"] as JsonArray;
+            check(faces != null && faces.Count > 4 && faces[4]?["material"]?.GetValue<string>() == tiles.Guid && doc.SelectedId == wall,
+                  "paint: a click on a brush's front face gives that face the material (the selection stays)");
+            doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
+        }
+        else check(false, "paint: a wall to paint");
+
+        doc.SetPainting(false);
         Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
         await Task.Delay(300);

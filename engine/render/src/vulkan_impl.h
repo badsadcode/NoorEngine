@@ -113,9 +113,12 @@ struct MeshPushConstants {
     math::Vec4 world_row1;
     math::Vec4 world_row2;
     math::Vec4 tint;            // rgb = linear color, a = blend amount (0 = mesh colors)
-    std::uint32_t ids[4];       // material slot, unused x3
+    // x: material slot (splat layer 0). Scene pass: y = 0x80000000 | layer 1's slot for a splat (else 0),
+    // z, w: layers 2 and 3. Shadow pass: y = cascade.
+    std::uint32_t ids[4];
+    math::Vec4 splat_tiling;    // UV multiplier per splat layer
 };
-static_assert(sizeof(MeshPushConstants) == 80);
+static_assert(sizeof(MeshPushConstants) == 96);
 
 // mesh.hlsl's GpuMaterial (std430), one per material slot.
 struct GpuMaterial {
@@ -401,6 +404,7 @@ struct Renderer::Impl {
     // The scene's opaque draws, its see-through ones (sorted back to front), or the editor gizmos.
     void record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass);
     [[nodiscard]] std::uint32_t material_slot(const DrawItem& item) const noexcept;
+    [[nodiscard]] std::uint32_t material_slot(MaterialHandle material) const noexcept;
 
     // vulkan_capture.cpp
     Status record_capture(VkCommandBuffer cmd, VkImage image);

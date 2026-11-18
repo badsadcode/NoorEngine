@@ -459,8 +459,10 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
     mesh = {};
 }
 
-std::uint32_t Renderer::Impl::material_slot(const DrawItem& item) const noexcept {
-    return item.material.valid() && item.material.id < materials.size() && material_alive[item.material.id] ? item.material.id : 0u;
+std::uint32_t Renderer::Impl::material_slot(const DrawItem& item) const noexcept { return material_slot(item.material); }
+
+std::uint32_t Renderer::Impl::material_slot(MaterialHandle material) const noexcept {
+    return material.valid() && material.id < materials.size() && material_alive[material.id] ? material.id : 0u;
 }
 
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass) {
@@ -526,7 +528,9 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, D
                                      {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
                                      {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
                                      item.tint,
-                                     {material, 0, 0, 0}};
+                                     {material, item.splat && !gizmos ? 0x80000000u | material_slot(item.splat_layers[0]) : 0u,
+                                      material_slot(item.splat_layers[1]), material_slot(item.splat_layers[2])},
+                                     item.splat_tiling};
         vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
         const VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);

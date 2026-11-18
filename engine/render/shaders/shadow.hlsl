@@ -9,6 +9,7 @@ struct PushConstants
     float4 world_row2;
     float4 tint;
     uint4 ids;  // x: material slot, y: cascade
+    float4 splat_tiling;  // (the scene pass's; unused here)
 };
 [[vk::push_constant]] PushConstants pc;
 

@@ -247,10 +247,29 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         }
         if (e.has("terrain") && e.components["terrain"].is_object()) {
             const auto& t = e.components["terrain"];
-            SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain::Settings::from_json(t, file_resolver(asset_path)), {}};
-            if (const auto mat = asset::guid_field(t, "material"); mat && asset_path)
-                if (auto file = asset_path(*mat)) terrain.material_file = std::move(*file);
-        terrain.sculpt = asset::guid_field(t, "sculpt");
+            SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain::Settings::from_json(t, file_resolver(asset_path))};
+            // Material layers: "layers": [{"material": id, "tiling": n}, ...] (up to four); without
+            // them, "material" is the only layer.
+            auto file_of = [&](const Json& j, const char* key) -> std::filesystem::path {
+                const auto id = asset::guid_field(j, key);
+                if (!id || !asset_path) return {};
+                auto file = asset_path(*id);
+                return file ? *file : std::filesystem::path{};
+            };
+            terrain.layer_files[0] = file_of(t, "material");
+            if (t.contains("layers") && t["layers"].is_array()) {
+                for (std::size_t li = 0; li < std::min<std::size_t>(4, t["layers"].size()); ++li) {
+                    const Json& layer = t["layers"][li];
+                    if (!layer.is_object()) continue;
+                    if (layer.contains("material") && !layer["material"].is_null()) terrain.layer_files[li] = file_of(layer, "material");
+                    if (layer.contains("tiling") && layer["tiling"].is_number()) {
+                        const float tiling = std::clamp(layer["tiling"].get<float>(), 0.001f, 1000.0f);
+                        (li == 0 ? terrain.tiling.x : li == 1 ? terrain.tiling.y : li == 2 ? terrain.tiling.z : terrain.tiling.w) = tiling;
+                    }
+                }
+            }
+            terrain.sculpt = asset::guid_field(t, "sculpt");
+            terrain.paint = asset::guid_field(t, "paint");
             view.terrains.push_back(std::move(terrain));
         }
         if (e.has("csg_model")) {
@@ -299,6 +318,17 @@ math::Mat4 camera_view(const math::Mat4& m) {
     math::Vec3 right = math::cross(fwd, {0, 1, 0});
     right = math::length(right) < 1e-4f ? math::normalize(math::transform_vector(m, {1, 0, 0})) : math::normalize(right);
     return math::look_at(eye, eye + fwd, math::cross(right, fwd));
+}
+
+render::DrawItem terrain_draw(const SceneView::Terrain& terrain, render::MeshHandle tile,
+                              const std::function<render::MaterialHandle(const std::filesystem::path&)>& material) {
+    auto handle = [&](const std::filesystem::path& file) { return file.empty() ? render::MaterialHandle{} : material(file); };
+    render::DrawItem item{tile, math::translation(terrain.position)};
+    item.material = handle(terrain.layer_files[0]);
+    item.splat = true;  // always: the vertex colours are weights (unpainted: all layer 0)
+    for (std::size_t i = 0; i < 3; ++i) item.splat_layers[i] = handle(terrain.layer_files[i + 1]);
+    item.splat_tiling = terrain.tiling;
+    return item;
 }
 
 } // namespace noor::game

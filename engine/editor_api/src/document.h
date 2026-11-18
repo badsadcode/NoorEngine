@@ -66,23 +66,30 @@ struct CsgMesh {
     std::vector<std::string> warnings;
 };
 
-// A terrain's sculpt layer while the editor has it open (Milestone 6, part 6), shared by the
-// terrains that use the same .noorsculpt asset. The layer here is the truth until it is saved.
+// A terrain's hand-made layers while the editor has it open (Milestone 6, parts 6 and 7): its sculpt
+// offsets and its paint weights, one edit per terrain entity. The layers here are the truth until
+// saved. A layer's asset is remembered even while the component doesn't name it (an undone first
+// stroke), so redo finds the same data.
 struct TerrainEdit {
-    Guid asset;
-    std::filesystem::path file;
+    Guid entity;
+    std::optional<Guid> sculpt_asset, paint_asset;
+    std::filesystem::path sculpt_file, paint_file;
     terrain::SculptLayer layer;
+    terrain::PaintLayer paint;
+    bool sculpt_active = false, paint_active = false;  // the component names the asset right now
+    bool sculpt_dirty = false, paint_dirty = false;    // changed since saved
     std::string base_key;                            // settings of the generated base it sits on
     std::shared_ptr<const terrain::Heights> base;
-    std::shared_ptr<terrain::Heights> current;       // base + layer (only the document writes it)
+    std::shared_ptr<terrain::Heights> current;       // base + layers (only the document writes it)
     std::shared_ptr<const terrain::Heights> published;  // a frozen copy of `current` for viewports
-    std::vector<std::uint64_t> tile_versions;        // per tile, row by row: changes with its heights
+    std::vector<std::uint64_t> tile_versions;        // per tile, row by row: changes with its heights or weights
     std::uint64_t revision = 1, published_revision = 0;
-    bool dirty = false;                              // changed since it was saved
-    // Sets the layer's offsets in a rectangle (values row by row) and updates the heights.
+    // Set a layer's values in a rectangle (row by row) and update the heights/weights there.
     void write(const terrain::SampleRect& rect, const std::vector<float>& offsets);
-    // The heights changed in `rect`: recompose them and bump the tiles they (and their normals) touch.
+    void write(const terrain::SampleRect& rect, const std::vector<std::uint32_t>& weights);
+    // The layers changed in `rect`: recompose and bump the tiles it (and its normals) touch.
     void touched(const terrain::SampleRect& rect);
+    void rebuild();  // everything, from the base and the active layers
     [[nodiscard]] std::shared_ptr<const terrain::Heights> snapshot();
 };
 
@@ -213,29 +220,37 @@ public:
     [[nodiscard]] asset::Json csg_info() const;
     // Writes a CSG model as a Noor Interchange GLB + manifest (Milestone 6, part 4).
     [[nodiscard]] Result<asset::Json> export_csg(const Guid& model, const std::filesystem::path& glb);
-    // Sculpting a terrain (Milestone 6, part 6): {"terrain": id, "phase": "begin" | "dab" | "end",
-    // "tool": "raise" | "lower" | "smooth" | "flatten", "radius", "strength", "falloff",
-    // "dabs": [{"point": [x, y, z] (world), "seconds"}]}. A stroke (begin .. end) is one undo step.
+    // Sculpting or painting a terrain (Milestone 6, parts 6-7): {"terrain": id, "phase": "begin" |
+    // "dab" | "end", "tool": "raise" | "lower" | "smooth" | "flatten" | "paint", "material": id (paint),
+    // "radius", "strength", "falloff", "dabs": [{"point": [x, y, z] (world), "seconds"}]}. A stroke
+    // (begin .. end) is one undo step.
     [[nodiscard]] Result<asset::Json> sculpt(const asset::Json& command);
 
 private:
-    // Terrain sculpt layers in use, by sculpt asset id (loaded on first use, saved with the scene).
+    // Terrains with hand-made layers, by entity (loaded on first use, saved with the scene).
     std::unordered_map<Guid, std::shared_ptr<TerrainEdit>> terrain_edits_;
-    // The live edit for a sculpt asset, rebuilt on a new base when the terrain's settings change.
-    std::shared_ptr<TerrainEdit> terrain_edit(const Guid& asset, const terrain::Settings& settings);
+    // The live edit of a terrain entity with these layer assets and settings (rebuilt on a new base).
+    std::shared_ptr<TerrainEdit> terrain_edit(const Guid& entity, const std::optional<Guid>& sculpt, const std::optional<Guid>& paint,
+                                              const terrain::Settings& settings);
     struct Stroke {
         Guid entity;
         std::shared_ptr<TerrainEdit> edit;
         terrain_edit::Brush brush;
-        math::Vec3 position;          // the terrain's centre in the world
-        terrain::SculptLayer before;  // the layer when the stroke began (for undo)
+        bool painting = false;
+        std::uint32_t layer = 0;       // painting: the material layer
+        math::Vec3 position;           // the terrain's centre in the world
+        terrain::SculptLayer before;   // the layer when the stroke began (for undo)
+        terrain::PaintLayer before_paint;
         std::optional<terrain::SampleRect> changed;
         bool first_dab = true;
+        math::Vec2 last;  // the previous dab (terrain space): fast pointer moves are filled in from it
     };
     std::optional<Stroke> stroke_;
     void finish_stroke();  // an unfinished stroke becomes its undo step (before other edits)
-    void save_sculpt();
+    void save_terrain_layers();
     void apply_dabs(const asset::Json& dabs);
+    // A new layer file for a terrain (Assets/Terrain/<name><extension>), registered; its asset id.
+    Result<Guid> new_layer_file(const std::string& name, std::string_view extension, const terrain::Settings& settings, bool paint);
     // CSG models built for snapshots, by model entity (rebuilt only when their brushes change).
     std::unordered_map<Guid, std::shared_ptr<const CsgMesh>> csg_cache_;
     std::vector<std::pair<Guid, std::shared_ptr<const CsgMesh>>> csg_last_;  // models in the last published snapshot

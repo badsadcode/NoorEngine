@@ -57,9 +57,12 @@ public sealed class ComponentsEditor : StackPanel
         };
         ToolTip.SetTip(toggle, "Left-drag on the terrain to sculpt it (Q/W/E/R put the brush down)");
         toggle.Click += (_, _) => _doc.SetSculpting(toggle.IsChecked == true);
-        panel.Children.Add(toggle);
+        var paintToggle = PaintToggle("Left-drag on the terrain to paint the material (up to four per terrain)");
+        var modes = new Avalonia.Controls.Primitives.UniformGrid { Rows = 1, Columns = 2, Children = { toggle, paintToggle } };
+        panel.Children.Add(modes);
+        if (_doc.Painting) panel.Children.Add(PaintMaterialPicker());
 
-        var tools = new Avalonia.Controls.Primitives.UniformGrid { Rows = 1, Columns = EditorDocument.SculptTools.Length };
+        var tools = new Avalonia.Controls.Primitives.UniformGrid { Rows = 1, Columns = EditorDocument.SculptTools.Length, IsVisible = !_doc.Painting };
         foreach (var tool in EditorDocument.SculptTools)
         {
             var button = new Avalonia.Controls.Primitives.ToggleButton { Content = char.ToUpper(tool[0]) + tool[1..], IsChecked = brush.Tool == tool, Classes = { "tool" },
@@ -89,15 +92,101 @@ public sealed class ComponentsEditor : StackPanel
         }
         panel.Children.Add(Row("Radius (m)", brush.Radius, x => _doc.Brush with { Radius = Math.Clamp(x, 0.5, 200) }, "How big the brush is"));
         panel.Children.Add(Row("Strength", brush.Strength, x => _doc.Brush with { Strength = Math.Clamp(x, 0.05, 100) },
-                               "Raise/Lower/Flatten: metres per second at the centre. Smooth: how fast (1 = all the way in a second)"));
+                               "Raise/Lower/Flatten: metres per second at the centre. Smooth and Paint: how fast (1 = all the way in a second)"));
         panel.Children.Add(Row("Falloff", brush.Falloff, x => _doc.Brush with { Falloff = Math.Clamp(x, 0, 1) }, "0: a hard edge. 1: soft from the centre out"));
         panel.Children.Add(new TextBlock
         {
-            Text = "Each stroke is one undo step. Sculpting sits on top of the generated hills, so changing the seed keeps it. Save writes it to Assets/Terrain.",
+            Text = "Each stroke is one undo step. Sculpting and paint sit on top of the generated hills, so changing the seed keeps them. Save writes them to Assets/Terrain.",
             FontSize = 10, TextWrapping = TextWrapping.Wrap, Classes = { "muted" },
         });
         panel.Children.Add(new Border { Height = 1, Background = NoorTheme.Brush(NoorTheme.Border), Margin = new Thickness(0, 4) });
         return panel;
+    }
+
+    // ---- Painting (Milestone 6, part 7) ----
+
+    private Avalonia.Controls.Primitives.ToggleButton PaintToggle(string tip)
+    {
+        var toggle = new Avalonia.Controls.Primitives.ToggleButton
+        {
+            Content = _doc.Painting ? "Painting" : "Paint", IsChecked = _doc.Painting, Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        ToolTip.SetTip(toggle, tip);
+        toggle.Click += (_, _) =>
+        {
+            if (toggle.IsChecked == true && _doc.PaintMaterial == null)
+                _doc.SetPaintMaterial(_doc.Assets.FirstOrDefault(a => a.Importer == "material")?.Guid);
+            _doc.SetPainting(toggle.IsChecked == true);
+        };
+        return toggle;
+    }
+
+    private Control PaintMaterialPicker()
+    {
+        var materials = _doc.Assets.Where(a => a.Importer == "material").ToList();
+        var items = materials.Select(m => m.Path).ToList();
+        var current = materials.FirstOrDefault(m => m.Guid == _doc.PaintMaterial)?.Path;
+        var combo = new ComboBox { ItemsSource = items, SelectedItem = current, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch,
+                                   PlaceholderText = materials.Count == 0 ? "No materials in the project yet" : "Pick a material" };
+        ToolTip.SetTip(combo, "The material to paint");
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedItem is string path && path != current) _doc.SetPaintMaterial(materials.First(m => m.Path == path).Guid);
+        };
+        return combo;
+    }
+
+    /// <summary>A terrain's material layers: up to four, blended by the paint (layer 0 is the ground underneath).</summary>
+    private Control LayersEditor(JsonObject terrain)
+    {
+        var panel = new StackPanel { Spacing = 3, Margin = new Thickness(0, 6, 0, 0) };
+        panel.Children.Add(new TextBlock { Text = "Material layers", Classes = { "section" } });
+        var layers = terrain["layers"] as JsonArray;
+        if (layers == null || layers.Count == 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "One layer: \"material\" above. Painting another material adds a layer (up to four).",
+                FontSize = 10, Classes = { "muted" }, TextWrapping = TextWrapping.Wrap,
+            });
+            return panel;
+        }
+        var materials = _doc.Assets.Where(a => a.Importer == "material").ToList();
+        for (var i = 0; i < layers.Count && i < 4; i++)
+        {
+            var index = i;
+            var layer = layers[i] as JsonObject ?? new JsonObject();
+            var id = layer["material"]?.GetValue<string>();
+            var items = new List<string> { "(default)" };
+            items.AddRange(materials.Select(m => m.Path));
+            var selected = id == null ? "(default)" : materials.FirstOrDefault(m => m.Guid == id)?.Path ?? "(missing material)";
+            if (!items.Contains(selected)) items.Add(selected);
+            var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (combo.SelectedItem is not string path || path == selected || path == "(missing material)") return;
+                SetLayer(index, l => l["material"] = path == "(default)" ? null : materials.First(m => m.Path == path).Guid);
+            };
+            var tiling = NumberBox(layer["tiling"]?.GetValue<double>() ?? 1, x => SetLayer(index, l => l["tiling"] = Math.Clamp(x, 0.001, 1000)));
+            ToolTip.SetTip(tiling, "Tiling: how many times the material repeats per metre of its own size (2 = twice as small)");
+            tiling.Width = 54;
+            var row = new DockPanel { Children = { new TextBlock { Text = $"{index}", Width = 16, FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center }, tiling, combo } };
+            DockPanel.SetDock(row.Children[0], Avalonia.Controls.Dock.Left);
+            DockPanel.SetDock(tiling, Avalonia.Controls.Dock.Right);
+            panel.Children.Add(row);
+        }
+        return panel;
+
+        void SetLayer(int index, Action<JsonObject> change)
+        {
+            if (_entity?.Components["terrain"] is not JsonObject current || current["layers"] is not JsonArray list || index >= list.Count) return;
+            var next = (JsonObject)current.DeepClone();
+            var nextLayers = (JsonArray)next["layers"]!;
+            var layer = nextLayers[index] as JsonObject ?? new JsonObject();
+            change(layer);
+            nextLayers[index] = layer.DeepClone();
+            SetComponent("terrain", next);
+        }
     }
 
     // ---- CSG brush faces (Milestone 6, part 3) ----
@@ -115,6 +204,9 @@ public sealed class ComponentsEditor : StackPanel
         var faces = brush["faces"] as JsonArray;
         var panel = new StackPanel { Spacing = 3, Margin = new Thickness(0, 6, 0, 0) };
         panel.Children.Add(new TextBlock { Text = "Faces", Classes = { "section" } });
+        // The Paint tool works on faces too: click faces of brushes to give them the material.
+        panel.Children.Add(PaintToggle("Click faces of brushes in the viewport to give them the material"));
+        if (_doc.Painting) panel.Children.Add(PaintMaterialPicker());
         panel.Children.Add(new TextBlock
         {
             Text = "Click a face in the viewport (on the selected brush) to pick it. A face without its own settings uses the brush's.",
@@ -427,7 +519,8 @@ public sealed class ComponentsEditor : StackPanel
         {
             if (type == "terrain") body.Children.Add(SculptEditor());
             foreach (var (field, fieldValue) in obj)
-                if (!(type == "brush" && field == "faces")) body.Children.Add(FieldRow(type, field, field, fieldValue));
+                if (!(type == "brush" && field == "faces") && !(type == "terrain" && field == "layers")) body.Children.Add(FieldRow(type, field, field, fieldValue));
+            if (type == "terrain") body.Children.Add(LayersEditor(obj));
             if (type == "brush") body.Children.Add(FacesEditor(obj));
             var addField = new Button { Content = "+ Field", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
             addField.Click += async (_, _) => await AddField(type);

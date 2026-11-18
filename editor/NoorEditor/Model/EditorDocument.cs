@@ -35,6 +35,7 @@ public sealed class EditorDocument : IDisposable
     public void SetTool(EditorTool tool)
     {
         SetSculpting(false);  // picking a transform tool puts the brush down
+        SetPainting(false);
         if (tool == Tool) return;
         Tool = tool;
         ToolChanged?.Invoke();
@@ -55,7 +56,44 @@ public sealed class EditorDocument : IDisposable
     {
         if (on == Sculpting) return;
         Sculpting = on;
+        if (on) Painting = false;
         SculptChanged?.Invoke();
+    }
+
+    // ---- Painting (Milestone 6, part 7): one tool for terrains (strokes) and CSG faces (clicks) ----
+
+    /// <summary>On: left-drags on the selected terrain paint PaintMaterial; clicks on brush faces give them it.</summary>
+    public bool Painting { get; private set; }
+    /// <summary>The material being painted (a .noormat asset id), or null.</summary>
+    public string? PaintMaterial { get; private set; }
+
+    public void SetPainting(bool on)
+    {
+        if (on == Painting) return;
+        Painting = on;
+        if (on) Sculpting = false;
+        SculptChanged?.Invoke();
+    }
+
+    public void SetPaintMaterial(string? material)
+    {
+        if (material == PaintMaterial) return;
+        PaintMaterial = material;
+        SculptChanged?.Invoke();
+    }
+
+    /// <summary>Gives a CSG brush's face the paint material (one undo step; its UV settings stay).</summary>
+    public bool PaintFace(string brushId, int face)
+    {
+        if (PaintMaterial == null || face < 0 || Scene.Entities.FirstOrDefault(e => e.Id == brushId)?.Components["brush"] is not JsonObject brush) return false;
+        var next = (JsonObject)brush.DeepClone();
+        var faces = next["faces"] as JsonArray ?? new JsonArray();
+        while (faces.Count <= face) faces.Add(null);
+        var own = faces[face] as JsonObject ?? new JsonObject();
+        own["material"] = PaintMaterial;
+        faces[face] = own.DeepClone();
+        next["faces"] = faces.DeepClone();
+        return Execute(new JsonObject { ["op"] = "set_component", ["entity"] = brushId, ["type"] = "brush", ["value"] = next });
     }
 
     public void SetBrush(SculptBrush brush)
@@ -78,7 +116,8 @@ public sealed class EditorDocument : IDisposable
             return false;
         }
         // The terrain's first stroke made its sculpt layer file: show it in the asset list too.
-        if (JsonNode.Parse(result)?["sculpt"]?.GetValue<string>() is { } layer && Assets.All(a => a.Guid != layer)) RefreshAssets(false);
+        var parsed = JsonNode.Parse(result);
+        if ((parsed?["sculpt"] ?? parsed?["paint"])?.GetValue<string>() is { Length: > 0 } layer && Assets.All(a => a.Guid != layer)) RefreshAssets(false);
         if (refresh) Refresh();
         return true;
     }

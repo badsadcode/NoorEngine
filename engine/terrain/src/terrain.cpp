@@ -98,6 +98,8 @@ Settings Settings::from_json(const Json& c, const asset::AssetFileResolver& reso
         if (auto file = resolve(*id)) s.heightmap = *file;
     if (const auto id = asset::guid_field(c, "sculpt"); id && resolve)
         if (auto file = resolve(*id)) s.sculpt = *file;
+    if (const auto id = asset::guid_field(c, "paint"); id && resolve)
+        if (auto file = resolve(*id)) s.paint = *file;
     return s;
 }
 
@@ -105,9 +107,10 @@ std::string Settings::key() const {
     std::error_code ec;
     const auto time = heightmap.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(heightmap, ec);
     const auto sculpt_time = sculpt.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(sculpt, ec);
-    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height, scale,
-                       octaves, heightmap.generic_string(), time.time_since_epoch().count(), min_height, max_height, flat_height, 0,
-                       sculpt.generic_string(), sculpt_time.time_since_epoch().count());
+    const auto paint_time = paint.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(paint, ec);
+    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height,
+                       scale, octaves, heightmap.generic_string(), time.time_since_epoch().count(), min_height, max_height, flat_height, 0,
+                       sculpt.generic_string(), sculpt_time.time_since_epoch().count(), paint.generic_string(), paint_time.time_since_epoch().count());
 }
 
 Result<Heights> Heights::build(const Settings& s) {
@@ -147,7 +150,13 @@ Result<Heights> Heights::build(const Settings& s) {
         auto layer = SculptLayer::load(s.sculpt);
         if (!layer) return std::unexpected(layer.error());
         layer->resize(s.tiles_x, s.tiles_z);  // a terrain that changed size keeps the tiles it still has
-        return compose(out, *layer);
+        out = compose(out, *layer);
+    }
+    if (!s.paint.empty()) {
+        auto paint = PaintLayer::load(s.paint);
+        if (!paint) return std::unexpected(paint.error());
+        paint->resize(s.tiles_x, s.tiles_z);
+        out.repaint(*paint);
     }
     return out;
 }
@@ -164,20 +173,22 @@ void Heights::recompose(const Heights& base, const SculptLayer& layer, const Sam
             h_[static_cast<std::size_t>(z) * sx_ + x] = base.at(x, z) + layer.offset(x, z);
 }
 
-// ---- Sculpt layer ----
+// ---- Tile layers (sculpt offsets, paint weights) ----
 
-float SculptLayer::offset(std::uint32_t x, std::uint32_t z) const noexcept {
+template <class T>
+T TileLayer<T>::get(std::uint32_t x, std::uint32_t z) const noexcept {
     // Every tile holding a sample has the same value: read the one on its low side (inside the terrain).
-    if (tiles_x_ == 0 || tiles_z_ == 0) return 0.0f;
+    if (tiles_x_ == 0 || tiles_z_ == 0) return fill_;
     const std::uint32_t tx = std::min(x / kTileCells, tiles_x_ - 1), tz = std::min(z / kTileCells, tiles_z_ - 1);
     const auto it = tiles_.find({tx, tz});
-    if (it == tiles_.end()) return 0.0f;
+    if (it == tiles_.end()) return fill_;
     const std::uint32_t lx = x - tx * kTileCells, lz = z - tz * kTileCells;
-    if (lx >= kTileSamples || lz >= kTileSamples) return 0.0f;
+    if (lx >= kTileSamples || lz >= kTileSamples) return fill_;
     return it->second[static_cast<std::size_t>(lz) * kTileSamples + lx];
 }
 
-void SculptLayer::set(std::uint32_t x, std::uint32_t z, float value) {
+template <class T>
+void TileLayer<T>::set(std::uint32_t x, std::uint32_t z, T value) {
     if (tiles_x_ == 0 || tiles_z_ == 0 || x > tiles_x_ * kTileCells || z > tiles_z_ * kTileCells) return;
     // A sample on a tile edge (or corner) is in up to four tiles: keep them all equal.
     const std::uint32_t tx_hi = std::min(x / kTileCells, tiles_x_ - 1), tz_hi = std::min(z / kTileCells, tiles_z_ - 1);
@@ -187,14 +198,15 @@ void SculptLayer::set(std::uint32_t x, std::uint32_t z, float value) {
         for (std::uint32_t tx = tx_lo; tx <= tx_hi; ++tx) {
             auto it = tiles_.find({tx, tz});
             if (it == tiles_.end()) {
-                if (value == 0.0f) continue;  // nothing to store
-                it = tiles_.emplace(std::pair{tx, tz}, std::vector<float>(static_cast<std::size_t>(kTileSamples) * kTileSamples, 0.0f)).first;
+                if (value == fill_) continue;  // nothing to store
+                it = tiles_.emplace(std::pair{tx, tz}, std::vector<T>(static_cast<std::size_t>(kTileSamples) * kTileSamples, fill_)).first;
             }
             it->second[static_cast<std::size_t>(z - tz * kTileCells) * kTileSamples + (x - tx * kTileCells)] = value;
         }
 }
 
-std::uint64_t SculptLayer::hash() const noexcept {
+template <class T>
+std::uint64_t TileLayer<T>::hash() const noexcept {
     std::uint64_t h = 1469598103934665603ull;
     auto add = [&](std::uint32_t v) {
         h ^= v;
@@ -203,13 +215,12 @@ std::uint64_t SculptLayer::hash() const noexcept {
     for (const auto& [key, values] : tiles_) {
         add(key.first);
         add(key.second);
-        for (const float v : values) add(std::bit_cast<std::uint32_t>(v));
+        for (const T v : values) add(std::bit_cast<std::uint32_t>(v));
     }
     return h;
 }
 
 namespace {
-constexpr char kSculptMagic[8] = {'N', 'S', 'C', 'U', 'L', 'P', 'T', '1'};
 void put_u32(std::string& out, std::uint32_t v) {
     for (int i = 0; i < 4; ++i) out.push_back(static_cast<char>((v >> (8 * i)) & 0xFF));
 }
@@ -220,8 +231,9 @@ std::uint32_t get_u32(const std::string& in, std::size_t at) {
 }
 } // namespace
 
-Status SculptLayer::save(const stdfs::path& file) const {
-    std::string out(kSculptMagic, sizeof kSculptMagic);
+template <class T>
+Status TileLayer<T>::save_as(const stdfs::path& file, std::string_view magic) const {
+    std::string out(magic);
     put_u32(out, 1);
     put_u32(out, tiles_x_);
     put_u32(out, tiles_z_);
@@ -229,32 +241,62 @@ Status SculptLayer::save(const stdfs::path& file) const {
     for (const auto& [key, values] : tiles_) {
         put_u32(out, key.first);
         put_u32(out, key.second);
-        for (const float v : values) put_u32(out, std::bit_cast<std::uint32_t>(v));
+        for (const T v : values) put_u32(out, std::bit_cast<std::uint32_t>(v));
     }
     return fs::write_file_atomic(file, out, false);
 }
 
-Result<SculptLayer> SculptLayer::load(const stdfs::path& file) {
+template <class T>
+Result<TileLayer<T>> TileLayer<T>::load_as(const stdfs::path& file, std::string_view magic, std::string_view what, T fill) {
     auto bytes = fs::read_file(file, 1ull << 30);
     if (!bytes) return std::unexpected(bytes.error());
     const std::string& in = *bytes;
     const auto bad = [&](std::string_view why) {
-        return fail(ErrorCode::ParseError, std::format("sculpt layer {}: {}", file.filename().string(), why));
+        return fail(ErrorCode::ParseError, std::format("{} {}: {}", what, file.filename().string(), why));
     };
-    if (in.size() < 24 || in.compare(0, 8, kSculptMagic, 8) != 0) return bad("not a .noorsculpt file");
+    if (in.size() < 24 || in.compare(0, 8, magic.data(), 8) != 0) return bad(std::format("not a {} file", what));
     if (get_u32(in, 8) != 1) return bad(std::format("version {} is newer than this engine reads", get_u32(in, 8)));
-    SculptLayer layer(get_u32(in, 12), get_u32(in, 16));
+    TileLayer layer(get_u32(in, 12), get_u32(in, 16), fill);
     const std::size_t count = get_u32(in, 20);
     constexpr std::size_t kTileBytes = 8 + static_cast<std::size_t>(kTileSamples) * kTileSamples * 4;
     if (layer.tiles_x_ == 0 || layer.tiles_z_ == 0 || layer.tiles_x_ > 64 || layer.tiles_z_ > 64 || in.size() != 24 + count * kTileBytes)
         return bad("damaged (its size doesn't match its header)");
     for (std::size_t i = 0; i < count; ++i) {
         const std::size_t at = 24 + i * kTileBytes;
-        std::vector<float> values(static_cast<std::size_t>(kTileSamples) * kTileSamples);
-        for (std::size_t k = 0; k < values.size(); ++k) values[k] = std::bit_cast<float>(get_u32(in, at + 8 + k * 4));
+        std::vector<T> values(static_cast<std::size_t>(kTileSamples) * kTileSamples);
+        for (std::size_t k = 0; k < values.size(); ++k) values[k] = std::bit_cast<T>(get_u32(in, at + 8 + k * 4));
         layer.tiles_[{get_u32(in, at), get_u32(in, at + 4)}] = std::move(values);
     }
     return layer;
+}
+
+template class TileLayer<float>;
+template class TileLayer<std::uint32_t>;
+
+Result<SculptLayer> SculptLayer::load(const stdfs::path& file) {
+    auto layer = load_as(file, "NSCULPT1", "sculpt layer", 0.0f);
+    if (!layer) return std::unexpected(layer.error());
+    return SculptLayer(std::move(*layer));
+}
+
+Result<PaintLayer> PaintLayer::load(const stdfs::path& file) {
+    auto layer = load_as(file, "NPAINT01", "paint layer", kUnpainted);
+    if (!layer) return std::unexpected(layer.error());
+    return PaintLayer(std::move(*layer));
+}
+
+void Heights::repaint(const PaintLayer& paint) {
+    if (paint.empty()) {
+        w_.clear();
+        return;
+    }
+    repaint(paint, {0, 0, sx_ - 1, sz_ - 1});
+}
+
+void Heights::repaint(const PaintLayer& paint, const SampleRect& r) {
+    if (w_.empty()) w_.assign(static_cast<std::size_t>(sx_) * sz_, PaintLayer::kUnpainted);
+    for (std::uint32_t z = r.z0; z <= std::min(r.z1, sz_ - 1); ++z)
+        for (std::uint32_t x = r.x0; x <= std::min(r.x1, sx_ - 1); ++x) w_[static_cast<std::size_t>(z) * sx_ + x] = paint.get(x, z);
 }
 
 std::optional<float> raycast(const Heights& h, math::Vec3 origin, math::Vec3 dir, float max_distance) {
@@ -361,7 +403,9 @@ TileMesh tile_mesh(const Heights& heights, std::uint32_t tx, std::uint32_t tz) {
             // Tangent along +x (the direction of +u), on the surface; bitangent along +z (+v).
             math::Vec3 t = math::normalize(math::Vec3{1, 0, 0} - n * n.x);
             const float w = math::dot(math::cross(n, t), math::Vec3{0, 0, 1}) < 0.0f ? -1.0f : 1.0f;
-            m.vertices.push_back({p, n, {1, 1, 1}, {p.x, p.z}, {t.x, t.y, t.z, w}});
+            const std::uint32_t packed = heights.weights(gx, gz);
+            const math::Vec3 weights{PaintLayer::weight(packed, 1), PaintLayer::weight(packed, 2), PaintLayer::weight(packed, 3)};
+            m.vertices.push_back({p, n, weights, {p.x, p.z}, {t.x, t.y, t.z, w}});
             m.lo = {std::min(m.lo.x, p.x), std::min(m.lo.y, p.y), std::min(m.lo.z, p.z)};
             m.hi = {std::max(m.hi.x, p.x), std::max(m.hi.y, p.y), std::max(m.hi.z, p.z)};
         }

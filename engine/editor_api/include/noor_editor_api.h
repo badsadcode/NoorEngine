@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 17u
+#define NOOR_EDITOR_API_VERSION 18u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -141,6 +141,12 @@ NOOR_API const char* noor_doc_export_csg(noor_doc* doc, const char* model_id, co
    noor_viewport_set_brush shows the brush circle and turns left-drags on the terrain into "stroke"
    events: {"type": "stroke", "phase": "begin" | "dab" | "end", "terrain": id, "point": [x, y, z],
    "seconds"} (no "point" when the pointer is off the terrain). */
+/* v18: painting (Milestone 6, part 7) through the same call: "tool": "paint" with "material": a
+   .noormat asset id. The terrain's "layers" (up to four {"material", "tiling"}) gain the material if
+   it isn't one of them yet; the first paint stroke makes Assets/Terrain/<name>.noorpaint (the
+   component's "paint"). Strength: how far towards the material per second (1 = all the way).
+   Returns {"paint": asset id, "layer": index, "changed"} for paint strokes. Fast pointer moves are
+   filled in with dabs along the way (sculpting too). */
 NOOR_API const char* noor_doc_sculpt(noor_doc* doc, const char* command_json);
 /* {"terrain": entity id | null (off), "radius": metres}. While set, the gizmo and click-to-select
    are off in the viewport. */

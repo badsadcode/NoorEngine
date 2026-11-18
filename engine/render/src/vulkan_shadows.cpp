@@ -198,7 +198,8 @@ void Renderer::Impl::record_shadows(VkCommandBuffer cmd, const FrameDesc& frame)
                                              {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
                                              {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
                                              item.tint,
-                                             {material, c, 0, 0}};
+                                             {material, c, 0, 0},
+                                             item.splat_tiling};
                 vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
                 const VkDeviceSize offset = 0;
                 vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);

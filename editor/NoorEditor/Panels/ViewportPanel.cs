@@ -121,7 +121,8 @@ public sealed class ViewportPanel : DockPanel
         var selected = _doc.Selected;
         Viewport.SetSelection(selected == null ? [] : _doc.Subtree(selected.Id));
         // Sculpting the selected terrain: the brush takes the left button, the gizmo goes away.
-        var sculpting = _doc.Sculpting && selected is { FromPrefab: false } && selected.Components["terrain"] != null && !_doc.Playing;
+        var sculpting = (_doc.Sculpting || (_doc.Painting && _doc.PaintMaterial != null)) && selected is { FromPrefab: false } &&
+                        selected.Components["terrain"] != null && !_doc.Playing;
         Viewport.SetBrush(sculpting ? selected!.Id : null, _doc.Brush.Radius);
         var mode = selected is { FromPrefab: false } && !_doc.Playing && !sculpting ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
@@ -143,7 +144,8 @@ public sealed class ViewportPanel : DockPanel
         if (phase == "begin")
         {
             var b = _doc.Brush;
-            command["tool"] = b.Tool;
+            command["tool"] = _doc.Painting ? "paint" : b.Tool;
+            if (_doc.Painting) command["material"] = _doc.PaintMaterial;
             command["radius"] = b.Radius;
             command["strength"] = b.Strength;
             command["falloff"] = b.Falloff;
@@ -161,6 +163,11 @@ public sealed class ViewportPanel : DockPanel
         {
             switch (ev?["type"]?.GetValue<string>())
             {
+                case "click" when _doc.Painting && _doc.PaintMaterial != null && ev["face"] is JsonValue paintFace &&
+                                  ev["entity"]?.GetValue<string>() is { } paintBrush && _doc.Scene.Entities.Any(e => e.Id == paintBrush && e.Components["brush"] != null && !e.FromPrefab):
+                    // Painting: a click on a brush face gives it the material (the selection stays).
+                    if (!_doc.PaintFace(paintBrush, paintFace.GetValue<int>())) EngineLog.Warn("Paint", Native.LastError());
+                    break;
                 case "click":
                     var hitId = ev["entity"]?.GetValue<string>();
                     var target = _doc.ClickTarget(hitId);

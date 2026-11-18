@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 6, part 7: painting
+**Added**
+- **Terrain painting**: up to four material layers per terrain (`"layers": [{"material", "tiling"}]`),
+  blended by painted weights (`terrain::PaintLayer`, `.noorpaint` asset, importer `terrain_paint`).
+  Inspector ▸ terrain ▸ **Paint** with a material; painting a new material adds it as a layer. One undo
+  step per stroke; Save writes the weights; games load them. **Material layers** list with tiling.
+- **Splat rendering**: `render::DrawItem::splat` (+ `splat_layers`, `splat_tiling`): the mesh shader
+  blends four materials (colour, normal, roughness, metalness, occlusion, glow) by the weights in the
+  vertex colour. Terrains are always drawn as splats. `MeshPushConstants` grew to 96 bytes.
+- **Paint on CSG faces with the same tool**: with Paint on, a click on a brush face gives it the material.
+- `terrain_edit::paint`, `mix_weights`; `TileLayer<T>` shares the sparse tile storage of sculpt and paint.
+- Editor API **v18**: `noor_doc_sculpt` takes `"tool": "paint"` and `"material"`.
+
+**Changed:** fast strokes are filled in with dabs along the pointer's path (sculpting too); the
+document keeps one edit per terrain entity with both layers.
+
+**Fixed:** a smoke check's upper bound on a sculpted height depended on frame timing (it failed at
+7.03 m against 7 m); it now checks "a few metres".
+
+**Tests:** paint unit tests, an API painting test (layers, the four-material limit, undo, saved
+weights), a fast-stroke API test, `render.golden_TerrainPaint`, smoke checks for terrain and face painting.
+
 ### 2026-11-18 — Milestone 6, part 6: terrain sculpting
 **Added**
 - **Sculpting**: Raise, Lower, Smooth and Flatten brushes with radius, strength and falloff

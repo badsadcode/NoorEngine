@@ -222,6 +222,12 @@ struct DrawItem {
     MaterialHandle material;          // none: the default material
     std::uint32_t first_index = 0;    // a range of the mesh's indices (a submesh);
     std::uint32_t index_count = 0;    // 0 = the whole mesh
+    // Splatting (terrains, Milestone 6 part 7): up to four materials blended per pixel by the vertex
+    // colour, which holds the weights of layers 1, 2 and 3 (layer 0, `material`, gets the rest).
+    // Each layer's UVs are multiplied by its tiling before the material's own UV transform.
+    bool splat = false;
+    std::array<MaterialHandle, 3> splat_layers{};
+    math::Vec4 splat_tiling{1, 1, 1, 1};
 };
 
 // The 2D overlay (HUD), drawn over the 3D scene with alpha blending. Triangle-list vertices in
