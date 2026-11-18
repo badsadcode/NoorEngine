@@ -33,7 +33,9 @@ table says where it goes and what it waits on. Moving into a milestone still nee
 | **The first real game on NoorEngine: The Uncounted, Chapter Two** (sequel to github.com/badsadcode/TheUncounted, Tom's data-driven first-person action RPG on raylib/C++20: JSON content, dialogue, quests, combat, save/load, mods, a level editor). Uncle Wispr will be in it: an old, almost deaf uncle with a bronze ear trumpet who mishears everything. "No rush." (Textured walls will be needed.) Before planning: read its HANDOFF.md and docs/ARCHITECTURE.md to see which systems (dialogue, quests, inventory, combat, saves, content validation) the engine needs and what can be carried over as data. | Tom | 2026-11-17 |
 | **2D sprites and directional billboards**: sprite-sheet assets (grid, frames, named animations, 8 viewing directions), sprite rendering in 2D and as camera-facing billboards in 3D (Doom-style enemies), animation playback from scripts. Test data offered: a character sheet from The Uncounted (8 directions × idle, walk, run, attack, hurt, plus death poses). | Tom | 2026-11-17 |
 
-- **NoorSky** → the roadmap's Milestone 8 "sky/weather" group. Waits on: fog and aerial perspective in the
+- **NoorSky** → **scheduled**: Milestone 8, group 8A ([M8_PLAN.md](docs/milestones/M8_PLAN.md), brief in
+  [docs/ideas/NOORSKY.md](docs/ideas/NOORSKY.md)); underwater and space environments added (Tom, 2026-11-18).
+  Originally triaged as: the roadmap's Milestone 8 "sky/weather" group. Waits on: fog and aerial perspective in the
   renderer, a sun-driven atmosphere, and environment lighting rebuilt on the GPU (today it's baked on the
   CPU, too slow for a moving sun). Hillside with its forest is the showcase scene. Phase A first.
 - **The Uncounted, Chapter Two** → the first real game, so it should steer the order of what comes next

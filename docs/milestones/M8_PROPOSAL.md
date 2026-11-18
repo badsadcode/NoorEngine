@@ -1,6 +1,6 @@
 # Milestone 8: a proposal (not a plan yet)
 
-**Status:** for Tom and Noor to decide · **Date:** 2026-11-18 · **From:** Sage, after the
+**Status:** answered 2026-11-18 → [M8_PLAN.md](M8_PLAN.md) · **Date:** 2026-11-18 · **From:** Sage, after the
 [Milestone 7 review](M7_REVIEW.md) and the first [ideas triage](../../IDEAS.md#triaged).
 
 ## What the roadmap says
@@ -37,6 +37,18 @@ NoorEngine has none yet. The Uncounted has its own, on raylib.
 | **8C: Skeletal animation** | Skinned meshes from glTF, an animation player, blending and a simple state machine, root motion, an editor preview; Alden Wayfarer as the test character (a GLB needed) | Big and self-contained; needed for 3D characters and the mascot, not for The Uncounted's style |
 | **8D: Water** | Water bodies (lakes, a sea plane) with reflections, shorelines that read the terrain, underwater fog (reusing 8A) | Builds on 8A's fog and sky |
 | **Later in 8 (or 9)** | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Volumetrics need 8A first; streaming belongs with Milestone 9's big worlds |
+
+## Answers (2026-11-18)
+
+1. **Order:** 8A → 8B → 8C → 8D, as proposed.
+2. Not answered yet (sprites or 3D for The Uncounted, Chapter Two); it doesn't change 8A.
+3. **The six presets:** yes, plus environments for **underwater** and **space** (space: 8A part 5;
+   underwater: with 8D's water).
+4. **The NoorSky brief:** yes, in the repository (`docs/ideas/NOORSKY.md`; the images stay out).
+5. **NoorMD:** it needs a rework first; it keeps its Unreal, Godot and general exports and gets a
+   NoorEngine mode later. For now 3D assets come from **Blender**; trees, grass and rocks from NoorMD now
+   and then. And animation should support popular rigs, Rigify included (8C: any glTF rig plays;
+   retargeting through a humanoid bone map with Rigify, Mixamo and Unreal-mannequin presets).
 
 ## Questions only Tom (and Noor) can answer
 
