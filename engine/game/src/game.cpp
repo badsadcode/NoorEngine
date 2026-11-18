@@ -63,6 +63,25 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         t.indices = std::move(cooked->indices);
         return t;
     };
+    // Terrains collide as height fields, generated from their settings (shared with the renderer).
+    physics_options.terrain_tiles = [&project, &registry](const Json& component) {
+        std::vector<physics::HeightTile> tiles;
+        const auto settings = terrain::Settings::from_json(component, file_resolver(registry_asset_path(project, registry)));
+        auto heights = terrain::Heights::shared(settings);
+        if (!heights) {
+            NOOR_LOG_ERROR("Game", "Terrain: {}", heights.error().describe());
+            return tiles;
+        }
+        const auto& h = **heights;
+        for (std::uint32_t tz = 0; tz < settings.tiles_z; ++tz)
+            for (std::uint32_t tx = 0; tx < settings.tiles_x; ++tx) {
+                const math::Vec2 o = h.origin();
+                const float step = static_cast<float>(terrain::kTileCells) * h.cell_size();
+                tiles.push_back({{o.x + static_cast<float>(tx) * step, 0.0f, o.y + static_cast<float>(tz) * step}, h.cell_size(), terrain::kTileSamples,
+                                 h.tile(tx, tz)});
+            }
+        return tiles;
+    };
     world->add_system(std::make_unique<physics::PhysicsSystem>(std::move(physics_options)));
 
     // A sound clip is an asset id or a project-relative path.
@@ -143,7 +162,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool sun = is_light && !view.has_sun && light_type == "directional";
         const bool local = is_light && (light_type == "point" || light_type == "spot");
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
-        if (!camera && !primitive && !mesh && !sun && !local && !env && !e.has("csg_model")) continue;
+        if (!camera && !primitive && !mesh && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
         if (env) {
             const auto& en = e.components["environment"];
             if (const auto id = asset::guid_field(en, "hdri"); id && asset_path)
@@ -224,6 +243,13 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 prim.world = world * math::scale(size);
             }
             view.primitives.push_back(prim);
+        }
+        if (e.has("terrain") && e.components["terrain"].is_object()) {
+            const auto& t = e.components["terrain"];
+            SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain::Settings::from_json(t, file_resolver(asset_path)), {}};
+            if (const auto mat = asset::guid_field(t, "material"); mat && asset_path)
+                if (auto file = asset_path(*mat)) terrain.material_file = std::move(*file);
+            view.terrains.push_back(std::move(terrain));
         }
         if (e.has("csg_model")) {
             const auto model_index = static_cast<std::size_t>(&e - entities.data());

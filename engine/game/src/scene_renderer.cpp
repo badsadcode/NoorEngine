@@ -22,6 +22,8 @@ SceneRenderer::~SceneRenderer() {
     destroy(box_);
     destroy(sphere_);
     for (const auto& [id, c] : cooked_) destroy(c.mesh);
+    for (const auto& [id, t] : terrains_)
+        for (const auto h : t.tiles) destroy(h);
     for (const auto& [key, h] : capsules_) destroy(h);
     for (const auto& [path, model] : models_) {
         if (model)
@@ -71,6 +73,32 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
             item.index_count = sm.index_count;
             if (sm.material >= 0 && sm.material < static_cast<int>(it->second->materials.size()))
                 item.material = it->second->materials[static_cast<std::size_t>(sm.material)];
+            out.push_back(item);
+        }
+    }
+    for (const auto& t : view.terrains) {
+        TerrainMeshes& tm = terrains_[t.entity];
+        const std::string key = t.settings.key();
+        if (tm.key != key) {  // new, or its settings changed
+            for (const auto h : tm.tiles)
+                if (h.valid()) renderer_.destroy_mesh(h);
+            tm = {key, {}, false};
+            if (auto heights = terrain::Heights::shared(t.settings)) {
+                for (std::uint32_t tz = 0; tz < t.settings.tiles_z; ++tz)
+                    for (std::uint32_t tx = 0; tx < t.settings.tiles_x; ++tx) {
+                        const auto mesh = terrain::tile_mesh(**heights, tx, tz);
+                        auto h = renderer_.create_mesh({{mesh.vertices.data(), mesh.vertices.size()}, mesh.indices, "Terrain tile"});
+                        tm.tiles.push_back(h ? *h : render::MeshHandle{});
+                    }
+            } else {
+                NOOR_LOG_WARN("Game", "Terrain {}: {}", t.entity.to_string(), heights.error().describe());
+            }
+        }
+        const auto material = t.material_file.empty() ? render::MaterialHandle{} : materials_.file(t.material_file);
+        for (const auto h : tm.tiles) {
+            if (!h.valid()) continue;
+            render::DrawItem item{h, math::translation(t.position)};
+            item.material = material;
             out.push_back(item);
         }
     }

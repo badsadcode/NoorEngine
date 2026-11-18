@@ -4,6 +4,29 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 6, part 5: terrain foundation
+**Added**
+- **`noor_terrain`** (runtime-safe module, [docs/terrain/TERRAIN.md](docs/terrain/TERRAIN.md)):
+  heightfield tiles of 256 × 256 cells (257² samples, shared edges, no seams), heights from
+  deterministic gradient noise (seed, height, scale, octaves), a 16-bit or 8-bit PNG heightmap
+  (min/max metres) or flat; `Heights::height`/`normal`, tile meshes, a shared cache so the renderer
+  and physics generate once.
+- **`terrain` component**: the settings above plus `material` and `collision`; centred on its
+  entity (rotation and scale ignored). Drawn in the editor viewport, Play and built games; one static
+  Jolt `HeightFieldShape` per tile. The mesh triangles use Jolt's diagonal, so you stand on what you
+  see.
+- Editor: **Create ▸ Terrain**; the Inspector shows `base` as a list and the heightmap as a picture
+  picker.
+- [ADR-031](docs/decisions/ADR-031-terrain-heightfields.md) **accepted**, with what part 5 changed
+  (settings in the component until there are layers to store; centred frame; measured cost).
+
+**Tests:** `test_terrain` (same seed → same hash, pinned for seed 7 and identical in Debug and
+Release; seams; height lookup vs. mesh triangles; heightmap; settings; cache); `golden_Terrain`;
+`cli.build_terrain` + `player.terrain_walk` (a built game: a character walks up a heightmap ramp,
+feet within 2 mm of the ground); 4 editor smoke checks. A configure-time check now fails the build
+when a doctest name contains `;` (ctest splits names there and silently ran nothing for four of our
+tests until we noticed).
+
 ### 2026-11-18 — Milestone 6, part 4: CSG in games (cook, collide, export)
 **Added**
 - **Cooked CSG models** (`noor/game/cooked_csg.h`): `<project>/.noor/cooked/csg/<model>.ncsg` with

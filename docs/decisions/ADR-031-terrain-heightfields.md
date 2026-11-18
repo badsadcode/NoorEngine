@@ -1,6 +1,6 @@
 # ADR-031: Terrain: tiled heightfields with a non-destructive layer stack
 
-**Status:** Proposed (Milestone 6, part 5 decides the details) · **Date:** 2026-11-17 · **Milestone:** 6
+**Status:** Accepted (Milestone 6, part 5; the layer files are settled in parts 6–7) · **Date:** 2026-11-17, accepted 2026-11-18 · **Milestone:** 6
 
 ## Context
 Spec 13.1 starts terrain as heightfield tiles and requires the representation to be documented:
@@ -39,6 +39,23 @@ consumer (its decision D23), and the need for deterministic maths for seeded gen
 - **Runtime:** compiled heights + weights per tile; render meshes per tile (one LOD in Milestone 6);
   Jolt height fields per tile.
 
+## What part 5 settled (2026-11-18)
+Built and tested; where it differs from the proposal above, this wins.
+- **Settings live in the `terrain` component**, not in `Assets/Terrain/<name>/terrain.json`: a seed
+  or heightmap recipe is a few numbers, and a file would only add a second place to keep in sync.
+  The per-tile binary files arrive with the first data that needs them (sculpt layer, part 6;
+  weights, part 7).
+- **Centred on the entity** (not "the entity is tile (0, 0)'s corner"): Create ▸ Terrain at the
+  origin puts you in the middle of it. Rotation and scale of the entity are ignored.
+- **Triangle split = Jolt's** (diagonal from the cell's (x, z) corner to (x+1, z+1)), in the mesh and
+  in `Heights::height`, so the drawn ground is the collided ground (built-game test: feet within
+  2 mm).
+- **One Jolt `HeightFieldShape` body per tile** (257 samples; Jolt pads internally), static.
+- **Noise** uses + − × ÷ and floor only (no sqrt either), SplitMix64 hashing; seed 7's hash is pinned
+  in CI and was identical in Debug and Release builds (MSVC x64). Other compilers: checked when we
+  build with them.
+- **Shared heights:** renderer and physics share one generated `Heights` per settings key.
+
 ## Consequences
 - Easier: sculpt/paint as image-like operations on tiles; region undo; partial saves and rebuilds.
 - Harder: no overhangs, caves or vertical cliffs (steep slopes stretch textures until triplanar
@@ -47,8 +64,10 @@ consumer (its decision D23), and the need for deterministic maths for seeded gen
   (same seed → same hash) in CI.
 
 ## Evidence / benchmark
-None yet. Part 5 measures memory, compile and render cost for 2 × 2 tiles (512 m) and sculpt
-latency.
+Measured 2026-11-18, RelWithDebInfo, the dev machine ([docs/terrain/TERRAIN.md](../terrain/TERRAIN.md)):
+heights for 2 × 2 tiles in ~35 ms (1.05 MB); one tile mesh in ~2.3 ms (5.5 MB: full vertex format,
+one LOD, so a lighter terrain format is worth doing before big maps). Render cost per frame was not
+measured separately (the Render stats panel shows it live). Sculpt latency: part 6.
 
 ## Migration or reversal strategy
 Layers are stored separately from compiled data, so the tile size or storage format can change
@@ -56,4 +75,4 @@ with a migration (ADR-005) that resamples layers. A voxel layer (spec 14) can be
 heightfield later rather than replacing it.
 
 ## Reviewed by
-Sage (proposal).
+Sage (proposal; accepted after part 5).

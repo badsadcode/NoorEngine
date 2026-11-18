@@ -250,6 +250,7 @@ internal static class SmokeTest
         await TextureSettingsChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
+        await TerrainChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -942,6 +943,38 @@ internal static class SmokeTest
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = model });
         check(doc.CsgInfo().Count == 0, "brushes: deleting the model removes it");
         await Task.Delay(300);
+    }
+
+    // Milestone 6, part 5: Create ▸ Terrain draws a tile of generated hills; a new seed reshapes it.
+    private static async Task TerrainChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        long Triangles()
+        {
+            var json = window.ViewportView?.Viewport.RenderStats();
+            return json != null && JsonNode.Parse(json) is JsonObject s && s["triangles"] is JsonNode t ? t.GetValue<long>() : -1;
+        }
+        await Task.Delay(500);
+        var before = Triangles();
+        doc.Select(null);
+        var id = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.TerrainTemplateName));
+        check(id != null, "terrain: Create ▸ Terrain makes an entity");
+        if (id == null) return;
+        window.ViewportView?.Viewport.Frame(doc.Subtree(id));
+        await Task.Delay(1200);
+        var with = Triangles();
+        // One tile: 256 x 256 cells, two triangles each (the shadow passes may draw it again).
+        check(with - before >= 2 * 256 * 256, $"terrain: Create ▸ Terrain draws a 256 m tile ({before} → {with} triangles)");
+        var terrain = (JsonObject)doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]!.DeepClone();
+        terrain["seed"] = 42;
+        terrain["material"] = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Textures/tiles.noormat")?.Guid;
+        doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = id, ["type"] = "terrain", ["value"] = terrain });
+        await Task.Delay(1200);
+        check(Triangles() == with, "terrain: a new seed rebuilds it (same size, new hills)");
+        shot(window, "editor_26_terrain.png");
+        doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
+        await Task.Delay(600);
+        check(Triangles() == before, "terrain: deleting it frees its tiles");
     }
 
     // Milestone 6, part 3: click a face, give it a material, cut a window after texturing.

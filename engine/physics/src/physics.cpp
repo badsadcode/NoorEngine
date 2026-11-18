@@ -18,6 +18,7 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
@@ -134,6 +135,7 @@ struct PhysicsSystem::Impl {
         bool sensor;
     };
     std::unordered_map<Guid, Body> bodies;
+    std::unordered_map<Guid, std::vector<JPH::BodyID>> terrain_bodies;  // height field tiles per terrain entity
     struct Character {
         JPH::Ref<JPH::CharacterVirtual> controller;
         float step_height = 0.4f;
@@ -347,6 +349,31 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         c.step_height = std::max(0.0f, number(*ch, "step_height", 0.4f));
         d.characters[entity.id] = std::move(c);
     }
+    // Terrain: one static height field per tile, placed at the entity (its rotation and scale are ignored).
+    if (const auto t = entity.components.find("terrain"); t != entity.components.end() && t->is_object() && t->value("collision", true) &&
+                                                          impl_->options.terrain_tiles) {
+        auto& d = *impl_;
+        const auto pos = runtime::api::world_position(world, entity.id).value_or(math::Vec3{});
+        for (const auto& tile : impl_->options.terrain_tiles(*t)) {
+            if (tile.samples < 2 || tile.heights.size() != static_cast<std::size_t>(tile.samples) * tile.samples) continue;
+            JPH::HeightFieldShapeSettings hs(tile.heights.data(), to_j(tile.corner), JPH::Vec3(tile.cell_size, 1.0f, tile.cell_size), tile.samples);
+            auto result = hs.Create();
+            if (result.HasError()) {
+                NOOR_LOG_ERROR("Physics", "'{}': terrain tile not created: {}", entity.name, result.GetError().c_str());
+                continue;
+            }
+            JPH::BodyCreationSettings settings(result.Get(), to_j(pos), JPH::Quat::sIdentity(), JPH::EMotionType::Static, layers::kStatic);
+            settings.mFriction = 0.8f;
+            d.entity_of.push_back(entity.id);
+            settings.mUserData = d.entity_of.size();
+            const JPH::BodyID id = d.system.GetBodyInterface().CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+            if (id.IsInvalid()) {
+                NOOR_LOG_ERROR("Physics", "'{}': too many physics bodies", entity.name);
+                break;
+            }
+            d.terrain_bodies[entity.id].push_back(id);
+        }
+    }
     const auto c = entity.components.find("collider");
     if (c == entity.components.end() || !c->is_object()) return;
     auto& d = *impl_;
@@ -394,6 +421,14 @@ void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entit
     auto& d = *impl_;
     d.characters.erase(entity.id);
     d.poses.erase(entity.id);
+    if (const auto t = d.terrain_bodies.find(entity.id); t != d.terrain_bodies.end()) {
+        auto& tbi = d.system.GetBodyInterface();
+        for (const auto& id : t->second) {
+            tbi.RemoveBody(id);
+            tbi.DestroyBody(id);
+        }
+        d.terrain_bodies.erase(t);
+    }
     const auto it = d.bodies.find(entity.id);
     if (it == d.bodies.end()) return;
     auto& bi = d.system.GetBodyInterface();

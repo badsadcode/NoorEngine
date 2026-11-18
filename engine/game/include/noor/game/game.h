@@ -14,6 +14,7 @@
 #include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
 #include "noor/render/renderer.h"
+#include "noor/terrain/terrain.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
@@ -77,6 +78,14 @@ struct SceneView {
         std::uint64_t key = 0;  // what the scene says the model is now (a different cooked key: stale)
     };
     std::vector<Csg> csg;
+    // Terrains (`terrain` components, noor/terrain/terrain.h): generated from their settings.
+    struct Terrain {
+        Guid entity;
+        math::Vec3 position;  // the terrain's centre (rotation and scale are ignored)
+        terrain::Settings settings;
+        std::filesystem::path material_file;  // empty: the default material
+    };
+    std::vector<Terrain> terrains;
     std::vector<Primitive> primitives;
     std::optional<Camera> camera;
     // The sun: the first entity with a directional `light` ({"type": "directional", "color":

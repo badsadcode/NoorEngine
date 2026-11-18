@@ -65,6 +65,12 @@ private:
         bool warned = false;
     };
     std::unordered_map<Guid, CookedModel> cooked_;
+    struct TerrainMeshes {
+        std::string key;  // the settings it was built from
+        std::vector<render::MeshHandle> tiles;
+        bool warned = false;
+    };
+    std::unordered_map<Guid, TerrainMeshes> terrains_;
     std::filesystem::path cooked_root_;
     asset::AssetFileResolver resolve_;
 };

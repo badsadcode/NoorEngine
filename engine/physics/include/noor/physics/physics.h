@@ -12,6 +12,8 @@
 //                optional: "offset": [x, y, z], "trigger": true (detects, doesn't push)
 //   "rigidbody": {"type": "dynamic" | "kinematic" | "static", "mass": 1, "friction": 0.5,
 //                 "restitution": 0, "linear_damping": 0.05, "gravity_scale": 1}
+//   "terrain":   heightfield tiles (noor/terrain/terrain.h) collide unless "collision": false: one
+//                static height field per tile, from the host's terrain_tiles.
 //   "character": {"radius": 0.3, "height": 1.8, "max_slope": 50, "step_height": 0.4, "mass": 70}
 //                A capsule character controller (Jolt CharacterVirtual) with its feet at the entity's
 //                origin: slides along walls, walks up steps and slopes, sticks to the floor going down,
@@ -38,6 +40,14 @@ struct Triangles {
     std::vector<std::uint32_t> indices;  // triangle list
 };
 
+// One terrain tile's heights for a static height field, in the entity's space.
+struct HeightTile {
+    math::Vec3 corner;          // sample (0, 0)
+    float cell_size = 1.0f;
+    std::uint32_t samples = 0;  // per side
+    std::vector<float> heights;  // samples x samples, row by row (z rows of x samples)
+};
+
 struct RayHit {
     Guid entity;
     math::Vec3 point;
@@ -53,6 +63,8 @@ public:
         std::function<std::optional<Triangles>(const asset::Json& mesh_component)> mesh_triangles;
         // Triangles of a CSG model (the entity with `csg_model`), in the model's space: cooked data.
         std::function<std::optional<Triangles>(const Guid& model)> csg_triangles;
+        // Height field tiles of a `terrain` component.
+        std::function<std::vector<HeightTile>(const asset::Json& terrain_component)> terrain_tiles;
     };
 
     explicit PhysicsSystem(Options options);

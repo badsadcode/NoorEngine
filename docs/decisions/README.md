@@ -28,7 +28,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [028](ADR-028-player-and-builds.md) | The `game` module shared by Play and `noor_player`; `noor_cli build` (player + project content + game.json) | Accepted |
 | [029](ADR-029-textures.md) | Textures: stb_image, colour-space kinds in `.noormeta`, linear-light mips, BC7/BC5 compression, cache | Accepted (Milestone 5; .exr/BC6H open) |
 | [030](ADR-030-materials.md) | Materials: `.noormat` (glTF metallic-roughness channels) + instances; the future graph outputs the same channels | Accepted (Milestone 5; graph future) |
-| [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Proposed (Milestone 6) |
+| [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Accepted (Milestone 6, part 5) |
 
 Still open from the register: 007 plugin ABI, 013 world coordinates, 014 procedural graph,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.

@@ -109,6 +109,8 @@ struct RenderSnapshot {
         std::shared_ptr<const CsgMesh> mesh;
     };
     std::vector<Csg> csg;
+    using Terrain = game::SceneView::Terrain;  // generated in the viewport from their settings
+    std::vector<Terrain> terrains;
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
 };

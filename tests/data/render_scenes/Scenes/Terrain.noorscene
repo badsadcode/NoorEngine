@@ -1,0 +1,112 @@
+{
+  "noor_scene": 2,
+  "id": "7e5d0000-000d-4000-8000-000000000000",
+  "name": "Terrain",
+  "entities": [
+    {
+      "id": "7e5d0000-000d-4000-8000-000000000001",
+      "name": "Hills",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "terrain": {
+          "tiles": [
+            1,
+            1
+          ],
+          "cell_size": 1,
+          "base": "noise",
+          "seed": 11,
+          "height": 30,
+          "scale": 110,
+          "octaves": 5,
+          "material": "7e5d0000-3a70-4000-8000-000000000004",
+          "collision": true
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000d-4000-8000-000000000002",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          -0.3261904081870283,
+          -0.28257102082169233,
+          -0.10284744064531129,
+          0.8962007809365465
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-000d-4000-8000-000000000003",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          45,
+          110
+        ],
+        "rotation": [
+          -0.1908089953765448,
+          0,
+          0,
+          0.981627183447664
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1,
+          "ev100": 14
+        }
+      }
+    }
+  ]
+}

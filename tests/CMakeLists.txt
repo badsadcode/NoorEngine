@@ -26,8 +26,17 @@ add_executable(noor_unit_tests
     unit/test_shadows.cpp
     unit/test_environment.cpp
     unit/test_csg.cpp
+    unit/test_terrain.cpp
 )
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg doctest::doctest stb::image)
+# ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
+file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
+foreach(source IN LISTS noor_unit_sources)
+    file(STRINGS ${source} bad_names REGEX "TEST_CASE[(]\"[^\"]*;")
+    if(bad_names)
+        message(FATAL_ERROR "${source}: a TEST_CASE name contains ';' (ctest would run nothing for it): use a comma")
+    endif()
+endforeach()
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -124,7 +133,7 @@ endif()
 # reference pictures in tests/golden by noor_image_compare (tests/tools/image_compare.cpp).
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
-foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass)
+foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -144,6 +153,16 @@ add_test(NAME player.csg_doorway
     COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_csg_game/CSG Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_csg
         -P ${CMAKE_CURRENT_SOURCE_DIR}/csg_check.cmake)
 set_tests_properties(player.csg_doorway PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csg_game)
+
+# Terrain in games (Milestone 6, part 5): a character walks up a heightmap ramp in a built game.
+add_test(NAME cli.build_terrain
+    COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/terrain_project ${CMAKE_CURRENT_BINARY_DIR}/built_terrain_game)
+set_tests_properties(cli.build_terrain PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP built_terrain_game
+                     PASS_REGULAR_EXPRESSION "Built 'Terrain Test'")
+add_test(NAME player.terrain_walk
+    COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_terrain_game/Terrain Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_terrain
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/terrain_check.cmake)
+set_tests_properties(player.terrain_walk PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_terrain_game)
 
 # The PBR sample (Milestone 5, part 8): the same showroom under the sun and three HDRIs.
 foreach(name IN ITEMS Showroom_Sun Showroom_Studio Showroom_Evening Showroom_Venice)

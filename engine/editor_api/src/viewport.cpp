@@ -27,6 +27,7 @@
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
 #include "noor/game/environment_library.h"
+#include "noor/terrain/terrain.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
 
@@ -339,6 +340,12 @@ void render_thread_main(noor_viewport* vp) {
         std::vector<LoadedMesh> ghosts;
     };
     std::unordered_map<std::uint64_t, CsgGpu> csg_gpu;
+    // Terrains on the GPU, by entity: rebuilt when their settings change.
+    struct TerrainGpu {
+        std::string key;
+        std::vector<LoadedMesh> tiles;
+    };
+    std::unordered_map<Guid, TerrainGpu> terrain_gpu;
     noor::render::MaterialHandle ghost_subtract, ghost_intersect, face_material;
     noor::render::MeshHandle face_mesh;     // the highlighted face, lifted 3 mm off the surface
     Mat4 face_world = Mat4::identity();
@@ -567,6 +574,49 @@ void render_thread_main(noor_viewport* vp) {
                         grow(lo, hi, prim.world.transform_point({c & 1 ? lm->hi.x : lm->lo.x, c & 2 ? lm->hi.y : lm->lo.y, c & 4 ? lm->hi.z : lm->lo.z}));
                         any = true;
                     }
+                }
+                // Terrains: one draw per tile.
+                for (const auto& t : snap->terrains) {
+                    TerrainGpu& tg = terrain_gpu[t.entity];
+                    const std::string key = t.settings.key();
+                    if (tg.key != key) {
+                        for (const auto& old : tg.tiles)
+                            if (old.handle.valid()) r.destroy_mesh(old.handle);
+                        tg = {key, {}};
+                        if (auto heights = noor::terrain::Heights::shared(t.settings)) {
+                            for (std::uint32_t tz = 0; tz < t.settings.tiles_z; ++tz)
+                                for (std::uint32_t tx = 0; tx < t.settings.tiles_x; ++tx) {
+                                    auto mesh = noor::terrain::tile_mesh(**heights, tx, tz);
+                                    LoadedMesh lm{{}, mesh.lo, mesh.hi, {}, std::move(mesh.indices), {}};
+                                    if (auto h = r.create_mesh({{mesh.vertices.data(), mesh.vertices.size()}, lm.indices, "Terrain tile"})) lm.handle = *h;
+                                    lm.positions.reserve(mesh.vertices.size());
+                                    for (const auto& v : mesh.vertices) lm.positions.push_back(v.position);
+                                    tg.tiles.push_back(std::move(lm));
+                                }
+                        } else {
+                            NOOR_LOG_WARN("Viewport", "Terrain: {}", heights.error().describe());
+                        }
+                    }
+                    const auto material = t.material_file.empty() ? noor::render::MaterialHandle{} : materials->file(t.material_file);
+                    for (auto& lm : tg.tiles) {
+                        if (!lm.handle.valid()) continue;
+                        lm.parts = {{0, static_cast<std::uint32_t>(lm.indices.size()), material}};
+                        const Mat4 world = noor::math::translation(t.position);
+                        scene_draws.push_back({{lm.handle, world}, t.entity, &lm});
+                        for (int c = 0; c < 8; ++c) {
+                            grow(lo, hi, world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));
+                            any = true;
+                        }
+                    }
+                }
+                for (auto it = terrain_gpu.begin(); it != terrain_gpu.end();) {
+                    if (std::ranges::any_of(snap->terrains, [&](const auto& t) { return t.entity == it->first; })) {
+                        ++it;
+                        continue;
+                    }
+                    for (const auto& lm : it->second.tiles)
+                        if (lm.handle.valid()) r.destroy_mesh(lm.handle);
+                    it = terrain_gpu.erase(it);
                 }
                 // CSG models: one draw per brush (so a click selects the brush that made the face).
                 if (!ghost_subtract.valid()) {
@@ -1085,6 +1135,10 @@ void render_thread_main(noor_viewport* vp) {
         if (!stats_json.empty()) vp->render_stats = std::move(stats_json);
     }
 
+    for (auto& [id, tg] : terrain_gpu)
+        for (const auto& lm : tg.tiles)
+            if (lm.handle.valid()) r.destroy_mesh(lm.handle);
+    terrain_gpu.clear();
     for (auto& [key, gpu] : csg_gpu) {
         if (gpu.handle.valid()) r.destroy_mesh(gpu.handle);
         for (const auto& g : gpu.ghosts)

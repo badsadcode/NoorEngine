@@ -437,6 +437,35 @@ public sealed class ComponentsEditor : StackPanel
                 editor = combo;
                 break;
             }
+            case JsonValue v when v.TryGetValue<string>(out var choice) && type == "terrain" && field == "base":
+            {
+                // Terrains: what the heights start from (ADR-031).
+                string[] options = ["noise", "flat", "heightmap"];
+                var combo = new ComboBox { ItemsSource = options, SelectedItem = options.Contains(choice) ? choice : null, Classes = { "field" },
+                                           HorizontalAlignment = HorizontalAlignment.Stretch };
+                combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
+                editor = combo;
+                break;
+            }
+            case var _ when type == "terrain" && field == "heightmap" && (value is null || value is JsonValue hv && hv.TryGetValue<string>(out _)):
+            {
+                // A heightmap: any picture in the project (16-bit greyscale PNGs keep the most steps).
+                var current = (value as JsonValue)?.GetValue<string>();
+                var pictures = _doc.Assets.Where(a => a.Path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)).ToList();
+                var items = new List<string> { "(none)" };
+                items.AddRange(pictures.Select(m => m.Path));
+                var selected = current == null ? "(none)" : pictures.FirstOrDefault(m => m.Guid == current)?.Path ?? "(missing picture)";
+                if (!items.Contains(selected)) items.Add(selected);
+                var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string path || path == selected || path == "(missing picture)") return;
+                    var guid = path == "(none)" ? null : pictures.FirstOrDefault(m => m.Path == path)?.Guid;
+                    SetField(type, field, guid == null ? null : JsonValue.Create(guid));
+                };
+                editor = combo;
+                break;
+            }
             case var _ when field == "material" && (value is null || value is JsonValue mv && mv.TryGetValue<string>(out _)):
             {
                 // A material: picked from the project's materials (or none: the default).

@@ -66,7 +66,20 @@ public static class EntityTemplates
         {
             ["light"] = new JsonObject { ["type"] = "spot", ["color"] = "#FFF0D8", ["intensity"] = 3000, ["range"] = 15, ["angle"] = 30 },
         }, new Vec3(0, 4, 0), new Vec3(-90, 0, 0)),
+        // Terrain (Milestone 6, part 5, ADR-031): generated from these settings, centred on the entity
+        // (its rotation and scale are ignored). Tiles of 256 cells; height and scale in metres.
+        new(TerrainTemplateName, () => new JsonObject { ["terrain"] = Terrain() }, new Vec3(0, 0, 0)),
     ];
+
+    public const string TerrainTemplateName = "Terrain";
+
+    public static JsonObject Terrain() => new()
+    {
+        ["tiles"] = new JsonArray(1, 1), ["cell_size"] = 1.0, ["base"] = "noise",
+        ["seed"] = 1, ["height"] = 30, ["scale"] = 200, ["octaves"] = 5,
+        ["heightmap"] = null, ["min_height"] = 0, ["max_height"] = 50, ["flat_height"] = 0,
+        ["material"] = null, ["collision"] = true,
+    };
 
     // ---- CSG brushes (Milestone 6, ADR-016): children of an entity with a `csg_model` component,
     // combined in child order. Sizes are a sensible start for building at human scale. ----
