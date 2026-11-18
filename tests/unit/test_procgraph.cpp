@@ -9,8 +9,17 @@
 #include <ostream>
 #include <doctest/doctest.h>
 
+#if defined(_MSC_VER)
+#pragma warning(push, 0)
+#endif
+#include <stb_image_write.h>  // the implementation is in test_texture.cpp
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -308,7 +317,7 @@ TEST_CASE("procgraph: only changed nodes and what depends on them run again, fro
 
     // A damaged cache file is a miss: computed again (same result) and replaced.
     cache.forget_memory();
-    const auto victim = dir / std::format("{:016x}.npgc", first.nodes.at("limit").key);
+    const auto victim = dir / std::format("{:016x}.npgc", first.nodes.at("limit").tile_keys.at(0));  // fields are cached per tile
     REQUIRE(std::filesystem::exists(victim));
     { std::ofstream(victim, std::ios::binary | std::ios::trunc) << "NPGCACHE garbage"; }
     const auto repaired = evaluate(hills(), Registry::builtin(), opts);
@@ -404,4 +413,140 @@ TEST_CASE("procgraph: generate writes the same bytes every time, files another t
     CHECK_FALSE(generate(broken, Registry::builtin(), opts));
     CHECK(count_files(c) == 0);
     for (const auto& d : {a, b, c}) std::filesystem::remove_all(d);
+}
+
+// ---- Milestone 7, part 3: tiles as regions, terrain nodes ----
+
+namespace {
+// 2 x 2 tiles of hills with a stamp in one corner, clamped.
+Graph corner_stamp(double x, double z, double radius = 30) {
+    auto g = Graph::from_json(Json::parse(R"({
+      "noor_graph": 1, "seed": 3,
+      "nodes": [
+        {"id": "hills", "type": "noise", "params": {"tiles_x": 2, "tiles_z": 2, "height": 20, "scale": 150, "octaves": 3}},
+        {"id": "bump", "type": "stamp", "params": {"x": 0, "z": 0, "radius": 30, "height": 12, "shape": "plateau"}},
+        {"id": "limit", "type": "clamp", "params": {"min": 0, "max": 40}}
+      ],
+      "links": [{"from": "hills.height", "to": "bump.in"}, {"from": "bump.out", "to": "limit.in"}],
+      "outputs": [{"name": "terrain", "from": "limit.out"}]
+    })"));
+    REQUIRE(g);
+    g->nodes[1].params["x"] = x;
+    g->nodes[1].params["z"] = z;
+    g->nodes[1].params["radius"] = radius;
+    return *g;
+}
+// Is tile (tx, tz) of two fields identical?
+bool same_tile(const Field& a, const Field& b, std::uint32_t tx, std::uint32_t tz) {
+    for (std::uint32_t z = 0; z <= kTileCells; ++z)
+        for (std::uint32_t x = 0; x <= kTileCells; ++x)
+            if (a.at(tx * kTileCells + x, tz * kTileCells + z) != b.at(tx * kTileCells + x, tz * kTileCells + z)) return false;
+    return true;
+}
+} // namespace
+
+TEST_CASE("procgraph: moving a stamp inside one corner recomputes only that corner's tile") {
+    Cache cache;
+    EvaluateOptions opts;
+    opts.cache = &cache;
+    // The terrain spans -256..256 m; tile (0, 0) is x and z from -256 to 0. The stamp sits well inside it.
+    const auto before = evaluate(corner_stamp(-150, -150), Registry::builtin(), opts);
+    REQUIRE(before.issues.empty());
+    CHECK(before.nodes.at("bump").tiles_run == 1);     // only the tile it reaches
+    CHECK(before.nodes.at("bump").tiles_passed == 3);  // the other three are the hills, untouched
+    CHECK(before.nodes.at("limit").tiles_run == 4);
+
+    const auto after = evaluate(corner_stamp(-140, -150), Registry::builtin(), opts);
+    CHECK(after.nodes.at("hills").tiles_cached == 4);
+    CHECK(after.nodes.at("bump").tiles_run == 1);
+    CHECK(after.nodes.at("limit").tiles_run == 1);     // downstream too: one tile
+    CHECK(after.nodes.at("limit").tiles_cached == 3);
+    const Field& a = *before.outputs.at("terrain").field;
+    const Field& b = *after.outputs.at("terrain").field;
+    CHECK_FALSE(same_tile(a, b, 0, 0));
+    CHECK(same_tile(a, b, 1, 0));
+    CHECK(same_tile(a, b, 0, 1));
+    CHECK(same_tile(a, b, 1, 1));
+    for (std::size_t t = 1; t < 4; ++t) CHECK(after.nodes.at("limit").tile_keys[t] == before.nodes.at("limit").tile_keys[t]);
+    // Recomputed or cached, the result is the same as computing everything fresh.
+    CHECK(after.fingerprint() == evaluate(corner_stamp(-140, -150)).fingerprint());
+
+    // A stamp on the corner where all four tiles meet reaches all four.
+    const auto middle = evaluate(corner_stamp(0, 0), Registry::builtin(), opts);
+    CHECK(middle.nodes.at("bump").tiles_passed == 0);
+    CHECK(middle.nodes.at("bump").tiles_run == 4);
+    CHECK(middle.fingerprint() == evaluate(corner_stamp(0, 0)).fingerprint());
+}
+
+TEST_CASE("procgraph: terrace, height band and slope do what they say") {
+    auto g = Graph::from_json(Json::parse(R"({
+      "noor_graph": 1, "seed": 5,
+      "nodes": [
+        {"id": "hills", "type": "noise", "params": {"height": 30, "scale": 100, "octaves": 3}},
+        {"id": "steps", "type": "terrace", "params": {"step": 5, "sharpness": 1}},
+        {"id": "band", "type": "height_band", "params": {"min": 10, "max": 20, "soft": 0}},
+        {"id": "flat", "type": "noise", "params": {"height": 0}},
+        {"id": "hill", "type": "stamp", "params": {"x": 0, "z": 0, "radius": 60, "height": 50}},
+        {"id": "steep", "type": "slope", "params": {"min_degrees": 20, "max_degrees": 30}}
+      ],
+      "links": [{"from": "hills.height", "to": "steps.in"}, {"from": "hills.height", "to": "band.in"},
+                {"from": "flat.height", "to": "hill.in"}, {"from": "hill.out", "to": "steep.in"}],
+      "outputs": [{"name": "steps", "from": "steps.out"}, {"name": "band", "from": "band.out"}, {"name": "steep", "from": "steep.out"}]
+    })"));
+    REQUIRE(g);
+    const auto ev = evaluate(*g);
+    REQUIRE(ev.issues.empty());
+    const Field& hills = *ev.nodes.at("hills").outputs.at("height").field;
+    const Field& steps = *ev.outputs.at("steps").field;
+    const Field& band = *ev.outputs.at("band").field;
+    for (std::size_t i = 0; i < hills.v.size(); i += 97) {
+        CHECK(std::fmod(steps.v[i], 5.0f) == doctest::Approx(0.0f));                 // sharpness 1: flat levels
+        CHECK(band.v[i] == ((hills.v[i] >= 10 && hills.v[i] < 20) ? 1.0f : 0.0f));    // soft 0: a hard band
+    }
+    CHECK(ev.outputs.at("band").unit == Unit::Ratio);
+    // Slope: flat ground (far from the hill) is 0; the hill's flank (about 56 degrees at r = 25 m) is 1.
+    const Field& steep = *ev.outputs.at("steep").field;
+    CHECK(steep.at(10, 10) == 0.0f);
+    CHECK(steep.at(128 + 25, 128) == 1.0f);
+    CHECK(steep.at(128, 128) == 0.0f);  // the very top is flat
+    // A tiled node fed fields of different sizes: refused before running, on that node.
+    auto bad = Graph::from_json(Json::parse(R"({
+      "noor_graph": 1, "nodes": [
+        {"id": "a", "type": "noise", "params": {"tiles_x": 2}}, {"id": "b", "type": "noise", "params": {}},
+        {"id": "both", "type": "combine", "params": {}}],
+      "links": [{"from": "a.height", "to": "both.a"}, {"from": "b.height", "to": "both.b"}]})"));
+    REQUIRE(bad);
+    const auto be = evaluate(*bad);
+    CHECK(be.nodes.at("both").state == NodeResult::State::Failed);
+    CHECK(has_issue(be.issues, "both", "different sizes"));
+}
+
+TEST_CASE("procgraph: a heightmap node reads a picture asset, the same heights a terrain would") {
+    const auto dir = temp_folder("noor_pghm");
+    std::vector<std::uint8_t> px(64 * 64);
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x) px[static_cast<std::size_t>(y) * 64 + x] = static_cast<std::uint8_t>(x * 4);
+    REQUIRE(stbi_write_png((dir / "ramp.png").string().c_str(), 64, 64, 1, px.data(), 64));
+    const Guid image = Guid::generate();
+    Graph g;
+    g.nodes.push_back({"ramp", "heightmap", 1, Json{{"image", image.to_string()}, {"min_height", 2}, {"max_height", 12}}, {}, Json::object()});
+    g.outputs.push_back({"terrain", {"ramp", "height"}});
+    EvaluateOptions opts;
+    opts.resolve = [&](const Guid& id) -> std::optional<std::filesystem::path> { return id == image ? std::optional(dir / "ramp.png") : std::nullopt; };
+    const auto ev = evaluate(g, Registry::builtin(), opts);
+    REQUIRE(ev.outputs.contains("terrain"));
+    terrain::Settings s;
+    s.tiles_x = s.tiles_z = 1;
+    s.base = terrain::Settings::Base::Heightmap;
+    s.heightmap = dir / "ramp.png";
+    s.min_height = 2;
+    s.max_height = 12;
+    auto h = terrain::Heights::build(s);
+    REQUIRE(h);
+    CHECK(ev.outputs.at("terrain").field->at(0, 10) == h->at(0, 10));
+    CHECK(ev.outputs.at("terrain").field->at(256, 10) == h->at(256, 10));
+    // A missing picture is an error on the node, not a flat surprise.
+    opts.resolve = nullptr;
+    CHECK(evaluate(g, Registry::builtin(), opts).nodes.at("ramp").state == NodeResult::State::Failed);
+    std::filesystem::remove_all(dir);
 }

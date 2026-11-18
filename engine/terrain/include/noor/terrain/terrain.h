@@ -5,7 +5,9 @@
 //
 // A `terrain` component:
 //   { "tiles": [2, 2], "cell_size": 1,                        tiles of 256 x 256 cells (257 samples)
-//     "base": "noise" | "heightmap" | "flat",
+//     "base": "noise" | "heightmap" | "flat" | "graph",
+//     "graph": <.noorgraph id>, "graph_output": "terrain",     graph: a procedural graph's height field
+//                                                             (games read it cooked: game::cooked_graph_folder)
 //     "seed": 1, "height": 40, "scale": 250, "octaves": 5,    noise: the hills (metres)
 //     "heightmap": <texture id>, "min_height": 0, "max_height": 50,   a greyscale PNG (16-bit best)
 //     "flat_height": 0,
@@ -19,6 +21,7 @@
 #include "noor/asset/json.h"
 #include "noor/asset/material.h"
 #include "noor/foundation/error.h"
+#include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
 #include "noor/render/renderer.h"
 
@@ -41,7 +44,7 @@ inline constexpr std::uint32_t kTileSamples = kTileCells + 1;
 struct Settings {
     std::uint32_t tiles_x = 2, tiles_z = 2;
     float cell_size = 1.0f;
-    enum class Base : std::uint8_t { Flat, Noise, Heightmap } base = Base::Noise;
+    enum class Base : std::uint8_t { Flat, Noise, Heightmap, Field } base = Base::Noise;
     std::uint64_t seed = 1;
     float height = 40.0f;  // noise: from the lowest to the highest point (metres)
     float scale = 250.0f;  // noise: the size of the largest hills (metres)
@@ -51,6 +54,13 @@ struct Settings {
     float flat_height = 0.0f;
     std::filesystem::path sculpt;  // resolved .noorsculpt file (empty: none)
     std::filesystem::path paint;   // resolved .noorpaint file (empty: all layer 0)
+    // Base::Field ("base": "graph"): the cooked height field (a .noorfield, Milestone 7) and where it
+    // came from. The caller fills `base_field` (game::graph_terrain_settings) and adopt_field_shape()
+    // takes the terrain's tiles and cell size from the file.
+    std::filesystem::path base_field;
+    std::optional<Guid> graph;
+    std::string graph_output = "terrain";
+    [[nodiscard]] Status adopt_field_shape();
 
     // From a `terrain` component; `resolve` finds the heightmap's and the sculpt layer's files.
     [[nodiscard]] static Settings from_json(const asset::Json& component, const asset::AssetFileResolver& resolve);

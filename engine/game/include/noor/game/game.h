@@ -139,7 +139,16 @@ using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid&
 // (World::render_poses()) replaces the world matrices of entities physics moves with where to draw
 // them this frame; their children (a player's camera) follow.
 [[nodiscard]] SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path,
-                                     const std::unordered_map<Guid, math::Mat4>* render_poses = nullptr);
+                                     const std::unordered_map<Guid, math::Mat4>* render_poses = nullptr,
+                                     const std::filesystem::path& project_root = {});
+
+// Where a procedural graph's outputs are cooked for games (Milestone 7): <root>/.noor/cooked/graphs/<graph id>/,
+// written by the editor (on Save, and when the graph changes) and by noor_cli build/cook.
+[[nodiscard]] std::filesystem::path cooked_graph_folder(const std::filesystem::path& root, const Guid& graph);
+
+// A terrain component's settings; a graph base ("base": "graph") gets its cooked height field and that
+// field's tiles and cell size. A field that isn't there yet is reported when the heights are built.
+[[nodiscard]] terrain::Settings terrain_settings(const asset::Json& component, const asset::AssetFileResolver& resolve, const std::filesystem::path& project_root);
 
 // A terrain tile as a draw item: a splat of its material layers (`material` resolves a layer's file).
 [[nodiscard]] render::DrawItem terrain_draw(const SceneView::Terrain& terrain, render::MeshHandle tile,

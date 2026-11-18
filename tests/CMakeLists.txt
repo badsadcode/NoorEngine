@@ -55,7 +55,7 @@ if(WIN32)
     add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
-    target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain doctest::doctest)
+    target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph doctest::doctest)
     target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data" NOOR_SAMPLES_DIR="${PROJECT_SOURCE_DIR}/samples")
     noor_set_target_options(noor_editor_api_tests)
     set_target_properties(noor_editor_api_tests PROPERTIES FOLDER "Tests")
@@ -168,6 +168,16 @@ if(WIN32)
     set_tests_properties(api.generate_matches_cli PROPERTIES LABELS "api" FIXTURES_REQUIRED generated_cli
                          ENVIRONMENT "NOOR_CLI_GENERATED=${CMAKE_CURRENT_BINARY_DIR}/generated_cli" FAIL_REGULAR_EXPRESSION "${NOOR_NOTHING_RAN}")
 endif()
+
+# A terrain built on a procedural graph in a built game (Milestone 7, part 3): noor_cli build cooks the graph.
+add_test(NAME cli.build_graph_terrain
+    COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/procgraph_project ${CMAKE_CURRENT_BINARY_DIR}/built_graph_game)
+set_tests_properties(cli.build_graph_terrain PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP built_graph_game
+                     PASS_REGULAR_EXPRESSION "1 terrain graph[(]s[)] cooked")
+add_test(NAME player.graph_terrain
+    COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_graph_game/Graph Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_graph
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/graph_terrain_check.cmake)
+set_tests_properties(player.graph_terrain PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_graph_game)
 
 # Terrain in games (Milestone 6, part 5): a character walks up a heightmap ramp in a built game.
 add_test(NAME cli.build_terrain

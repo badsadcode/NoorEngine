@@ -247,6 +247,10 @@ private:
     };
     std::unique_ptr<GenerateJob> job_;
     std::unique_ptr<procgraph::Cache> graph_cache_;  // <project>/.noor/cache/procgraph, shared by runs
+    // Terrains' graphs cooked for the scene (Milestone 7, part 3): by graph id, the graph file's time when
+    // last cooked. Cooked again when the file changes, and on every save.
+    std::unordered_map<Guid, std::filesystem::file_time_type> graphs_cooked_;
+    void cook_graphs(const scene::Scene& expanded, bool force);
     // Terrains with hand-made layers, by entity (loaded on first use, saved with the scene).
     std::unordered_map<Guid, std::shared_ptr<TerrainEdit>> terrain_edits_;
     // The live edit of a terrain entity with these layer assets and settings (rebuilt on a new base).

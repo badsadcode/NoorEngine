@@ -66,7 +66,7 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
     // Terrains collide as height fields, generated from their settings (shared with the renderer).
     physics_options.terrain_tiles = [&project, &registry, live = options.terrain_heights](const Json& component) {
         std::vector<physics::HeightTile> tiles;
-        const auto settings = terrain::Settings::from_json(component, file_resolver(registry_asset_path(project, registry)));
+        const auto settings = terrain_settings(component, file_resolver(registry_asset_path(project, registry)), project.root());
         Result<std::shared_ptr<const terrain::Heights>> heights = live ? live(component, settings) : nullptr;
         if (!*heights) heights = terrain::Heights::shared(settings);
         if (!heights) {
@@ -126,7 +126,8 @@ math::Vec3 color_of(const Json& primitive, math::Vec3 color = {0.55f, 0.52f, 0.6
 
 } // namespace
 
-SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, const std::unordered_map<Guid, math::Mat4>* render_poses) {
+SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, const std::unordered_map<Guid, math::Mat4>* render_poses,
+                       const std::filesystem::path& project_root) {
     SceneView view;
     const auto& entities = scene.entities;
     bool has_environment = false;
@@ -247,7 +248,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         }
         if (e.has("terrain") && e.components["terrain"].is_object()) {
             const auto& t = e.components["terrain"];
-            SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain::Settings::from_json(t, file_resolver(asset_path))};
+            SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain_settings(t, file_resolver(asset_path), project_root)};
             // Material layers: "layers": [{"material": id, "tiling": n}, ...] (up to four); without
             // them, "material" is the only layer.
             auto file_of = [&](const Json& j, const char* key) -> std::filesystem::path {
@@ -329,6 +330,19 @@ render::DrawItem terrain_draw(const SceneView::Terrain& terrain, render::MeshHan
     for (std::size_t i = 0; i < 3; ++i) item.splat_layers[i] = handle(terrain.layer_files[i + 1]);
     item.splat_tiling = terrain.tiling;
     return item;
+}
+
+std::filesystem::path cooked_graph_folder(const std::filesystem::path& root, const Guid& graph) {
+    return root / ".noor" / "cooked" / "graphs" / graph.to_string();
+}
+
+terrain::Settings terrain_settings(const Json& component, const asset::AssetFileResolver& resolve, const std::filesystem::path& project_root) {
+    auto s = terrain::Settings::from_json(component, resolve);
+    if (s.base == terrain::Settings::Base::Field && s.graph && !project_root.empty()) {
+        s.base_field = cooked_graph_folder(project_root, *s.graph) / (s.graph_output + ".noorfield");
+        (void)s.adopt_field_shape();  // missing or damaged: Heights::build says so where the heights are needed
+    }
+    return s;
 }
 
 } // namespace noor::game

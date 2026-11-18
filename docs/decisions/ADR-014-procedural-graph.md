@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7; parts 1–2 done: core, cache, jobs, headless) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Proposed (Milestone 7; parts 1–3 done: core, cache, jobs, headless, tiles, terrain) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds
@@ -82,6 +82,16 @@ BadBuilding) are separate .NET programs connected by files.
   exists, and writes the fingerprint file last.
 - **One path:** the editor (a background thread in the document, API v20) and `noor_cli generate` both
   call `procgraph::generate`; a test compares their files byte for byte.
+
+## What part 3 settled (2026-11-18)
+- **Tiles are the regions.** Tile-local nodes declare `run_tile` and are keyed, cached and recomputed per
+  tile; a node's key is the hash of its tiles' keys. A node with bounds (`touches`) passes untouched
+  tiles through under the input's keys, so invalidation stops at the region's edge. Nodes that need
+  neighbours (`slope`) stay whole-field and key every tile with the node.
+- **Shapes are known before running** (from parameters or inputs), so tile keys can be planned first.
+- **Terrains on graphs read cooked fields** (`.noor/cooked/graphs/<id>/`), written by the editor (graph
+  changed, or Save) and noor_cli build/cook; games link no graph code. Unchanged files aren't rewritten.
+- The pinned fingerprint didn't move when the nodes became tiled: same bytes as whole-field evaluation.
 
 ## Consequences
 - Easier: reproducibility tests are hash comparisons; invalidation is "which keys changed"; the CLI

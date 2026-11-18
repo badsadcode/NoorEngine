@@ -330,6 +330,7 @@ Status Document::save_scene() {
     finish_stroke();
     if (auto s = scene_->save(scene_file_); !s) return s;
     save_terrain_layers();
+    cook_graphs(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, true);  // a picture a graph reads may have changed
     cook_csg();  // games (noor_player on the project) load what was saved
     scene_->migrations_applied.clear();
     history_.mark_saved();
@@ -591,8 +592,10 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id, std::nullopt});
     }
+    // Terrains built on graphs: their cooked height fields first (only when a graph changed).
+    if (!world_) cook_graphs(expanded, false);
     // Models, shapes and the game camera: the same view noor_player draws.
-    auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
+    auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr, project_.root());
     snap->primitives = std::move(view.primitives);
     snap->terrains = std::move(view.terrains);
     // Sculpted or painted terrains: the live layers (saved or not).
@@ -1063,7 +1066,7 @@ Result<Json> Document::sculpt(const Json& command) {
 
         Json component = target->components["terrain"];
         const Json original = component;
-        auto settings = terrain::Settings::from_json(component, {});
+        auto settings = game::terrain_settings(component, game::file_resolver(game::registry_asset_path(project_, registry_)), project_.root());
         std::uint32_t layer_index = 0;
         std::string label;
         if (painting) {
@@ -1102,7 +1105,7 @@ Result<Json> Document::sculpt(const Json& command) {
             component[field] = made->to_string();
         }
         if (component != original) history_.execute(*scene_, scene::set_component(*id, "terrain", component));
-        settings = terrain::Settings::from_json(component, game::file_resolver(game::registry_asset_path(project_, registry_)));
+        settings = game::terrain_settings(component, game::file_resolver(game::registry_asset_path(project_, registry_)), project_.root());
         auto edit = terrain_edit(*id, asset::guid_field(component, "sculpt"), asset::guid_field(component, "paint"), settings);
         if (!edit) {
             history_.end_transaction();
@@ -1140,7 +1143,7 @@ Result<float> Document::terrain_height(const Guid& terrain, float x, float z) {
         if (e.id != terrain) continue;
         if (!e.has("terrain") || !e.components["terrain"].is_object()) break;
         const Json& component = e.components["terrain"];
-        const auto settings = terrain::Settings::from_json(component, game::file_resolver(game::registry_asset_path(project_, registry_)));
+        const auto settings = game::terrain_settings(component, game::file_resolver(game::registry_asset_path(project_, registry_)), project_.root());
         const math::Vec3 centre = expanded.scene.world_matrix(i).transform_point({0, 0, 0});
         std::shared_ptr<const terrain::Heights> heights;
         if (auto edit = terrain_edit(e.id, asset::guid_field(component, "sculpt"), asset::guid_field(component, "paint"), settings)) heights = edit->snapshot();
@@ -1232,6 +1235,30 @@ Json Document::generate_status() {
 
 void Document::generate_cancel() {
     if (job_) job_->cancel = true;
+}
+
+void Document::cook_graphs(const scene::Scene& expanded, bool force) {
+    for (const auto& e : expanded.entities) {
+        if (!e.has("terrain") || !e.components["terrain"].is_object() || e.components["terrain"].value("base", std::string()) != "graph") continue;
+        const auto graph = asset::guid_field(e.components["terrain"], "graph");
+        const auto* rec = graph ? registry_.find(*graph) : nullptr;
+        if (!rec) continue;  // terrain_settings/Heights::build report a missing graph
+        auto file = project_.resolve(rec->path);
+        if (!file) continue;
+        std::error_code ec;
+        const auto time = stdfs::last_write_time(*file, ec);
+        const auto out = game::cooked_graph_folder(project_.root(), *graph);
+        if (!force && graphs_cooked_.contains(*graph) && graphs_cooked_[*graph] == time && stdfs::exists(out / "graph.fingerprint.json", ec)) continue;
+        graphs_cooked_[*graph] = time;
+        if (!graph_cache_) graph_cache_ = std::make_unique<procgraph::Cache>(project_.root() / ".noor" / "cache" / "procgraph");
+        auto r = procgraph::cook(*file, out, graph_cache_.get(), [this](const Guid& id) -> std::optional<stdfs::path> {
+            const auto* a = registry_.find(id);
+            auto p = a ? project_.resolve(a->path) : Result<stdfs::path>(fail(ErrorCode::NotFound, "unknown asset"));
+            return p ? std::optional(*p) : std::nullopt;
+        });
+        if (!r) NOOR_LOG_WARN("Editor", "Terrain {}: graph {}: {}", e.name, file->filename().string(), r.error().describe());
+        else NOOR_LOG_INFO("Editor", "Terrain {}: graph {} cooked ({} node(s) ran, {} from the cache)", e.name, file->filename().string(), r->evaluation.ran, r->evaluation.cached);
+    }
 }
 
 } // namespace noor::editor

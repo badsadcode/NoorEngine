@@ -10,7 +10,7 @@ in the editor and in games, collided with by Jolt, and **painted with up to four
 "terrain": {
   "tiles": [2, 2],          // tiles along X and Z (1..16 each)
   "cell_size": 1,           // metres between samples (0.05..64)
-  "base": "noise",          // "noise" | "heightmap" | "flat"
+  "base": "noise",          // "noise" | "heightmap" | "flat" | "graph" (a procedural graph's height field, Milestone 7)
   "seed": 7, "height": 40, "scale": 250, "octaves": 5,     // noise: 0..height metres, features ~scale m
   "heightmap": "<asset guid>", "min_height": 0, "max_height": 50,  // heightmap: black..white
   "flat_height": 0,         // flat
@@ -37,6 +37,10 @@ Create ▸ Terrain adds one with noise defaults. The Inspector shows `base` as a
   corner. That's the same split Jolt's `HeightFieldShape` uses, so what you see is what you stand on.
   `Heights::height(x, z)` interpolates on those same triangles (tested against the mesh).
 - **UVs** are world X/Z in metres (a material with 1 m tiling repeats once per metre).
+
+**Graph bases** (Milestone 7): `"base": "graph"` with `"graph"` (a `.noorgraph` id) and `"graph_output"`.
+The terrain's tiles and cell size come from the graph's field; games read it cooked. See
+[PROCGRAPH.md](../procgraph/PROCGRAPH.md#terrains-built-on-graphs-part-3).
 
 ## Heights
 

@@ -1,0 +1,152 @@
+{
+  "noor_scene": 2,
+  "id": "7e770000-0003-4000-8000-000000000000",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "7e770000-0003-4000-8000-000000000001",
+      "name": "Hills",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "terrain": {
+          "base": "graph",
+          "graph": "7e770000-9a17-4000-8000-00000000600d",
+          "graph_output": "terrain",
+          "material": null,
+          "collision": true
+        }
+      }
+    },
+    {
+      "id": "7e770000-0003-4000-8000-000000000002",
+      "name": "Walker",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "character": {
+          "radius": 0.3,
+          "height": 1.8,
+          "step_height": 0.3,
+          "max_slope": 50
+        },
+        "script": {
+          "file": "Scripts/Walker.luau",
+          "params": {
+            "speed": 0,
+            "x": 1,
+            "z": 0
+          }
+        },
+        "primitive": {
+          "shape": "capsule",
+          "radius": 0.3,
+          "height": 1.8,
+          "color": "#F2C14E"
+        }
+      }
+    },
+    {
+      "id": "7e770000-0003-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          -0.42261826174069944,
+          0,
+          0,
+          0.9063077870366499
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "7e770000-0003-4000-8000-000000000004",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          40,
+          120
+        ],
+        "rotation": [
+          -0.13052619222005157,
+          0,
+          0,
+          0.9914448613738104
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1,
+          "ev100": 14
+        }
+      }
+    }
+  ]
+}

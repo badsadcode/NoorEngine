@@ -204,7 +204,24 @@ void Cache::forget_memory() {
 
 // ---- Field files ----
 
-Status save_field(const stdfs::path& file, const Field& f, Unit unit) {
+namespace {
+
+// Writes `bytes` unless the file already holds exactly them.
+Status write_if_changed(const stdfs::path& file, const std::string& bytes) {
+    std::error_code ec;
+    if (stdfs::exists(file, ec) && stdfs::file_size(file, ec) == bytes.size())
+        if (auto old = fs::read_file(file, 1ull << 31); old && *old == bytes) return {};
+    return fs::write_file_atomic(file, bytes, false);
+}
+
+std::string field_bytes(const Field& f, Unit unit);
+
+} // namespace
+
+Status save_field(const stdfs::path& file, const Field& f, Unit unit) { return fs::write_file_atomic(file, field_bytes(f, unit), false); }
+
+namespace {
+std::string field_bytes(const Field& f, Unit unit) {
     Writer w;
     w.out = "NFIELD01";
     w.u32(1);
@@ -214,8 +231,9 @@ Status save_field(const stdfs::path& file, const Field& f, Unit unit) {
     w.u32(static_cast<std::uint32_t>(unit));
     w.out.reserve(w.out.size() + f.v.size() * 4);
     for (const float x : f.v) w.f32(x);
-    return fs::write_file_atomic(file, w.out, false);
+    return std::move(w.out);
 }
+} // namespace
 
 Result<std::pair<Field, Unit>> load_field(const stdfs::path& file) {
     auto bytes = fs::read_file(file, 1ull << 31);
@@ -278,7 +296,7 @@ Result<GenerateReport> generate(const Graph& graph, const Registry& registry, co
         Json o{{"type", std::string(type_name(v.type))}, {"unit", std::string(unit_name(v.unit))}, {"hash", hex(v.hash())}};
         if (v.type == PinType::Field && v.field) {
             const auto file = options.out / (name + ".noorfield");
-            if (auto s = save_field(file, *v.field, v.unit); !s) return std::unexpected(s.error());
+            if (auto s = write_if_changed(file, field_bytes(*v.field, v.unit)); !s) return std::unexpected(s.error());
             report.files.push_back(file);
             o["file"] = file.filename().generic_string();
         } else if (v.type == PinType::Scalar) {
@@ -295,9 +313,21 @@ Result<GenerateReport> generate(const Graph& graph, const Registry& registry, co
     fp["outputs"] = std::move(outputs);
     fp["fingerprint"] = hex(report.fingerprint);
     const auto fp_file = options.out / ((options.name.empty() ? std::string("graph") : options.name) + ".fingerprint.json");
-    if (auto s = fs::write_file_atomic(fp_file, asset::to_text(fp), false); !s) return std::unexpected(s.error());
+    if (auto s = write_if_changed(fp_file, asset::to_text(fp)); !s) return std::unexpected(s.error());
     report.files.push_back(fp_file);
     return report;
+}
+
+Result<GenerateReport> cook(const stdfs::path& graph_file, const stdfs::path& out, Cache* cache,
+                            std::function<std::optional<stdfs::path>(const Guid&)> resolve) {
+    auto graph = Graph::load(graph_file);
+    if (!graph) return std::unexpected(graph.error());
+    GenerateOptions opts;
+    opts.out = out;
+    opts.name = "graph";
+    opts.run.cache = cache;
+    opts.run.resolve = std::move(resolve);
+    return generate(*graph, Registry::builtin(), opts);
 }
 
 } // namespace noor::procgraph

@@ -34,6 +34,7 @@
 #include "noor/asset/json.h"
 #include "noor/csg/scene_csg.h"
 #include "noor/game/cooked_csg.h"
+#include "noor/game/game.h"
 #include "noor/procgraph/procgraph.h"
 
 #include <chrono>
@@ -51,6 +52,7 @@
 #include <memory>
 #include <optional>
 #include <regex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -223,10 +225,42 @@ int cmd_add_model(const std::vector<std::string>& a) {
     return 0;
 }
 
-// Cooks every CSG model of every scene (ADR-016) into `root`/.noor/cooked/csg: what games load.
-// Returns the number of models cooked, or -1 if one failed.
-int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root) {
+// Cooks the procedural graphs that terrains use as their base (Milestone 7) into `root`/.noor/cooked/graphs.
+// Returns the number cooked, or -1 if one failed.
+int cook_graphs(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root, const scene::Scene& expanded,
+                std::set<std::string>& done) {
     int cooked = 0;
+    const auto resolve = [&](const Guid& id) -> std::optional<stdfs::path> {
+        const auto* rec = registry.find(id);
+        auto path = rec ? p.resolve(rec->path) : Result<stdfs::path>(fail(ErrorCode::NotFound, "unknown asset"));
+        return path ? std::optional(*path) : std::nullopt;
+    };
+    for (const auto& e : expanded.entities) {
+        if (!e.has("terrain") || !e.components["terrain"].is_object() || e.components["terrain"].value("base", std::string()) != "graph") continue;
+        const auto graph = asset::guid_field(e.components["terrain"], "graph");
+        if (!graph || !done.insert(graph->to_string()).second) continue;
+        const auto file = resolve(*graph);
+        if (!file) {
+            NOOR_LOG_ERROR("CLI", "Terrain {}: its graph {} isn't in the project", e.name, graph->to_string());
+            return -1;
+        }
+        procgraph::Cache cache(p.root() / ".noor" / "cache" / "procgraph");
+        auto r = procgraph::cook(*file, game::cooked_graph_folder(root, *graph), &cache, resolve);
+        if (!r) {
+            NOOR_LOG_ERROR("CLI", "Terrain {}: graph {}: {}", e.name, file->filename().string(), r.error().describe());
+            return -1;
+        }
+        ++cooked;
+    }
+    return cooked;
+}
+
+// Cooks every CSG model of every scene (ADR-016) into `root`/.noor/cooked/csg, and terrains' graphs into
+// `root`/.noor/cooked/graphs: what games load. Returns the number of CSG models cooked, or -1 if
+// something failed; `graphs` counts the graphs.
+int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root, int* graphs = nullptr) {
+    int cooked = 0;
+    std::set<std::string> graphs_done;
     std::error_code ec;
     for (auto it = stdfs::recursive_directory_iterator(p.scenes_dir(), ec); !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
         if (it->path().extension() != ".noorscene") continue;
@@ -234,6 +268,9 @@ int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, 
         if (!scene) continue;  // validate reports it
         scene::PrefabLibrary prefabs(p, registry);
         const auto expanded = scene::expand_prefabs(*scene, prefabs.resolver()).scene;
+        const int g = cook_graphs(p, registry, root, expanded, graphs_done);
+        if (g < 0) return -1;
+        if (graphs) *graphs += g;
         for (std::size_t i = 0; i < expanded.entities.size(); ++i) {
             if (!expanded.entities[i].has("csg_model")) continue;
             std::vector<std::string> warnings;
@@ -259,9 +296,11 @@ int cmd_cook(const std::vector<std::string>& a) {
     if (!p) return report(p.error());
     asset::AssetRegistry registry;
     if (auto r = registry.scan(*p); !r) return report(r.error());
-    const int n = cook_project(*p, registry, p->root());
+    int graphs = 0;
+    const int n = cook_project(*p, registry, p->root(), &graphs);
     if (n < 0) return 1;
     std::printf("Cooked %d CSG model(s) into %s\n", n, (p->root() / ".noor" / "cooked" / "csg").generic_string().c_str());
+    if (graphs > 0) std::printf("Cooked %d terrain graph(s) into %s\n", graphs, (p->root() / ".noor" / "cooked" / "graphs").generic_string().c_str());
     return 0;
 }
 
@@ -719,12 +758,14 @@ int cmd_build(const std::vector<std::string>& a) {
     {
         asset::AssetRegistry registry;
         if (auto r = registry.scan(*p); !r) return report(r.error());
-        const int models = cook_project(*p, registry, out / "game");
+        int graphs = 0;
+        const int models = cook_project(*p, registry, out / "game", &graphs);
         if (models < 0) {
             NOOR_LOG_ERROR("CLI", "Build stopped: a CSG model couldn't be cooked");
             return 1;
         }
         if (models > 0) std::printf("  %d CSG model(s) cooked\n", models);
+        if (graphs > 0) std::printf("  %d terrain graph(s) cooked\n", graphs);
     }
 
     const asset::Json manifest{{"noor_game", 1},

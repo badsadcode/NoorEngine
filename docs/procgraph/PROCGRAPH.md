@@ -3,8 +3,8 @@
 Milestone 7 ([plan](../milestones/M7_PLAN.md), [ADR-014](../decisions/ADR-014-procedural-graph.md)).
 **Works:** the graph file, typed nodes in a registry, validation, deterministic evaluation with keys
 (part 1); the results cache, worker threads with progress and Cancel, `noor_cli generate` and the
-editor API's background runs (part 2). **Planned:** terrain as a client (part 3), the graph editor
-(part 4), scatter (part 7).
+editor API's background runs (part 2); tiles as regions, terrain nodes, terrains built on graphs
+(part 3). **Planned:** the graph editor (part 4), scatter (part 7).
 
 ## A graph file (`.noorgraph`, format 1)
 
@@ -56,6 +56,47 @@ since only then is the unit known. A plain number (unit none) combines with anyt
 Every node has a **version**. A node's results may only change with a new version. A graph saved
 with another version of a node is reported (newer: "made with a newer version"; older: no
 migration yet) and that node doesn't run.
+
+## The terrain nodes (part 3)
+
+| Node | Inputs → outputs | Parameters |
+|---|---|---|
+| `stamp` | `in` (metres) → `out` | `x`, `z` (centre, in the terrain's space), `radius`, `height` (negative: a hollow), `shape`: hill (round top), plateau (flat top) |
+| `terrace` | `in` → `out` | `step` (m), `sharpness` (1: flat levels and cliffs, 0: no steps) |
+| `height_band` | `in` (metres) → `out` (mask) | `min`, `max`, `soft` (fade width at each edge, m) |
+| `slope` | `in` (metres) → `out` (mask) | `min_degrees`, `max_degrees`: 0 flatter than min, 1 steeper than max (its angle thresholds use a cosine made of + − × only) |
+| `heightmap` | → `height` (metres) | `image` (a picture asset's id), `min_height`, `max_height`, `tiles_x`, `tiles_z`, `cell_size`: the terrain's own heightmap reading |
+
+## Tiles: regions that change alone (part 3)
+
+Fields are made of tiles (256 cells, 257 samples, shared edges). Most field nodes are **tile-local**
+(noise, combine, clamp, remap, stamp, terrace, height band): a tile of their output depends only on
+the same tile of their inputs, so they're **keyed, cached and recomputed tile by tile**. A stamp
+says which tiles it reaches; the others are its input's tiles **under the input's keys**, so nothing
+after it reruns there either. Move a stamp inside one corner of a 2 × 2 terrain and exactly one tile
+is recomputed in the stamp and in everything after it; the other three come out bit-identical with
+unchanged keys (tested). `slope` reads neighbouring samples, so it works on the whole field: any
+change upstream recomputes all of it. `heightmap` reads a file: its key includes the picture's size
+and time.
+
+## Terrains built on graphs (part 3)
+
+```json
+"terrain": { "base": "graph", "graph": "<.noorgraph id>", "graph_output": "terrain", "collision": true }
+```
+
+The graph's output (a height field in metres) is the terrain's generated base: sculpting and paint
+sit on top as for any base, so a new seed or a changed node keeps the hand-made layers. The terrain
+takes its tiles and cell size from the field. **Games never run graphs**: the field is cooked into
+`<project>/.noor/cooked/graphs/<graph id>/terrain.noorfield` (with `graph.fingerprint.json`):
+- by the editor when it shows a scene whose graph file changed, and on every Save (a picture a
+  `heightmap` node reads may have changed);
+- by `noor_cli build` (into the game) and `noor_cli cook`.
+
+A cooked file whose bytes wouldn't change isn't rewritten, so terrains don't rebuild for nothing. A
+graph that hasn't been cooked yet is reported plainly ("hasn't been generated yet: save the scene,
+or run noor_cli cook"). Cooking runs on the editor's UI thread for now (fast with the cache; the
+first run of a big terrain graph takes a moment).
 
 ## Determinism
 
@@ -131,5 +172,6 @@ the graph still runs:
 `engine/procgraph` (`noor_procgraph`, editor and tools only; the runtime-boundary test keeps it out
 of games): `procgraph.h` (types, graph file, registry, validation, evaluation, cache, generate),
 `procgraph.cpp` (checking and running), `nodes.cpp` (the built-in nodes), `run.cpp` (bytes, cache,
-files). Tests: `tests/unit/test_procgraph.cpp` (11 cases), `cli.generate`, `api: …a graph runs in
-the background…` and `api.generate_matches_cli`; test data `tests/data/procgraph_project`.
+files, cooking). Tests: `tests/unit/test_procgraph.cpp` (14 cases), `cli.generate`, `api: …a graph runs
+in the background…`, `api.generate_matches_cli`, `api: …a terrain on a graph base…`,
+`cli.build_graph_terrain` + `player.graph_terrain`; test data `tests/data/procgraph_project`.

@@ -15,6 +15,7 @@
 #include <bit>
 #include <cmath>
 #include <format>
+#include <fstream>
 #include <map>
 #include <mutex>
 
@@ -85,7 +86,9 @@ Settings Settings::from_json(const Json& c, const asset::AssetFileResolver& reso
     }
     s.cell_size = std::clamp(number(c, "cell_size", 1.0f), 0.05f, 64.0f);
     const std::string base = c.value("base", std::string("noise"));
-    s.base = base == "flat" ? Base::Flat : base == "heightmap" ? Base::Heightmap : Base::Noise;
+    s.base = base == "flat" ? Base::Flat : base == "heightmap" ? Base::Heightmap : base == "graph" ? Base::Field : Base::Noise;
+    s.graph = asset::guid_field(c, "graph");
+    if (c.contains("graph_output") && c["graph_output"].is_string()) s.graph_output = c["graph_output"].get<std::string>();
     if (c.contains("seed") && c["seed"].is_number_unsigned()) s.seed = c["seed"].get<std::uint64_t>();
     else if (c.contains("seed") && c["seed"].is_number_integer()) s.seed = static_cast<std::uint64_t>(c["seed"].get<std::int64_t>());
     s.height = std::clamp(number(c, "height", 40.0f), 0.0f, 10000.0f);
@@ -108,9 +111,57 @@ std::string Settings::key() const {
     const auto time = heightmap.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(heightmap, ec);
     const auto sculpt_time = sculpt.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(sculpt, ec);
     const auto paint_time = paint.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(paint, ec);
-    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height,
+    const auto field_time = base_field.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(base_field, ec);
+    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height,
                        scale, octaves, heightmap.generic_string(), time.time_since_epoch().count(), min_height, max_height, flat_height, 0,
-                       sculpt.generic_string(), sculpt_time.time_since_epoch().count(), paint.generic_string(), paint_time.time_since_epoch().count());
+                       sculpt.generic_string(), sculpt_time.time_since_epoch().count(), paint.generic_string(), paint_time.time_since_epoch().count(),
+                       base == Base::Field ? base_field.generic_string() : std::string(), field_time.time_since_epoch().count());
+}
+
+namespace {
+
+// A .noorfield (procgraph's format, docs/procgraph/PROCGRAPH.md): "NFIELD01", u32 version 1, u32 sx,
+// u32 sz, f32 cell, u32 unit, then sx*sz f32. Read here too, so games need no graph code.
+struct FieldHeader {
+    std::uint32_t sx = 0, sz = 0;
+    float cell = 1.0f;
+};
+std::uint32_t read_u32(const std::string& b, std::size_t at) {
+    std::uint32_t v = 0;
+    for (std::size_t i = 0; i < 4; ++i) v |= static_cast<std::uint32_t>(static_cast<unsigned char>(b[at + i])) << (8 * i);
+    return v;
+}
+Result<FieldHeader> field_header(const std::string& b, const stdfs::path& file) {
+    if (b.size() < 28 || b.compare(0, 8, "NFIELD01") != 0 || read_u32(b, 8) != 1)
+        return fail(ErrorCode::ParseError, std::format("{} isn't a .noorfield height field", file.filename().string()));
+    FieldHeader h{read_u32(b, 12), read_u32(b, 16), std::bit_cast<float>(read_u32(b, 20))};
+    if (h.sx < 2 || h.sz < 2 || (h.sx - 1) % kTileCells != 0 || (h.sz - 1) % kTileCells != 0 || b.size() != 28 + static_cast<std::size_t>(h.sx) * h.sz * 4)
+        return fail(ErrorCode::ParseError, std::format("{} is damaged or isn't whole tiles", file.filename().string()));
+    return h;
+}
+Status missing_field(const Settings& s) {
+    return fail(ErrorCode::NotFound, s.base_field.empty() ? std::string("terrain: its graph isn't set or isn't in the project")
+                                                          : std::format("terrain: the graph's output \"{}\" hasn't been generated yet ({}): save the scene, or run noor_cli cook",
+                                                                        s.graph_output, s.base_field.generic_string()));
+}
+
+} // namespace
+
+Status Settings::adopt_field_shape() {
+    if (base != Base::Field) return {};
+    std::error_code ec;
+    if (base_field.empty() || !stdfs::exists(base_field, ec)) return missing_field(*this);
+    // Only the header is needed: read its 28 bytes.
+    std::string head(28, ' ');
+    std::ifstream in(base_field, std::ios::binary);
+    if (!in || !in.read(head.data(), static_cast<std::streamsize>(head.size()))) return fail(ErrorCode::ParseError, std::format("{} is too short or can't be read", base_field.filename().string()));
+    if (head.compare(0, 8, "NFIELD01") != 0 || read_u32(head, 8) != 1) return fail(ErrorCode::ParseError, std::format("{} isn't a .noorfield", base_field.filename().string()));
+    const std::uint32_t sx = read_u32(head, 12), sz = read_u32(head, 16);
+    if (sx < 2 || sz < 2 || (sx - 1) % kTileCells != 0 || (sz - 1) % kTileCells != 0) return fail(ErrorCode::ParseError, "the height field isn't whole tiles");
+    tiles_x = (sx - 1) / kTileCells;
+    tiles_z = (sz - 1) / kTileCells;
+    cell_size = std::bit_cast<float>(read_u32(head, 20));
+    return {};
 }
 
 Result<Heights> Heights::build(const Settings& s) {
@@ -119,7 +170,18 @@ Result<Heights> Heights::build(const Settings& s) {
     out.sz_ = s.tiles_z * kTileCells + 1;
     out.cell_ = s.cell_size;
     out.h_.assign(static_cast<std::size_t>(out.sx_) * out.sz_, s.flat_height);
-    if (s.base == Settings::Base::Noise) {
+    if (s.base == Settings::Base::Field) {
+        std::error_code ec;
+        if (s.base_field.empty() || !stdfs::exists(s.base_field, ec)) return std::unexpected(missing_field(s).error());
+        auto bytes = fs::read_file(s.base_field, 1ull << 31);
+        if (!bytes) return std::unexpected(bytes.error());
+        auto header = field_header(*bytes, s.base_field);
+        if (!header) return std::unexpected(header.error());
+        if (header->sx != out.sx_ || header->sz != out.sz_)
+            return fail(ErrorCode::InvalidArgument, std::format("terrain: the height field is {}x{} samples, the terrain {}x{} (adopt_field_shape first)", header->sx,
+                                                                header->sz, out.sx_, out.sz_));
+        for (std::size_t i = 0; i < out.h_.size(); ++i) out.h_[i] = std::bit_cast<float>(read_u32(*bytes, 28 + i * 4));
+    } else if (s.base == Settings::Base::Noise) {
         // Noise in metres-from-the-corner / scale; heights from 0 to `height`.
         for (std::uint32_t z = 0; z < out.sz_; ++z)
             for (std::uint32_t x = 0; x < out.sx_; ++x) {

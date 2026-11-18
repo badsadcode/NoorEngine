@@ -12,6 +12,7 @@
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
 #include "noor/scene/prefab.h"
+#include "noor/procgraph/procgraph.h"
 #include "noor/terrain/terrain.h"
 
 #include <chrono>
@@ -552,6 +553,54 @@ TEST_CASE("document api: a graph runs in the background, can be cancelled, and m
     } else {
         MESSAGE("NOOR_CLI_GENERATED isn't set: the CLI comparison runs as api.generate_matches_cli");
     }
+    noor_doc_close(doc);
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
+}
+
+// Milestone 7, part 3: a terrain whose base is a procedural graph. The editor cooks the graph when the
+// scene shows it; sculpting sits on top; a new seed in the graph changes the hills and keeps the sculpting.
+TEST_CASE("document api: a terrain on a graph base cooks itself, and its sculpting survives a new seed") {
+    const stdfs::path src = kData / "procgraph_project";
+    const stdfs::path dir = stdfs::temp_directory_path() / ("noor_graphterrain_" + noor::Guid::generate().to_string());
+    stdfs::create_directories(dir);
+    stdfs::copy(src, dir, stdfs::copy_options::recursive);
+    noor_doc* doc = noor_doc_open_project(dir.string().c_str());
+    REQUIRE(doc != nullptr);
+    REQUIRE(noor_doc_open_scene(doc, "Scenes/Main.noorscene") == 1);
+    const Json scene = json(noor_doc_scene(doc));
+    const std::string id = (*find_entity(scene, "Hills"))["id"];
+    const stdfs::path cooked = dir / ".noor" / "cooked" / "graphs" / "7e770000-9a17-4000-8000-00000000600d" / "terrain.noorfield";
+    CHECK(stdfs::exists(cooked));  // cooked when the scene was opened (published)
+    auto field = noor::procgraph::load_field(cooked);
+    REQUIRE(field);
+    float ground = 0;
+    REQUIRE(noor_doc_terrain_height(doc, id.c_str(), 0, 0, &ground) == 1);
+    CHECK(ground == doctest::Approx(field->first.at(128, 128)));  // the graph's height at the centre
+    CHECK(ground == doctest::Approx(9.3314f));                    // the pinned graph's value there
+
+    // A 4 m bump by hand.
+    const Json begin{{"terrain", id}, {"phase", "begin"}, {"tool", "raise"}, {"radius", 6}, {"strength", 4}, {"falloff", 0.5},
+                     {"dabs", Json::array({{{"point", {0, 0, 0}}, {"seconds", 0.25}}})}};
+    REQUIRE(noor_doc_sculpt(doc, begin.dump().c_str()) != nullptr);
+    for (int i = 0; i < 3; ++i)
+        REQUIRE(noor_doc_sculpt(doc, (Json{{"terrain", id}, {"phase", i == 2 ? "end" : "dab"}, {"dabs", Json::array({{{"point", {0, 0, 0}}, {"seconds", 0.25}}})}}).dump().c_str()) != nullptr);
+    REQUIRE(noor_doc_terrain_height(doc, id.c_str(), 0, 0, &ground) == 1);
+    CHECK(ground == doctest::Approx(field->first.at(128, 128) + 4.0f));
+    REQUIRE(noor_doc_save_scene(doc) == 1);
+
+    // A new seed in the graph file: different hills, the same 4 m on top of them.
+    auto graph = noor::procgraph::Graph::load(dir / "Assets" / "Graphs" / "hills.noorgraph");
+    REQUIRE(graph);
+    graph->seed = 8;
+    REQUIRE(graph->save(dir / "Assets" / "Graphs" / "hills.noorgraph"));
+    REQUIRE(noor_doc_assets(doc, 1) != nullptr);  // the editor notices the changed asset (rescan republishes)
+    REQUIRE(noor_doc_save_scene(doc) == 1);       // and Save always cooks
+    auto reseeded = noor::procgraph::load_field(cooked);
+    REQUIRE(reseeded);
+    CHECK(reseeded->first.at(128, 128) != field->first.at(128, 128));
+    REQUIRE(noor_doc_terrain_height(doc, id.c_str(), 0, 0, &ground) == 1);
+    CHECK(ground == doctest::Approx(reseeded->first.at(128, 128) + 4.0f));
     noor_doc_close(doc);
     std::error_code ec;
     stdfs::remove_all(dir, ec);

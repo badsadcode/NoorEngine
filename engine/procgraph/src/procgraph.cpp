@@ -16,6 +16,7 @@
 
 namespace noor::procgraph {
 using asset::Json;
+constexpr std::uint32_t kTileSamples = kTileCells + 1;
 
 // ---- Names ----
 
@@ -489,16 +490,27 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
         }
     }
 
-    // Plan: parameters, seed and key per node, in order (a key needs only its inputs' keys, not their
-    // results). Nodes that can't run are decided here.
+    // Plan: parameters, seed, shape and keys per node, in order (a key needs only its inputs' keys, not
+    // their results). Nodes that can't run are decided here. Fields are keyed tile by tile, so a change
+    // in one region gives new keys only to that region's tiles (Milestone 7, part 3).
     struct Plan {
         const Node* node = nullptr;
         const NodeType* type = nullptr;
         Json params;
         std::uint64_t seed = 0;
         bool runnable = false;
+        std::optional<FieldShape> shape;      // of the field output, when known before running
+        std::vector<std::uint64_t> tile_keys; // per tile of the field output
+        std::vector<char> passthrough;        // tiled + touches: the tile is input "in" unchanged
     };
     std::map<std::string, Plan> plans;
+    std::map<std::string, std::vector<Issue>> plan_issues;
+    const auto run_issues_plan = [&](const std::string& node, const std::string& message) { plan_issues[node].push_back({node, "", message}); };
+    const auto field_output = [](const NodeType& t) -> const PinSpec* {
+        for (const auto& o : t.outputs)
+            if (o.type == PinType::Field) return &o;
+        return nullptr;
+    };
     for (const auto& id : ev.order) {
         NodeResult& res = ev.nodes[id];
         Plan& plan = plans[id];
@@ -511,12 +523,22 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
         plan.type = ix.types.at(id);
         plan.params = fill_params(*plan.type, *plan.node, nullptr);
         plan.seed = mix(graph.seed ^ hash_text(id));
-        Hasher key;
-        key.text(plan.type->name);
-        key.u32(plan.type->version);
-        key.text(nlohmann::json(plan.params).dump());  // sorted keys: the same parameters always hash the same
-        key.u64(plan.seed);
+        NodeContext ctx{*plan.node, {}, plan.params, plan.seed, nullptr, options.resolve};
+        Hasher own;  // everything but the inputs
+        own.text(plan.type->name);
+        own.u32(plan.type->version);
+        own.text(nlohmann::json(plan.params).dump());  // sorted keys: the same parameters always hash the same
+        own.u64(plan.seed);
+        if (plan.type->extra_key) own.text(plan.type->extra_key(ctx));
+        Hasher key = own;
         bool ok = true;
+        std::vector<FieldShape> input_shapes;
+        struct FieldIn {
+            std::string pin;
+            const Plan* up;
+            std::uint64_t up_key;
+        };
+        std::vector<FieldIn> field_ins;
         for (const auto& in : plan.type->inputs) {
             key.text(in.name);
             const auto link = ix.into.find({id, in.name});
@@ -531,12 +553,92 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
                 ok = false;
                 break;
             }
-            key.u64(ev.nodes[link->second->from.node].key);
+            const std::uint64_t up_key = ev.nodes[link->second->from.node].key;
+            key.u64(up_key);
             key.text(link->second->from.pin);
+            if (in.type == PinType::Field) {
+                field_ins.push_back({in.name, &up_plan, up_key});
+                if (up_plan.shape) input_shapes.push_back(*up_plan.shape);
+            }
         }
         if (!ok) continue;
         res.key = key.h;
         plan.runnable = true;
+        const PinSpec* fout = field_output(*plan.type);
+        if (!fout) continue;
+        // The output's shape.
+        if (plan.type->shape) {
+            auto shape = plan.type->shape(ctx, input_shapes);
+            if (!shape) {
+                res.state = NodeResult::State::Failed;
+                res.message = shape.error().message;
+                run_issues_plan(id, res.message);
+                plan.runnable = false;
+                continue;
+            }
+            plan.shape = *shape;
+        } else if (!input_shapes.empty()) {
+            plan.shape = input_shapes.front();
+        }
+        if (plan.type->run_tile) {
+            for (const auto& fs : input_shapes)
+                if (plan.shape && !(fs == *plan.shape)) {
+                    res.state = NodeResult::State::Failed;
+                    res.message = std::format("the fields are different sizes ({}x{} and {}x{} tiles)", plan.shape->tiles_x, plan.shape->tiles_z, fs.tiles_x, fs.tiles_z);
+                    run_issues_plan(id, res.message);
+                    plan.runnable = false;
+                    break;
+                }
+            if (!plan.runnable) continue;
+            if (!plan.shape) {
+                res.state = NodeResult::State::Failed;
+                res.message = "the node's field size isn't known (an engine bug: a tiled node needs a shape)";
+                run_issues_plan(id, res.message);
+                plan.runnable = false;
+                continue;
+            }
+        }
+        if (!plan.shape) continue;  // a whole-node field of unknown size: keyed as a whole
+        const FieldShape shape = *plan.shape;
+        plan.tile_keys.resize(shape.tiles());
+        plan.passthrough.assign(shape.tiles(), 0);
+        Hasher all = own;
+        for (std::uint32_t tz = 0; tz < shape.tiles_z; ++tz)
+            for (std::uint32_t tx = 0; tx < shape.tiles_x; ++tx) {
+                const std::size_t t = static_cast<std::size_t>(tz) * shape.tiles_x + tx;
+                if (!plan.type->run_tile) {  // a whole-node field: every tile changes with the node
+                    Hasher h;
+                    h.u64(res.key);
+                    h.u32(tx), h.u32(tz);
+                    plan.tile_keys[t] = h.h;
+                    continue;
+                }
+                const TileInfo info{tx, tz, shape};
+                const FieldIn* in_pin = nullptr;
+                for (const auto& f : field_ins)
+                    if (f.pin == "in") in_pin = &f;
+                if (plan.type->touches && in_pin && !in_pin->up->tile_keys.empty() && !plan.type->touches(ctx, info)) {
+                    plan.tile_keys[t] = in_pin->up->tile_keys[t];  // untouched: the input's tile, under the input's key
+                    plan.passthrough[t] = 1;
+                } else {
+                    Hasher h = own;
+                    h.u32(tx), h.u32(tz), h.u32(shape.tiles_x), h.u32(shape.tiles_z), h.f32(shape.cell);
+                    for (const auto& in : plan.type->inputs) {
+                        h.text(in.name);
+                        const auto link = ix.into.find({id, in.name});
+                        if (link == ix.into.end()) {
+                            h.u64(0);
+                            continue;
+                        }
+                        const Plan& up = plans[link->second->from.node];
+                        h.u64(in.type == PinType::Field && !up.tile_keys.empty() ? up.tile_keys[t] : ev.nodes[link->second->from.node].key);
+                    }
+                    plan.tile_keys[t] = h.h;
+                }
+                all.u64(plan.tile_keys[t]);
+            }
+        if (plan.type->run_tile) res.key = all.h;  // tiled: the node's key is its tiles' keys
+        res.tile_keys = plan.tile_keys;
     }
 
     // Run: workers take nodes whose inputs are done. Results are written under the lock; a node reads
@@ -563,7 +665,7 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
         const Plan& plan = plans.at(id);
         NodeResult res = ev.nodes.at(id);  // a copy: key, state so far (read-only lookups: no thread changes a map's shape)
         std::vector<Issue> issues;
-        NodeContext ctx{*plan.node, {}, plan.params, plan.seed, options.cancel};
+        NodeContext ctx{*plan.node, {}, plan.params, plan.seed, options.cancel, options.resolve};
         bool ok = true;
         if (is_cancelled()) {
             res.state = NodeResult::State::Skipped;
@@ -611,7 +713,80 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
                 }
             }
         }
-        if (ok) {
+        if (ok && plan.type->run_tile) {
+            // Tile by tile: untouched tiles copied from "in", cached tiles from the cache, the rest computed.
+            const auto t0 = std::chrono::steady_clock::now();
+            const FieldShape shape = *plan.shape;
+            auto f = std::make_shared<Field>();
+            f->sx = shape.samples_x();
+            f->sz = shape.samples_z();
+            f->cell = shape.cell;
+            f->v.assign(static_cast<std::size_t>(f->sx) * f->sz, 0.0f);
+            const Value* in = ctx.input("in");
+            auto put_tile = [&](const TileInfo& info, const std::vector<float>& tile) {
+                for (std::uint32_t z = 0; z < kTileSamples; ++z)
+                    std::copy_n(tile.begin() + static_cast<std::ptrdiff_t>(z) * kTileSamples, kTileSamples,
+                                f->v.begin() + static_cast<std::ptrdiff_t>(info.z0() + z) * f->sx + info.x0());
+            };
+            for (std::uint32_t tz = 0; ok && tz < shape.tiles_z; ++tz)
+                for (std::uint32_t tx = 0; ok && tx < shape.tiles_x; ++tx) {
+                    const std::size_t t = static_cast<std::size_t>(tz) * shape.tiles_x + tx;
+                    const TileInfo info{tx, tz, shape};
+                    if (is_cancelled()) {
+                        res.state = NodeResult::State::Skipped;
+                        res.message = "cancelled";
+                        ok = false;
+                        break;
+                    }
+                    if (plan.passthrough[t] && in && in->field) {
+                        for (std::uint32_t z = 0; z < kTileSamples; ++z)
+                            std::copy_n(in->field->v.begin() + static_cast<std::ptrdiff_t>(info.z0() + z) * f->sx + info.x0(), kTileSamples,
+                                        f->v.begin() + static_cast<std::ptrdiff_t>(info.z0() + z) * f->sx + info.x0());
+                        ++res.tiles_passed;
+                        continue;
+                    }
+                    if (auto hit = options.cache ? options.cache->get(plan.tile_keys[t]) : std::nullopt; hit && hit->contains("tile") && hit->at("tile").field) {
+                        put_tile(info, hit->at("tile").field->v);
+                        ++res.tiles_cached;
+                        continue;
+                    }
+                    auto tile = plan.type->run_tile(ctx, info);
+                    if (!tile || tile->size() != static_cast<std::size_t>(kTileSamples) * kTileSamples) {
+                        const bool cancelled = tile ? false : tile.error().code == ErrorCode::Cancelled;
+                        res.state = cancelled ? NodeResult::State::Skipped : NodeResult::State::Failed;
+                        res.message = cancelled ? "cancelled" : tile ? "a tile came back the wrong size (an engine bug)" : tile.error().message;
+                        if (!cancelled) issues.push_back({id, "", res.message});
+                        ok = false;
+                        break;
+                    }
+                    put_tile(info, *tile);
+                    ++res.tiles_run;
+                    if (options.cache) {
+                        auto tf = std::make_shared<Field>();
+                        tf->sx = tf->sz = kTileSamples;
+                        tf->cell = shape.cell;
+                        tf->v = std::move(*tile);
+                        Value tv;
+                        tv.type = PinType::Field;
+                        tv.field = std::move(tf);
+                        options.cache->put(plan.tile_keys[t], Outputs{{"tile", tv}});
+                    }
+                }
+            if (ok) {
+                const PinSpec& spec = plan.type->outputs.front();
+                Value out;
+                out.type = PinType::Field;
+                out.unit = spec.unit == Unit::SameAs ? (ctx.input(spec.same_as) ? ctx.input(spec.same_as)->unit : Unit::None)
+                         : spec.unit == Unit::Any   ? (plan.type->unit ? plan.type->unit(ctx) : in ? in->unit : Unit::None)
+                                                    : spec.unit;
+                out.field = std::move(f);
+                res.bytes = value_bytes(out);
+                res.outputs = Outputs{{spec.name, std::move(out)}};
+                res.state = NodeResult::State::Done;
+                res.cached = res.tiles_run == 0;
+            }
+            res.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        } else if (ok) {
             const auto t0 = std::chrono::steady_clock::now();
             std::optional<Outputs> hit = options.cache ? options.cache->get(res.key) : std::nullopt;
             if (hit) {
@@ -686,11 +861,16 @@ Evaluation evaluate(const Graph& graph, const Registry& registry, const Evaluate
             ev.nodes[n.id].state = NodeResult::State::Failed;
             ev.nodes[n.id].message = broken.contains(n.id) ? broken[n.id] : "part of a cycle";
         }
-    for (const auto& id : ev.order)  // in the fixed order, whatever order threads finished in
+    for (const auto& id : ev.order) {  // in the fixed order, whatever order threads finished in
+        if (const auto it = plan_issues.find(id); it != plan_issues.end()) ev.issues.insert(ev.issues.end(), it->second.begin(), it->second.end());
         if (const auto it = run_issues.find(id); it != run_issues.end()) ev.issues.insert(ev.issues.end(), it->second.begin(), it->second.end());
+    }
     for (const auto& [id, r] : ev.nodes) {
         if (r.state == NodeResult::State::Done) ++(r.cached ? ev.cached : ev.ran);
         if (r.message == "cancelled") ev.cancelled = true;
+        ev.tiles_run += r.tiles_run;
+        ev.tiles_cached += r.tiles_cached;
+        ev.tiles_passed += r.tiles_passed;
     }
     for (const auto& o : graph.outputs) {
         const auto it = ev.nodes.find(o.from.node);

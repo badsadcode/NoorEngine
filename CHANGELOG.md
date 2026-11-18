@@ -4,6 +4,30 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 7, part 3: terrain as a graph client
+**Added**
+- **Tiles as regions**: tile-local field nodes (`run_tile`) are keyed, cached and recomputed tile by
+  tile; nodes with bounds (`touches`) pass untouched tiles through under the input's keys. Per-node tile
+  counts (run, cached, passed). Field shapes are planned before running.
+- Nodes: **`stamp`** (hill/plateau with bounds), **`terrace`**, **`height_band`** (mask), **`slope`**
+  (mask; deterministic cosine for its thresholds), **`heightmap`** (a picture asset; its key includes the
+  file's size and time). noise, combine, clamp and remap became tile-local (same bytes: the pinned
+  fingerprint didn't move).
+- **Terrains on graphs**: `"base": "graph"` (`graph`, `graph_output`); sculpting and paint stay on top
+  through a new seed. Games read the field cooked in `.noor/cooked/graphs/<id>/`, written by the editor
+  (when the graph changes, and on Save) and by `noor_cli build`/`cook` (`procgraph::cook`).
+  `game::terrain_settings`, `game::cooked_graph_folder`; `collect_view` takes the project root.
+- `generate` doesn't rewrite files whose bytes wouldn't change.
+
+**Fixed (during the part):** a patch script that opened `terrain.cpp` for writing before reading it
+emptied the file; restored from git before anything was built or committed.
+
+**Tests:** 3 more `test_procgraph` cases (moving a stamp in one corner recomputes exactly that tile in the
+stamp and downstream, the other three bit-identical with unchanged keys; terrace/height band/slope;
+heightmap equals the terrain's reading), an API test (a graph-based terrain cooks itself, a sculpted bump
+survives a new seed), `cli.build_graph_terrain` + `player.graph_terrain` (a built game: a walker lands on
+the cooked terrain, 2 mm from its height).
+
 ### 2026-11-18 — Milestone 7, part 2: cache, jobs and noor_cli generate
 **Added**
 - **Results cache** (`procgraph::Cache`): node results under their keys, in memory and in
