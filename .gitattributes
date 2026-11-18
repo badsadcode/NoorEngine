@@ -9,3 +9,6 @@
 *.gltf -text
 # Test data is generator output: keep it byte-for-byte (manifests hold checksums of siblings).
 tests/data/** -text
+
+# NoorMD exports: manifests hold SHA-256s of their sibling files, so keep them byte for byte.
+samples/Hillside/Assets/Trees/** -text
