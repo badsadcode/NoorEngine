@@ -114,6 +114,15 @@ at noon, orange-red at sunset) and its disc is drawn in the sky.
   south), `"day_of_year"` (1–365, 172 midsummer by default) and `"north"` (degrees: which way north
   points, turned from −Z about +Y). The editor's **+ Time of day** button adds them. Change it from a
   script (`e:get("environment")`, `e:set(...)`) to run a day.
+- **Fog** (any sky; the editor's **+ Fog** button adds it):
+  `"fog_density": 0.004` (per metre at and below the fog's height; 0.001 a light haze, 0.01 thick),
+  `"fog_height": 3` (metres: full density below), `"fog_falloff": 0.1` (per metre above: it halves every
+  ln 2 / falloff, here about 7 m), `"fog_anisotropy": 0.6` (how much it glows towards the sun, 0–0.95),
+  `"fog_color": "#FFFFFF"` (its albedo: a tint). It covers everything drawn and the sky, lit by the sun and
+  the sky; valleys fill and hilltops poke out. No shadows inside the fog yet.
+- **Aerial perspective** (atmosphere sky): distant things fade into the air, bluish by day, warm at sunset,
+  from the same model as the sky. `"aerial_scale": 1` is physical (a hill 1 km away gets 1 km of air, which
+  is subtle); a small world can raise it (Hillside's haze scene uses 30); 0 turns it off.
 - The sky, its reflections and the light from all around are rebuilt **on the GPU** whenever the sun
   moves (about 0.2 ms), so a moving sun costs almost nothing. `noor_player --cpu-sky` builds it on the
   CPU instead (the reference implementation, about 120 ms a move) for comparisons.

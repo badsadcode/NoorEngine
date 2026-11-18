@@ -276,6 +276,17 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         if (env) {
             const auto& en = e.components["environment"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
+            render::FogParams& fog = view.lighting.fog;
+            fog.density = std::clamp(number(en, "fog_density", 0.0f), 0.0f, 1.0f);
+            fog.height = number(en, "fog_height", fog.height);
+            fog.falloff = std::clamp(number(en, "fog_falloff", fog.falloff), 0.0f, 10.0f);
+            fog.anisotropy = std::clamp(number(en, "fog_anisotropy", fog.anisotropy), 0.0f, 0.95f);
+            if (en.contains("fog_color")) {
+                Json tint = Json::object();
+                tint["color"] = en["fog_color"];
+                fog.albedo = color_of(tint, fog.albedo);
+            }
+            view.environment.aerial_scale = std::clamp(number(en, "aerial_scale", 1.0f), 0.0f, 1000.0f);
             if (en.contains("time_of_day") && en["time_of_day"].is_number())
                 time_of_day = TimeOfDay{std::fmod(std::fmod(number(en, "time_of_day", 12.0f), 24.0f) + 24.0f, 24.0f),
                                         std::clamp(number(en, "latitude", 50.0f), -90.0f, 90.0f),

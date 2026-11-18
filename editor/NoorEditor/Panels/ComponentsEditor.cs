@@ -833,7 +833,26 @@ public sealed class ComponentsEditor : StackPanel
         Grid.SetColumn(combo, 1);
         grid.Children.Add(text);
         grid.Children.Add(combo);
-        if (env["time_of_day"] != null) return grid;
+        var buttons = new WrapPanel();
+        if (env["fog_density"] == null)
+        {
+            // Height fog: thick below fog_height, thinning above (Milestone 8A, part 3).
+            var fog = new Button { Content = "+ Fog", Classes = { "tool" }, Margin = new Thickness(0, 0, 4, 0) };
+            ToolTip.SetTip(fog, "Height fog: full density below fog_height, thinning above it; lit by the sun and the sky");
+            fog.Click += (_, _) =>
+            {
+                var next = (JsonObject)env.DeepClone();
+                next["fog_density"] = 0.004;
+                next["fog_height"] = 0;
+                next["fog_falloff"] = 0.05;
+                next["fog_anisotropy"] = 0.6;
+                next["fog_color"] = "#FFFFFF";
+                SetComponent("environment", next);
+            };
+            buttons.Children.Add(fog);
+        }
+        if (env["time_of_day"] != null)
+            return buttons.Children.Count == 0 ? grid : new StackPanel { Spacing = 4, Children = { grid, buttons } };
         // The time of day places the sun (it then ignores the sun light's rotation).
         var time = new Button { Content = "+ Time of day", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
         ToolTip.SetTip(time, "Place the sun by the hour (and latitude, day of the year) instead of by turning the sun light");
@@ -845,7 +864,8 @@ public sealed class ComponentsEditor : StackPanel
             next["day_of_year"] ??= 172;
             SetComponent("environment", next);
         };
-        return new StackPanel { Spacing = 4, Children = { grid, time } };
+        buttons.Children.Add(time);
+        return new StackPanel { Spacing = 4, Children = { grid, buttons } };
     }
 
     private Control AddComponentButton()

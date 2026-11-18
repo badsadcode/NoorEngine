@@ -4,6 +4,27 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-18 — Milestone 8A, part 3: fog and aerial perspective
+**Added**
+- **Height fog** (`noor/render/fog.h`, `shaders/fog.hlsli`; `render::Lighting::fog`): full density below a
+  height, thinning above; closed-form optical depth; lit by the sun (Henyey-Greenstein) and the sky's average
+  radiance; on opaque and see-through surfaces and the sky. Environment fields `fog_density`, `fog_height`,
+  `fog_falloff`, `fog_anisotropy`, `fog_color`; the editor's **+ Fog** button.
+- **Aerial perspective** with the atmosphere sky: a 32³ froxel volume built every frame by compute (`CSAerial`),
+  `asset::Atmosphere::aerial_perspective` as its reference; `aerial_scale` (`AtmosphereDesc::aerial_distance_scale`).
+- **Hillside_Haze**: a second scene of the Hillside sample (`tools/samples/add_hillside_haze.py`) and its golden.
+- Shaders can share code: `.hlsli` files next to them are build dependencies.
+
+**Changed:** `noor_cli cook`/`build` cook a CSG model shared by several scenes once; one whose brushes differ
+between scenes under the same entity id is refused with an explanation (it used to be overwritten silently).
+
+**Measured:** the aerial volume 0.025 ms a frame; Hillside_Haze 1.33 ms GPU a frame at 1280×720.
+
+**Tests:** fog maths against numerical integration (cameras inside and above the fog), density, height,
+falloff, the horizon, the phase function's normalisation, the seam (far ground and sky reach the same
+colour); aerial perspective against the sky; fog fields reaching the view; `cli.csg_shared_between_scenes`;
+golden `Hillside_Haze`.
+
 ### 2026-11-18 — Milestone 8A, part 2: the live sky on the GPU, time of day
 **Added**
 - **The renderer's first compute shaders** (`shaders/atmosphere.hlsl`, `vulkan_atmosphere.cpp`):

@@ -64,6 +64,9 @@ struct FrameUniforms
     float4x4 world_from_clip;
     float4 environment;      // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
     uint4 background;
+    float4 fog;              // x density, y falloff, z height, w anisotropy (fog.hlsli)
+    float4 fog_albedo;       // rgb
+    float4 aerial;           // x: 1 = aerial perspective, y: the volume's far end (km), z: distance scale
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2DArray<float> shadow_map;
@@ -72,6 +75,11 @@ struct FrameUniforms
 [[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState environment_sampler;
 // The environment's diffuse light: spherical harmonics (rgb, 9), written by set_environment or the live sky.
 [[vk::binding(3, 0)]] StructuredBuffer<float4> irradiance_sh;
+// The air between the camera and each point (the live atmosphere sky; otherwise one texel of "no air").
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture3D<float4> aerial_volume;
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState aerial_sampler;
+
+#include "fog.hlsli"
 static const uint kBrdfLut = 3;  // built-in texture slot
 
 struct VertexInput
@@ -278,6 +286,45 @@ Surface sample_surface(uint slot, float2 surface_uv, float3 n, float4 tangent)
     return s;
 }
 
+// The atmosphere and the fog between the camera and `world` (Milestone 8A, part 3): what's behind is
+// multiplied by `transmittance`, `inscatter` is added (scaled by coverage for see-through surfaces).
+void atmosphere_between(float3 world, out float transmittance, out float3 inscatter)
+{
+    const float3 to_point = world - frame.camera_position.xyz;
+    const float distance = length(to_point);
+    const float3 dir = to_point / max(distance, 1e-4);
+    transmittance = 1.0;
+    inscatter = 0.0;
+    if (frame.aerial.x != 0.0)
+    {
+        // The aerial perspective volume: x, y the point on screen, z the square root of its distance
+        // (CSAerial's slices: slice s holds the air up to ((s + 1) / 32)^2 of the far end).
+        const float4 clip = mul(frame.clip_from_world, float4(world, 1.0));
+        const float2 uv = clip.xy / max(clip.w, 1e-6) * 0.5 + 0.5;
+        const float slice = sqrt(distance * frame.aerial.z * 0.001 / frame.aerial.y) * 32.0;
+        const float4 air = aerial_volume.SampleLevel(aerial_sampler, float3(uv, (clamp(slice - 1.0, 0.0, 31.0) + 0.5) / 32.0), 0);
+        const float near = saturate(slice);  // closer than the first slice: fade from no air
+        transmittance = lerp(1.0, air.a, near);
+        inscatter = air.rgb * near * frame.environment.x;  // relative to the sun's illuminance (the sky's intensity)
+    }
+    if (frame.fog.x > 0.0)
+    {
+        Fog f;
+        f.density = frame.fog.x;
+        f.falloff = frame.fog.y;
+        f.height = frame.fog.z;
+        f.anisotropy = frame.fog.w;
+        f.albedo = frame.fog_albedo.rgb;
+        // The sky's average radiance: the irradiance's constant term (cosine-convolved by pi) over pi.
+        const float3 ambient = max(irradiance_sh[0].rgb, 0.0) * (0.282095 / kPi) * frame.environment.x;
+        float t;
+        float3 s;
+        fog_apply(f, frame.camera_position.xyz, dir, distance, false, frame.to_sun.xyz, frame.sun_radiance.rgb, ambient, t, s);
+        inscatter = inscatter * t + s;  // the air first (further away), then the fog in front of it
+        transmittance *= t;
+    }
+}
+
 float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
 {
     float3 n = normalize(input.normal);
@@ -357,9 +404,15 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
         // See-through (premultiplied alpha): the light the surface sends back is scaled by how much
         // of it is there; reflections and glow stay whole (a clear window still reflects the sky).
         const float a = saturate(alpha);
-        return float4(color * a + reflection + emissive, a);
+        float air_t;
+        float3 air_in;
+        atmosphere_between(input.world_position, air_t, air_in);
+        return float4((color * a + reflection + emissive) * air_t + air_in * a, a);
     }
     color += reflection;
     color += emissive;  // relative to the exposure (already "exposed"): 1 is about white on screen
-    return float4(color, 1.0);  // alpha 1: something was drawn here (tonemap.hlsl)
+    float air_t;
+    float3 air_in;
+    atmosphere_between(input.world_position, air_t, air_in);
+    return float4(color * air_t + air_in, 1.0);  // alpha 1: something was drawn here (tonemap.hlsl)
 }

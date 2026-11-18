@@ -52,20 +52,87 @@ void Renderer::Impl::destroy_hdr_target() {
 
 // ------------------------------------------------------------------ lighting uniforms
 
+Status Renderer::Impl::create_aerial_default() {
+    VkImageCreateInfo volume_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    volume_info.imageType = VK_IMAGE_TYPE_3D;
+    volume_info.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    volume_info.extent = {1, 1, 1};
+    volume_info.mipLevels = 1;
+    volume_info.arrayLayers = 1;
+    volume_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    volume_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    volume_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VmaAllocationCreateInfo alloc{};
+    alloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    NOOR_VK_TRY(vmaCreateImage(allocator, &volume_info, &alloc, &aerial_default.image, &aerial_default.allocation, nullptr));
+    set_name(VK_OBJECT_TYPE_IMAGE, aerial_default.image, "Aerial perspective (none)");
+    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.image = aerial_default.image;
+    view.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    view.format = volume_info.format;
+    view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    NOOR_VK_TRY(vkCreateImageView(device, &view, nullptr, &aerial_default.view));
+    VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    sampler.magFilter = sampler.minFilter = VK_FILTER_LINEAR;
+    sampler.addressModeU = sampler.addressModeV = sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    NOOR_VK_TRY(vkCreateSampler(device, &sampler, nullptr, &aerial_default.sampler));
+    // Clear it to "no air": inscatter 0, transmittance 1.
+    VkCommandBufferAllocateInfo cmd_alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    cmd_alloc.commandPool = upload_pool;
+    cmd_alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmd_alloc.commandBufferCount = 1;
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    NOOR_VK_TRY(vkAllocateCommandBuffers(device, &cmd_alloc, &cmd));
+    VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &begin);
+    image_barrier(cmd, aerial_default.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                  VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    const VkClearColorValue clear{{0.0f, 0.0f, 0.0f, 1.0f}};
+    const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCmdClearColorImage(cmd, aerial_default.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+    image_barrier(cmd, aerial_default.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                  VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    vkEndCommandBuffer(cmd);
+    VkCommandBufferSubmitInfo cmd_info{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+    cmd_info.commandBuffer = cmd;
+    VkSubmitInfo2 submit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit.commandBufferInfoCount = 1;
+    submit.pCommandBufferInfos = &cmd_info;
+    VkResult r = vkQueueSubmit2(queue, 1, &submit, VK_NULL_HANDLE);
+    if (r == VK_SUCCESS) r = vkQueueWaitIdle(queue);
+    vkFreeCommandBuffers(device, upload_pool, 1, &cmd);
+    if (r != VK_SUCCESS) return vk_failure(r, "aerial perspective default");
+    return {};
+}
+
+void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageView view, VkImageLayout layout) {
+    VkDescriptorImageInfo image{aerial_default.sampler, view, layout};
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = frame_sets[frame_slot];
+    write.dstBinding = 4;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &image;
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+}
+
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[4] = {
+    const VkDescriptorSetLayoutBinding bindings[5] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // environment cube
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // environment irradiance (SH9)
+        {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // aerial perspective volume
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 4;
+    layout_info.bindingCount = 5;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
-                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 2},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 3},
                                                 {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
@@ -83,6 +150,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
     if (!irradiance) return std::unexpected(irradiance.error());
     irradiance_buffer = *irradiance;
     set_name(VK_OBJECT_TYPE_BUFFER, irradiance_buffer.buffer, "Environment irradiance (SH9)");
+    if (auto s = create_aerial_default(); !s) return s;
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         VkDescriptorBufferInfo sh_info{irradiance_buffer.buffer, 0, VK_WHOLE_SIZE};
         VkWriteDescriptorSet sh_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -92,6 +160,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         sh_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         sh_write.pBufferInfo = &sh_info;
         vkUpdateDescriptorSets(device, 1, &sh_write, 0, nullptr);
+        write_aerial_descriptor(i, aerial_default.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         auto buffer = create_buffer(sizeof(FrameUniforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true, false);
@@ -171,6 +240,13 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     u.background[0] = live_sky.active ? live_sky.copies[frame_index].sky_slot
                                       : environment.background.valid() ? environment.background.id : kTextureWhite;
     u.background[1] = frame.lighting.sun_disc ? 1u : 0u;
+    const FogParams& fog = frame.lighting.fog;
+    u.fog = {std::max(0.0f, fog.density), std::max(0.0f, fog.falloff), fog.height, std::clamp(fog.anisotropy, -0.95f, 0.95f)};
+    u.fog_albedo = {fog.albedo.x, fog.albedo.y, fog.albedo.z, 0.0f};
+    const bool aerial = live_sky.active && live_sky.desc.aerial_distance_scale > 0.0f;
+    u.aerial = {aerial ? 1.0f : 0.0f, kAerialFarKm, std::max(0.0f, live_sky.desc.aerial_distance_scale), 0.0f};
+    frame_world_from_clip = u.world_from_clip;
+    frame_eye = eye;
     GpuBuffer& ubo = frame_ubos[frame_index];
     std::memcpy(ubo.mapped, &u, sizeof(u));
     vmaFlushAllocation(allocator, ubo.allocation, 0, sizeof(u));
@@ -314,6 +390,12 @@ void Renderer::Impl::record_tonemap(VkCommandBuffer cmd, const Lighting& lightin
 }
 
 void Renderer::Impl::destroy_frame_resources() {
+    if (device != VK_NULL_HANDLE) {
+        if (aerial_default.sampler) vkDestroySampler(device, aerial_default.sampler, nullptr);
+        if (aerial_default.view) vkDestroyImageView(device, aerial_default.view, nullptr);
+        if (aerial_default.image) vmaDestroyImage(allocator, aerial_default.image, aerial_default.allocation);
+        aerial_default = {};
+    }
     if (device == VK_NULL_HANDLE) return;
     for (auto& ubo : frame_ubos)
         if (ubo.buffer != VK_NULL_HANDLE) destroy_buffer(ubo);

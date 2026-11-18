@@ -20,10 +20,16 @@ struct FrameUniforms
     float4x4 world_from_clip;
     float4 environment;         // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
     uint4 background;           // x: background texture slot, y: 1 = draw the sun's disc
+    float4 fog;                 // x density, y falloff, z height, w anisotropy (fog.hlsli)
+    float4 fog_albedo;
+    float4 aerial;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 [[vk::binding(1, 1)]] SamplerState texture_sampler;
+[[vk::binding(3, 0)]] StructuredBuffer<float4> irradiance_sh;  // the fog's ambient light
+
+#include "fog.hlsli"
 
 struct VertexOutput
 {
@@ -69,6 +75,22 @@ float4 PSMain(VertexOutput input) : SV_Target
             color += frame.sun_radiance.rgb * (limb / (0.8 * 6.8e-5));
             color = min(color, 60000.0);  // the HDR target is half floats
         }
+    }
+    // Height fog in front of the sky (to infinity): on the horizon the sky becomes the fog's colour, which
+    // is where distant fogged ground ends up too, so the two meet without a seam.
+    if (frame.fog.x > 0.0)
+    {
+        Fog f;
+        f.density = frame.fog.x;
+        f.falloff = frame.fog.y;
+        f.height = frame.fog.z;
+        f.anisotropy = frame.fog.w;
+        f.albedo = frame.fog_albedo.rgb;
+        const float3 ambient = max(irradiance_sh[0].rgb, 0.0) * (0.282095 / kPi) * frame.environment.x;
+        float t;
+        float3 s;
+        fog_apply(f, frame.camera_position.xyz, world_d, 0.0, true, frame.to_sun.xyz, frame.sun_radiance.rgb, ambient, t, s);
+        color = color * t + s;
     }
     return float4(color, 0.0);
 }

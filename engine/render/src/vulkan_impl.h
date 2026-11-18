@@ -59,6 +59,10 @@ inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
 // GPU timestamps per frame: start, after shadows, after the scene, after tonemapping, after the gizmos, end.
 inline constexpr std::uint32_t kTimestampsPerFrame = 7;
+// The aerial perspective volume (Milestone 8A, part 3): 32^3 froxels over the camera's view, slices
+// spaced by the square root of the distance out to this far end (km of air, after the distance scale).
+inline constexpr std::uint32_t kAerialSize = 32;
+inline constexpr float kAerialFarKm = 32.0f;
 inline constexpr VkFormat kShadowFormat = VK_FORMAT_D32_SFLOAT;
 // The bindless texture table (set 1): slots 0..2 are built in.
 inline constexpr std::uint32_t kMaxTextures = 4096;
@@ -172,8 +176,19 @@ struct FrameUniforms {
     GpuLight lights[kMaxLocalLights];
     math::Mat4 world_from_clip;          // the sky's view rays
     math::Vec4 environment;              // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
-    std::uint32_t background[4];         // x: background texture slot
+    std::uint32_t background[4];         // x: background texture slot, y: sun disc
+    math::Vec4 fog;                      // x density, y falloff, z height, w anisotropy (fog.h)
+    math::Vec4 fog_albedo;               // rgb
+    math::Vec4 aerial;                   // x: 1 = the aerial perspective volume is live, y: its far end (km), z: distance scale
 };
+
+// atmosphere.hlsl's push constants (Params): the atmosphere and what this pass works on.
+struct LiveSkyPush {
+    math::Vec4 rayleigh, mie, ozone, planet, ground, sun;
+    std::uint32_t pass[4];
+    math::Vec4 extra;
+};
+static_assert(sizeof(LiveSkyPush) == 128, "push constants: the guaranteed minimum is 128 bytes");
 
 struct PendingCapture {
     GpuBuffer buffer;
@@ -281,6 +296,17 @@ struct Renderer::Impl {
     // The environment's irradiance (SH9, 9 float4) for the scene (frame set, binding 3): uploaded by
     // set_environment, written by the live sky's compute shader.
     GpuBuffer irradiance_buffer;
+    // The aerial perspective volume the scene samples when there's no live sky (frame set binding 4): one
+    // texel that adds nothing and lets everything through.
+    struct AerialDefault {
+        VkImage image = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;  // linear, clamped (the live volumes use it too)
+    } aerial_default;
+    // This frame's camera, kept by update_frame_uniforms for the aerial perspective pass.
+    math::Mat4 frame_world_from_clip = math::Mat4::identity();
+    math::Vec3 frame_eye{0, 0, 0};
 
     // The live sky (vulkan_atmosphere.cpp, Milestone 8A part 2): the atmosphere's tables, the sky image
     // and the environment's cube and irradiance, rebuilt by compute shaders when the sun moves.
@@ -298,6 +324,9 @@ struct Renderer::Impl {
         // made each frame's compute wait for the previous frame's presentation: half the frame rate).
         struct Copy {
             Image sky, cube;
+            Image aerial;                // the camera's aerial perspective (32^3, rebuilt every frame)
+            GpuBuffer aerial_camera;     // host-visible: the camera the aerial volume is built for
+            VkDescriptorSet aerial_set = VK_NULL_HANDLE;
             GpuBuffer irradiance;   // SH9 (frame set binding 3)
             std::uint32_t sky_slot = 0;  // the sky image's slot in the texture table
             VkDescriptorSet sky_set = VK_NULL_HANDLE, irradiance_set = VK_NULL_HANDLE;
@@ -311,7 +340,8 @@ struct Renderer::Impl {
         VkDescriptorPool pool = VK_NULL_HANDLE;
         VkPipelineLayout layout = VK_NULL_HANDLE;
         VkPipeline transmittance_pipeline = VK_NULL_HANDLE, multiple_pipeline = VK_NULL_HANDLE, sky_pipeline = VK_NULL_HANDLE,
-                   downsample_pipeline = VK_NULL_HANDLE, cube_pipeline = VK_NULL_HANDLE, irradiance_pipeline = VK_NULL_HANDLE;
+                   downsample_pipeline = VK_NULL_HANDLE, cube_pipeline = VK_NULL_HANDLE, irradiance_pipeline = VK_NULL_HANDLE,
+                   aerial_pipeline = VK_NULL_HANDLE;
         VkDescriptorSet transmittance_set = VK_NULL_HANDLE, multiple_set = VK_NULL_HANDLE;
         bool active = false;         // the environment is this (set_environment turns it off)
         bool has_desc = false;
@@ -432,6 +462,8 @@ struct Renderer::Impl {
     Status create_hdr_target();
     void destroy_hdr_target();
     Status ensure_frame_uniforms();
+    Status create_aerial_default();
+    void write_aerial_descriptor(std::uint32_t frame_slot, VkImageView view, VkImageLayout layout);
     Status ensure_tonemap(VkFormat color_format);
     void write_tonemap_descriptor();
     void update_frame_uniforms(const FrameDesc& frame);
@@ -451,6 +483,8 @@ struct Renderer::Impl {
     Status ensure_live_sky();
     Status set_atmosphere(const AtmosphereDesc& desc);
     void record_live_sky(VkCommandBuffer cmd);
+    // The sky image, its pyramid, the cube and the irradiance for this frame's copy.
+    void record_live_sky_lighting(VkCommandBuffer cmd, LiveSkyPush& push);
     void destroy_live_sky();
     // vulkan_shadows.cpp
     Status ensure_shadows();

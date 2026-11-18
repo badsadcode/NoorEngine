@@ -8,6 +8,7 @@
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
 #include "noor/platform/presentation_target.h"
+#include "noor/render/fog.h"
 
 #include <array>
 #include <cstdint>
@@ -184,6 +185,10 @@ struct AtmosphereDesc {
     float turbidity = 1.0f;
     float altitude_m = 0.0f;
     math::Vec3 to_sun{0, 1, 0};  // towards the sun (unit)
+    // Aerial perspective (part 3): scene distances are multiplied by this before the air between the camera
+    // and a surface is worked out. 1 is physical (a hill 1 km away gets 1 km of air); a small world can make
+    // its far edge look further away; 0 turns it off.
+    float aerial_distance_scale = 1.0f;
 };
 
 // A point or spot light (Milestone 5, part 4). Intensity is luminous power in lumens, like a
@@ -223,6 +228,8 @@ struct Lighting {
     // Draw the sun's disc in the sky (0.53 degrees across, from sun_color * sun_illuminance): on for
     // the atmosphere sky, whose background leaves the sun out.
     bool sun_disc = false;
+    // Height fog (Milestone 8A, part 3; noor/render/fog.h): over everything drawn and the sky. Density 0: none.
+    FogParams fog;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;

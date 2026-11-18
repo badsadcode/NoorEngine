@@ -12,6 +12,8 @@ function(noor_add_shader target hlsl entry profile name)
     set(gen_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set(spv "${spv_dir}/${name}.spv")
     set(header "${gen_dir}/noor/shaders/${name}.h")
+    get_filename_component(shader_dir "${hlsl}" DIRECTORY)
+    file(GLOB includes CONFIGURE_DEPENDS "${shader_dir}/*.hlsli")  # shared code (#include): a change rebuilds every shader
     add_custom_command(
         OUTPUT "${header}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${spv_dir}" "${gen_dir}/noor/shaders"
@@ -19,7 +21,7 @@ function(noor_add_shader target hlsl entry profile name)
                 -T ${profile} -E ${entry} -Fo "${spv}" "${hlsl}"
         COMMAND ${CMAKE_COMMAND} -DINPUT=${spv} -DOUTPUT=${header} -DSYMBOL=k_${name}
                 -P "${PROJECT_SOURCE_DIR}/cmake/NoorEmbedBinary.cmake"
-        DEPENDS "${hlsl}" "${PROJECT_SOURCE_DIR}/cmake/NoorEmbedBinary.cmake"
+        DEPENDS "${hlsl}" ${includes} "${PROJECT_SOURCE_DIR}/cmake/NoorEmbedBinary.cmake"
         COMMENT "Compiling shader ${name} (${profile}, ${entry})"
         VERBATIM)
     target_sources(${target} PRIVATE "${header}" "${hlsl}")

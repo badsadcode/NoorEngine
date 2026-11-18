@@ -2,6 +2,9 @@
 // environment's lighting (prefiltered cube, irradiance SH9) built by compute shaders
 // (shaders/atmosphere.hlsl), so the sun can move every frame.
 //
+// Every frame (Milestone 8A, part 3): the camera's aerial perspective, a 32^3 volume of what the air adds
+// and lets through along each pixel's view, which the scene's shader applies to every surface.
+//
 // What is rebuilt when:
 //   - settings change (planet, air, haze, ground): the transmittance and multiple-scattering tables
 //     (shared), then every copy below;
@@ -18,6 +21,7 @@
 // synchronisation is global memory barriers.
 #include "vulkan_impl.h"
 
+#include "noor/shaders/atmosphere_aerial.h"
 #include "noor/shaders/atmosphere_cube.h"
 #include "noor/shaders/atmosphere_downsample.h"
 #include "noor/shaders/atmosphere_irradiance.h"
@@ -41,12 +45,7 @@ constexpr std::uint32_t kCube = 64;
 constexpr std::uint32_t kCubeMips = 7;    // 64 down to 1
 constexpr std::uint32_t kIrradianceLevel = 1;  // make_environment projects SH from level 1 when wider than 256
 
-struct Push {
-    math::Vec4 rayleigh, mie, ozone, planet, ground, sun;
-    std::uint32_t pass[4];
-    math::Vec4 extra;
-};
-static_assert(sizeof(Push) == 128, "push constants: the guaranteed minimum is 128 bytes");
+using Push = LiveSkyPush;
 
 Push push_of(const AtmosphereDesc& d) {
     Push p{};
@@ -95,6 +94,13 @@ void compute_to_compute(VkCommandBuffer cmd) {
 }
 
 std::uint32_t groups(std::uint32_t n) { return (n + 7) / 8; }
+
+// atmosphere.hlsl's AerialCamera (binding 8).
+struct AerialCameraGpu {
+    math::Mat4 world_from_clip;
+    math::Vec4 eye;
+    math::Vec4 params;  // x far end (km), y distance scale, z the camera's height above the surface (km)
+};
 
 } // namespace
 
@@ -150,6 +156,31 @@ Status Renderer::Impl::ensure_live_sky() {
         auto buffer = create_buffer(9 * sizeof(math::Vec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, false);
         if (!buffer) return std::unexpected(buffer.error());
         c.irradiance = *buffer;
+        {  // the aerial perspective volume (3D, 32^3)
+            VkImageCreateInfo volume_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+            volume_info.imageType = VK_IMAGE_TYPE_3D;
+            volume_info.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+            volume_info.extent = {kAerialSize, kAerialSize, kAerialSize};
+            volume_info.mipLevels = 1;
+            volume_info.arrayLayers = 1;
+            volume_info.samples = VK_SAMPLE_COUNT_1_BIT;
+            volume_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+            volume_info.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+            VmaAllocationCreateInfo alloc{};
+            alloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+            NOOR_VK_TRY(vmaCreateImage(allocator, &volume_info, &alloc, &c.aerial.image, &c.aerial.allocation, nullptr));
+            set_name(VK_OBJECT_TYPE_IMAGE, c.aerial.image, std::format("Aerial perspective volume (copy {})", i));
+            VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+            view.image = c.aerial.image;
+            view.viewType = VK_IMAGE_VIEW_TYPE_3D;
+            view.format = volume_info.format;
+            view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            NOOR_VK_TRY(vkCreateImageView(device, &view, nullptr, &c.aerial.view));
+            auto camera = create_buffer(sizeof(AerialCameraGpu), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true, false);
+            if (!camera) return std::unexpected(camera.error());
+            c.aerial_camera = *camera;
+        }
+        live_images.push_back(&c.aerial);
         set_name(VK_OBJECT_TYPE_BUFFER, c.irradiance.buffer, std::format("Live sky irradiance (SH9, copy {})", i));
         live_images.push_back(&c.sky);
         live_images.push_back(&c.cube);
@@ -206,7 +237,7 @@ Status Renderer::Impl::ensure_live_sky() {
     NOOR_VK_TRY(vkCreateSampler(device, &sampler, nullptr, &s.sky_sampler));
 
     // One set layout for every pass; each set fills the bindings its entry point uses.
-    const VkDescriptorSetLayoutBinding bindings[8] = {
+    const VkDescriptorSetLayoutBinding bindings[10] = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_table
         {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_image
         {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_cube
@@ -215,9 +246,11 @@ Status Renderer::Impl::ensure_live_sky() {
         {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},  // sky pyramid
         {6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // in_level
         {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},          // sh_out
+        {8, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},          // aerial_camera
+        {9, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_volume
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 8;
+    layout_info.bindingCount = 10;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &s.set_layout));
     const VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
@@ -249,16 +282,18 @@ Status Renderer::Impl::ensure_live_sky() {
     if (auto r = make_pipeline(k_atmosphere_downsample, sizeof(k_atmosphere_downsample), "CSDownsample", s.downsample_pipeline); !r) return r;
     if (auto r = make_pipeline(k_atmosphere_cube, sizeof(k_atmosphere_cube), "CSCube", s.cube_pipeline); !r) return r;
     if (auto r = make_pipeline(k_atmosphere_irradiance, sizeof(k_atmosphere_irradiance), "CSIrradiance", s.irradiance_pipeline); !r) return r;
+    if (auto r = make_pipeline(k_atmosphere_aerial, sizeof(k_atmosphere_aerial), "CSAerial", s.aerial_pipeline); !r) return r;
 
     // Descriptor sets: the two tables, and per copy the sky, a downsample per level, a cube per mip, irradiance.
-    const std::uint32_t per_copy = 1 + (kSkyLevels - 1) + kCubeMips + 1;
+    const std::uint32_t per_copy = 1 + (kSkyLevels - 1) + kCubeMips + 1 + 1;  // ... and the aerial volume
     const std::uint32_t set_count = 2 + per_copy * kFramesInFlight;
-    const VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, set_count * 2},
+    const VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, set_count * 2},
                                            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, set_count * 2},
-                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight}};
+                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight},
+                                           {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = set_count;
-    pool_info.poolSizeCount = 3;
+    pool_info.poolSizeCount = 4;
     pool_info.pPoolSizes = sizes;
     NOOR_VK_TRY(vkCreateDescriptorPool(device, &pool_info, nullptr, &s.pool));
     const auto allocate = [&](VkDescriptorSet& set) -> Status {
@@ -322,6 +357,19 @@ Status Renderer::Impl::ensure_live_sky() {
         write.pBufferInfo = &buffer;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
+        if (auto r = allocate(c.aerial_set); !r) return r;
+        sampled(c.aerial_set, 3, s.transmittance.view, s.table_sampler);
+        sampled(c.aerial_set, 4, s.multiple.view, s.table_sampler);
+        storage(c.aerial_set, 9, c.aerial.view);
+        VkDescriptorBufferInfo camera{c.aerial_camera.buffer, 0, sizeof(AerialCameraGpu)};
+        VkWriteDescriptorSet camera_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        camera_write.dstSet = c.aerial_set;
+        camera_write.dstBinding = 8;
+        camera_write.descriptorCount = 1;
+        camera_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        camera_write.pBufferInfo = &camera;
+        vkUpdateDescriptorSets(device, 1, &camera_write, 0, nullptr);
+
         // The sky image as a texture in the bindless table (the sky pass draws it as the background).
         std::uint32_t slot = kAnySlot;
         for (std::uint32_t i = kFirstUserTexture; i < textures.size(); ++i)
@@ -373,6 +421,7 @@ Status Renderer::Impl::set_atmosphere(const AtmosphereDesc& d) {
             writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             writes[1].pBufferInfo = &buffer;
             vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+            write_aerial_descriptor(i, c.aerial.view, VK_IMAGE_LAYOUT_GENERAL);
         }
         environment.mip_count = kCubeMips;
         environment.background = TextureHandle{s.copies[0].sky_slot};  // valid for record_sky; each frame draws its own copy
@@ -389,9 +438,11 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
     if (!s.active || !s.has_desc) return;
     LiveSky::Copy& c = s.copies[frame_index];
     const bool tables = !s.tables_built || !same_tables(s.desc, s.tables_for);
-    if (!tables && c.built && same_sky(c.built_for, s.desc)) return;
+    const bool sky = tables || !c.built || !same_sky(c.built_for, s.desc);
+    const bool aerial = s.desc.aerial_distance_scale > 0.0f;
+    if (!sky && !aerial) return;
 
-    begin_label(cmd, "Live sky (atmosphere, environment lighting)", {1.0f, 0.62f, 0.33f, 1.0f});
+    begin_label(cmd, "Live sky (atmosphere, environment lighting, aerial perspective)", {1.0f, 0.62f, 0.33f, 1.0f});
     Push push = push_of(s.desc);
     const auto bind = [&](VkPipeline pipeline, VkDescriptorSet set) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
@@ -414,6 +465,32 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
         for (LiveSky::Copy& other : s.copies) other.built = false;  // all show the old air now
         ++s.table_builds;
     }
+    if (sky) record_live_sky_lighting(cmd, push);
+    if (aerial) {
+        // This frame's camera (update_frame_uniforms kept it); the copy's last reader has finished.
+        AerialCameraGpu camera{};
+        camera.world_from_clip = frame_world_from_clip;
+        camera.eye = {frame_eye.x, frame_eye.y, frame_eye.z, 1.0f};
+        camera.params = {kAerialFarKm, s.desc.aerial_distance_scale, std::max(0.0f, (s.desc.altitude_m + frame_eye.y) * 0.001f), 0.0f};
+        std::memcpy(c.aerial_camera.mapped, &camera, sizeof(camera));
+        vmaFlushAllocation(allocator, c.aerial_camera.allocation, 0, sizeof(camera));
+        bind(s.aerial_pipeline, c.aerial_set);
+        vkCmdDispatch(cmd, groups(kAerialSize), groups(kAerialSize), 1);
+    }
+    // This frame's scene pass reads them all.
+    memory_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                   VK_ACCESS_2_SHADER_READ_BIT);
+    end_label(cmd);
+}
+
+void Renderer::Impl::record_live_sky_lighting(VkCommandBuffer cmd, Push& push) {
+    LiveSky& s = live_sky;
+    LiveSky::Copy& c = s.copies[frame_index];
+    const auto bind = [&](VkPipeline pipeline, VkDescriptorSet set) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.layout, 0, 1, &set, 0, nullptr);
+        vkCmdPushConstants(cmd, s.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
+    };
     bind(s.sky_pipeline, c.sky_set);
     vkCmdDispatch(cmd, groups(kSkyW), groups(kSkyH), 1);
     compute_to_compute(cmd);
@@ -438,10 +515,7 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
     push.pass[0] = kIrradianceLevel;
     bind(s.irradiance_pipeline, c.irradiance_set);
     vkCmdDispatch(cmd, 1, 1, 1);
-    // This frame's scene pass reads them all.
-    memory_barrier(cmd, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                   VK_ACCESS_2_SHADER_READ_BIT);
-    end_label(cmd);
+    push = push_of(s.desc);  // the aerial pass reads the plain settings
     c.built = true;
     c.built_for = s.desc;
     ++s.sky_builds;
@@ -450,7 +524,8 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
 void Renderer::Impl::destroy_live_sky() {
     if (device == VK_NULL_HANDLE) return;
     LiveSky& s = live_sky;
-    for (VkPipeline p : {s.transmittance_pipeline, s.multiple_pipeline, s.sky_pipeline, s.downsample_pipeline, s.cube_pipeline, s.irradiance_pipeline})
+    for (VkPipeline p : {s.transmittance_pipeline, s.multiple_pipeline, s.sky_pipeline, s.downsample_pipeline, s.cube_pipeline, s.irradiance_pipeline,
+                         s.aerial_pipeline})
         if (p) vkDestroyPipeline(device, p, nullptr);
     if (s.layout) vkDestroyPipelineLayout(device, s.layout, nullptr);
     if (s.pool) vkDestroyDescriptorPool(device, s.pool, nullptr);
@@ -468,7 +543,9 @@ void Renderer::Impl::destroy_live_sky() {
         if (c.sky_slot != 0 && c.sky_slot < textures.size()) textures[c.sky_slot] = {};
         destroy_image(c.sky);
         destroy_image(c.cube);
+        destroy_image(c.aerial);
         destroy_buffer(c.irradiance);
+        destroy_buffer(c.aerial_camera);
     }
     s = {};
 }

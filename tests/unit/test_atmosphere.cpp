@@ -230,3 +230,43 @@ TEST_CASE("atmosphere: time_of_day on the environment places the sun") {
     const auto wrapped = view_with(90.0f, {{"time_of_day", 25.0}, {"latitude", 50}});
     CHECK(wrapped.lighting.sun_direction.y > 0.0f);  // the sun is below the horizon: light points up
 }
+
+TEST_CASE("atmosphere: aerial perspective grows with distance and meets the sky") {
+    const auto& a = earth();
+    const Vec3 sun = sun_at(40.0f);
+    const Vec3 view = math::normalize(Vec3{1, 0.02f, 0});
+    const auto none = a.aerial_perspective(view, 0.0f, sun, 0.0f);
+    CHECK(none.transmittance.x == 1.0f);
+    CHECK(none.inscatter.z == 0.0f);
+    // A hill 1 km away: a few per cent of blue haze; 20 km: much more, and bluer light gets through less.
+    const auto near = a.aerial_perspective(view, 1.0f, sun, 0.0f);
+    const auto far = a.aerial_perspective(view, 20.0f, sun, 0.0f);
+    CHECK(near.transmittance.z > 0.95f);
+    CHECK(near.transmittance.z < 0.99f);
+    CHECK(far.inscatter.z > 5.0f * near.inscatter.z);
+    CHECK(far.transmittance.z < far.transmittance.x);
+    // Looking up through the whole atmosphere, the aerial perspective is the sky itself.
+    const Vec3 up = math::normalize(Vec3{0.3f, 1, 0});
+    const auto whole = a.aerial_perspective(up, 400.0f, sun, 0.0f);
+    const Vec3 sky = a.sky_radiance(up, sun);
+    CHECK(whole.inscatter.x == doctest::Approx(sky.x).epsilon(0.03));
+    CHECK(whole.inscatter.z == doctest::Approx(sky.z).epsilon(0.03));
+}
+
+TEST_CASE("atmosphere: fog and aerial fields on the environment reach the view") {
+    const auto view = view_with(30.0f, {{"sky", "hdri"},
+                                        {"fog_density", 0.004},
+                                        {"fog_height", 3},
+                                        {"fog_falloff", 0.1},
+                                        {"fog_anisotropy", 0.5},
+                                        {"fog_color", "#FF0000"},
+                                        {"aerial_scale", 30}});
+    CHECK(view.lighting.fog.density == doctest::Approx(0.004f));
+    CHECK(view.lighting.fog.height == 3.0f);
+    CHECK(view.lighting.fog.falloff == doctest::Approx(0.1f));
+    CHECK(view.lighting.fog.anisotropy == doctest::Approx(0.5f));
+    CHECK(view.lighting.fog.albedo.y == doctest::Approx(0.0f));
+    CHECK(view.environment.aerial_scale == 30.0f);
+    // No fog fields: no fog (an old scene looks as it did).
+    CHECK(view_with(30.0f, {{"sky", "atmosphere"}}).lighting.fog.density == 0.0f);
+}

@@ -290,6 +290,9 @@ int cook_graphs(const asset::Project& p, const asset::AssetRegistry& registry, c
 int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root, int* graphs = nullptr) {
     int cooked = 0;
     std::set<std::string> graphs_done;
+    // Cooked models are stored by entity id. Scenes may share one (Hillside_Haze is Hillside under another
+    // sky): the same brushes are cooked once; different brushes under one id would overwrite each other.
+    std::map<Guid, std::pair<std::uint64_t, std::string>> models_done;  // id -> (brushes' key, scene)
     std::error_code ec;
     for (auto it = stdfs::recursive_directory_iterator(p.scenes_dir(), ec); !ec && it != stdfs::recursive_directory_iterator(); it.increment(ec)) {
         if (it->path().extension() != ".noorscene") continue;
@@ -302,6 +305,17 @@ int cook_project(const asset::Project& p, const asset::AssetRegistry& registry, 
         if (graphs) *graphs += g;
         for (std::size_t i = 0; i < expanded.entities.size(); ++i) {
             if (!expanded.entities[i].has("csg_model")) continue;
+            const Guid id = expanded.entities[i].id;
+            const std::uint64_t key = game::csg_model_key(expanded, i);
+            const std::string scene_name = it->path().filename().string();
+            if (const auto done = models_done.find(id); done != models_done.end()) {
+                if (done->second.first == key) continue;  // the same model, already cooked
+                NOOR_LOG_ERROR("CLI", "CSG model {} has different brushes in {} and {} but the same entity id ({}); cooked models are "
+                               "stored by entity id, so one would replace the other. Give one of them a new id (duplicate it, delete the original)",
+                               expanded.entities[i].name, done->second.second, scene_name, id.to_string());
+                return -1;
+            }
+            models_done[id] = {key, scene_name};
             std::vector<std::string> warnings;
             auto model = csg::cook_model(expanded, i, nullptr, &warnings);
             for (const auto& w : warnings) NOOR_LOG_WARN("CLI", "{}: CSG model {}: {}", it->path().filename().string(), expanded.entities[i].name, w);

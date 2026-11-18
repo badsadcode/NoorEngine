@@ -1,0 +1,37 @@
+# Two scenes sharing a CSG model (Milestone 8A, part 3: Hillside_Haze is Hillside under another sky). Cooked
+# models are stored by entity id, so noor_cli must
+#   - cook a model that two scenes share with the same brushes once;
+#   - refuse (not silently overwrite) one whose brushes differ between the scenes.
+#   -DCLI=<noor_cli> -DPROJECT=<tests/data/csg_project> -DWORK=<folder>
+file(REMOVE_RECURSE "${WORK}")
+file(COPY "${PROJECT}/" DESTINATION "${WORK}/project")
+file(REMOVE_RECURSE "${WORK}/project/.noor")
+file(COPY_FILE "${WORK}/project/Scenes/Main.noorscene" "${WORK}/project/Scenes/Copy.noorscene")
+execute_process(COMMAND "${CLI}" cook "${WORK}/project" RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT code EQUAL 0 OR NOT out MATCHES "Cooked 1 CSG model")
+    message(FATAL_ERROR "the same model in two scenes should be cooked once (${code}):\n${out}${err}")
+endif()
+# Change a brush in the copy: same entity id, different brushes.
+file(READ "${WORK}/project/Scenes/Copy.noorscene" scene)
+string(JSON count LENGTH "${scene}" entities)
+math(EXPR last "${count} - 1")
+set(changed FALSE)
+foreach(i RANGE ${last})
+    string(JSON brush ERROR_VARIABLE none GET "${scene}" entities ${i} components brush)
+    if(NOT none AND NOT changed)
+        string(JSON scene SET "${scene}" entities ${i} transform position "[0.5, 0.5, 0.5]")
+        set(changed TRUE)
+    endif()
+endforeach()
+if(NOT changed)
+    message(FATAL_ERROR "no brush found in the test scene")
+endif()
+file(WRITE "${WORK}/project/Scenes/Copy.noorscene" "${scene}")
+execute_process(COMMAND "${CLI}" cook "${WORK}/project" RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(code EQUAL 0)
+    message(FATAL_ERROR "different brushes under one entity id were cooked anyway:\n${out}${err}")
+endif()
+if(NOT "${out}${err}" MATCHES "different brushes")
+    message(FATAL_ERROR "the refusal doesn't say why:\n${out}${err}")
+endif()
+message(STATUS "shared CSG models: cooked once when the same, refused when different")

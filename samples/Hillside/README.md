@@ -37,7 +37,9 @@ the yellow walker follows the dirt path north, through the doorway, into the hou
 calls when you click: Make material for each texture set, Create ▸ Terrain, sculpt and paint
 strokes (`noor_doc_sculpt`), brushes as `create` commands, Save. Run it again to rebuild the sample
 from scratch, then `tools/samples/add_hillside_forest.py` for the forest (a graph file and a scatter entity,
-saved). Doing it by hand in the editor takes the same steps, with a mouse.
+saved), then `tools/samples/add_hillside_haze.py` for `Scenes/Hillside_Haze.noorscene`: the same land under
+the physically based sky on a late summer afternoon, with valley fog and aerial perspective (Milestone 8A).
+Doing it by hand in the editor takes the same steps, with a mouse.
 
 The meadow is `Assets/Materials/meadow.noormat`, a material instance of Leafy Grass with a greener
 base colour (Poly Haven's Leafy Grass is autumn-coloured).

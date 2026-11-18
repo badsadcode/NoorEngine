@@ -26,6 +26,7 @@ add_executable(noor_unit_tests
     unit/test_shadows.cpp
     unit/test_environment.cpp
     unit/test_atmosphere.cpp
+    unit/test_fog.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -174,6 +175,10 @@ add_test(NAME cli.build_csg
     COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/csg_project ${CMAKE_CURRENT_BINARY_DIR}/built_csg_game)
 set_tests_properties(cli.build_csg PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP built_csg_game
                      PASS_REGULAR_EXPRESSION "1 CSG model[(]s[)] cooked")
+add_test(NAME cli.csg_shared_between_scenes
+    COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/csg_project
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/csg_shared -P ${CMAKE_CURRENT_SOURCE_DIR}/csg_shared_check.cmake)
+set_tests_properties(cli.csg_shared_between_scenes PROPERTIES LABELS "cli" TIMEOUT 120)
 add_test(NAME player.csg_doorway
     COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_csg_game/CSG Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_csg
         -P ${CMAKE_CURRENT_SOURCE_DIR}/csg_check.cmake)
@@ -248,6 +253,17 @@ add_test(NAME render.golden_Hillside
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
+                     FIXTURES_REQUIRED hillside_cooked)
+# Fog and aerial perspective (Milestone 8A, part 3): Hillside in haze (tools/samples/add_hillside_haze.py), the
+# far hills fading into the sky without a seam.
+add_test(NAME render.golden_Hillside_Haze
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Haze.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Haze.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Haze
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Haze PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                      FIXTURES_REQUIRED hillside_cooked)
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).

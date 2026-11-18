@@ -7,7 +7,8 @@
 // Keep them in step: a change to one is a change to the other (tests/golden Atmosphere_* catch drift).
 //
 // Entry points (one pipeline each, vulkan_atmosphere.cpp): CSTransmittance, CSMultiple (on a settings
-// change), CSSky, CSDownsample, CSCube, CSIrradiance (on a sun change).
+// change), CSSky, CSDownsample, CSCube, CSIrradiance (on a sun change), CSAerial (every frame: the camera's
+// aerial perspective, Milestone 8A part 3; asset::Atmosphere::aerial_perspective is its reference).
 
 struct Params
 {
@@ -33,6 +34,14 @@ struct Params
 [[vk::combinedImageSampler]] [[vk::binding(5, 0)]] SamplerState sky_sampler;
 [[vk::binding(6, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> in_level;
 [[vk::binding(7, 0)]] RWStructuredBuffer<float4> sh_out;
+struct AerialCamera
+{
+    float4x4 world_from_clip;
+    float4 eye;     // xyz: the camera (metres)
+    float4 params;  // x: the volume's far end (km of air), y: distance scale, z: the camera's height above the surface (km)
+};
+[[vk::binding(8, 0)]] ConstantBuffer<AerialCamera> aerial_camera;
+[[vk::binding(9, 0)]] [[vk::image_format("rgba16f")]] RWTexture3D<float4> out_volume;
 
 static const float kPi = 3.14159265358979;
 static const uint kTW = 256, kTH = 64, kMS = 32;  // atmosphere.h's table sizes
@@ -365,5 +374,52 @@ void CSIrradiance(uint3 id : SV_GroupThreadID)
     {
         const float band[9] = {kPi, 2.0 * kPi / 3.0, 2.0 * kPi / 3.0, 2.0 * kPi / 3.0, kPi / 4.0, kPi / 4.0, kPi / 4.0, kPi / 4.0, kPi / 4.0};
         [unroll] for (int k = 0; k < 9; ++k) sh_out[k] = float4(g_sh[k][0] * band[k], 0.0);
+    }
+}
+
+// ---------------------------------------------------------------- aerial perspective (part 3)
+
+// One thread per froxel column: march out along the pixel's view ray and write each depth slice: rgb the
+// light the air adds (relative to a sun of illuminance 1), a the light that gets through (mean of rgb).
+// Slice s ends at ((s + 1) / 32)^2 of the far end: thin slices near the camera, where it matters.
+static const uint kAerial = 32;
+
+[numthreads(8, 8, 1)]
+void CSAerial(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= kAerial || id.y >= kAerial) return;
+    const float2 ndc = (float2(id.xy) + 0.5) / kAerial * 2.0 - 1.0;
+    const float4 far_point = mul(aerial_camera.world_from_clip, float4(ndc, 1.0, 1.0));
+    const float3 view = normalize(far_point.xyz / far_point.w - aerial_camera.eye.xyz);
+    const float3 to_sun = normalize(p.sun.xyz);
+    const float r = bottom() + clamp(aerial_camera.params.z, 0.0, height_range() - 0.01);
+    const float c = dot(view, to_sun);
+    const float pr = phase_rayleigh(c), pm = phase_mie(c, p.mie.w);
+    float3 t_acc = 1.0, l = 0.0;
+    float t_prev = 0.0;
+    for (uint s = 0; s < kAerial; ++s)
+    {
+        const float f = float(s + 1) / kAerial;
+        const float slice_end = aerial_camera.params.x * f * f;
+        const float slice_start = t_prev;
+        for (uint k = 0; k < 2; ++k)  // two steps per slice
+        {
+            const float t_next = lerp(slice_start, slice_end, float(k + 1) / 2.0);
+            const float t = 0.5 * (t_prev + t_next), dt = t_next - t_prev;
+            t_prev = t_next;
+            const float3 pos = float3(view.x * t, r + view.y * t, view.z * t);
+            const float rp = length(pos);
+            const float3 up = pos / rp;
+            const float h = max(0.0, rp - bottom());  // below the surface counts as the surface
+            const Medium m = medium(h);
+            const float mu_s = dot(up, to_sun);
+            const float3 t_sun = transmittance(h, mu_s);
+            const float3 single = (m.scattering_rayleigh * pr + m.scattering_mie * pm) * t_sun;
+            const float3 multi = (m.scattering_rayleigh + m.scattering_mie) * multiple_scattering(h, mu_s);
+            const float3 step_t = exp(-m.extinction * dt);
+            l += t_acc * (single + multi) * div_safe(1.0 - step_t, m.extinction);
+            t_acc *= step_t;
+        }
+        out_volume[uint3(id.xy, s)] = float4(l, dot(t_acc, 1.0 / 3.0));
     }
 }

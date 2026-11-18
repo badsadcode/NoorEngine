@@ -129,6 +129,16 @@ sometimes ran at a 26–31 ms median while the GPU and CPU numbers above didn't 
 from one run to the next (most likely the test window not getting focus while someone works in another
 window). The test therefore judges the engine's own costs and prints the wall times.
 
+### Fog and aerial perspective (part 3)
+Hillside_Haze (the Hillside sample under the atmosphere, height fog and `aerial_scale` 30), 1280×720:
+
+| What | GPU time |
+|---|---|
+| The aerial perspective volume (32³, every frame) | 0.025 ms |
+| The whole frame (shadows 0.64, scene 0.66 ms) | 1.33 ms, the same as Hillside without fog within the noise |
+
+The fog itself is computed per pixel in the scene and sky passes (a few exponentials, no marching).
+
 **A lesson on the way:** the first GPU version shared one copy of the sky between frames, and its barrier
 waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
 compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.

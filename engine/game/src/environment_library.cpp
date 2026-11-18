@@ -57,6 +57,7 @@ void EnvironmentLibrary::apply(const SceneView::Environment& env) {
         desc.turbidity = a.turbidity;
         desc.altitude_m = a.altitude_m;
         desc.to_sun = env.to_sun;
+        desc.aerial_distance_scale = env.aerial_scale;
         if (auto s = renderer_.set_atmosphere(desc); !s) {
             NOOR_LOG_WARN("Game", "Atmosphere sky can't be set: {}", s.error().describe());
             return;

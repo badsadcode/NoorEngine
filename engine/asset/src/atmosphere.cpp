@@ -241,6 +241,39 @@ Vec3 Atmosphere::sky_radiance(Vec3 view, Vec3 to_sun) const {
     return l;
 }
 
+Atmosphere::Aerial Atmosphere::aerial_perspective(Vec3 view, float distance_km, Vec3 to_sun, float observer_km) const {
+    Aerial out;
+    if (distance_km <= 0.0f) return out;
+    const float r = bottom_ + std::clamp(observer_km, 0.0f, s_.atmosphere_height_km - 0.01f);
+    const float c = math::dot(view, to_sun);
+    const float pr = phase_rayleigh(c), pm = phase_mie(c, s_.mie_g);
+    // Samples bunched near the observer like the sky's (the GPU volume's slices are spaced the same way).
+    constexpr int kSteps = 64;
+    Vec3 t_acc{1, 1, 1}, l{0, 0, 0};
+    float t_prev = 0.0f;
+    for (int i = 0; i < kSteps; ++i) {
+        const float a = (static_cast<float>(i) + 1.0f) / kSteps;
+        const float t_next = distance_km * a * a;
+        const float t = 0.5f * (t_prev + t_next), dt = t_next - t_prev;
+        t_prev = t_next;
+        const Vec3 p{view.x * t, r + view.y * t, view.z * t};
+        const float rp = math::length(p);
+        const Vec3 up = p * (1.0f / rp);
+        const float h = rp - bottom_;  // below the surface counts as the surface (the scene's ground is in front)
+        const Medium m = medium(h);
+        const float mu_s = math::dot(up, to_sun);
+        const Vec3 t_sun = transmittance(std::max(0.0f, h), mu_s);
+        const Vec3 single = mul(m.scattering_rayleigh * pr + m.scattering_mie * pm, t_sun);
+        const Vec3 multi = mul(m.scattering_rayleigh + m.scattering_mie, multiple_scattering(std::max(0.0f, h), mu_s));
+        const Vec3 step_t = exp3(m.extinction * -dt);
+        l = l + mul(t_acc, mul(single + multi, div_safe(Vec3{1, 1, 1} - step_t, m.extinction)));
+        t_acc = mul(t_acc, step_t);
+    }
+    out.inscatter = l;
+    out.transmittance = t_acc;
+    return out;
+}
+
 EquirectImage Atmosphere::sky_image(Vec3 to_sun, std::uint32_t width, std::uint32_t height) const {
     EquirectImage img;
     img.width = std::max(8u, width);

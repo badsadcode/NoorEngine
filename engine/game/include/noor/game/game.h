@@ -158,12 +158,17 @@ struct SceneView {
     // follows the sun's, and the sun's disc is drawn in the sky.
     // "time_of_day": hours (any sky; Milestone 8A part 2) places the sun instead of the light's rotation:
     // "latitude" (50), "day_of_year" (172, midsummer), "north" (degrees north is turned from -Z about +Y).
+    // Fog (Milestone 8A part 3, any sky; noor/render/fog.h): "fog_density" (per metre; 0 or absent: none),
+    // "fog_height" (m: full density below), "fog_falloff" (per metre above it), "fog_anisotropy" (glow
+    // towards the sun, 0..0.95), "fog_color" (its albedo). "aerial_scale" (atmosphere sky): how far the
+    // air makes things look (1 physical, more for small worlds, 0 off).
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)
         bool atmosphere = false;      // sky "atmosphere" (hdri is then empty)
         asset::AtmosphereSettings atmosphere_settings;
         math::Vec3 to_sun{0, 1, 0};   // atmosphere: towards the sun (unit)
+        float aerial_scale = 1.0f;    // atmosphere: render::AtmosphereDesc::aerial_distance_scale
     };
     Environment environment;
 };

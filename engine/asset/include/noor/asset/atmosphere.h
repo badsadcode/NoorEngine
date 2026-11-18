@@ -76,6 +76,16 @@ public:
     // disc isn't included (the renderer draws it).
     [[nodiscard]] math::Vec3 sky_radiance(math::Vec3 view, math::Vec3 to_sun) const;
 
+    // Aerial perspective (part 3): what the air between the observer (`observer_km` above the surface)
+    // and a point `distance_km` along `view` adds (inscatter, relative to a sun of illuminance 1) and lets
+    // through (transmittance). Distant hills turn into sky this way. The GPU builds a volume of these for
+    // the camera every frame (shaders/atmosphere.hlsl CSAerial: same steps, same maths).
+    struct Aerial {
+        math::Vec3 inscatter{0, 0, 0};
+        math::Vec3 transmittance{1, 1, 1};
+    };
+    [[nodiscard]] Aerial aerial_perspective(math::Vec3 view, float distance_km, math::Vec3 to_sun, float observer_km) const;
+
     // The whole sky as an equirect image (asset::equirect_direction's layout), for the environment
     // pipeline: background, reflections and the light from all around.
     [[nodiscard]] EquirectImage sky_image(math::Vec3 to_sun, std::uint32_t width = 384, std::uint32_t height = 192) const;

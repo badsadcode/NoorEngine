@@ -1,6 +1,6 @@
 # ADR-033: Environments and atmosphere
 
-**Status:** Proposed (Milestone 8A; parts 1-2 implemented: the atmosphere sky, built on the GPU every frame the sun moves) · **Date:** 2026-11-18 · **Milestone:** 8
+**Status:** Proposed (Milestone 8A; parts 1-3 implemented: the atmosphere sky on the GPU, time of day, fog and aerial perspective) · **Date:** 2026-11-18 · **Milestone:** 8
 
 ## Context
 Milestone 8A ([plan](../milestones/M8_PLAN.md), [NoorSky brief](../ideas/NOORSKY.md)) wants skies that
@@ -66,6 +66,17 @@ must agree, or the picture falls apart.
   own copy while the previous frame may still draw with the other. The first version shared one copy;
   its barrier on earlier fragment work made every frame's compute wait for the previous frame's
   presentation (that work sits behind the swapchain's acquire), which halved the frame rate.
+- **Aerial perspective** (part 3): a 32×32×32 froxel volume over the camera's view (slices spaced by the
+  square root of distance out to 32 km of air), built by compute every frame from the same atmosphere
+  (`CSAerial`, reference `asset::Atmosphere::aerial_perspective`), sampled by every surface: colour ×
+  transmittance + inscatter. `aerial_scale` multiplies scene distances (1 physical; a 256 m world can look
+  kilometres deep). Only with the atmosphere sky.
+- **Height fog** (part 3, any sky): full density below `fog_height`, thinning exponentially above; its
+  optical depth along a ray in closed form (no marching), lit by the sun through a Henyey-Greenstein phase
+  and the sky's average radiance (the irradiance's constant term). Applied to opaque and see-through
+  surfaces **and to the sky** (to infinity): on the horizon the sky becomes the fog's colour, which is where
+  distant fogged ground ends up, so the two meet without a seam. Reference and tests: `noor/render/fog.h`;
+  shaders share `fog.hlsli`. No shadows inside the fog (volumetric shadows: phase C).
 - **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
   the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
   hour angle from the time; no equation of time or refraction).
@@ -84,6 +95,8 @@ must agree, or the picture falls apart.
   GPU is clocked down), the tables a fraction of a millisecond once; dragging the time from 5:00 to
   21:00 rebuilds every frame at 60 FPS (`render.day_cycle`). Spreading the work over several frames,
   which the plan expected to need, wasn't.
+- **Fog and aerial perspective cost** almost nothing: the aerial volume 0.025 ms a frame on an RTX 3080,
+  the fog a handful of exponentials per pixel. Golden `Hillside_Haze`.
 - **GPU equals CPU:** the GPU path reproduces part 1's goldens (made by the CPU path) with a mean
   difference of 0.02 (noon) and 0.04 (sunset) out of 255, and no pixel outside the tolerance; the CPU
   path still passes the same goldens (`render.golden_Atmosphere_*_cpu_sky`). The sky pass itself is a texture lookup plus the disc: the whole scene pass,
