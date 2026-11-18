@@ -1,0 +1,194 @@
+// The physically based atmosphere (Milestone 8A, part 1, ADR-033), checked against physics we can work
+// out by hand, not against how it looks.
+#include "noor/asset/atmosphere.h"
+#include "noor/game/game.h"
+#include "noor/scene/scene.h"
+
+#include <ostream>
+#include <doctest/doctest.h>
+
+#include <cmath>
+
+using namespace noor;
+using math::Vec3;
+
+namespace {
+
+const asset::Atmosphere& earth() {
+    static const auto a = asset::Atmosphere::shared({});
+    return *a;
+}
+
+Vec3 sun_at(float elevation_deg) {
+    const float e = elevation_deg * 3.14159265f / 180.0f;
+    return {0.0f, std::sin(e), -std::cos(e)};
+}
+
+float luminance(Vec3 c) { return 0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z; }
+
+} // namespace
+
+TEST_CASE("atmosphere: straight up from sea level, transmittance is exp(-optical depth) worked out by hand") {
+    // Optical depth of each layer straight up: Rayleigh beta*H, Mie (scattering+absorption)*H, ozone's
+    // tent integrates to peak*half_width (the top at 100 km cuts off a negligible exp(-12.5)).
+    const asset::AtmosphereSettings s;
+    const Vec3 tau = s.rayleigh_scattering * s.rayleigh_height_km + Vec3{1, 1, 1} * ((s.mie_scattering + s.mie_absorption) * s.mie_height_km) +
+                     s.ozone_absorption * s.ozone_half_width_km;
+    const Vec3 t = earth().transmittance_exact(0.0f, 1.0f);
+    CHECK(t.x == doctest::Approx(std::exp(-tau.x)).epsilon(0.01));
+    CHECK(t.y == doctest::Approx(std::exp(-tau.y)).epsilon(0.01));
+    CHECK(t.z == doctest::Approx(std::exp(-tau.z)).epsilon(0.01));
+    // The published figures for this model's Earth (about 0.94, 0.86, 0.76):
+    CHECK(t.x == doctest::Approx(0.936f).epsilon(0.01));
+    CHECK(t.y == doctest::Approx(0.864f).epsilon(0.01));
+    CHECK(t.z == doctest::Approx(0.758f).epsilon(0.01));
+}
+
+TEST_CASE("atmosphere: at the horizon the air mass matches Chapman's sqrt(pi R / 2H)") {
+    asset::AtmosphereSettings s;  // Rayleigh only, so one scale height
+    s.mie_scattering = s.mie_absorption = 0.0f;
+    s.ozone_absorption = {0, 0, 0};
+    const asset::Atmosphere a(s);
+    const float zenith = -std::log(a.transmittance_exact(0.0f, 1.0f).z);
+    const float horizon = -std::log(a.transmittance_exact(0.0f, 0.0f).z);
+    const float chapman = std::sqrt(3.14159265f * s.planet_radius_km / (2.0f * s.rayleigh_height_km));  // about 35.3
+    CHECK(horizon / zenith == doctest::Approx(chapman).epsilon(0.05));
+}
+
+TEST_CASE("atmosphere: the transmittance table agrees with exact marches") {
+    const auto& a = earth();
+    for (const float h : {0.0f, 0.5f, 2.0f, 10.0f, 40.0f})
+        for (const float mu : {1.0f, 0.7f, 0.3f, 0.1f, 0.02f, 0.0f, -0.02f}) {
+            CAPTURE(h);
+            CAPTURE(mu);
+            const Vec3 exact = a.transmittance_exact(h, mu), table = a.transmittance(h, mu);
+            CHECK(table.x == doctest::Approx(exact.x).epsilon(0.03).scale(0.01));
+            CHECK(table.z == doctest::Approx(exact.z).epsilon(0.03).scale(0.01));
+        }
+    CHECK(a.transmittance(0.0f, -0.5f).x == 0.0f);  // into the ground
+}
+
+TEST_CASE("atmosphere: the sun at the horizon is red, at noon nearly white") {
+    const auto& a = earth();
+    const Vec3 low = a.sun_transmittance(sun_at(2.0f));
+    CHECK(low.x > 3.0f * low.z);  // red-dominant
+    CHECK(low.x > low.y);
+    const Vec3 high = a.sun_transmittance(sun_at(80.0f));
+    CHECK(high.z / high.x > 0.75f);
+    CHECK(a.sun_transmittance(sun_at(-5.0f)).x == 0.0f);  // set
+}
+
+TEST_CASE("atmosphere: the day sky is blue and as bright as the CIE clear-sky formula says") {
+    const auto& a = earth();
+    const Vec3 sun = sun_at(60.0f);
+    const Vec3 zenith = a.sky_radiance({0, 1, 0}, sun);
+    CHECK(zenith.z > zenith.x);
+    CHECK(zenith.z > zenith.y);
+    // Measured clear skies (the CIE's zenith luminance formula, Linke turbidity T):
+    //   Lz [kcd/m2] = (1.376 T - 1.81) tan(sun elevation) + 0.38
+    // For a very clear sky (T = 2), relative to the sun outside the atmosphere (about 128 klx).
+    for (const float elevation : {30.0f, 45.0f, 60.0f}) {
+        CAPTURE(elevation);
+        const float cie = ((1.376f * 2.0f - 1.81f) * std::tan(elevation * 3.14159265f / 180.0f) + 0.38f) / 128.0f;
+        CHECK(luminance(a.sky_radiance({0, 1, 0}, sun_at(elevation))) == doctest::Approx(cie).epsilon(0.35));
+    }
+    // The horizon is brighter and paler than the zenith (the long path through the air).
+    const Vec3 horizon = a.sky_radiance(math::normalize(Vec3{1, 0.02f, 0}), sun);
+    CHECK(luminance(horizon) > luminance(zenith));
+    CHECK(horizon.x / horizon.z > zenith.x / zenith.z);
+}
+
+TEST_CASE("atmosphere: at sunset the horizon under the sun glows warm and ozone keeps the zenith blue") {
+    const auto& a = earth();
+    const Vec3 sun = sun_at(1.0f);
+    const Vec3 toward = a.sky_radiance(math::normalize(Vec3{0, 0.05f, -1}), sun);
+    const Vec3 away = a.sky_radiance(math::normalize(Vec3{0, 0.05f, 1}), sun);
+    CHECK(toward.x > toward.z);
+    CHECK(luminance(toward) > 3.0f * luminance(away));
+    // Hulburt (1953): without ozone the twilight zenith would turn grey-yellow; its absorption of
+    // orange light is what keeps it blue.
+    const Vec3 zenith = a.sky_radiance({0, 1, 0}, sun);
+    CHECK(zenith.z > zenith.x);
+    asset::AtmosphereSettings no_ozone;
+    no_ozone.ozone_absorption = {0, 0, 0};
+    const Vec3 bare = asset::Atmosphere(no_ozone).sky_radiance({0, 1, 0}, sun);
+    // Its absorption is strongest in green-orange (the Chappuis band): green-to-blue drops by about 30%.
+    CHECK(zenith.y / zenith.z < 0.8f * (bare.y / bare.z));
+    CHECK(zenith.z == doctest::Approx(bare.z).epsilon(0.05));  // blue hardly touched
+}
+
+TEST_CASE("atmosphere: haze and altitude do what they say") {
+    asset::AtmosphereSettings hazy;
+    hazy.turbidity = 5.0f;
+    const Vec3 sun = sun_at(30.0f);
+    const Vec3 clear_t = earth().sun_transmittance(sun);
+    const Vec3 hazy_t = asset::Atmosphere(hazy).sun_transmittance(sun);
+    CHECK(hazy_t.y < clear_t.y);  // the sun dims in haze
+
+    asset::AtmosphereSettings high;
+    high.altitude_m = 30000.0f;  // a stratospheric balloon: darker sky overhead
+    const asset::Atmosphere up(high);
+    CHECK(luminance(up.sky_radiance({0, 1, 0}, sun)) < 0.3f * luminance(earth().sky_radiance({0, 1, 0}, sun)));
+}
+
+TEST_CASE("atmosphere: the sky image follows the equirect layout and is deterministic") {
+    const auto& a = earth();
+    const Vec3 sun = sun_at(20.0f);
+    const asset::EquirectImage img = a.sky_image(sun, 64, 32);
+    REQUIRE(img.width == 64);
+    REQUIRE(img.rgb.size() == 64u * 32u * 3u);
+    // The top row is the zenith: compare with the direct call.
+    const Vec3 d = asset::equirect_direction(0.5f / 64.0f, 0.5f / 32.0f);
+    const Vec3 direct = a.sky_radiance(d, sun);
+    CHECK(img.rgb[0] == doctest::Approx(direct.x));
+    CHECK(img.rgb[2] == doctest::Approx(direct.z));
+    CHECK(a.sky_image(sun, 64, 32).rgb == img.rgb);
+    CHECK(asset::Atmosphere::shared({}).get() == &a);  // built once
+}
+
+
+namespace {
+
+// A scene with a sun `elevation` degrees up and an environment component.
+game::SceneView view_with(float elevation, asset::Json environment, asset::Json light = {{"type", "directional"}, {"illuminance", 100000}}) {
+    scene::Scene s;
+    scene::Entity sun;
+    sun.id = Guid::generate();
+    sun.name = "Sun";
+    // Forward (-Z) tipped down by `elevation`: the way sunlight travels.
+    sun.transform.rotation = math::Quat::from_axis_angle({1, 0, 0}, math::radians(-elevation));
+    sun.components["light"] = std::move(light);
+    s.entities.push_back(sun);
+    scene::Entity sky;
+    sky.id = Guid::generate();
+    sky.name = "Sky";
+    sky.components["environment"] = std::move(environment);
+    s.entities.push_back(sky);
+    return game::collect_view(s, {});
+}
+
+} // namespace
+
+TEST_CASE("atmosphere: a scene's environment {sky: atmosphere} colours the sun and lights the sky from it") {
+    const auto noon = view_with(60.0f, {{"sky", "atmosphere"}});
+    REQUIRE(noon.environment.atmosphere);
+    CHECK(noon.lighting.sun_disc);
+    CHECK(noon.lighting.environment_intensity == doctest::Approx(100000.0f));  // the sky's brightness follows the sun's
+    CHECK(noon.environment.to_sun.y == doctest::Approx(std::sin(math::radians(60.0f))).epsilon(0.001));
+    // White outside the air, nearly white at noon; red at sunset.
+    CHECK(noon.lighting.sun_color.z / noon.lighting.sun_color.x > 0.75f);
+    const auto sunset = view_with(2.0f, {{"sky", "atmosphere"}});
+    CHECK(sunset.lighting.sun_color.x > 3.0f * sunset.lighting.sun_color.z);
+    // The scene's knobs reach the settings.
+    const auto hazy = view_with(30.0f, {{"sky", "atmosphere"}, {"turbidity", 4}, {"altitude", 1500}, {"ground_albedo", 0.1}});
+    CHECK(hazy.environment.atmosphere_settings.turbidity == 4.0f);
+    CHECK(hazy.environment.atmosphere_settings.altitude_m == 1500.0f);
+    CHECK(hazy.environment.atmosphere_settings.ground_albedo.x == doctest::Approx(0.1f));
+    // A given colour is the sun's own (outside the air), still tinted by it.
+    const auto tinted = view_with(60.0f, {{"sky", "atmosphere"}}, {{"type", "directional"}, {"illuminance", 100000}, {"color", "#FF0000"}});
+    CHECK(tinted.lighting.sun_color.y == doctest::Approx(0.0f));
+    // Other skies don't draw a disc or touch the sun's colour.
+    const auto gradient = view_with(60.0f, {{"sky", "gradient"}});
+    CHECK_FALSE(gradient.environment.atmosphere);
+    CHECK_FALSE(gradient.lighting.sun_disc);
+}

@@ -20,7 +20,7 @@ struct FrameUniforms
     float4x4 world_from_clip;
     float4 irradiance_sh[9];
     float4 environment;         // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
-    uint4 background;           // x: background texture slot
+    uint4 background;           // x: background texture slot, y: 1 = draw the sun's disc
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
@@ -48,6 +48,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     // The view ray through this pixel: unproject a point on the near plane.
     const float4 p = mul(frame.world_from_clip, float4(input.ndc, 1.0, 1.0));
     float3 d = normalize(p.xyz / p.w - frame.camera_position.xyz);
+    const float3 world_d = d;
     // The environment's turn about +Y.
     const float c = frame.environment.y, s = frame.environment.z;
     d = float3(c * d.x + s * d.z, d.y, -s * d.x + c * d.z);
@@ -55,5 +56,20 @@ float4 PSMain(VertexOutput input) : SV_Target
     const float u = atan2(d.x, -d.z) / (2.0 * kPi) + 0.5;
     const float v = acos(clamp(d.y, -1.0, 1.0)) / kPi;
     const float3 sky = textures[frame.background.x].SampleLevel(texture_sampler, float2(u, v), 0).rgb;
-    return float4(sky * frame.environment.x, 0.0);
+    float3 color = sky * frame.environment.x;
+    if (frame.background.y != 0)
+    {
+        // The sun's disc: 0.2665 degrees in radius (6.8e-5 sr), radiance = illuminance / solid angle,
+        // darker towards the rim (linear limb darkening, 0.6; its average over the disc is 0.8).
+        const float cos_radius = 0.99998918;
+        const float cos_sun = dot(world_d, frame.to_sun.xyz);
+        if (cos_sun > cos_radius)
+        {
+            const float r2 = saturate((1.0 - cos_sun) / (1.0 - cos_radius));  // (angle / radius)^2
+            const float limb = 1.0 - 0.6 * (1.0 - sqrt(1.0 - r2));
+            color += frame.sun_radiance.rgb * (limb / (0.8 * 6.8e-5));
+            color = min(color, 60000.0);  // the HDR target is half floats
+        }
+    }
+    return float4(color, 0.0);
 }

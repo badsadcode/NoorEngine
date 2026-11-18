@@ -99,6 +99,19 @@ The committed test forest (`tests/data/forest_project`, 120 oaks) is a golden re
 (`render.golden_Forest`) and a check (`render.forest_instancing_lod`): 152 objects in 10 scene draw
 calls, 42 culled, 0.32 M triangles.
 
+## The atmosphere sky (Milestone 8A, part 1)
+Release build, RTX 3080, Ryzen CPU (16 threads), `render_scenes/Atmosphere_Noon` and `Atmosphere_Sunset`:
+
+| What | Time |
+|---|---|
+| Atmosphere tables (transmittance 256×64, multiple scattering 32×32), once per setting | about 0.1 s |
+| A sun change: sky image 512×256 (40-step march per pixel, all cores) + prefiltered cubemap and irradiance | **about 120 ms** (CPU) |
+| The scene pass at 1280×720 with the sky and its sun disc (7 objects) | 0.09 ms (GPU) |
+
+The sky pass is one texture lookup and the disc test per pixel; scaled by pixel count it stays under
+0.21 ms at 1920×1080 (not measured there: the player can't render at 1080p yet). The 120 ms is why the sun
+can't move smoothly yet: part 2 moves the tables and the lighting to the GPU.
+
 ## Not measured yet
 A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale
 with pixels: about 4× the numbers above at 3840×2160).

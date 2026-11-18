@@ -13,6 +13,7 @@ noor_add_module(asset
         src/texture_compress.cpp
         src/material.cpp
         src/environment.cpp
+        src/atmosphere.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json

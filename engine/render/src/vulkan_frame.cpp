@@ -154,6 +154,7 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     u.environment = {frame.lighting.environment_intensity * exposure, std::cos(frame.lighting.environment_rotation),
                      std::sin(frame.lighting.environment_rotation), static_cast<float>(environment.mip_count - 1)};
     u.background[0] = environment.background.valid() ? environment.background.id : kTextureWhite;
+    u.background[1] = frame.lighting.sun_disc ? 1u : 0u;
     GpuBuffer& ubo = frame_ubos[frame_index];
     std::memcpy(ubo.mapped, &u, sizeof(u));
     vmaFlushAllocation(allocator, ubo.allocation, 0, sizeof(u));

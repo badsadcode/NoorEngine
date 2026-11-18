@@ -579,8 +579,9 @@ public sealed class ComponentsEditor : StackPanel
         else if (value is JsonObject obj && editable)
         {
             if (type == "terrain") body.Children.Add(SculptEditor());
+            if (type == "environment") body.Children.Add(SkyModeRow(obj));
             foreach (var (field, fieldValue) in obj)
-                if (!(type == "brush" && field == "faces") && !(type == "terrain" && field == "layers") && !(type == "scatter" && field is "removed" or "added"))
+                if (!(type == "environment" && field == "sky") && !(type == "brush" && field == "faces") && !(type == "terrain" && field == "layers") && !(type == "scatter" && field is "removed" or "added"))
                     body.Children.Add(FieldRow(type, field, field, fieldValue));
             if (type == "scatter") body.Children.Add(ScatterEditor(obj));
             if (type == "terrain") body.Children.Add(LayersEditor(obj));
@@ -804,6 +805,35 @@ public sealed class ComponentsEditor : StackPanel
     {
         box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { commit(); e.Handled = true; } };
         box.LostFocus += (_, _) => commit();
+    }
+
+    /// <summary>The environment's sky (ADR-033): a photo (HDRI), the old three-colour gradient, or the
+    /// physically based atmosphere built from the sun. Shown even when the scene doesn't say yet.</summary>
+    private Control SkyModeRow(JsonObject env)
+    {
+        string[] options = ["hdri", "gradient", "atmosphere"];
+        var current = env["sky"] is JsonValue v && v.TryGetValue<string>(out var s) && options.Contains(s) ? s : env["hdri"] != null ? "hdri" : "gradient";
+        var combo = new ComboBox { ItemsSource = options, SelectedItem = current, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+        ToolTip.SetTip(combo, "atmosphere: the sky and the sun's colour from the sun's direction (red at sunset); the sun's illuminance then means outside the air");
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedItem is not string pick || pick == current) return;
+            var next = (JsonObject)env.DeepClone();
+            next["sky"] = pick;
+            if (pick == "atmosphere")
+            {
+                next["turbidity"] ??= 1;
+                next["ground_albedo"] ??= 0.3;
+                next["altitude"] ??= 0;
+            }
+            SetComponent("environment", next);
+        };
+        var text = new TextBlock { Text = "sky", FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*") };
+        Grid.SetColumn(combo, 1);
+        grid.Children.Add(text);
+        grid.Children.Add(combo);
+        return grid;
     }
 
     private Control AddComponentButton()

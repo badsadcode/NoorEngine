@@ -1,9 +1,12 @@
 #include "noor/game/environment_library.h"
 
+#include "noor/asset/atmosphere.h"
 #include "noor/asset/environment.h"
 #include "noor/foundation/log.h"
 
 #include <bit>
+#include <chrono>
+#include <cmath>
 #include <format>
 #include <vector>
 
@@ -35,7 +38,9 @@ EnvironmentLibrary::~EnvironmentLibrary() {
 }
 
 void EnvironmentLibrary::apply(const SceneView::Environment& env) {
-    const std::string key = env.hdri.empty()
+    const std::string key = env.atmosphere ? std::format("atmosphere {} {:.4f} {:.4f} {:.4f}", env.atmosphere_settings.key(), env.to_sun.x,
+                                                         env.to_sun.y, env.to_sun.z)
+                            : env.hdri.empty()
                                 ? std::format("sky {} {} {} {} {} {} {} {} {}", env.zenith.x, env.zenith.y, env.zenith.z, env.horizon.x,
                                               env.horizon.y, env.horizon.z, env.ground.x, env.ground.y, env.ground.z)
                                 : std::format("hdri {} {}", env.hdri.generic_string(), time_of(env.hdri).time_since_epoch().count());
@@ -43,7 +48,16 @@ void EnvironmentLibrary::apply(const SceneView::Environment& env) {
     key_ = key;
 
     asset::EnvironmentData data;
-    if (env.hdri.empty()) {
+    if (env.atmosphere) {
+        // Rebuilt when the sun moves (on the CPU for now; Milestone 8A part 2 moves it to the GPU).
+        const auto start = std::chrono::steady_clock::now();
+        const auto atmosphere = asset::Atmosphere::shared(env.atmosphere_settings);
+        const auto built = std::chrono::steady_clock::now();
+        data = asset::make_environment(atmosphere->sky_image(env.to_sun, 512, 256), 64);
+        const auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        NOOR_LOG_INFO("Game", "Atmosphere sky built in {:.1f} ms (tables {:.1f} ms, sun elevation {:.1f} deg)",
+                      ms(start, std::chrono::steady_clock::now()), ms(start, built), std::asin(std::clamp(env.to_sun.y, -1.0f, 1.0f)) * (180.0f / math::kPi));
+    } else if (env.hdri.empty()) {
         data = asset::make_environment(asset::procedural_sky(env.zenith, env.horizon, env.ground, 128, 64), 32);
     } else if (auto loaded = asset::load_environment(env.hdri, cache_dir_)) {
         data = std::move(*loaded);

@@ -201,6 +201,9 @@ struct Lighting {
     // axis (radians). Without an environment the renderer lights with a plain grey one.
     float environment_intensity = 8000.0f;
     float environment_rotation = 0.0f;
+    // Draw the sun's disc in the sky (0.53 degrees across, from sun_color * sun_illuminance): on for
+    // the atmosphere sky, whose background leaves the sun out.
+    bool sun_disc = false;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;

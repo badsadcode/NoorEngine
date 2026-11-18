@@ -90,6 +90,28 @@ that from an **environment**: an HDRI photo, or a procedural sky when the scene 
 - **The sun**: an HDRI already contains its sun, so a scene with an HDRI and no `light` entity gets
   no default sun. Add a directional light (pointing like the photo's sun) for sharp sun shadows.
 
+### The atmosphere sky (Milestone 8A, [ADR-033](../decisions/ADR-033-environments-and-atmosphere.md))
+
+```json
+"environment": { "sky": "atmosphere", "turbidity": 1, "ground_albedo": 0.3, "altitude": 0 }
+```
+
+The sky is built from the sun: point the directional light and the sky follows (blue at noon, a warm
+glow round a low sun, a blue zenith at dusk). The sun's light is coloured by the air it crosses (white
+at noon, orange-red at sunset) and its disc is drawn in the sky.
+- **`sky`**: `"atmosphere"`; `"hdri"` (the default with an HDRI) or `"gradient"` (the three-colour sky,
+  even when an HDRI is set). The editor's **sky** dropdown switches it.
+- **`turbidity`**: haze. 1 a clear day, 3–5 hazy, 10 thick haze (dims and yellows the sun, whitens the sky).
+- **`ground_albedo`**: how much the planet's surface reflects (0–1); it brightens the sky a little and
+  lights the scene from below.
+- **`altitude`**: the observer's height in metres (a mountain top sees a darker sky).
+- **The sun light** then means: `illuminance` **outside** the atmosphere (100,000 lux is a good value;
+  at noon about 85% of it reaches the ground) and `color` the sun's own colour (leave it out: white). The
+  sky's brightness follows the sun's, so exposure is the only other knob (EV 15 at noon, about 11 at sunset).
+- Under the horizon the sky shows distant land seen through 20 km of haze.
+- Today the sky is rebuilt **on the CPU** when the sun moves (about 120 ms); a moving sun (time of day)
+  arrives with GPU tables in part 2.
+
 How it works, once per environment, on the CPU, cached in `<project>/.noor/cache`:
 - a **prefiltered cubemap** (faces up to 256², one mip per roughness step): mip 0 is the sharp
   environment, each next mip what a rougher surface reflects (GGX importance sampling with

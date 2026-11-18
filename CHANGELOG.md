@@ -2,7 +2,30 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 7 complete (procedural graph and first generation tools)
+## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
+
+### 2026-11-18 — Milestone 8A, part 1: the atmosphere sky
+**Added**
+- **`asset::Atmosphere`** (ADR-033, proposed): a physically based atmosphere (Rayleigh, Mie, ozone over a
+  spherical planet; Hillaire 2020's coefficients): transmittance and multiple-scattering tables, the sky by
+  ray marching, the sun's transmittance, an equirect sky image. CPU reference implementation; the GPU port
+  is part 2.
+- **`"sky": "atmosphere"`** on the `environment` component (`turbidity`, `ground_albedo`, `altitude`): the
+  sky follows the sun light; the sun's colour is its own (white unless given) times the air's
+  transmittance; the sky's intensity is the sun's illuminance. `"sky": "gradient"` forces the procedural sky.
+- **The sun's disc** in the sky (`render::Lighting::sun_disc`, 0.53°, limb-darkened), on for the atmosphere.
+- **Editor:** a **sky** dropdown on the environment component (hdri, gradient, atmosphere).
+- Goldens `Atmosphere_Noon`, `Atmosphere_Sunset`.
+
+**Measured:** tables about 0.1 s once per setting; a sun change rebuilds the sky and its lighting in about
+120 ms (CPU); the scene pass with the sky 0.09 ms at 1280×720 (RTX 3080).
+
+**Tests:** `test_atmosphere.cpp`: transmittance against the hand-worked optical depth and the published
+values, Chapman's horizon air mass, the table against exact marches, the sun's colour at 2° and 80°, the
+zenith's luminance against the CIE clear-sky formula, ozone's effect on the twilight zenith, haze and
+altitude, the sky image's layout, and a scene's environment reaching the view.
+
+## Milestone 7 complete (procedural graph and first generation tools)
 
 ### 2026-11-18 — After the Milestone 7 review: rocks and grass from NoorMD
 **Added**

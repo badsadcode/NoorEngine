@@ -204,6 +204,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     const auto& entities = scene.entities;
     bool has_environment = false;
     float env_intensity = 8000.0f;
+    bool sun_color_given = false;
     // World matrices, with render poses in place of the simulated ones (and children following).
     // Each is computed once and kept (a parent's matrix is reused by all its children): the scene's
     // own world_matrix() searches for every parent, which is quadratic and took 190 ms a frame for a
@@ -270,8 +271,17 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         if (!camera && !primitive && !mesh && !model && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
         if (env) {
             const auto& en = e.components["environment"];
-            if (const auto id = asset::guid_field(en, "hdri"); id && asset_path)
+            const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
+            if (sky_mode == "atmosphere") {
+                view.environment.atmosphere = true;
+                auto& as = view.environment.atmosphere_settings;
+                as.turbidity = std::clamp(number(en, "turbidity", as.turbidity), 0.0f, 20.0f);
+                as.altitude_m = std::clamp(number(en, "altitude", as.altitude_m), 0.0f, 90000.0f);
+                const float albedo = std::clamp(number(en, "ground_albedo", as.ground_albedo.x), 0.0f, 1.0f);
+                as.ground_albedo = {albedo, albedo, albedo};
+            } else if (const auto id = asset::guid_field(en, "hdri"); id && asset_path && sky_mode != "gradient") {
                 if (auto file = asset_path(*id)) view.environment.hdri = std::move(*file);
+            }
             env_intensity = std::clamp(number(en, "intensity", 8000.0f), 0.0f, 1.0e7f);
             view.lighting.environment_rotation = math::radians(number(en, "rotation", 0.0f));
             if (en.contains("background") && en["background"].is_boolean()) view.lighting.sky_background = en["background"].get<bool>();
@@ -293,6 +303,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             const math::Vec3 dir = math::transform_vector(world, {0, 0, -1});
             if (math::length(dir) > 1e-6f) view.lighting.sun_direction = math::normalize(dir);
             view.lighting.sun_color = color_of(l, view.lighting.sun_color);
+            sun_color_given = l.contains("color");
             view.lighting.sun_illuminance = std::clamp(number(l, "illuminance", view.lighting.sun_illuminance), 0.0f, 1.0e6f);
             // The sky that goes with this sun, until environments arrive (Milestone 5, part 5).
             if (l.contains("sky_color")) {
@@ -433,8 +444,19 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         }
         view.scatters.push_back(std::move(sv));
     }
-    // The environment: an HDRI, or a procedural sky from the sun's sky settings (or the defaults).
-    if (view.environment.hdri.empty()) {
+    // The environment: the atmosphere, an HDRI, or a procedural sky from the sun's sky settings (or the defaults).
+    if (view.environment.atmosphere) {
+        const math::Vec3 to_sun = math::normalize(view.lighting.sun_direction * -1.0f);
+        view.environment.to_sun = to_sun;
+        // The sun's light after the air it crosses: its own colour (white unless given) times the
+        // transmittance; the sky's radiance is relative to the sun's illuminance outside the atmosphere.
+        const math::Vec3 own = sun_color_given ? view.lighting.sun_color : math::Vec3{1, 1, 1};
+        const math::Vec3 t = asset::Atmosphere::shared(view.environment.atmosphere_settings)->sun_transmittance(to_sun);
+        view.lighting.sun_color = {own.x * t.x, own.y * t.y, own.z * t.z};
+        view.lighting.environment_intensity = view.lighting.sun_illuminance;
+        view.lighting.environment_rotation = 0.0f;  // built in world space, around the real sun
+        view.lighting.sun_disc = true;
+    } else if (view.environment.hdri.empty()) {
         const math::Vec3 sky = view.lighting.sky_color;
         view.environment.zenith = sky;
         view.environment.horizon = (sky + math::Vec3{1, 1, 1}) * 0.55f;  // paler and brighter near the horizon

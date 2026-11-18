@@ -7,6 +7,7 @@
 //   SceneRenderer   draws a SceneView with the renderer (noor_player; the editor viewport has its own
 //                   drawing with picking and gizmos)
 
+#include "noor/asset/atmosphere.h"
 #include "noor/asset/material.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
@@ -149,9 +150,18 @@ struct SceneView {
     // with an `environment` component ({"hdri": <.hdr asset id>, "intensity": 8000 (nits per HDRI
     // unit), "rotation": 0 (degrees), "background": true}); without one, a procedural sky made from
     // the sun light's sky_color / sky_luminance (or the defaults).
+    // "sky": "hdri" (the default with an HDRI), "gradient" (the procedural sky, even with an HDRI set) or
+    // "atmosphere" (Milestone 8A, ADR-033), which builds the sky from the sun instead: a physically
+    // based atmosphere ("turbidity": 1 clear .. 10 thick haze, "ground_albedo": 0.3, "altitude": 0 m).
+    // The sun's "illuminance" then means outside the atmosphere and its "color" the sun's own colour
+    // (white unless given): the air between tints and dims it (red at sunset), the sky's brightness
+    // follows the sun's, and the sun's disc is drawn in the sky.
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)
+        bool atmosphere = false;      // sky "atmosphere" (hdri is then empty)
+        asset::AtmosphereSettings atmosphere_settings;
+        math::Vec3 to_sun{0, 1, 0};   // atmosphere: towards the sun (unit)
     };
     Environment environment;
 };

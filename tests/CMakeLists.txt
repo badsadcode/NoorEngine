@@ -25,6 +25,7 @@ add_executable(noor_unit_tests
     unit/test_material.cpp
     unit/test_shadows.cpp
     unit/test_environment.cpp
+    unit/test_atmosphere.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -139,7 +140,8 @@ endif()
 # reference pictures in tests/golden by noor_image_compare (tests/tools/image_compare.cpp).
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
-foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain TerrainPaint)
+foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain TerrainPaint
+                     Atmosphere_Noon Atmosphere_Sunset)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>

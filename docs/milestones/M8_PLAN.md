@@ -50,7 +50,7 @@ export mode).
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **Atmosphere** (ADR-033): the sky from the sun's direction (Rayleigh, Mie, ozone; transmittance, multiple scattering and sky-view tables on the GPU), the sun's disc, the sun's light coloured by the air it crosses (red at sunset), `sky: "atmosphere"` on today's environment component | A golden render at noon and at sunset from the same scene; the sun's colour at the horizon matches the published reference within a tolerance; the sky costs under 0.3 ms at 1080p (measured) |
+| 1 ✅ | **Atmosphere** (ADR-033): the sky from the sun's direction (Rayleigh, Mie, ozone; transmittance, multiple scattering and sky-view tables on the GPU), the sun's disc, the sun's light coloured by the air it crosses (red at sunset), `sky: "atmosphere"` on today's environment component | A golden render at noon and at sunset from the same scene; the sun's colour at the horizon matches the published reference within a tolerance; the sky costs under 0.3 ms at 1080p (measured) |
 | 2 | **Lighting from the live sky**: the cubemap and irradiance rebuilt on the GPU when the sun moves (spread over frames); `time_of_day` on the environment (sun direction from the hour, latitude optional) | Dragging the time from dawn to dusk relights the scene smoothly at 60 FPS (measured per frame); an object's colour under the GPU result matches the CPU path for the same sky within a tolerance |
 | 3 | **Fog and aerial perspective**: distance and height fog lit by the sun and sky, distant terrain fading into the atmosphere, per environment; applied to opaque and see-through surfaces | Hillside's far hills fade into the sky without a seam (golden); fog density and height change the picture as documented (unit tests of the fog maths) |
 | 4 | **Clouds (layered)**: one or two cloud layers from tileable noise (coverage, density, altitude, wind speed and direction), lit by the sun (bright edges, dark bases at sunset), moving over time; deterministic from a seed | The same seed and time give the same clouds (golden); overcast coverage dims the sun and softens shadows as documented; the clouds cost under 0.5 ms (measured) |
@@ -58,6 +58,14 @@ export mode).
 | 6 | **`.noorenv` assets and presets**: environment assets with every setting, scenes referencing them (with overrides), six presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast), the editor's environment gallery (thumbnails, apply, duplicate, edit, reset) and inspector | Applying a preset changes sky, light, fog and exposure together (smoke test); duplicating a preset never changes the installed one; a custom environment saves, reopens and builds into a game identically (tests) |
 | 7 | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
 | 8 | **Sample + review**: Hillside shown under the six presets (one golden each), a space scene, performance notes (each feature's GPU cost, low and high settings), the 8A review | The 8A gate |
+
+## Part 1 result (2026-11-18)
+Done, with one deviation: the atmosphere runs **on the CPU** (`asset::Atmosphere`) as the reference
+implementation, tested against physics (hand-worked transmittance, Chapman's air mass, the CIE clear-sky
+zenith luminance, ozone's blue twilight). The GPU tables move to part 2, where the moving sun needs them:
+a sun change rebuilds sky and lighting in about 120 ms on the CPU today. Goldens `Atmosphere_Noon` and
+`Atmosphere_Sunset`. The sky pass costs at most about 0.2 ms at 1080p (scaled from 0.09 ms for the whole
+scene pass at 720p; the player can't render at 1080p yet).
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to
