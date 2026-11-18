@@ -5,6 +5,9 @@
 //
 // Options: [--scene <Scenes/X.noorscene>] [--title <text>] [--frames N] [--report <file.json>]
 //          [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8]
+//          [--cpu-sky]
+// --cpu-sky: build an atmosphere sky on the CPU (the reference implementation) instead of the GPU, to
+// compare the two (tests); a moving sun then costs about 120 ms a move.
 // --no-input: the game gets no keyboard or mouse (automated tests: a click on the window by
 // whoever sits at the PC must not change the result).
 //
@@ -60,6 +63,7 @@ struct Options {
     bool input = true;
     bool validation = false;
     std::uint32_t msaa = 4;
+    bool cpu_sky = false;
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -76,6 +80,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--no-input") o.input = false;
         else if (a == "--validation") o.validation = true;
         else if (a == "--msaa" && more) o.msaa = static_cast<std::uint32_t>(std::stoul(argv[++i]));
+        else if (a == "--cpu-sky") o.cpu_sky = true;
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
     }
@@ -285,6 +290,7 @@ int run(const Options& o) {
                 noor::game::SceneRenderer scene_renderer(**renderer, project->root() / ".noor" / "cache" / "textures",
                                                          noor::game::file_resolver(noor::game::registry_asset_path(*project, registry)));
                 scene_renderer.set_cooked_root(project->root());
+                scene_renderer.environment().use_cpu_atmosphere(o.cpu_sky);
                 double last_refresh = noor::platform::time_seconds();
                 const noor::game::Hud hud;  // the HUD scripts draw (noor.ui / Ui), with the built-in font
                 if (auto s = (*renderer)->set_overlay_atlas(hud.atlas_width(), hud.atlas_height(), hud.atlas()); !s)
@@ -301,7 +307,7 @@ int run(const Options& o) {
                 // Frame timings for --report (Milestone 7, part 6): wall time per frame, and where the CPU
                 // spent it (the game, collecting the view, recording the frame), plus the GPU's own time.
                 struct Timing {
-                    double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1;
+                    double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1;
                 };
                 std::vector<Timing> timings;
                 double frame_start = noor::platform::time_seconds();
@@ -367,8 +373,12 @@ int run(const Options& o) {
                     {
                         const double t_end = noor::platform::time_seconds();
                         const auto& fs = (*renderer)->last_frame_stats();
+                        double environment_ms = -1;
+                        for (const auto& pass : fs.passes)
+                            if (std::string_view(pass.name) == "Environment") environment_ms = pass.ms;
                         timings.push_back({(t_end - frame_start) * 1000.0, (t_game_done - t_game) * 1000.0,
-                                           (t_view_done - t_game_done) * 1000.0, (t_collected - t_game_done) * 1000.0, fs.cpu_record_ms, fs.gpu_ms});
+                                           (t_view_done - t_game_done) * 1000.0, (t_collected - t_game_done) * 1000.0, fs.cpu_record_ms, fs.gpu_ms,
+                                           environment_ms});
                         frame_start = t_end;
                     }
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
@@ -448,7 +458,7 @@ int run(const Options& o) {
                                 if (timings[i].*field >= 0) v.push_back(timings[i].*field);
                             if (v.empty()) return Json(nullptr);
                             std::ranges::sort(v);
-                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}};
+                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}, {"max", v.back()}};
                         };
                         report["timing_ms"] = {{"frames", timings.size() - 60},
                                                {"wall", stat(&Timing::wall)},
@@ -456,8 +466,10 @@ int run(const Options& o) {
                                                {"view", stat(&Timing::view)},
                                                {"collect", stat(&Timing::collect)},
                                                {"record", stat(&Timing::record)},
-                                               {"gpu", stat(&Timing::gpu)}};
+                                               {"gpu", stat(&Timing::gpu)},
+                                               {"environment_gpu", stat(&Timing::environment)}};
                     }
+                    report["sky_builds"] = {{"tables", (*renderer)->atmosphere_table_builds()}, {"sky", (*renderer)->atmosphere_sky_builds()}};
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }
@@ -478,7 +490,7 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse(argc, argv, options)) {
         NOOR_LOG_ERROR("Player", "Usage: noor_player [project folder] [--scene <path>] [--title <text>] [--frames N] "
-                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8]");
+                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8] [--cpu-sky]");
         return 64;
     }
     // There's no console (a windowed program): the log goes to a file, by default <exe name>.log

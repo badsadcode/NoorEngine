@@ -10,6 +10,7 @@ noor_add_module(render
         src/vulkan_shadows.cpp
         src/vulkan_instancing.cpp
         src/vulkan_environment.cpp
+        src/vulkan_atmosphere.cpp
         src/vulkan_textures.cpp
         src/vulkan_overlay.cpp
         src/vma_impl.cpp
@@ -31,3 +32,7 @@ noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.hlsl VSMa
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.hlsl PSMain ps_6_0 shadow_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl VSMain vs_6_0 tonemap_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl PSMain ps_6_0 tonemap_ps)
+foreach(pass IN ITEMS Transmittance Multiple Sky Downsample Cube Irradiance)
+    string(TOLOWER ${pass} lower)
+    noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/atmosphere.hlsl CS${pass} cs_6_0 atmosphere_${lower})
+endforeach()

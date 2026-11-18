@@ -58,7 +58,7 @@ inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::
 inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
 // GPU timestamps per frame: start, after shadows, after the scene, after tonemapping, after the gizmos, end.
-inline constexpr std::uint32_t kTimestampsPerFrame = 6;
+inline constexpr std::uint32_t kTimestampsPerFrame = 7;
 inline constexpr VkFormat kShadowFormat = VK_FORMAT_D32_SFLOAT;
 // The bindless texture table (set 1): slots 0..2 are built in.
 inline constexpr std::uint32_t kMaxTextures = 4096;
@@ -171,7 +171,6 @@ struct FrameUniforms {
     std::uint32_t light_count[4];
     GpuLight lights[kMaxLocalLights];
     math::Mat4 world_from_clip;          // the sky's view rays
-    math::Vec4 irradiance_sh[9];         // the environment's diffuse light (rgb)
     math::Vec4 environment;              // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
     std::uint32_t background[4];         // x: background texture slot
 };
@@ -276,10 +275,51 @@ struct Renderer::Impl {
         VkImageView view = VK_NULL_HANDLE;
         VkSampler sampler = VK_NULL_HANDLE;
         std::uint32_t mip_count = 1;
-        std::array<math::Vec3, 9> sh{};
         TextureHandle background;
     } environment;
     VkPipeline sky_pipeline = VK_NULL_HANDLE;
+    // The environment's irradiance (SH9, 9 float4) for the scene (frame set, binding 3): uploaded by
+    // set_environment, written by the live sky's compute shader.
+    GpuBuffer irradiance_buffer;
+
+    // The live sky (vulkan_atmosphere.cpp, Milestone 8A part 2): the atmosphere's tables, the sky image
+    // and the environment's cube and irradiance, rebuilt by compute shaders when the sun moves.
+    struct LiveSky {
+        struct Image {
+            VkImage image = VK_NULL_HANDLE;
+            VmaAllocation allocation = VK_NULL_HANDLE;
+            VkImageView view = VK_NULL_HANDLE;   // all levels (sampling)
+            std::vector<VkImageView> levels;     // one per level (writing)
+            std::uint32_t mips = 1, layers = 1;
+        };
+        Image transmittance, multiple;  // shared: written only when the settings change
+        // What the scene reads, one copy per frame in flight: a frame rebuilds its own copy while the
+        // previous frame may still be drawing with the other, so no frame waits for another (a shared copy
+        // made each frame's compute wait for the previous frame's presentation: half the frame rate).
+        struct Copy {
+            Image sky, cube;
+            GpuBuffer irradiance;   // SH9 (frame set binding 3)
+            std::uint32_t sky_slot = 0;  // the sky image's slot in the texture table
+            VkDescriptorSet sky_set = VK_NULL_HANDLE, irradiance_set = VK_NULL_HANDLE;
+            std::vector<VkDescriptorSet> downsample_sets, cube_sets;
+            bool built = false;
+            AtmosphereDesc built_for;    // the settings and sun it shows
+        };
+        std::array<Copy, kFramesInFlight> copies;
+        VkSampler table_sampler = VK_NULL_HANDLE, sky_sampler = VK_NULL_HANDLE;
+        VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkPipeline transmittance_pipeline = VK_NULL_HANDLE, multiple_pipeline = VK_NULL_HANDLE, sky_pipeline = VK_NULL_HANDLE,
+                   downsample_pipeline = VK_NULL_HANDLE, cube_pipeline = VK_NULL_HANDLE, irradiance_pipeline = VK_NULL_HANDLE;
+        VkDescriptorSet transmittance_set = VK_NULL_HANDLE, multiple_set = VK_NULL_HANDLE;
+        bool active = false;         // the environment is this (set_environment turns it off)
+        bool has_desc = false;
+        AtmosphereDesc desc;         // what the scene wants now
+        bool tables_built = false;
+        AtmosphereDesc tables_for;   // what the tables were built for
+        std::uint64_t table_builds = 0, sky_builds = 0;
+    } live_sky;
 
     // Per-frame lighting uniforms (vulkan_frame.cpp)
     VkDescriptorSetLayout frame_set_layout = VK_NULL_HANDLE;
@@ -405,6 +445,13 @@ struct Renderer::Impl {
     void record_sky(VkCommandBuffer cmd, const Lighting& lighting);
     void destroy_environment_image();
     void destroy_environment();
+    // vulkan_atmosphere.cpp
+    Status create_live_image(LiveSky::Image& out, VkFormat format, std::uint32_t width, std::uint32_t height, std::uint32_t mips,
+                             bool cube, const char* name);
+    Status ensure_live_sky();
+    Status set_atmosphere(const AtmosphereDesc& desc);
+    void record_live_sky(VkCommandBuffer cmd);
+    void destroy_live_sky();
     // vulkan_shadows.cpp
     Status ensure_shadows();
     void record_shadows(VkCommandBuffer cmd, const FrameDesc& frame);

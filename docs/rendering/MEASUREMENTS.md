@@ -109,8 +109,29 @@ Release build, RTX 3080, Ryzen CPU (16 threads), `render_scenes/Atmosphere_Noon`
 | The scene pass at 1280×720 with the sky and its sun disc (7 objects) | 0.09 ms (GPU) |
 
 The sky pass is one texture lookup and the disc test per pixel; scaled by pixel count it stays under
-0.21 ms at 1920×1080 (not measured there: the player can't render at 1080p yet). The 120 ms is why the sun
-can't move smoothly yet: part 2 moves the tables and the lighting to the GPU.
+0.21 ms at 1920×1080 (not measured there: the player can't render at 1080p yet).
+
+### On the GPU (part 2)
+`render.day_cycle`: Atmosphere_Day drags the time from 5:00 to 21:00 over 8 seconds, so the sky and its
+lighting are rebuilt every frame (480 rebuilds).
+
+| What | GPU time |
+|---|---|
+| A sun change: sky 512×256 + pyramid, cube 64² × 7 mips (GGX), SH9 | **0.16 ms** at full clocks; 0.5–1.0 ms median while the GPU is clocked down, worst frame seen 3.4 ms |
+| The tables, once per setting | included in the first frame (a fraction of a millisecond) |
+| The whole frame of that scene while the sun moves | 0.4–0.7 ms median |
+
+CPU per frame stays where it was (game 0.06, view 0.08, recording 0.2 ms at the 95th percentile).
+
+**Wall-clock frame times on a working desktop.** With the window focused the sweep runs at a 16.7 ms
+median (60 FPS, vsync) and 17.3–17.6 ms at the 95th percentile. But the same scene, and a still sun too,
+sometimes ran at a 26–31 ms median while the GPU and CPU numbers above didn't change; it came and went
+from one run to the next (most likely the test window not getting focus while someone works in another
+window). The test therefore judges the engine's own costs and prints the wall times.
+
+**A lesson on the way:** the first GPU version shared one copy of the sky between frames, and its barrier
+waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
+compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.
 
 ## Not measured yet
 A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale

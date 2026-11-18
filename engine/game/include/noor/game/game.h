@@ -156,6 +156,8 @@ struct SceneView {
     // The sun's "illuminance" then means outside the atmosphere and its "color" the sun's own colour
     // (white unless given): the air between tints and dims it (red at sunset), the sky's brightness
     // follows the sun's, and the sun's disc is drawn in the sky.
+    // "time_of_day": hours (any sky; Milestone 8A part 2) places the sun instead of the light's rotation:
+    // "latitude" (50), "day_of_year" (172, midsummer), "north" (degrees north is turned from -Z about +Y).
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)

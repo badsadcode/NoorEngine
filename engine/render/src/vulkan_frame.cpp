@@ -54,20 +54,22 @@ void Renderer::Impl::destroy_hdr_target() {
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[3] = {
+    const VkDescriptorSetLayoutBinding bindings[4] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // environment cube
+        {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // environment irradiance (SH9)
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 3;
+    layout_info.bindingCount = 4;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
-    const VkDescriptorPoolSize pool_sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
-                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 2}};
+    const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 2},
+                                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
-    pool_info.poolSizeCount = 2;
+    pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes = pool_sizes;
     NOOR_VK_TRY(vkCreateDescriptorPool(device, &pool_info, nullptr, &frame_pool));
     std::array<VkDescriptorSetLayout, kFramesInFlight> layouts;
@@ -77,6 +79,20 @@ Status Renderer::Impl::ensure_frame_uniforms() {
     set_info.descriptorSetCount = kFramesInFlight;
     set_info.pSetLayouts = layouts.data();
     NOOR_VK_TRY(vkAllocateDescriptorSets(device, &set_info, frame_sets.data()));
+    auto irradiance = create_buffer(9 * sizeof(math::Vec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, false);
+    if (!irradiance) return std::unexpected(irradiance.error());
+    irradiance_buffer = *irradiance;
+    set_name(VK_OBJECT_TYPE_BUFFER, irradiance_buffer.buffer, "Environment irradiance (SH9)");
+    for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
+        VkDescriptorBufferInfo sh_info{irradiance_buffer.buffer, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet sh_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        sh_write.dstSet = frame_sets[i];
+        sh_write.dstBinding = 3;
+        sh_write.descriptorCount = 1;
+        sh_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        sh_write.pBufferInfo = &sh_info;
+        vkUpdateDescriptorSets(device, 1, &sh_write, 0, nullptr);
+    }
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         auto buffer = create_buffer(sizeof(FrameUniforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true, false);
         if (!buffer) return std::unexpected(buffer.error());
@@ -150,10 +166,10 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
                        {std::cos(outer), std::cos(inner), 0, 0}};
     }
     u.world_from_clip = math::inverse(clip_from_world);
-    for (std::size_t i = 0; i < 9; ++i) u.irradiance_sh[i] = {environment.sh[i].x, environment.sh[i].y, environment.sh[i].z, 0};
     u.environment = {frame.lighting.environment_intensity * exposure, std::cos(frame.lighting.environment_rotation),
                      std::sin(frame.lighting.environment_rotation), static_cast<float>(environment.mip_count - 1)};
-    u.background[0] = environment.background.valid() ? environment.background.id : kTextureWhite;
+    u.background[0] = live_sky.active ? live_sky.copies[frame_index].sky_slot
+                                      : environment.background.valid() ? environment.background.id : kTextureWhite;
     u.background[1] = frame.lighting.sun_disc ? 1u : 0u;
     GpuBuffer& ubo = frame_ubos[frame_index];
     std::memcpy(ubo.mapped, &u, sizeof(u));

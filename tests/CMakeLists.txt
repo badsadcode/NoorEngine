@@ -151,6 +151,23 @@ foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60 FIXTURES_SETUP golden_${name})
 endforeach()
+# A moving sun (Milestone 8A, part 2): the time of day dragged from dawn to dusk, the live sky rebuilt
+# on the GPU every frame, 60 FPS held (tests/day_cycle_check.cmake). And the CPU reference path (part 1)
+# must still match the same goldens the GPU path does.
+add_test(NAME render.day_cycle
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/day_cycle_check -P ${CMAKE_CURRENT_SOURCE_DIR}/day_cycle_check.cmake)
+set_tests_properties(render.day_cycle PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+foreach(name IN ITEMS Atmosphere_Noon Atmosphere_Sunset)
+    add_test(NAME render.golden_${name}_cpu_sky
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${name}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png -DEXTRA=--cpu-sky
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}_cpu
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${name}_cpu_sky PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
 # CSG in games (Milestone 6, part 4): noor_cli build cooks the model; a character walks through its
 # doorway, another is stopped by the wall (tests/csg_check.cmake).
 add_test(NAME cli.build_csg

@@ -192,3 +192,41 @@ TEST_CASE("atmosphere: a scene's environment {sky: atmosphere} colours the sun a
     CHECK_FALSE(gradient.environment.atmosphere);
     CHECK_FALSE(gradient.lighting.sun_disc);
 }
+
+TEST_CASE("atmosphere: the sun's position by the hour, against textbook astronomy") {
+    const auto elevation = [](Vec3 d) { return std::asin(d.y) * 180.0f / 3.14159265f; };
+    // March equinox (declination about 0) on the equator: overhead at noon, rising due east at 6:00.
+    const Vec3 noon_eq = asset::solar_direction(12.0f, 0.0f, 80.0f);
+    CHECK(elevation(noon_eq) == doctest::Approx(90.0f).epsilon(0.02));
+    const Vec3 dawn_eq = asset::solar_direction(6.0f, 0.0f, 80.0f);
+    CHECK(dawn_eq.x == doctest::Approx(1.0f).epsilon(0.01));  // east is +X
+    CHECK(std::abs(dawn_eq.y) < 0.02f);
+    // Midsummer at 50 degrees north: noon elevation 90 - 50 + 23.44 = 63.44, due south (+Z).
+    const Vec3 summer = asset::solar_direction(12.0f, 50.0f, 172.0f);
+    CHECK(elevation(summer) == doctest::Approx(63.44f).epsilon(0.005));
+    CHECK(summer.z > 0.0f);
+    CHECK(std::abs(summer.x) < 1e-3f);
+    // Midwinter there: 90 - 50 - 23.44 = 16.56; and night at midnight.
+    CHECK(elevation(asset::solar_direction(12.0f, 50.0f, 355.0f)) == doctest::Approx(16.56f).epsilon(0.01));
+    CHECK(asset::solar_direction(0.0f, 50.0f, 172.0f).y < 0.0f);
+    // Afternoon sun is in the west (-X); the southern hemisphere sees the noon sun in the north (-Z).
+    CHECK(asset::solar_direction(16.0f, 50.0f, 172.0f).x < 0.0f);
+    CHECK(asset::solar_direction(12.0f, -35.0f, 172.0f).z < 0.0f);
+}
+
+TEST_CASE("atmosphere: time_of_day on the environment places the sun") {
+    // The sun light points straight down; the time of day overrides it.
+    const auto view = view_with(90.0f, {{"sky", "atmosphere"}, {"time_of_day", 7.5}, {"latitude", 50}, {"day_of_year", 172}});
+    const Vec3 expected = asset::solar_direction(7.5f, 50.0f, 172.0f);
+    CHECK(view.environment.to_sun.x == doctest::Approx(expected.x).epsilon(1e-4));
+    CHECK(view.environment.to_sun.y == doctest::Approx(expected.y).epsilon(1e-4));
+    CHECK(view.lighting.sun_direction.y == doctest::Approx(-expected.y).epsilon(1e-4));
+    // "north" turns the compass by 90 degrees about +Y: the equinox sunrise (east, +X) comes from -Z
+    // instead, so its light travels along +Z.
+    const auto turned = view_with(90.0f, {{"time_of_day", 6.0}, {"latitude", 0}, {"day_of_year", 80}, {"north", 90}});
+    CHECK(std::abs(turned.lighting.sun_direction.x) < 0.05f);
+    CHECK(turned.lighting.sun_direction.z > 0.95f);
+    // Hours wrap: 25 is 1 in the morning.
+    const auto wrapped = view_with(90.0f, {{"time_of_day", 25.0}, {"latitude", 50}});
+    CHECK(wrapped.lighting.sun_direction.y > 0.0f);  // the sun is below the horizon: light points up
+}

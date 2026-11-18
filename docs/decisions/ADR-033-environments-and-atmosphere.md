@@ -1,6 +1,6 @@
 # ADR-033: Environments and atmosphere
 
-**Status:** Proposed (Milestone 8A; part 1 implemented: the atmosphere sky, on the CPU) · **Date:** 2026-11-18 · **Milestone:** 8
+**Status:** Proposed (Milestone 8A; parts 1-2 implemented: the atmosphere sky, built on the GPU every frame the sun moves) · **Date:** 2026-11-18 · **Milestone:** 8
 
 ## Context
 Milestone 8A ([plan](../milestones/M8_PLAN.md), [NoorSky brief](../ideas/NOORSKY.md)) wants skies that
@@ -55,6 +55,20 @@ must agree, or the picture falls apart.
   version is the **reference** the GPU port in part 2 is compared against, and it can be tested against
   physics without a GPU. The sky image (512×256) feeds the existing environment pipeline (prefiltered
   cubemap, irradiance), keyed by the sun's direction.
+- **Part 2 moves it to the GPU** (`render::Renderer::set_atmosphere`, `shaders/atmosphere.hlsl`, the
+  renderer's first compute shaders): a straight port of the CPU code (same tables, same march, same
+  pyramid, GGX prefiltering and SH9), so the CPU path stays the reference (`noor_player --cpu-sky`).
+  Tables rebuild when the settings change; the sky image, its pyramid, the cube's seven mips and the
+  irradiance when the sun moves, all in that frame, before the shadow pass. The irradiance moved from
+  the frame uniforms into a small storage buffer (frame set binding 3) so the GPU can write it without
+  a read-back.
+- **One copy per frame in flight** of what the scene reads (sky, cube, irradiance): a frame rebuilds its
+  own copy while the previous frame may still draw with the other. The first version shared one copy;
+  its barrier on earlier fragment work made every frame's compute wait for the previous frame's
+  presentation (that work sits behind the swapchain's acquire), which halved the frame rate.
+- **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
+  the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
+  hour angle from the time; no equation of time or refraction).
 
 ## Consequences
 - **Checked against physics, not taste** (`tests/unit/test_atmosphere.cpp`): sea-level zenith
@@ -64,16 +78,21 @@ must agree, or the picture falls apart.
   the CIE formula 2.0 for a very clear sky); the sun at 2° is red; ozone keeps the twilight zenith blue
   (green-to-blue falls by about 30% with it, as Hulburt explained in 1953).
 - **Goldens:** `Atmosphere_Noon` and `Atmosphere_Sunset` (the same objects under the sun at 60° and 3°).
-- **Cost:** the tables take about 0.1 s to build once per setting. **Each sun change rebuilds the sky
-  and its lighting in about 120 ms on the CPU**: fine for a fixed sun, not for time of day. That is
-  part 2's job (GPU). The sky pass itself is a texture lookup plus the disc: the whole scene pass,
+- **Cost (CPU, part 1):** the tables take about 0.1 s once per setting; each sun change rebuilds the
+  sky and its lighting in about 120 ms.
+- **Cost (GPU, part 2):** a sun change costs **0.16 ms** of GPU time at full clocks (0.5–1 ms while the
+  GPU is clocked down), the tables a fraction of a millisecond once; dragging the time from 5:00 to
+  21:00 rebuilds every frame at 60 FPS (`render.day_cycle`). Spreading the work over several frames,
+  which the plan expected to need, wasn't.
+- **GPU equals CPU:** the GPU path reproduces part 1's goldens (made by the CPU path) with a mean
+  difference of 0.02 (noon) and 0.04 (sunset) out of 255, and no pixel outside the tolerance; the CPU
+  path still passes the same goldens (`render.golden_Atmosphere_*_cpu_sky`). The sky pass itself is a texture lookup plus the disc: the whole scene pass,
   sky included, is 0.09 ms at 1280×720 on an RTX 3080 (about 0.2 ms at 1080p by pixel count; the player
   can't render at 1080p yet, so that figure is scaled, not measured).
 - The HDR target is half floats, so the sun's disc is clamped at 60,000 (it tonemaps to white anyway).
 - Old scenes are unchanged: `sky` is new and optional; the gradient and HDRI paths are untouched.
 
 ## Unresolved
-- The GPU tables (part 2) and how far a sun move may be spread over frames.
 - The `.noorenv` asset format and overrides (part 6), and blending two atmospheres (part 7: blend
   parameters, or blend the results?).
 - Other planets (Mars-like coefficients) are possible with the same settings; no preset yet.

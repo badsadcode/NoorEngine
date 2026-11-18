@@ -18,7 +18,6 @@ struct FrameUniforms
     uint4 light_count;
     float4 lights[64];          // GpuLight[16] (not used here)
     float4x4 world_from_clip;
-    float4 irradiance_sh[9];
     float4 environment;         // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
     uint4 background;           // x: background texture slot, y: 1 = draw the sun's disc
 };

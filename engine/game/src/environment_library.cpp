@@ -38,6 +38,36 @@ EnvironmentLibrary::~EnvironmentLibrary() {
 }
 
 void EnvironmentLibrary::apply(const SceneView::Environment& env) {
+    if (env.atmosphere && !cpu_atmosphere_) {
+        // The live sky: the renderer rebuilds it on the GPU when the sun or the settings change.
+        const asset::AtmosphereSettings& a = env.atmosphere_settings;
+        render::AtmosphereDesc desc;
+        desc.planet_radius_km = a.planet_radius_km;
+        desc.atmosphere_height_km = a.atmosphere_height_km;
+        desc.rayleigh_scattering = a.rayleigh_scattering;
+        desc.rayleigh_height_km = a.rayleigh_height_km;
+        desc.mie_scattering = a.mie_scattering;
+        desc.mie_absorption = a.mie_absorption;
+        desc.mie_height_km = a.mie_height_km;
+        desc.mie_g = a.mie_g;
+        desc.ozone_absorption = a.ozone_absorption;
+        desc.ozone_centre_km = a.ozone_centre_km;
+        desc.ozone_half_width_km = a.ozone_half_width_km;
+        desc.ground_albedo = a.ground_albedo;
+        desc.turbidity = a.turbidity;
+        desc.altitude_m = a.altitude_m;
+        desc.to_sun = env.to_sun;
+        if (auto s = renderer_.set_atmosphere(desc); !s) {
+            NOOR_LOG_WARN("Game", "Atmosphere sky can't be set: {}", s.error().describe());
+            return;
+        }
+        if (key_ != "live atmosphere") {
+            key_ = "live atmosphere";
+            if (background_.valid()) renderer_.destroy_texture(background_);  // the previous fixed sky's
+            background_ = {};
+        }
+        return;
+    }
     const std::string key = env.atmosphere ? std::format("atmosphere {} {:.4f} {:.4f} {:.4f}", env.atmosphere_settings.key(), env.to_sun.x,
                                                          env.to_sun.y, env.to_sun.z)
                             : env.hdri.empty()

@@ -109,8 +109,14 @@ at noon, orange-red at sunset) and its disc is drawn in the sky.
   at noon about 85% of it reaches the ground) and `color` the sun's own colour (leave it out: white). The
   sky's brightness follows the sun's, so exposure is the only other knob (EV 15 at noon, about 11 at sunset).
 - Under the horizon the sky shows distant land seen through 20 km of haze.
-- Today the sky is rebuilt **on the CPU** when the sun moves (about 120 ms); a moving sun (time of day)
-  arrives with GPU tables in part 2.
+- **Time of day** (any sky): `"time_of_day": 17.5` (hours, local solar time: 12 is the sun's highest)
+  places the sun instead of the sun light's rotation, with `"latitude"` (degrees, 50 by default; negative
+  south), `"day_of_year"` (1–365, 172 midsummer by default) and `"north"` (degrees: which way north
+  points, turned from −Z about +Y). The editor's **+ Time of day** button adds them. Change it from a
+  script (`e:get("environment")`, `e:set(...)`) to run a day.
+- The sky, its reflections and the light from all around are rebuilt **on the GPU** whenever the sun
+  moves (about 0.2 ms), so a moving sun costs almost nothing. `noor_player --cpu-sky` builds it on the
+  CPU instead (the reference implementation, about 120 ms a move) for comparisons.
 
 How it works, once per environment, on the CPU, cached in `<project>/.noor/cache`:
 - a **prefiltered cubemap** (faces up to 256², one mip per roughness step): mip 0 is the sharp

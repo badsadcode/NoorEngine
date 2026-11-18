@@ -51,7 +51,7 @@ export mode).
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **Atmosphere** (ADR-033): the sky from the sun's direction (Rayleigh, Mie, ozone; transmittance, multiple scattering and sky-view tables on the GPU), the sun's disc, the sun's light coloured by the air it crosses (red at sunset), `sky: "atmosphere"` on today's environment component | A golden render at noon and at sunset from the same scene; the sun's colour at the horizon matches the published reference within a tolerance; the sky costs under 0.3 ms at 1080p (measured) |
-| 2 | **Lighting from the live sky**: the cubemap and irradiance rebuilt on the GPU when the sun moves (spread over frames); `time_of_day` on the environment (sun direction from the hour, latitude optional) | Dragging the time from dawn to dusk relights the scene smoothly at 60 FPS (measured per frame); an object's colour under the GPU result matches the CPU path for the same sky within a tolerance |
+| 2 ✅ | **Lighting from the live sky**: the cubemap and irradiance rebuilt on the GPU when the sun moves (spread over frames); `time_of_day` on the environment (sun direction from the hour, latitude optional) | Dragging the time from dawn to dusk relights the scene smoothly at 60 FPS (measured per frame); an object's colour under the GPU result matches the CPU path for the same sky within a tolerance |
 | 3 | **Fog and aerial perspective**: distance and height fog lit by the sun and sky, distant terrain fading into the atmosphere, per environment; applied to opaque and see-through surfaces | Hillside's far hills fade into the sky without a seam (golden); fog density and height change the picture as documented (unit tests of the fog maths) |
 | 4 | **Clouds (layered)**: one or two cloud layers from tileable noise (coverage, density, altitude, wind speed and direction), lit by the sun (bright edges, dark bases at sunset), moving over time; deterministic from a seed | The same seed and time give the same clouds (golden); overcast coverage dims the sun and softens shadows as documented; the clouds cost under 0.5 ms (measured) |
 | 5 | **Night and space**: moon (phase, light), stars (a deterministic star field), exposure for night that keeps silhouettes readable; `sky: "space"`: no scattering, a black sky with stars, **celestial bodies** (planets, moons, rings: textured spheres or discs at a direction and size, lit by the sun), several suns allowed | A night golden where the house and trees read against the sky; a space golden (a planet with a lit and a dark side, a second sun); the Alien World preset's look becomes possible (later) |
@@ -67,11 +67,20 @@ a sun change rebuilds sky and lighting in about 120 ms on the CPU today. Goldens
 `Atmosphere_Sunset`. The sky pass costs at most about 0.2 ms at 1080p (scaled from 0.09 ms for the whole
 scene pass at 720p; the player can't render at 1080p yet).
 
+## Part 2 result (2026-11-18)
+Done. The atmosphere, the sky image and the environment's lighting (cube, irradiance) are built by compute
+shaders, a port of the CPU code: the GPU path reproduces part 1's goldens (mean difference 0.02 and 0.04 of
+255). A sun change costs 0.16 ms of GPU time, so the whole rebuild runs in the frame the sun moves;
+**spreading it over frames wasn't needed** (risk 2, settled by measuring). `time_of_day` (with latitude, day
+of the year, north) places the sun; dragging it from dawn to dusk rebuilds every frame at 60 FPS
+(`render.day_cycle`). One lesson: a shared copy of the sky made each frame wait for the previous frame's
+presentation (half the frame rate); one copy per frame in flight fixed it.
+
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to
    make right. Part 1 compares against published values, not against our taste.
-2. **Cost of moving the sun.** Rebuilding environment lighting every frame is expensive; part 2 must
-   measure spreading the work over frames before promising smooth time of day.
+2. ~~**Cost of moving the sun.**~~ **Settled in part 2:** 0.16 ms a rebuild on the GPU, every frame, no
+   spreading needed.
 3. **Exposure.** Night and day differ by about 15 stops; presets need exposure that changes with them
    (automatic exposure may be needed; decide in part 5 by measuring, not guessing).
 4. **Scope creep from the brief.** Phase A only: volumetric clouds, storms with lightning, rain on

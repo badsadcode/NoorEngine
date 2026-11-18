@@ -833,7 +833,19 @@ public sealed class ComponentsEditor : StackPanel
         Grid.SetColumn(combo, 1);
         grid.Children.Add(text);
         grid.Children.Add(combo);
-        return grid;
+        if (env["time_of_day"] != null) return grid;
+        // The time of day places the sun (it then ignores the sun light's rotation).
+        var time = new Button { Content = "+ Time of day", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
+        ToolTip.SetTip(time, "Place the sun by the hour (and latitude, day of the year) instead of by turning the sun light");
+        time.Click += (_, _) =>
+        {
+            var next = (JsonObject)env.DeepClone();
+            next["time_of_day"] = 12;
+            next["latitude"] ??= 50;
+            next["day_of_year"] ??= 172;
+            SetComponent("environment", next);
+        };
+        return new StackPanel { Spacing = 4, Children = { grid, time } };
     }
 
     private Control AddComponentButton()

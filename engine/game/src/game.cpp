@@ -205,6 +205,10 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     bool has_environment = false;
     float env_intensity = 8000.0f;
     bool sun_color_given = false;
+    struct TimeOfDay {
+        float hours, latitude, day, north;
+    };
+    std::optional<TimeOfDay> time_of_day;
     // World matrices, with render poses in place of the simulated ones (and children following).
     // Each is computed once and kept (a parent's matrix is reused by all its children): the scene's
     // own world_matrix() searches for every parent, which is quadratic and took 190 ms a frame for a
@@ -272,6 +276,10 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         if (env) {
             const auto& en = e.components["environment"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
+            if (en.contains("time_of_day") && en["time_of_day"].is_number())
+                time_of_day = TimeOfDay{std::fmod(std::fmod(number(en, "time_of_day", 12.0f), 24.0f) + 24.0f, 24.0f),
+                                        std::clamp(number(en, "latitude", 50.0f), -90.0f, 90.0f),
+                                        std::clamp(number(en, "day_of_year", 172.0f), 1.0f, 366.0f), number(en, "north", 0.0f)};
             if (sky_mode == "atmosphere") {
                 view.environment.atmosphere = true;
                 auto& as = view.environment.atmosphere_settings;
@@ -443,6 +451,13 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             sv.count += group.worlds->size();
         }
         view.scatters.push_back(std::move(sv));
+    }
+    // The time of day places the sun (over the sun light's own direction): north is -Z, turned by "north".
+    if (time_of_day) {
+        const math::Vec3 s = asset::solar_direction(time_of_day->hours, time_of_day->latitude, time_of_day->day);
+        const float a = math::radians(time_of_day->north), c = std::cos(a), sn = std::sin(a);
+        const math::Vec3 to_sun{c * s.x + sn * s.z, s.y, -sn * s.x + c * s.z};
+        view.lighting.sun_direction = to_sun * -1.0f;
     }
     // The environment: the atmosphere, an HDRI, or a procedural sky from the sun's sky settings (or the defaults).
     if (view.environment.atmosphere) {

@@ -62,7 +62,6 @@ struct FrameUniforms
     uint4 light_count;       // x: local lights in use
     GpuLight lights[16];
     float4x4 world_from_clip;
-    float4 irradiance_sh[9]; // the environment's diffuse light, spherical harmonics (rgb)
     float4 environment;      // x: intensity * exposure, y: cos(rotation), z: sin(rotation), w: last mip
     uint4 background;
 };
@@ -71,6 +70,8 @@ struct FrameUniforms
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerComparisonState shadow_sampler;
 [[vk::combinedImageSampler]] [[vk::binding(2, 0)]] TextureCube<float4> environment_map;
 [[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState environment_sampler;
+// The environment's diffuse light: spherical harmonics (rgb, 9), written by set_environment or the live sky.
+[[vk::binding(3, 0)]] StructuredBuffer<float4> irradiance_sh;
 static const uint kBrdfLut = 3;  // built-in texture slot
 
 struct VertexInput
@@ -223,7 +224,7 @@ float3 environment_irradiance(float3 n)
     const float y[9] = {0.282095, 0.488603 * d.y, 0.488603 * d.z, 0.488603 * d.x, 1.092548 * d.x * d.y, 1.092548 * d.y * d.z,
                         0.315392 * (3.0 * d.z * d.z - 1.0), 1.092548 * d.x * d.z, 0.546274 * (d.x * d.x - d.y * d.y)};
     float3 e = 0.0;
-    [unroll] for (int i = 0; i < 9; ++i) e += frame.irradiance_sh[i].rgb * y[i];
+    [unroll] for (int i = 0; i < 9; ++i) e += irradiance_sh[i].rgb * y[i];
     return max(e, 0.0) * frame.environment.x;
 }
 

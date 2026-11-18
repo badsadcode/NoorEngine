@@ -51,6 +51,17 @@ float u_of(float mu) {
 
 } // namespace
 
+Vec3 solar_direction(float hours, float latitude_deg, float day_of_year) noexcept {
+    constexpr float kDeg = kPi / 180.0f;
+    const float declination = -23.44f * kDeg * std::cos(2.0f * kPi / 365.0f * (day_of_year + 10.0f));
+    const float hour_angle = 15.0f * kDeg * (hours - 12.0f);  // negative in the morning (sun in the east)
+    const float lat = std::clamp(latitude_deg, -90.0f, 90.0f) * kDeg;
+    const float east = -std::cos(declination) * std::sin(hour_angle);
+    const float north = std::cos(lat) * std::sin(declination) - std::sin(lat) * std::cos(declination) * std::cos(hour_angle);
+    const float up = std::sin(lat) * std::sin(declination) + std::cos(lat) * std::cos(declination) * std::cos(hour_angle);
+    return math::normalize(Vec3{east, up, -north});
+}
+
 std::string AtmosphereSettings::key() const {
     return std::format("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", planet_radius_km, atmosphere_height_km, rayleigh_scattering.x,
                        rayleigh_scattering.y, rayleigh_scattering.z, rayleigh_height_km, mie_scattering, mie_absorption, mie_height_km, mie_g,

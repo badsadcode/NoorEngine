@@ -167,6 +167,25 @@ struct EnvironmentDesc {
     TextureHandle background;  // an equirect RGBA16F texture (create_texture); none: no sky drawn
 };
 
+// The live atmosphere sky (Milestone 8A, part 2, ADR-033): the parameters of asset::AtmosphereSettings
+// (the render module doesn't depend on asset: game::EnvironmentLibrary copies them) and the sun.
+struct AtmosphereDesc {
+    float planet_radius_km = 6360.0f;
+    float atmosphere_height_km = 100.0f;
+    math::Vec3 rayleigh_scattering{5.802e-3f, 13.558e-3f, 33.1e-3f};
+    float rayleigh_height_km = 8.0f;
+    float mie_scattering = 3.996e-3f;
+    float mie_absorption = 4.40e-3f;
+    float mie_height_km = 1.2f;
+    float mie_g = 0.8f;
+    math::Vec3 ozone_absorption{0.650e-3f, 1.881e-3f, 0.085e-3f};
+    float ozone_centre_km = 25.0f, ozone_half_width_km = 15.0f;
+    math::Vec3 ground_albedo{0.3f, 0.3f, 0.3f};
+    float turbidity = 1.0f;
+    float altitude_m = 0.0f;
+    math::Vec3 to_sun{0, 1, 0};  // towards the sun (unit)
+};
+
 // A point or spot light (Milestone 5, part 4). Intensity is luminous power in lumens, like a
 // bulb's box says (a 60 W-equivalent bulb is about 800 lm): a point light sends it everywhere, a
 // spot into its cone (so a narrower spot of the same lumens is brighter, like a torch). Light
@@ -259,7 +278,7 @@ struct FrameStats {
     // GPU time of the most recent frame whose results are available (lags 1â€“2 frames).
     // Negative when timestamps are unsupported or not available yet.
     double gpu_ms = -1.0;
-    // GPU time per pass of that frame, in order (Shadows, Scene, Tonemap, Gizmos, HUD); empty when unknown.
+    // GPU time per pass of that frame, in order (Environment, Shadows, Scene, Tonemap, Gizmos, HUD); empty when unknown.
     struct Pass {
         const char* name = "";
         double ms = 0.0;
@@ -319,6 +338,14 @@ public:
     // Sets the environment that lights the scene and shows behind it. Waits for the GPU (it replaces
     // what frames in flight use): call it when the environment changes, not every frame.
     [[nodiscard]] Status set_environment(const EnvironmentDesc& desc);
+    // Makes the environment a live atmosphere sky, built on the GPU: the background, the reflections and
+    // the light from all around follow the sun. Call it every frame with the current sun: it only
+    // records work when something changed (the sun: the sky and its lighting; the settings: the tables
+    // too). The first call waits for the GPU; set_environment switches back to a fixed environment.
+    [[nodiscard]] Status set_atmosphere(const AtmosphereDesc& desc);
+    // How many times the live sky was rebuilt (its tables, the sky and its lighting): tests and stats.
+    [[nodiscard]] std::uint64_t atmosphere_table_builds() const noexcept;
+    [[nodiscard]] std::uint64_t atmosphere_sky_builds() const noexcept;
 
     // Replaces a texture's pixels, keeping its handle (so materials using it follow). Waits for the GPU.
     [[nodiscard]] Status update_texture(TextureHandle texture, const TextureDesc& desc);

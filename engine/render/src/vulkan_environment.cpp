@@ -115,6 +115,19 @@ Status Renderer::Impl::upload_environment(const EnvironmentDesc& d) {
         vkCmdPipelineBarrier2(cmd, &dep);
         vkCmdCopyBufferToImage(cmd, staging->buffer, environment.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                static_cast<std::uint32_t>(regions.size()), regions.data());
+        // The irradiance (the scene reads it from frame set binding 3).
+        std::array<math::Vec4, 9> sh{};
+        for (std::size_t i = 0; i < 9; ++i) sh[i] = {d.irradiance_sh[i].x, d.irradiance_sh[i].y, d.irradiance_sh[i].z, 0.0f};
+        vkCmdUpdateBuffer(cmd, irradiance_buffer.buffer, 0, sizeof(sh), sh.data());
+        VkMemoryBarrier2 sh_barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+        sh_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT;
+        sh_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+        sh_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+        sh_barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+        VkDependencyInfo sh_dep{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        sh_dep.memoryBarrierCount = 1;
+        sh_dep.pMemoryBarriers = &sh_barrier;
+        vkCmdPipelineBarrier2(cmd, &sh_dep);
         barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
         barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
         barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
@@ -156,6 +169,14 @@ Status Renderer::Impl::upload_environment(const EnvironmentDesc& d) {
         NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &environment.sampler));
     }
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
+        VkDescriptorBufferInfo sh_info{irradiance_buffer.buffer, 0, VK_WHOLE_SIZE};  // the live sky may have pointed it elsewhere
+        VkWriteDescriptorSet sh_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        sh_write.dstSet = frame_sets[i];
+        sh_write.dstBinding = 3;
+        sh_write.descriptorCount = 1;
+        sh_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        sh_write.pBufferInfo = &sh_info;
+        vkUpdateDescriptorSets(device, 1, &sh_write, 0, nullptr);
         VkDescriptorImageInfo image{environment.sampler, environment.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = frame_sets[i];
@@ -166,8 +187,8 @@ Status Renderer::Impl::upload_environment(const EnvironmentDesc& d) {
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
     environment.mip_count = d.mip_count;
-    environment.sh = d.irradiance_sh;
     environment.background = d.background;
+    live_sky.active = false;  // a fixed environment replaces the live sky
     return {};
 }
 
@@ -278,6 +299,8 @@ void Renderer::Impl::record_sky(VkCommandBuffer cmd, const Lighting& lighting) {
 
 void Renderer::Impl::destroy_environment() {
     if (device == VK_NULL_HANDLE) return;
+    destroy_live_sky();
+    destroy_buffer(irradiance_buffer);
     destroy_environment_image();
     if (environment.sampler) vkDestroySampler(device, environment.sampler, nullptr);
     if (sky_pipeline) vkDestroyPipeline(device, sky_pipeline, nullptr);

@@ -47,6 +47,13 @@ struct AtmosphereSettings {
     [[nodiscard]] std::string key() const;
 };
 
+// The direction towards the sun (unit; +Y up, north along -Z, east along +X) at `hours` of local solar
+// time (12 = the sun at its highest), at `latitude_deg` (positive north) on `day_of_year` (1-365;
+// 172 is about the June solstice, 80 the March equinox). The usual simple model: the declination from
+// the day, the hour angle from the time (15 degrees an hour); no equation of time or refraction, which
+// move the sun by less than a degree or about 16 minutes. Below the horizon when y < 0.
+[[nodiscard]] math::Vec3 solar_direction(float hours, float latitude_deg, float day_of_year = 172.0f) noexcept;
+
 class Atmosphere {
 public:
     explicit Atmosphere(const AtmosphereSettings& settings);

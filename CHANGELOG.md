@@ -4,6 +4,29 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-18 — Milestone 8A, part 2: the live sky on the GPU, time of day
+**Added**
+- **The renderer's first compute shaders** (`shaders/atmosphere.hlsl`, `vulkan_atmosphere.cpp`):
+  `Renderer::set_atmosphere` builds the atmosphere's tables, the sky image and its pyramid, the prefiltered
+  environment cube and its irradiance on the GPU, a port of the CPU reference; rebuilt in the frame the sun
+  moves (0.16 ms), one copy per frame in flight. A GPU pass `Environment` in the frame stats.
+- **`time_of_day`** on the environment component (`latitude`, `day_of_year`, `north`): places the sun
+  (`asset::solar_direction`); the editor's **+ Time of day** button.
+- `noor_player --cpu-sky` (the CPU reference path, for comparisons); the report's `sky_builds`, the
+  timing's `environment_gpu` and `max` values.
+
+**Changed:** the environment's irradiance (SH9) moved from the frame uniforms to a storage buffer (frame set
+binding 3), written by `set_environment` or the live sky.
+
+**Measured:** GPU path vs part 1's CPU goldens: mean difference 0.02 / 0.04 of 255. A day from 5:00 to
+21:00 rebuilt every frame at 60 FPS (focused window). See MEASUREMENTS.md for the wall-time caveat.
+
+**Fixed (on the way):** a shared sky copy made each frame's compute wait for the previous frame's
+presentation (31 ms frames); one copy per frame in flight.
+
+**Tests:** `render.day_cycle`, `render.golden_Atmosphere_{Noon,Sunset}_cpu_sky`, solar positions against
+textbook values (equinox, solstices, hemispheres), `time_of_day` in a scene.
+
 ### 2026-11-18 — Milestone 8A, part 1: the atmosphere sky
 **Added**
 - **`asset::Atmosphere`** (ADR-033, proposed): a physically based atmosphere (Rayleigh, Mie, ozone over a

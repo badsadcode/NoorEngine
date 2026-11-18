@@ -524,7 +524,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                 return b >= a ? static_cast<double>(b - a) * timestamp_period_ns / 1.0e6 : 0.0;
             };
             stats.gpu_ms = ms(ticks[0], ticks[kTimestampsPerFrame - 1]);
-            static constexpr const char* kPassNames[] = {"Shadows", "Scene", "Tonemap", "Gizmos", "HUD"};
+            static constexpr const char* kPassNames[] = {"Environment", "Shadows", "Scene", "Tonemap", "Gizmos", "HUD"};
             stats.passes.resize(kTimestampsPerFrame - 1);
             for (std::uint32_t i = 0; i + 1 < kTimestampsPerFrame; ++i) stats.passes[i] = {kPassNames[i], ms(ticks[i], ticks[i + 1])};
         }
@@ -568,9 +568,13 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
 
     const VkImage image = images[image_index];
 
+    // ---- The live sky (compute), when the sun or the atmosphere changed ----
+    record_live_sky(frame.cmd);
+    stamp(1, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+
     // ---- Shadow pass: the sun's cascades ----
     record_shadows(frame.cmd, frame_desc);
-    stamp(1, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
+    stamp(2, VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT);
 
     // ---- Scene pass: lit draws into the HDR image ----
     // The HDR image and the depth buffer are shared by frames in flight: wait for the previous
@@ -640,7 +644,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     vkCmdEndRendering(frame.cmd);
     if (msaa) depth.imageView = depth_view;  // the screen pass's gizmos use the plain depth buffer
     end_label(frame.cmd);
-    stamp(2, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     // ---- Screen pass: tonemap, then gizmos and the HUD in display colours ----
     image_barrier(frame.cmd, hdr_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -669,9 +673,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
-    stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-    record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
     stamp(4, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
+    stamp(5, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
     }
@@ -849,6 +853,15 @@ Status Renderer::set_environment(const EnvironmentDesc& desc) {
     if (auto s = impl_->ensure_frame_uniforms(); !s) return s;
     return impl_->upload_environment(desc);
 }
+
+Status Renderer::set_atmosphere(const AtmosphereDesc& desc) {
+    if (auto s = impl_->ensure_texture_table(); !s) return s;
+    if (auto s = impl_->ensure_frame_uniforms(); !s) return s;
+    if (auto s = impl_->ensure_default_environment(); !s) return s;  // its sampler reads the live cube too
+    return impl_->set_atmosphere(desc);
+}
+std::uint64_t Renderer::atmosphere_table_builds() const noexcept { return impl_->live_sky.table_builds; }
+std::uint64_t Renderer::atmosphere_sky_builds() const noexcept { return impl_->live_sky.sky_builds; }
 
 Status Renderer::update_texture(TextureHandle texture, const TextureDesc& desc) {
     if (texture.id < kFirstUserTexture || texture.id >= impl_->textures.size() || !impl_->textures[texture.id].alive)

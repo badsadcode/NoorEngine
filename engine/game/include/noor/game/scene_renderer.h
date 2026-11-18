@@ -37,6 +37,8 @@ public:
     // Reloads changed materials and textures (call a few times a second).
     void refresh() { materials_.refresh(); }
 
+    // The environment (sky, image-based lighting) it sets each frame.
+    [[nodiscard]] EnvironmentLibrary& environment() noexcept { return environment_; }
     // Where cooked CSG models are (the project or game folder; files in .noor/cooked/csg).
     void set_cooked_root(std::filesystem::path root) { cooked_root_ = std::move(root); }
 
