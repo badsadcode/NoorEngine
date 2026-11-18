@@ -123,6 +123,15 @@ at noon, orange-red at sunset) and its disc is drawn in the sky.
 - **Aerial perspective** (atmosphere sky): distant things fade into the air, bluish by day, warm at sunset,
   from the same model as the sky. `"aerial_scale": 1` is physical (a hill 1 km away gets 1 km of air, which
   is subtle); a small world can raise it (Hillside's haze scene uses 30); 0 turns it off.
+- **Clouds** (atmosphere sky; the editor's **+ Clouds** button adds a layer): `"cloud_coverage": 0.45` (0 clear,
+  1 overcast; a layer is on when it has a coverage), `"cloud_density": 6` (how thick a full cloud is: 6-8
+  heavy cumulus, 1 a thin veil), `"cloud_altitude": 1500` (m), `"cloud_scale": 2500` (m, the size of its
+  features), `"cloud_wind_speed": 10` (m/s), `"cloud_wind_direction": 60` (degrees: 0 blows towards −Z, 90
+  towards +X), `"cloud_seed": 1`. A second layer: the same names with `cloud2_` (a high cirrus veil: altitude
+  8000, density 1, scale 6000). The same seed, wind and game time always give the same sky. Clouds shade the
+  sun on the ground (shadows drift past); overcast takes nearly all the direct sunlight, so shadows fade and
+  the scene is lit by the grey sky. Limits: the layers are thin (no volumes you can fly through), seen from
+  below only, and they don't cast shadows on each other.
 - The sky, its reflections and the light from all around are rebuilt **on the GPU** whenever the sun
   moves (about 0.2 ms), so a moving sun costs almost nothing. `noor_player --cpu-sky` builds it on the
   CPU instead (the reference implementation, about 120 ms a move) for comparisons.

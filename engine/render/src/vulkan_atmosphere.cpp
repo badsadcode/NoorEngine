@@ -5,6 +5,10 @@
 // Every frame (Milestone 8A, part 3): the camera's aerial perspective, a 32^3 volume of what the air adds
 // and lets through along each pixel's view, which the scene's shader applies to every surface.
 //
+// Clouds (part 4) live in the sky image this copy lights the scene with (so overcast lights it grey); the sky
+// pass draws them sharp itself, every frame, over a cloud-free background image. Drifting clouds rebuild the
+// copy's lighting in steps (each 1% of their feature size), not every frame.
+//
 // What is rebuilt when:
 //   - settings change (planet, air, haze, ground): the transmittance and multiple-scattering tables
 //     (shared), then every copy below;
@@ -22,6 +26,7 @@
 #include "vulkan_impl.h"
 
 #include "noor/shaders/atmosphere_aerial.h"
+#include "noor/shaders/atmosphere_cloudlight.h"
 #include "noor/shaders/atmosphere_cube.h"
 #include "noor/shaders/atmosphere_downsample.h"
 #include "noor/shaders/atmosphere_irradiance.h"
@@ -68,6 +73,18 @@ bool same_tables(const AtmosphereDesc& a, const AtmosphereDesc& b) {
            a.mie_scattering == b.mie_scattering && a.mie_absorption == b.mie_absorption && a.mie_height_km == b.mie_height_km &&
            a.mie_g == b.mie_g && same(a.ozone_absorption, b.ozone_absorption) && a.ozone_centre_km == b.ozone_centre_km &&
            a.ozone_half_width_km == b.ozone_half_width_km && same(a.ground_albedo, b.ground_albedo) && a.turbidity == b.turbidity;
+}
+
+// The clouds a copy's lighting was built with still stand for these: the same layers, drifted by less than
+// 1% of their feature size (the sky pass draws the clouds sharp every frame itself; the reflections and the
+// light from all around follow them in steps, not every frame).
+bool close_clouds(const CloudsGpu& built, const CloudsGpu& now) {
+    if (std::memcmp(built.a, now.a, sizeof(now.a)) != 0 || std::memcmp(built.flags, now.flags, sizeof(now.flags)) != 0) return false;
+    for (std::size_t i = 0; i < 2; ++i) {
+        const float step = 0.01f * now.a[i].w;
+        if (std::abs(built.b[i].x - now.b[i].x) > step || std::abs(built.b[i].y - now.b[i].y) > step) return false;
+    }
+    return built.b[0].z == now.b[0].z && std::abs(built.b[0].w - now.b[0].w) < 0.05f;  // planet; the camera's height (50 m)
 }
 
 bool same_sky(const AtmosphereDesc& a, const AtmosphereDesc& b) {
@@ -181,6 +198,16 @@ Status Renderer::Impl::ensure_live_sky() {
             c.aerial_camera = *camera;
         }
         live_images.push_back(&c.aerial);
+        if (auto r = create_live_image(c.background, VK_FORMAT_R16G16B16A16_SFLOAT, kSkyW, kSkyH, 1, false, "Live sky background (no clouds)"); !r)
+            return r;
+        live_images.push_back(&c.background);
+        auto clouds = create_buffer(sizeof(CloudsGpu), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true, false);
+        if (!clouds) return std::unexpected(clouds.error());
+        c.clouds = *clouds;
+        auto light = create_buffer(4 * sizeof(math::Vec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, false);
+        if (!light) return std::unexpected(light.error());
+        c.cloud_light = *light;
+        set_name(VK_OBJECT_TYPE_BUFFER, c.cloud_light.buffer, std::format("Cloud light (copy {})", i));
         set_name(VK_OBJECT_TYPE_BUFFER, c.irradiance.buffer, std::format("Live sky irradiance (SH9, copy {})", i));
         live_images.push_back(&c.sky);
         live_images.push_back(&c.cube);
@@ -237,7 +264,7 @@ Status Renderer::Impl::ensure_live_sky() {
     NOOR_VK_TRY(vkCreateSampler(device, &sampler, nullptr, &s.sky_sampler));
 
     // One set layout for every pass; each set fills the bindings its entry point uses.
-    const VkDescriptorSetLayoutBinding bindings[10] = {
+    const VkDescriptorSetLayoutBinding bindings[13] = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_table
         {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_image
         {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_cube
@@ -248,9 +275,12 @@ Status Renderer::Impl::ensure_live_sky() {
         {7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},          // sh_out
         {8, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},          // aerial_camera
         {9, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},           // out_volume
+        {10, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},         // clouds
+        {11, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},         // cloud_light
+        {12, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},          // out_background
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 10;
+    layout_info.bindingCount = 13;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &s.set_layout));
     const VkPushConstantRange push{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push)};
@@ -283,14 +313,15 @@ Status Renderer::Impl::ensure_live_sky() {
     if (auto r = make_pipeline(k_atmosphere_cube, sizeof(k_atmosphere_cube), "CSCube", s.cube_pipeline); !r) return r;
     if (auto r = make_pipeline(k_atmosphere_irradiance, sizeof(k_atmosphere_irradiance), "CSIrradiance", s.irradiance_pipeline); !r) return r;
     if (auto r = make_pipeline(k_atmosphere_aerial, sizeof(k_atmosphere_aerial), "CSAerial", s.aerial_pipeline); !r) return r;
+    if (auto r = make_pipeline(k_atmosphere_cloudlight, sizeof(k_atmosphere_cloudlight), "CSCloudLight", s.cloud_light_pipeline); !r) return r;
 
     // Descriptor sets: the two tables, and per copy the sky, a downsample per level, a cube per mip, irradiance.
-    const std::uint32_t per_copy = 1 + (kSkyLevels - 1) + kCubeMips + 1 + 1;  // ... and the aerial volume
+    const std::uint32_t per_copy = 1 + (kSkyLevels - 1) + kCubeMips + 1 + 1 + 1;  // ... the aerial volume, the cloud light
     const std::uint32_t set_count = 2 + per_copy * kFramesInFlight;
     const VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, set_count * 2},
                                            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, set_count * 2},
-                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight},
-                                           {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight}};
+                                           {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 3},
+                                           {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight * 3}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = set_count;
     pool_info.poolSizeCount = 4;
@@ -324,6 +355,16 @@ Status Renderer::Impl::ensure_live_sky() {
         write.pImageInfo = &image;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     };
+    const auto buffer_write = [&](VkDescriptorSet set, std::uint32_t binding, VkBuffer buffer, VkDescriptorType type) {
+        VkDescriptorBufferInfo info{buffer, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = set;
+        write.dstBinding = binding;
+        write.descriptorCount = 1;
+        write.descriptorType = type;
+        write.pBufferInfo = &info;
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    };
     if (auto r = allocate(s.transmittance_set); !r) return r;
     storage(s.transmittance_set, 0, s.transmittance.view);
     if (auto r = allocate(s.multiple_set); !r) return r;
@@ -334,6 +375,14 @@ Status Renderer::Impl::ensure_live_sky() {
         storage(c.sky_set, 1, c.sky.levels[0]);
         sampled(c.sky_set, 3, s.transmittance.view, s.table_sampler);
         sampled(c.sky_set, 4, s.multiple.view, s.table_sampler);
+        buffer_write(c.sky_set, 10, c.clouds.buffer, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        buffer_write(c.sky_set, 11, c.cloud_light.buffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+        storage(c.sky_set, 12, c.background.view);
+        if (auto r = allocate(c.cloud_light_set); !r) return r;
+        sampled(c.cloud_light_set, 3, s.transmittance.view, s.table_sampler);
+        sampled(c.cloud_light_set, 4, s.multiple.view, s.table_sampler);
+        buffer_write(c.cloud_light_set, 10, c.clouds.buffer, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        buffer_write(c.cloud_light_set, 11, c.cloud_light.buffer, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
         c.downsample_sets.resize(kSkyLevels);
         for (std::uint32_t level = 1; level < kSkyLevels; ++level) {
             if (auto r = allocate(c.downsample_sets[level]); !r) return r;
@@ -386,7 +435,7 @@ Status Renderer::Impl::ensure_live_sky() {
         entry.alive = true;
         textures[slot] = entry;
         c.sky_slot = slot;
-        VkDescriptorImageInfo image{VK_NULL_HANDLE, c.sky.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo image{VK_NULL_HANDLE, c.background.view, VK_IMAGE_LAYOUT_GENERAL};  // the clear sky
         VkWriteDescriptorSet slot_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         slot_write.dstSet = texture_set;
         slot_write.dstBinding = 0;
@@ -422,6 +471,7 @@ Status Renderer::Impl::set_atmosphere(const AtmosphereDesc& d) {
             writes[1].pBufferInfo = &buffer;
             vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
             write_aerial_descriptor(i, c.aerial.view, VK_IMAGE_LAYOUT_GENERAL);
+            write_cloud_light_descriptor(i, c.cloud_light.buffer);
         }
         environment.mip_count = kCubeMips;
         environment.background = TextureHandle{s.copies[0].sky_slot};  // valid for record_sky; each frame draws its own copy
@@ -438,7 +488,7 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
     if (!s.active || !s.has_desc) return;
     LiveSky::Copy& c = s.copies[frame_index];
     const bool tables = !s.tables_built || !same_tables(s.desc, s.tables_for);
-    const bool sky = tables || !c.built || !same_sky(c.built_for, s.desc);
+    const bool sky = tables || !c.built || !same_sky(c.built_for, s.desc) || !close_clouds(c.built_clouds, frame_clouds);
     const bool aerial = s.desc.aerial_distance_scale > 0.0f;
     if (!sky && !aerial) return;
 
@@ -491,6 +541,12 @@ void Renderer::Impl::record_live_sky_lighting(VkCommandBuffer cmd, Push& push) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.layout, 0, 1, &set, 0, nullptr);
         vkCmdPushConstants(cmd, s.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
     };
+    // The clouds this copy shows, and the light at each layer (the sky pass reads it too).
+    std::memcpy(c.clouds.mapped, &frame_clouds, sizeof(CloudsGpu));
+    vmaFlushAllocation(allocator, c.clouds.allocation, 0, sizeof(CloudsGpu));
+    bind(s.cloud_light_pipeline, c.cloud_light_set);
+    vkCmdDispatch(cmd, 1, 1, 1);
+    compute_to_compute(cmd);
     bind(s.sky_pipeline, c.sky_set);
     vkCmdDispatch(cmd, groups(kSkyW), groups(kSkyH), 1);
     compute_to_compute(cmd);
@@ -518,6 +574,7 @@ void Renderer::Impl::record_live_sky_lighting(VkCommandBuffer cmd, Push& push) {
     push = push_of(s.desc);  // the aerial pass reads the plain settings
     c.built = true;
     c.built_for = s.desc;
+    c.built_clouds = frame_clouds;
     ++s.sky_builds;
 }
 
@@ -525,7 +582,7 @@ void Renderer::Impl::destroy_live_sky() {
     if (device == VK_NULL_HANDLE) return;
     LiveSky& s = live_sky;
     for (VkPipeline p : {s.transmittance_pipeline, s.multiple_pipeline, s.sky_pipeline, s.downsample_pipeline, s.cube_pipeline, s.irradiance_pipeline,
-                         s.aerial_pipeline})
+                         s.aerial_pipeline, s.cloud_light_pipeline})
         if (p) vkDestroyPipeline(device, p, nullptr);
     if (s.layout) vkDestroyPipelineLayout(device, s.layout, nullptr);
     if (s.pool) vkDestroyDescriptorPool(device, s.pool, nullptr);
@@ -544,6 +601,9 @@ void Renderer::Impl::destroy_live_sky() {
         destroy_image(c.sky);
         destroy_image(c.cube);
         destroy_image(c.aerial);
+        destroy_image(c.background);
+        destroy_buffer(c.clouds);
+        destroy_buffer(c.cloud_light);
         destroy_buffer(c.irradiance);
         destroy_buffer(c.aerial_camera);
     }

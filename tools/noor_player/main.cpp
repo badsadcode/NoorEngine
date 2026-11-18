@@ -350,7 +350,8 @@ int run(const Options& o) {
                         last_refresh = now;
                     }
 
-                    const auto view = noor::game::collect_view((*world)->scene(), asset_path, &(*world)->render_poses(), project->root());
+                    auto view = noor::game::collect_view((*world)->scene(), asset_path, &(*world)->render_poses(), project->root());
+                    view.lighting.time = static_cast<float>((*world)->time());  // the clouds drift with the game
                     if (!view.camera && !warned_no_camera) {
                         NOOR_LOG_WARN("Player", "The scene has no camera; showing it from above. Add a camera component (or Create ▸ Player) to see the game's view");
                         warned_no_camera = true;
@@ -458,7 +459,8 @@ int run(const Options& o) {
                                 if (timings[i].*field >= 0) v.push_back(timings[i].*field);
                             if (v.empty()) return Json(nullptr);
                             std::ranges::sort(v);
-                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}, {"max", v.back()}};
+                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}, {"max", v.back()},
+                                        {"min", v.front()}};
                         };
                         report["timing_ms"] = {{"frames", timings.size() - 60},
                                                {"wall", stat(&Timing::wall)},

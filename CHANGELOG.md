@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-18 — Milestone 8A, part 4: layered clouds
+**Added**
+- **Cloud layers** (`noor/render/clouds.h`, `shaders/clouds.hlsli`; `render::Lighting::clouds`, `Lighting::time`):
+  up to two, deterministic from a seed, drifting with game time; lit by the sun and sky at their altitude (a new
+  compute step, `CSCloudLight`); drawn sharp in the sky pass; in the live sky's lighting (overcast lights the scene
+  grey); shading the sun on the ground (drifting cloud shadows). Environment fields `cloud_*` and `cloud2_*`; the
+  editor's **+ Clouds** button. noor_player and the editor viewport pass their time.
+- The live sky keeps a cloud-free background image (what the sky pass draws under its clouds); frame set binding 5
+  (the clouds' light).
+- The player's timing report has `min` values.
+
+**Changed:** the GPU timing tests (`render.day_cycle`, `render.clouds_cost`) judge each run's fastest frame and print
+medians: on a working desktop the GPU idles at 210 MHz and is shared, and medians swing 3-10x between runs.
+
+**Measured:** clouds +26-28 µs a frame; a lighting rebuild 0.08 ms every few seconds while they drift.
+
+**Tests:** cloud maths (the same seed gives the same sky, coverage from clear to overcast, the wind's drift, detail
+fading with distance, overcast dimming the sun to e^-density); goldens `Atmosphere_Clouds`, `Atmosphere_Overcast`;
+`render.clouds_cost`.
+
 ### 2026-11-18 — Milestone 8A, part 3: fog and aerial perspective
 **Added**
 - **Height fog** (`noor/render/fog.h`, `shaders/fog.hlsli`; `render::Lighting::fog`): full density below a

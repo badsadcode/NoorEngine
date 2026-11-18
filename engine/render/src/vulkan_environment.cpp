@@ -178,6 +178,7 @@ Status Renderer::Impl::upload_environment(const EnvironmentDesc& d) {
         sh_write.pBufferInfo = &sh_info;
         vkUpdateDescriptorSets(device, 1, &sh_write, 0, nullptr);
         write_aerial_descriptor(i, aerial_default.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        write_cloud_light_descriptor(i, cloud_light_default.buffer);
         VkDescriptorImageInfo image{environment.sampler, environment.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = frame_sets[i];

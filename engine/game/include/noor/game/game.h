@@ -162,6 +162,10 @@ struct SceneView {
     // "fog_height" (m: full density below), "fog_falloff" (per metre above it), "fog_anisotropy" (glow
     // towards the sun, 0..0.95), "fog_color" (its albedo). "aerial_scale" (atmosphere sky): how far the
     // air makes things look (1 physical, more for small worlds, 0 off).
+    // Clouds (Milestone 8A part 4, atmosphere sky; noor/render/clouds.h): "cloud_coverage" (0..1; present = the
+    // layer is on), "cloud_density" (optical thickness of a full cloud), "cloud_altitude" (m), "cloud_scale"
+    // (m, feature size), "cloud_wind_speed" (m/s), "cloud_wind_direction" (degrees, 0 = towards -Z), "cloud_seed";
+    // a second layer with "cloud2_*". The game's time (render::Lighting::time) drifts them.
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)

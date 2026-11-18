@@ -287,6 +287,20 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 fog.albedo = color_of(tint, fog.albedo);
             }
             view.environment.aerial_scale = std::clamp(number(en, "aerial_scale", 1.0f), 0.0f, 1000.0f);
+            // Cloud layers: "cloud_*" (the first) and "cloud2_*" (the second); a layer is on when it has a coverage.
+            for (std::size_t layer_index = 0; layer_index < render::kCloudLayers; ++layer_index) {
+                const std::string prefix = layer_index == 0 ? "cloud_" : "cloud2_";
+                render::CloudLayer& layer = view.lighting.clouds[layer_index];
+                if (!en.contains(prefix + "coverage")) continue;
+                layer.enabled = true;
+                layer.coverage = std::clamp(number(en, (prefix + "coverage").c_str(), layer.coverage), 0.0f, 1.0f);
+                layer.density = std::clamp(number(en, (prefix + "density").c_str(), layer.density), 0.0f, 100.0f);
+                layer.altitude_km = std::clamp(number(en, (prefix + "altitude").c_str(), layer.altitude_km * 1000.0f) * 0.001f, 0.05f, 50.0f);
+                layer.scale_km = std::clamp(number(en, (prefix + "scale").c_str(), layer.scale_km * 1000.0f) * 0.001f, 0.05f, 100.0f);
+                layer.wind_speed = std::clamp(number(en, (prefix + "wind_speed").c_str(), layer.wind_speed), 0.0f, 200.0f);
+                layer.wind_direction = number(en, (prefix + "wind_direction").c_str(), layer.wind_direction);
+                layer.seed = static_cast<std::uint32_t>(std::max(0.0f, number(en, (prefix + "seed").c_str(), static_cast<float>(layer.seed))));
+            }
             if (en.contains("time_of_day") && en["time_of_day"].is_number())
                 time_of_day = TimeOfDay{std::fmod(std::fmod(number(en, "time_of_day", 12.0f), 24.0f) + 24.0f, 24.0f),
                                         std::clamp(number(en, "latitude", 50.0f), -90.0f, 90.0f),

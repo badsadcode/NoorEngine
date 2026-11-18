@@ -139,6 +139,22 @@ Hillside_Haze (the Hillside sample under the atmosphere, height fog and `aerial_
 
 The fog itself is computed per pixel in the scene and sky passes (a few exponentials, no marching).
 
+### Clouds (part 4)
+`render.clouds_cost`: Atmosphere_Clouds (two drifting layers) against Atmosphere_Noon (the same objects, no
+clouds), 300 frames each, 1280×720.
+
+| What | GPU time |
+|---|---|
+| Clouds: the sky pass's two layers and the scene's cloud shadows | **+26-28 µs** a frame (fastest frames: 0.320 vs 0.293 ms, twice) |
+| A lighting rebuild while they drift (cloud light, sky, pyramid, cube, irradiance) | 0.08 ms, 6 times in 5 s (each 1% of the clouds' size) |
+
+**Why "fastest frames".** While writing these tests the GPU (RTX 3080) sat in its lowest power state (P8,
+210 MHz of 2115) because these scenes are too light to wake it, and other programs were using it. Median GPU
+times then swing 3-10x from one run to the next: the same pair of scenes
+measured −875, +878 and −280 µs apart, the day cycle's rebuild 0.16 to 1.3 ms. Slowdowns only ever add time,
+so the tests judge each run's fastest frame (the work itself) and print the medians. Numbers in this file
+from before part 4 are medians on a quieter desktop.
+
 **A lesson on the way:** the first GPU version shared one copy of the sky between frames, and its barrier
 waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
 compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.

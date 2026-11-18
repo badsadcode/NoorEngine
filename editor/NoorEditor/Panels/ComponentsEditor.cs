@@ -851,6 +851,25 @@ public sealed class ComponentsEditor : StackPanel
             };
             buttons.Children.Add(fog);
         }
+        if (env["cloud_coverage"] == null)
+        {
+            // A cloud layer (Milestone 8A, part 4; drawn with the atmosphere sky).
+            var clouds = new Button { Content = "+ Clouds", Classes = { "tool" }, Margin = new Thickness(0, 0, 4, 0) };
+            ToolTip.SetTip(clouds, "A cloud layer (atmosphere sky): coverage 0 clear to 1 overcast, drifting with the wind");
+            clouds.Click += (_, _) =>
+            {
+                var next = (JsonObject)env.DeepClone();
+                next["cloud_coverage"] = 0.45;
+                next["cloud_density"] = 6;
+                next["cloud_altitude"] = 1500;
+                next["cloud_scale"] = 2500;
+                next["cloud_wind_speed"] = 10;
+                next["cloud_wind_direction"] = 60;
+                next["cloud_seed"] = 1;
+                SetComponent("environment", next);
+            };
+            buttons.Children.Add(clouds);
+        }
         if (env["time_of_day"] != null)
             return buttons.Children.Count == 0 ? grid : new StackPanel { Spacing = 4, Children = { grid, buttons } };
         // The time of day places the sun (it then ignores the sun light's rotation).

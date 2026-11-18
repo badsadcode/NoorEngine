@@ -180,6 +180,19 @@ struct FrameUniforms {
     math::Vec4 fog;                      // x density, y falloff, z height, w anisotropy (fog.h)
     math::Vec4 fog_albedo;               // rgb
     math::Vec4 aerial;                   // x: 1 = the aerial perspective volume is live, y: its far end (km), z: distance scale
+    // Cloud layers (clouds.hlsli): a = (coverage, density, altitude km, scale km), b = (drift x km, drift z km,
+    // planet radius km [b[0] only], the camera's height above the surface in km [b[0] only]), flags = (seed 0, seed 1,
+    // enabled 0, enabled 1). All zero without the live sky.
+    math::Vec4 cloud_a[2];
+    math::Vec4 cloud_b[2];
+    std::uint32_t cloud_flags[4];
+};
+
+// The clouds as the live sky's compute sees them (atmosphere.hlsl binding 10): the same fields as above.
+struct CloudsGpu {
+    math::Vec4 a[2];
+    math::Vec4 b[2];
+    std::uint32_t flags[4];
 };
 
 // atmosphere.hlsl's push constants (Params): the atmosphere and what this pass works on.
@@ -304,6 +317,10 @@ struct Renderer::Impl {
         VkImageView view = VK_NULL_HANDLE;
         VkSampler sampler = VK_NULL_HANDLE;  // linear, clamped (the live volumes use it too)
     } aerial_default;
+    // The clouds' light when there's no live sky (frame set binding 5): zeros.
+    GpuBuffer cloud_light_default;
+    // This frame's clouds (with their drift), kept by update_frame_uniforms for the live sky.
+    CloudsGpu frame_clouds{};
     // This frame's camera, kept by update_frame_uniforms for the aerial perspective pass.
     math::Mat4 frame_world_from_clip = math::Mat4::identity();
     math::Vec3 frame_eye{0, 0, 0};
@@ -325,6 +342,11 @@ struct Renderer::Impl {
         struct Copy {
             Image sky, cube;
             Image aerial;                // the camera's aerial perspective (32^3, rebuilt every frame)
+            Image background;            // the sky without clouds (512x256): what the sky pass draws under its own sharp clouds
+            GpuBuffer clouds;            // host-visible CloudsGpu: the clouds this copy is built with
+            GpuBuffer cloud_light;       // the sun and sky light at each layer (4 float4; frame set binding 5)
+            VkDescriptorSet cloud_light_set = VK_NULL_HANDLE;
+            CloudsGpu built_clouds{};
             GpuBuffer aerial_camera;     // host-visible: the camera the aerial volume is built for
             VkDescriptorSet aerial_set = VK_NULL_HANDLE;
             GpuBuffer irradiance;   // SH9 (frame set binding 3)
@@ -341,7 +363,7 @@ struct Renderer::Impl {
         VkPipelineLayout layout = VK_NULL_HANDLE;
         VkPipeline transmittance_pipeline = VK_NULL_HANDLE, multiple_pipeline = VK_NULL_HANDLE, sky_pipeline = VK_NULL_HANDLE,
                    downsample_pipeline = VK_NULL_HANDLE, cube_pipeline = VK_NULL_HANDLE, irradiance_pipeline = VK_NULL_HANDLE,
-                   aerial_pipeline = VK_NULL_HANDLE;
+                   aerial_pipeline = VK_NULL_HANDLE, cloud_light_pipeline = VK_NULL_HANDLE;
         VkDescriptorSet transmittance_set = VK_NULL_HANDLE, multiple_set = VK_NULL_HANDLE;
         bool active = false;         // the environment is this (set_environment turns it off)
         bool has_desc = false;
@@ -464,6 +486,7 @@ struct Renderer::Impl {
     Status ensure_frame_uniforms();
     Status create_aerial_default();
     void write_aerial_descriptor(std::uint32_t frame_slot, VkImageView view, VkImageLayout layout);
+    void write_cloud_light_descriptor(std::uint32_t frame_slot, VkBuffer buffer);
     Status ensure_tonemap(VkFormat color_format);
     void write_tonemap_descriptor();
     void update_frame_uniforms(const FrameDesc& frame);

@@ -23,13 +23,31 @@ struct FrameUniforms
     float4 fog;                 // x density, y falloff, z height, w anisotropy (fog.hlsli)
     float4 fog_albedo;
     float4 aerial;
+    float4 cloud_a[2];       // per layer: coverage, density, altitude km, scale km
+    float4 cloud_b[2];       // per layer: drift x, z km; [0].z planet radius km, [0].w camera height km
+    uint4 cloud_flags;       // seed 0, seed 1, enabled 0, enabled 1
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 [[vk::binding(1, 1)]] SamplerState texture_sampler;
 [[vk::binding(3, 0)]] StructuredBuffer<float4> irradiance_sh;  // the fog's ambient light
+[[vk::binding(5, 0)]] StructuredBuffer<float4> cloud_light;    // [2i] sun, [2i + 1] sky at cloud layer i (relative)
 
+#include "clouds.hlsli"
 #include "fog.hlsli"
+
+CloudLayer cloud_layer(uint i)
+{
+    CloudLayer l;
+    l.coverage = frame.cloud_a[i].x;
+    l.density = frame.cloud_a[i].y;
+    l.altitude_km = frame.cloud_a[i].z;
+    l.scale_km = frame.cloud_a[i].w;
+    l.offset_km = frame.cloud_b[i].xy;
+    l.seed = frame.cloud_flags[i];
+    l.enabled = frame.cloud_flags[2 + i] != 0;
+    return l;
+}
 
 struct VertexOutput
 {
@@ -54,6 +72,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     const float4 p = mul(frame.world_from_clip, float4(input.ndc, 1.0, 1.0));
     float3 d = normalize(p.xyz / p.w - frame.camera_position.xyz);
     const float3 world_d = d;
+    const float pixel_angle = length(fwidth(world_d));  // how much sky one pixel covers (clouds' detail)
     // The environment's turn about +Y.
     const float c = frame.environment.y, s = frame.environment.z;
     d = float3(c * d.x + s * d.z, d.y, -s * d.x + c * d.z);
@@ -74,6 +93,20 @@ float4 PSMain(VertexOutput input) : SV_Target
             const float limb = 1.0 - 0.6 * (1.0 - sqrt(1.0 - r2));
             color += frame.sun_radiance.rgb * (limb / (0.8 * 6.8e-5));
             color = min(color, 60000.0);  // the HDR target is half floats
+        }
+    }
+    // Cloud layers (part 4), sharp per pixel, the higher one first; over the sun's disc.
+    if (frame.cloud_flags.z != 0 || frame.cloud_flags.w != 0)
+    {
+        const float3 eye_km = float3(frame.camera_position.x * 0.001, frame.cloud_b[0].w, frame.camera_position.z * 0.001);
+        const uint first = frame.cloud_a[1].z > frame.cloud_a[0].z ? 1u : 0u;
+        [unroll] for (uint k = 0; k < 2; ++k)
+        {
+            const uint i = k == 0 ? first : 1u - first;
+            float alpha;
+            const float3 c = cloud_layer_shade(cloud_layer(i), eye_km, frame.cloud_b[0].z, world_d, pixel_angle, frame.to_sun.xyz, cloud_light[i * 2].rgb,
+                                               cloud_light[i * 2 + 1].rgb, alpha);
+            color = color * (1.0 - alpha) + c * frame.environment.x * alpha;  // relative to the sun's illuminance
         }
     }
     // Height fog in front of the sky (to infinity): on the horizon the sky becomes the fog's colour, which

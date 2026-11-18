@@ -27,6 +27,7 @@ add_executable(noor_unit_tests
     unit/test_environment.cpp
     unit/test_atmosphere.cpp
     unit/test_fog.cpp
+    unit/test_clouds.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -142,7 +143,7 @@ endif()
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
 foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain TerrainPaint
-                     Atmosphere_Noon Atmosphere_Sunset)
+                     Atmosphere_Noon Atmosphere_Sunset Atmosphere_Clouds Atmosphere_Overcast)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -159,6 +160,11 @@ add_test(NAME render.day_cycle
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/day_cycle_check -P ${CMAKE_CURRENT_SOURCE_DIR}/day_cycle_check.cmake)
 set_tests_properties(render.day_cycle PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+# Clouds (Milestone 8A, part 4): what they cost against the same scene without them.
+add_test(NAME render.clouds_cost
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/clouds_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/clouds_cost_check.cmake)
+set_tests_properties(render.clouds_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
 foreach(name IN ITEMS Atmosphere_Noon Atmosphere_Sunset)
     add_test(NAME render.golden_${name}_cpu_sky
         COMMAND ${CMAKE_COMMAND}

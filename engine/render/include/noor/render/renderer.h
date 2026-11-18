@@ -8,6 +8,7 @@
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
 #include "noor/platform/presentation_target.h"
+#include "noor/render/clouds.h"
 #include "noor/render/fog.h"
 
 #include <array>
@@ -230,6 +231,11 @@ struct Lighting {
     bool sun_disc = false;
     // Height fog (Milestone 8A, part 3; noor/render/fog.h): over everything drawn and the sky. Density 0: none.
     FogParams fog;
+    // Cloud layers (Milestone 8A, part 4; noor/render/clouds.h): drawn in the sky, shading the sun on the
+    // ground, lighting the scene through the live sky. Only with the atmosphere sky (set_atmosphere).
+    std::array<CloudLayer, kCloudLayers> clouds{};
+    // Seconds of game time: the clouds drift with it (the same time always gives the same sky).
+    float time = 0.0f;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;

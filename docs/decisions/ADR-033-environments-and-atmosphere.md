@@ -1,6 +1,6 @@
 # ADR-033: Environments and atmosphere
 
-**Status:** Proposed (Milestone 8A; parts 1-3 implemented: the atmosphere sky on the GPU, time of day, fog and aerial perspective) · **Date:** 2026-11-18 · **Milestone:** 8
+**Status:** Proposed (Milestone 8A; parts 1-4 implemented: the atmosphere sky on the GPU, time of day, fog and aerial perspective, layered clouds) · **Date:** 2026-11-18 · **Milestone:** 8
 
 ## Context
 Milestone 8A ([plan](../milestones/M8_PLAN.md), [NoorSky brief](../ideas/NOORSKY.md)) wants skies that
@@ -77,6 +77,15 @@ must agree, or the picture falls apart.
   surfaces **and to the sky** (to infinity): on the horizon the sky becomes the fog's colour, which is where
   distant fogged ground ends up, so the two meet without a seam. Reference and tests: `noor/render/fog.h`;
   shaders share `fog.hlsli`. No shadows inside the fog (volumetric shadows: phase C).
+- **Layered clouds** (part 4, atmosphere sky): up to two thin layers at an altitude, from deterministic value
+  noise (seed, coverage, density, feature size), drifting with the wind over game time (`render::Lighting::time`).
+  Lit by the sun as it reaches the layer and the sky above it (a compute step from the same tables), with a look
+  towards the sun through the cloud's own cover for bright thin edges and darker bodies: an approximation for a
+  thin layer, not a volume. Drawn sharp per pixel in the sky pass over a cloud-free background; the environment's
+  lighting is built from a cloudy copy (overcast lights the scene grey) and follows drifting clouds in steps of 1%
+  of their feature size; the scene's shader dims the sun by the clouds between each point and the sun (drifting
+  cloud shadows; overcast all but removes direct light, so shadows fade). Reference: `noor/render/clouds.h`;
+  shaders: `clouds.hlsli`. Fine noise fades with a pixel's footprint, so far clouds don't shimmer.
 - **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
   the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
   hour angle from the time; no equation of time or refraction).
@@ -95,6 +104,9 @@ must agree, or the picture falls apart.
   GPU is clocked down), the tables a fraction of a millisecond once; dragging the time from 5:00 to
   21:00 rebuilds every frame at 60 FPS (`render.day_cycle`). Spreading the work over several frames,
   which the plan expected to need, wasn't.
+- **Clouds cost** 26-28 µs a frame at 1280×720 (fastest frames, two layers, against the same scene without),
+  plus a 0.08 ms lighting rebuild a few times a minute while they drift. Goldens `Atmosphere_Clouds`,
+  `Atmosphere_Overcast`.
 - **Fog and aerial perspective cost** almost nothing: the aerial volume 0.025 ms a frame on an RTX 3080,
   the fog a handful of exponentials per pixel. Golden `Hillside_Haze`.
 - **GPU equals CPU:** the GPU path reproduces part 1's goldens (made by the CPU path) with a mean

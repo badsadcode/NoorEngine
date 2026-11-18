@@ -14,6 +14,8 @@ noor_player and compared with `tests/golden/<scene>.png` (320x180) by `noor_imag
   ACES fit.
 - `Atmosphere_Noon`, `Atmosphere_Sunset`: the same objects under the physically based sky (Milestone 8A),
   the sun at 60 and 3 degrees; rendered by the GPU path and, with `--cpu-sky`, by the CPU reference.
+- `Atmosphere_Clouds`, `Atmosphere_Overcast`: two cloud layers (cumulus and a high veil) late in the afternoon,
+  and a full overcast deck (Milestone 8A, part 4); `tests/clouds_cost_check.cmake` measures what clouds cost.
 - `Atmosphere_Day`: `Scripts/DayCycle.luau` drags the time of day from 5:00 to 21:00 over 8 seconds
   (`tests/day_cycle_check.cmake` measures the moving sun).
 

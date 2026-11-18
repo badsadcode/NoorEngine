@@ -379,6 +379,7 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::MaterialLibrary> materials;
     std::optional<noor::game::EnvironmentLibrary> environment;
     auto refresh_clock = std::chrono::steady_clock::now();
+    const auto started_at = std::chrono::steady_clock::now();  // the clouds' clock
     std::uint64_t seen_reload_token = 0;
     auto last_stats_time = std::chrono::steady_clock::now() - 1s;
     std::vector<noor::render::OverlayVertex> overlay;
@@ -1225,6 +1226,8 @@ void render_thread_main(noor_viewport* vp) {
             frame.camera.fov_y = basis.fov_y;
             frame.camera.near_plane = view_near;
             if (shown) frame.lighting = shown->lighting;
+            // The clouds drift in the editor too (seconds since the viewport opened; games use their own time).
+            frame.lighting.time = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
             frame.draws = frame_draws;
             // The game's HUD while playing. The font atlas is baked the first time a HUD appears.
             overlay.clear();

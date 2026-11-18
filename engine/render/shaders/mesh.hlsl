@@ -67,6 +67,9 @@ struct FrameUniforms
     float4 fog;              // x density, y falloff, z height, w anisotropy (fog.hlsli)
     float4 fog_albedo;       // rgb
     float4 aerial;           // x: 1 = aerial perspective, y: the volume's far end (km), z: distance scale
+    float4 cloud_a[2];       // per layer: coverage, density, altitude km, scale km
+    float4 cloud_b[2];       // per layer: drift x, z km; [0].z planet radius km, [0].w camera height km
+    uint4 cloud_flags;       // seed 0, seed 1, enabled 0, enabled 1
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2DArray<float> shadow_map;
@@ -79,7 +82,26 @@ struct FrameUniforms
 [[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture3D<float4> aerial_volume;
 [[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState aerial_sampler;
 
+#include "clouds.hlsli"
 #include "fog.hlsli"
+
+// The sun's light that gets through the clouds to this point: cloud shadows that drift with the wind (part 4).
+float cloud_shadow(float3 world)
+{
+    if (frame.cloud_flags.z == 0 && frame.cloud_flags.w == 0) return 1.0;
+    CloudLayer layers[2];
+    [unroll] for (uint i = 0; i < 2; ++i)
+    {
+        layers[i].coverage = frame.cloud_a[i].x;
+        layers[i].density = frame.cloud_a[i].y;
+        layers[i].altitude_km = frame.cloud_a[i].z;
+        layers[i].scale_km = frame.cloud_a[i].w;
+        layers[i].offset_km = frame.cloud_b[i].xy;
+        layers[i].seed = frame.cloud_flags[i];
+        layers[i].enabled = frame.cloud_flags[2 + i] != 0;
+    }
+    return cloud_sun_transmittance(layers, world, frame.to_sun.xyz);
+}
 static const uint kBrdfLut = 3;  // built-in texture slot
 
 struct VertexInput
@@ -389,7 +411,7 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const float occlusion = surf.occlusion;
     const float3 emissive = surf.emissive;
 
-    const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0));
+    const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0)) * cloud_shadow(input.world_position);
     float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow);
     color += local_lights(input.world_position, n, v, base_color, metallic, roughness);
     // The environment (image-based lighting): diffuse irradiance and prefiltered reflections.

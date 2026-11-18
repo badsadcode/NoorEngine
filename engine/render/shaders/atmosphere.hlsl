@@ -42,6 +42,18 @@ struct AerialCamera
 };
 [[vk::binding(8, 0)]] ConstantBuffer<AerialCamera> aerial_camera;
 [[vk::binding(9, 0)]] [[vk::image_format("rgba16f")]] RWTexture3D<float4> out_volume;
+// Clouds (part 4): the layers (vulkan_impl.h CloudsGpu), the light at each layer, the sky without them.
+struct Clouds
+{
+    float4 a[2];  // coverage, density, altitude km, scale km
+    float4 b[2];  // drift x km, drift z km
+    uint4 flags;  // seed 0, seed 1, enabled 0, enabled 1
+};
+[[vk::binding(10, 0)]] ConstantBuffer<Clouds> clouds;
+[[vk::binding(11, 0)]] RWStructuredBuffer<float4> cloud_light;  // [2i] sun, [2i + 1] sky, at layer i
+[[vk::binding(12, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> out_background;
+
+#include "clouds.hlsli"
 
 static const float kPi = 3.14159265358979;
 static const uint kTW = 256, kTH = 64, kMS = 32;  // atmosphere.h's table sizes
@@ -193,9 +205,13 @@ void CSMultiple(uint3 id : SV_DispatchThreadID)
     out_table[id.xy] = float4(div_safe(l2, max(1e-3, 1.0 - fms)), 1.0);
 }
 
-float3 sky_radiance(float3 view, float3 to_sun)
+float3 sky_radiance_from(float r, float3 view, float3 to_sun);
+
+float3 sky_radiance(float3 view, float3 to_sun) { return sky_radiance_from(bottom() + clamp(p.ground.w, 0.0, height_range() - 0.01), view, to_sun); }
+
+// The sky seen from radius `r` (the observer's height): atmosphere.cpp's sky_radiance.
+float3 sky_radiance_from(float r, float3 view, float3 to_sun)
 {
-    const float r = bottom() + clamp(p.ground.w, 0.0, height_range() - 0.01);
     const float mu = clamp(view.y, -1.0, 1.0);
     const bool ground = hits_ground(r, mu);
     const float kDistantLandKm = 20.0;  // atmosphere.cpp: below the horizon, distant land
@@ -270,6 +286,31 @@ float3 cube_direction(uint face, uint x, uint y, uint size)
 
 // ---------------------------------------------------------------- the sky and its pyramid
 
+CloudLayer cloud_layer(uint i)
+{
+    CloudLayer l;
+    l.coverage = clouds.a[i].x;
+    l.density = clouds.a[i].y;
+    l.altitude_km = clouds.a[i].z;
+    l.scale_km = clouds.a[i].w;
+    l.offset_km = clouds.b[i].xy;
+    l.seed = clouds.flags[i];
+    l.enabled = clouds.flags[2 + i] != 0;
+    return l;
+}
+
+// The light that reaches each cloud layer (part 4): the sun through the air above it, and the sky above it.
+[numthreads(2, 1, 1)]
+void CSCloudLight(uint3 id : SV_DispatchThreadID)
+{
+    const float h = clamp(clouds.a[id.x].z, 0.0, height_range() - 0.01);
+    const float3 to_sun = normalize(p.sun.xyz);
+    cloud_light[id.x * 2] = float4(transmittance(h, to_sun.y), 0.0);
+    cloud_light[id.x * 2 + 1] = float4(sky_radiance_from(bottom() + h, float3(0, 1, 0), to_sun), 0.0);
+}
+
+// The sky image: without clouds as the background (the sky pass draws sharp clouds over it), with them for
+// the environment's lighting (the pyramid, the cube, the irradiance), so an overcast sky lights the scene grey.
 [numthreads(8, 8, 1)]
 void CSSky(uint3 id : SV_DispatchThreadID)
 {
@@ -277,7 +318,21 @@ void CSSky(uint3 id : SV_DispatchThreadID)
     out_image.GetDimensions(w, h);
     if (id.x >= w || id.y >= h) return;
     const float3 d = equirect_direction((float(id.x) + 0.5) / w, (float(id.y) + 0.5) / h);
-    out_image[id.xy] = float4(sky_radiance(d, normalize(p.sun.xyz)), 1.0);
+    const float3 to_sun = normalize(p.sun.xyz);
+    const float3 clear = sky_radiance(d, to_sun);
+    out_background[id.xy] = float4(clear, 1.0);
+    float3 color = clear;
+    // The higher layer first (it's behind the lower one).
+    const uint first = clouds.a[1].z > clouds.a[0].z ? 1u : 0u;
+    [unroll] for (uint k = 0; k < 2; ++k)
+    {
+        const uint i = k == 0 ? first : 1u - first;
+        float alpha;
+        const float3 c = cloud_layer_shade(cloud_layer(i), float3(0.0, p.ground.w, 0.0), bottom(), d, 3.14159265 / float(h), to_sun, cloud_light[i * 2].rgb,
+                                           cloud_light[i * 2 + 1].rgb, alpha);
+        color = color * (1.0 - alpha) + c * alpha;
+    }
+    out_image[id.xy] = float4(color, 1.0);
 }
 
 // The next pyramid level: each texel the average of four (environment.cpp's Pyramid).

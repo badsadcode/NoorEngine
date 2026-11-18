@@ -107,6 +107,17 @@ Status Renderer::Impl::create_aerial_default() {
     return {};
 }
 
+void Renderer::Impl::write_cloud_light_descriptor(std::uint32_t frame_slot, VkBuffer buffer) {
+    VkDescriptorBufferInfo light_info{buffer, 0, VK_WHOLE_SIZE};
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = frame_sets[frame_slot];
+    write.dstBinding = 5;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pBufferInfo = &light_info;
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+}
+
 void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageView view, VkImageLayout layout) {
     VkDescriptorImageInfo image{aerial_default.sampler, view, layout};
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -120,20 +131,21 @@ void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageVi
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[5] = {
+    const VkDescriptorSetLayoutBinding bindings[6] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // environment cube
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // environment irradiance (SH9)
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // aerial perspective volume
+        {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // the clouds' light
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 5;
+    layout_info.bindingCount = 6;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
                                                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 3},
-                                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight}};
+                                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 2}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
     pool_info.poolSizeCount = 3;
@@ -151,6 +163,12 @@ Status Renderer::Impl::ensure_frame_uniforms() {
     irradiance_buffer = *irradiance;
     set_name(VK_OBJECT_TYPE_BUFFER, irradiance_buffer.buffer, "Environment irradiance (SH9)");
     if (auto s = create_aerial_default(); !s) return s;
+    auto cloud_light = create_buffer(4 * sizeof(math::Vec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, false);
+    if (!cloud_light) return std::unexpected(cloud_light.error());
+    cloud_light_default = *cloud_light;
+    std::memset(cloud_light_default.mapped, 0, 4 * sizeof(math::Vec4));
+    vmaFlushAllocation(allocator, cloud_light_default.allocation, 0, VK_WHOLE_SIZE);
+    set_name(VK_OBJECT_TYPE_BUFFER, cloud_light_default.buffer, "Cloud light (none)");
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         VkDescriptorBufferInfo sh_info{irradiance_buffer.buffer, 0, VK_WHOLE_SIZE};
         VkWriteDescriptorSet sh_write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
@@ -161,6 +179,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         sh_write.pBufferInfo = &sh_info;
         vkUpdateDescriptorSets(device, 1, &sh_write, 0, nullptr);
         write_aerial_descriptor(i, aerial_default.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        write_cloud_light_descriptor(i, cloud_light_default.buffer);
     }
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         auto buffer = create_buffer(sizeof(FrameUniforms), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, true, false);
@@ -245,6 +264,26 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     u.fog_albedo = {fog.albedo.x, fog.albedo.y, fog.albedo.z, 0.0f};
     const bool aerial = live_sky.active && live_sky.desc.aerial_distance_scale > 0.0f;
     u.aerial = {aerial ? 1.0f : 0.0f, kAerialFarKm, std::max(0.0f, live_sky.desc.aerial_distance_scale), 0.0f};
+    // Clouds (only with the live sky, which lights them): their drift after this much game time.
+    CloudsGpu clouds{};
+    if (live_sky.active) {
+        for (std::size_t i = 0; i < kCloudLayers; ++i) {
+            const CloudLayer& layer = frame.lighting.clouds[i];
+            if (!layer.enabled || layer.coverage <= 0.0f) continue;
+            const math::Vec2 drift = cloud_offset(layer, frame.lighting.time);
+            clouds.a[i] = {std::clamp(layer.coverage, 0.0f, 1.0f), std::max(0.0f, layer.density), std::max(0.05f, layer.altitude_km),
+                           std::max(0.05f, layer.scale_km)};
+            clouds.b[i] = {drift.x, drift.y, 0.0f, 0.0f};
+            clouds.flags[i] = layer.seed;
+            clouds.flags[2 + i] = 1u;
+        }
+        clouds.b[0].z = live_sky.desc.planet_radius_km;
+        clouds.b[0].w = std::max(0.0f, (live_sky.desc.altitude_m + eye.y) * 0.001f);
+    }
+    std::memcpy(u.cloud_a, clouds.a, sizeof(clouds.a));
+    std::memcpy(u.cloud_b, clouds.b, sizeof(clouds.b));
+    std::memcpy(u.cloud_flags, clouds.flags, sizeof(clouds.flags));
+    frame_clouds = clouds;
     frame_world_from_clip = u.world_from_clip;
     frame_eye = eye;
     GpuBuffer& ubo = frame_ubos[frame_index];
@@ -395,6 +434,7 @@ void Renderer::Impl::destroy_frame_resources() {
         if (aerial_default.view) vkDestroyImageView(device, aerial_default.view, nullptr);
         if (aerial_default.image) vmaDestroyImage(allocator, aerial_default.image, aerial_default.allocation);
         aerial_default = {};
+        destroy_buffer(cloud_light_default);
     }
     if (device == VK_NULL_HANDLE) return;
     for (auto& ubo : frame_ubos)

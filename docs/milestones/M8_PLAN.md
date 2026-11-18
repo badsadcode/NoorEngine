@@ -53,7 +53,7 @@ export mode).
 | 1 ✅ | **Atmosphere** (ADR-033): the sky from the sun's direction (Rayleigh, Mie, ozone; transmittance, multiple scattering and sky-view tables on the GPU), the sun's disc, the sun's light coloured by the air it crosses (red at sunset), `sky: "atmosphere"` on today's environment component | A golden render at noon and at sunset from the same scene; the sun's colour at the horizon matches the published reference within a tolerance; the sky costs under 0.3 ms at 1080p (measured) |
 | 2 ✅ | **Lighting from the live sky**: the cubemap and irradiance rebuilt on the GPU when the sun moves (spread over frames); `time_of_day` on the environment (sun direction from the hour, latitude optional) | Dragging the time from dawn to dusk relights the scene smoothly at 60 FPS (measured per frame); an object's colour under the GPU result matches the CPU path for the same sky within a tolerance |
 | 3 ✅ | **Fog and aerial perspective**: distance and height fog lit by the sun and sky, distant terrain fading into the atmosphere, per environment; applied to opaque and see-through surfaces | Hillside's far hills fade into the sky without a seam (golden); fog density and height change the picture as documented (unit tests of the fog maths) |
-| 4 | **Clouds (layered)**: one or two cloud layers from tileable noise (coverage, density, altitude, wind speed and direction), lit by the sun (bright edges, dark bases at sunset), moving over time; deterministic from a seed | The same seed and time give the same clouds (golden); overcast coverage dims the sun and softens shadows as documented; the clouds cost under 0.5 ms (measured) |
+| 4 ✅ | **Clouds (layered)**: one or two cloud layers from tileable noise (coverage, density, altitude, wind speed and direction), lit by the sun (bright edges, dark bases at sunset), moving over time; deterministic from a seed | The same seed and time give the same clouds (golden); overcast coverage dims the sun and softens shadows as documented; the clouds cost under 0.5 ms (measured) |
 | 5 | **Night and space**: moon (phase, light), stars (a deterministic star field), exposure for night that keeps silhouettes readable; `sky: "space"`: no scattering, a black sky with stars, **celestial bodies** (planets, moons, rings: textured spheres or discs at a direction and size, lit by the sun), several suns allowed | A night golden where the house and trees read against the sky; a space golden (a planet with a lit and a dark side, a second sun); the Alien World preset's look becomes possible (later) |
 | 6 | **`.noorenv` assets and presets**: environment assets with every setting, scenes referencing them (with overrides), six presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast), the editor's environment gallery (thumbnails, apply, duplicate, edit, reset) and inspector | Applying a preset changes sky, light, fog and exposure together (smoke test); duplicating a preset never changes the installed one; a custom environment saves, reopens and builds into a game identically (tests) |
 | 7 | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
@@ -83,6 +83,15 @@ itself, so the far ground meets the sky without a seam: golden `Hillside_Haze` (
 sample, written by `tools/samples/add_hillside_haze.py`). Fog maths unit-tested against numerical
 integration. One fix on the way: two scenes sharing a CSG model are now cooked once, and a model whose
 brushes differ between scenes under one entity id is refused instead of silently overwritten.
+
+## Part 4 result (2026-11-18)
+Done. Two thin cloud layers from deterministic noise, drifting with game time, lit by the sun and sky at their
+altitude (bright edges, darker bodies, red at sunset), drawn sharp in the sky pass, lighting the scene through
+the live sky (overcast lights it grey), shading the sun on the ground (drifting cloud shadows; overcast all but
+removes direct light). Goldens `Atmosphere_Clouds` and `Atmosphere_Overcast`; cloud maths unit-tested
+(determinism, coverage, wind, dimming). Cost: 26-28 µs a frame (budget 0.5 ms). Lighting follows drifting
+clouds in steps of 1% of their size, not every frame. The GPU timing tests now judge each run's fastest frame:
+on a working desktop the GPU idles in a low power state and medians swing 3-10x.
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to
