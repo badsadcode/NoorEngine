@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 16u
+#define NOOR_EDITOR_API_VERSION 17u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -132,6 +132,19 @@ NOOR_API const char* noor_doc_csg(noor_doc* doc);
    `.noor.json` manifest beside it (textures embedded, a collision node if the model has a collider).
    Returns {"path", "manifest", "warnings"}, or NULL (noor_last_error). */
 NOOR_API const char* noor_doc_export_csg(noor_doc* doc, const char* model_id, const char* glb_path);
+/* v17: sculpting a terrain (Milestone 6, part 6). command: {"terrain": entity id, "phase": "begin" |
+   "dab" | "end", "tool": "raise" | "lower" | "smooth" | "flatten", "radius" (m), "strength" (m/s;
+   smooth: fraction per second), "falloff" (0 hard .. 1 soft), "dabs": [{"point": [x, y, z] world,
+   "seconds"}]}. Brush settings are read at "begin". A stroke is one undo step; the first stroke on a
+   terrain makes its sculpt layer (Assets/Terrain/<name>.noorsculpt, the component's "sculpt"), which
+   is written when the scene is saved. Returns {"sculpt": asset id, "changed": bool} or NULL.
+   noor_viewport_set_brush shows the brush circle and turns left-drags on the terrain into "stroke"
+   events: {"type": "stroke", "phase": "begin" | "dab" | "end", "terrain": id, "point": [x, y, z],
+   "seconds"} (no "point" when the pointer is off the terrain). */
+NOOR_API const char* noor_doc_sculpt(noor_doc* doc, const char* command_json);
+/* {"terrain": entity id | null (off), "radius": metres}. While set, the gizmo and click-to-select
+   are off in the viewport. */
+NOOR_API void noor_viewport_set_brush(noor_viewport* viewport, const char* brush_json);
 /* v13: new import settings for a texture (the "settings" object above; missing keys get defaults).
    Written to its .noormeta; viewports reload the texture. Returns 1 or 0. */
 NOOR_API int32_t noor_doc_set_texture_settings(noor_doc* doc, const char* texture_path, const char* settings_json);

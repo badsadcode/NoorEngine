@@ -32,6 +32,9 @@ namespace noor::game {
 struct WorldOptions {
     const void* script_host = nullptr;  // noor_rt_host* for C# scripts; without one they report it
     bool audio_device = true;           // false: sounds are mixed silently (tests)
+    // The editor's live heights for a terrain (its sculpting may not be saved yet), from its component
+    // and settings; null (or no callback): generated from the settings and files, like a game.
+    std::function<std::shared_ptr<const terrain::Heights>(const asset::Json& component, const terrain::Settings& settings)> terrain_heights;
 };
 
 // The playing world for `scene` (prefabs are expanded here): Lua and C# scripts, physics, audio and
@@ -84,6 +87,11 @@ struct SceneView {
         math::Vec3 position;  // the terrain's centre (rotation and scale are ignored)
         terrain::Settings settings;
         std::filesystem::path material_file;  // empty: the default material
+        std::optional<Guid> sculpt;           // its sculpt layer asset, if it has one
+        // The editor: live heights (sculpting not saved yet) and a version per tile (row by row) that
+        // changes when that tile's heights do. Null: generate from the settings.
+        std::shared_ptr<const terrain::Heights> heights;
+        std::vector<std::uint64_t> tile_versions;
     };
     std::vector<Terrain> terrains;
     std::vector<Primitive> primitives;

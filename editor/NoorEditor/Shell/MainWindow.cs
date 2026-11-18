@@ -741,6 +741,11 @@ public sealed class MainWindow : Window
                 FrameEntity(sid);
             return;
         }
+        if (asset.Importer == "terrain_sculpt")
+        {
+            _ = Dialogs.Ask(this, "A sculpt layer", "This file holds a terrain's hand-sculpted edits. The terrain that made it uses it; it isn't added to scenes by itself.", "OK");
+            return;
+        }
         if (Doc.AddAsset(asset, new Vec3(0, 0, 0)) && Doc.SelectedId is { } id) FrameEntity(id);
     }
 

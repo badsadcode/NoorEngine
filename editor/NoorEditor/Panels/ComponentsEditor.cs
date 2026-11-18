@@ -44,6 +44,62 @@ public sealed class ComponentsEditor : StackPanel
         if (editable) Children.Add(AddComponentButton());
     }
 
+    // ---- Terrain sculpting (Milestone 6, part 6) ----
+
+    private Control SculptEditor()
+    {
+        var brush = _doc.Brush;
+        var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 6) };
+        var toggle = new Avalonia.Controls.Primitives.ToggleButton
+        {
+            Content = _doc.Sculpting ? "Sculpting: drag on the terrain" : "Sculpt", IsChecked = _doc.Sculpting,
+            Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        ToolTip.SetTip(toggle, "Left-drag on the terrain to sculpt it (Q/W/E/R put the brush down)");
+        toggle.Click += (_, _) => _doc.SetSculpting(toggle.IsChecked == true);
+        panel.Children.Add(toggle);
+
+        var tools = new Avalonia.Controls.Primitives.UniformGrid { Rows = 1, Columns = EditorDocument.SculptTools.Length };
+        foreach (var tool in EditorDocument.SculptTools)
+        {
+            var button = new Avalonia.Controls.Primitives.ToggleButton { Content = char.ToUpper(tool[0]) + tool[1..], IsChecked = brush.Tool == tool, Classes = { "tool" },
+                                            HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(1, 0) };
+            ToolTip.SetTip(button, tool switch
+            {
+                "raise" => "Push the ground up (strength: metres per second at the centre)",
+                "lower" => "Push the ground down",
+                "smooth" => "Even out bumps (strength: how fast)",
+                _ => "Level the ground to the height where the stroke starts",
+            });
+            button.Click += (_, _) => { _doc.SetBrush(_doc.Brush with { Tool = tool }); _doc.SetSculpting(true); };
+            tools.Children.Add(button);
+        }
+        panel.Children.Add(tools);
+
+        Control Row(string label, double value, Func<double, EditorDocument.SculptBrush> make, string tip)
+        {
+            var text = new TextBlock { Text = label, FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center };
+            var box = NumberBox(value, x => _doc.SetBrush(make(x)));
+            ToolTip.SetTip(box, tip);
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*") };
+            Grid.SetColumn(box, 1);
+            grid.Children.Add(text);
+            grid.Children.Add(box);
+            return grid;
+        }
+        panel.Children.Add(Row("Radius (m)", brush.Radius, x => _doc.Brush with { Radius = Math.Clamp(x, 0.5, 200) }, "How big the brush is"));
+        panel.Children.Add(Row("Strength", brush.Strength, x => _doc.Brush with { Strength = Math.Clamp(x, 0.05, 100) },
+                               "Raise/Lower/Flatten: metres per second at the centre. Smooth: how fast (1 = all the way in a second)"));
+        panel.Children.Add(Row("Falloff", brush.Falloff, x => _doc.Brush with { Falloff = Math.Clamp(x, 0, 1) }, "0: a hard edge. 1: soft from the centre out"));
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Each stroke is one undo step. Sculpting sits on top of the generated hills, so changing the seed keeps it. Save writes it to Assets/Terrain.",
+            FontSize = 10, TextWrapping = TextWrapping.Wrap, Classes = { "muted" },
+        });
+        panel.Children.Add(new Border { Height = 1, Background = NoorTheme.Brush(NoorTheme.Border), Margin = new Thickness(0, 4) });
+        return panel;
+    }
+
     // ---- CSG brush faces (Milestone 6, part 3) ----
 
     private static readonly HashSet<int> s_expandedFaces = [];
@@ -369,6 +425,7 @@ public sealed class ComponentsEditor : StackPanel
         }
         else if (value is JsonObject obj && editable)
         {
+            if (type == "terrain") body.Children.Add(SculptEditor());
             foreach (var (field, fieldValue) in obj)
                 if (!(type == "brush" && field == "faces")) body.Children.Add(FieldRow(type, field, field, fieldValue));
             if (type == "brush") body.Children.Add(FacesEditor(obj));
@@ -445,6 +502,16 @@ public sealed class ComponentsEditor : StackPanel
                                            HorizontalAlignment = HorizontalAlignment.Stretch };
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
                 editor = combo;
+                break;
+            }
+            case var _ when type == "terrain" && field == "sculpt":
+            {
+                // The sculpt layer: made by the first stroke, written on Save. Not for typing into.
+                var id = (value as JsonValue)?.GetValue<string>();
+                var path = id == null ? null : _doc.Assets.FirstOrDefault(a => a.Guid == id)?.Path;
+                editor = new TextBlock { Text = path ?? (id == null ? "(none)" : "(not saved yet)"), FontSize = 11, Classes = { "muted" },
+                                         VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+                ToolTip.SetTip(editor, "Hand-sculpted heights, added on top of the generated base (a new seed keeps them)");
                 break;
             }
             case var _ when type == "terrain" && field == "heightmap" && (value is null || value is JsonValue hv && hv.TryGetValue<string>(out _)):

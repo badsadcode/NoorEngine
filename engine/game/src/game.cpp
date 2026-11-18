@@ -64,10 +64,11 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         return t;
     };
     // Terrains collide as height fields, generated from their settings (shared with the renderer).
-    physics_options.terrain_tiles = [&project, &registry](const Json& component) {
+    physics_options.terrain_tiles = [&project, &registry, live = options.terrain_heights](const Json& component) {
         std::vector<physics::HeightTile> tiles;
         const auto settings = terrain::Settings::from_json(component, file_resolver(registry_asset_path(project, registry)));
-        auto heights = terrain::Heights::shared(settings);
+        Result<std::shared_ptr<const terrain::Heights>> heights = live ? live(component, settings) : nullptr;
+        if (!*heights) heights = terrain::Heights::shared(settings);
         if (!heights) {
             NOOR_LOG_ERROR("Game", "Terrain: {}", heights.error().describe());
             return tiles;
@@ -249,6 +250,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             SceneView::Terrain terrain{e.id, world.transform_point({0, 0, 0}), terrain::Settings::from_json(t, file_resolver(asset_path)), {}};
             if (const auto mat = asset::guid_field(t, "material"); mat && asset_path)
                 if (auto file = asset_path(*mat)) terrain.material_file = std::move(*file);
+        terrain.sculpt = asset::guid_field(t, "sculpt");
             view.terrains.push_back(std::move(terrain));
         }
         if (e.has("csg_model")) {

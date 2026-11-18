@@ -10,6 +10,7 @@
 #include "noor/asset/json.h"
 #include "noor/foundation/guid.h"
 #include "noor/scene/prefab.h"
+#include "noor/terrain/terrain.h"
 
 #include <chrono>
 #include <filesystem>
@@ -262,4 +263,93 @@ TEST_CASE("document api: undo edge cases") {
         CHECK(t.scene()["can_undo"] == false);
         CHECK(find_entity(t.scene(), "F"));
     }
+}
+
+// Milestone 6, part 6: sculpting through the editor API, exactly as the viewport's strokes arrive.
+TEST_CASE("document api: sculpting raises a hill, undoes as one step, saves a layer that outlives a new seed") {
+    TempDoc t;
+    REQUIRE(noor_doc_new_scene(t.doc, "Scenes/Sculpt.noorscene", "Sculpt") == 1);
+    const Json flat{{"tiles", {2, 2}}, {"base", "flat"}, {"flat_height", 2}, {"collision", true}};
+    REQUIRE(t.exec({{"op", "create"}, {"name", "Hill"}, {"transform", {{"position", {10, 0, 0}}}}, {"components", {{"terrain", flat}}}}));
+    const std::string id = (*find_entity(t.scene(), "Hill"))["id"];
+    auto sculpt = [&](const char* phase, double seconds, const char* tool = "raise") {
+        const Json cmd{{"terrain", id}, {"phase", phase}, {"tool", tool}, {"radius", 5}, {"strength", 4}, {"falloff", 0.5},
+                       {"dabs", Json::array({{{"point", {10, 2, 0}}, {"seconds", seconds}}})}};
+        const char* r = noor_doc_sculpt(t.doc, cmd.dump().c_str());
+        INFO(noor_last_error());
+        REQUIRE(r != nullptr);
+        return Json::parse(r);
+    };
+    // Where heights come from after a save: the component's settings with its files (like a game).
+    auto saved_heights = [&]() {
+        const Json comp = (*find_entity(t.scene(), "Hill"))["components"]["terrain"];
+        const Json assets = json(noor_doc_assets(t.doc, 1));
+        const auto settings = noor::terrain::Settings::from_json(comp, [&](const noor::Guid& g) -> std::optional<stdfs::path> {
+            for (const auto& a : assets)
+                if (a["guid"] == g.to_string()) return t.dir / a["path"].get<std::string>();
+            return std::nullopt;
+        });
+        auto h = noor::terrain::Heights::build(settings);
+        REQUIRE(h);
+        return *h;
+    };
+
+    // One stroke: begin, two dabs, end (1 s at 4 m/s at the centre).
+    const Json first = sculpt("begin", 0.25);
+    sculpt("dab", 0.25);
+    sculpt("dab", 0.25);
+    sculpt("end", 0.25);
+    Json s = t.scene();
+    const Json comp = (*find_entity(s, "Hill"))["components"]["terrain"];
+    REQUIRE(comp.contains("sculpt"));
+    CHECK(comp["sculpt"] == first["sculpt"]);
+    CHECK(stdfs::exists(t.dir / "Assets" / "Terrain" / "Hill.noorsculpt"));
+    CHECK(s["undo_label"] == "Sculpt: Raise");
+    CHECK(s["modified"] == true);
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    CHECK(saved_heights().height(0, 0) == doctest::Approx(6.0f));  // 2 m flat + 4 m
+
+    // Undo takes the whole stroke back (and the layer it made); redo brings it back.
+    REQUIRE(noor_doc_undo(t.doc) == 1);
+    CHECK_FALSE((*find_entity(t.scene(), "Hill"))["components"]["terrain"].contains("sculpt"));
+    REQUIRE(noor_doc_redo(t.doc) == 1);
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    CHECK(saved_heights().height(0, 0) == doctest::Approx(6.0f));
+
+    // A new base (noise instead of flat): the hand-made 4 m sits on top of the new hills.
+    Json noisy = (*find_entity(t.scene(), "Hill"))["components"]["terrain"];
+    noisy["base"] = "noise";
+    noisy["seed"] = 12;
+    noisy["height"] = 20;
+    REQUIRE(t.exec({{"op", "set_component"}, {"entity", id}, {"type", "terrain"}, {"value", noisy}}));
+    REQUIRE(noor_doc_save_scene(t.doc) == 1);
+    {
+        Json base_only = noisy;
+        base_only.erase("sculpt");
+        auto base = noor::terrain::Heights::build(noor::terrain::Settings::from_json(base_only, {}));
+        REQUIRE(base);
+        CHECK(saved_heights().height(0, 0) - base->height(0, 0) == doctest::Approx(4.0f));
+        CHECK(saved_heights().height(30, 30) == doctest::Approx(base->height(30, 30)));  // untouched away from the hill
+    }
+
+    // Play collides with sculpting that isn't saved yet: back to the flat base, 4 m more on the hill
+    // (unsaved), and a ball dropped on top.
+    Json flat_again = noisy;
+    flat_again["base"] = "flat";
+    REQUIRE(t.exec({{"op", "set_component"}, {"entity", id}, {"type", "terrain"}, {"value", flat_again}}));
+    sculpt("begin", 0.5);
+    sculpt("end", 0.5);
+    REQUIRE(t.exec({{"op", "create"}, {"name", "Ball"}, {"transform", {{"position", {10, 20, 0}}}},
+                    {"components", {{"rigidbody", {{"type", "dynamic"}, {"mass", 1}}}, {"collider", {{"shape", "sphere"}, {"radius", 0.5}}}}}}));
+    REQUIRE(noor_doc_play(t.doc) == 1);
+    for (int i = 0; i < 40; ++i) noor_doc_tick(t.doc, 0.1, nullptr);
+    const double ball_y = (*find_entity(t.scene(), "Ball"))["transform"]["position"][1].get<double>();
+    noor_doc_stop(t.doc);
+    // 2 m + 6 m of hill (dabs count at most 0.25 s each, so this stroke added 2 m) + the ball's radius.
+    // The saved layer alone would give 6.5 m: Play used the unsaved sculpting.
+    CHECK(ball_y == doctest::Approx(8.5).epsilon(0.02));
+
+    // Bad input.
+    CHECK(noor_doc_sculpt(t.doc, R"({"terrain": "not-an-id", "phase": "begin"})") == nullptr);
+    CHECK(noor_doc_sculpt(t.doc, (Json{{"terrain", id}, {"phase", "begin"}, {"tool", "melt"}}).dump().c_str()) == nullptr);
 }

@@ -96,14 +96,18 @@ Settings Settings::from_json(const Json& c, const asset::AssetFileResolver& reso
     s.flat_height = number(c, "flat_height", 0.0f);
     if (const auto id = asset::guid_field(c, "heightmap"); id && resolve)
         if (auto file = resolve(*id)) s.heightmap = *file;
+    if (const auto id = asset::guid_field(c, "sculpt"); id && resolve)
+        if (auto file = resolve(*id)) s.sculpt = *file;
     return s;
 }
 
 std::string Settings::key() const {
     std::error_code ec;
     const auto time = heightmap.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(heightmap, ec);
-    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height, scale,
-                       octaves, heightmap.generic_string(), time.time_since_epoch().count(), min_height, max_height, flat_height, 0);
+    const auto sculpt_time = sculpt.empty() ? stdfs::file_time_type{} : stdfs::last_write_time(sculpt, ec);
+    return std::format("t1 {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", tiles_x, tiles_z, cell_size, static_cast<int>(base), seed, height, scale,
+                       octaves, heightmap.generic_string(), time.time_since_epoch().count(), min_height, max_height, flat_height, 0,
+                       sculpt.generic_string(), sculpt_time.time_since_epoch().count());
 }
 
 Result<Heights> Heights::build(const Settings& s) {
@@ -139,7 +143,153 @@ Result<Heights> Heights::build(const Settings& s) {
             }
         stbi_image_free(p);
     }
+    if (!s.sculpt.empty()) {
+        auto layer = SculptLayer::load(s.sculpt);
+        if (!layer) return std::unexpected(layer.error());
+        layer->resize(s.tiles_x, s.tiles_z);  // a terrain that changed size keeps the tiles it still has
+        return compose(out, *layer);
+    }
     return out;
+}
+
+Heights Heights::compose(const Heights& base, const SculptLayer& layer) {
+    Heights out = base;
+    if (!layer.empty()) out.recompose(base, layer, {0, 0, base.sx_ - 1, base.sz_ - 1});
+    return out;
+}
+
+void Heights::recompose(const Heights& base, const SculptLayer& layer, const SampleRect& r) {
+    for (std::uint32_t z = r.z0; z <= std::min(r.z1, sz_ - 1); ++z)
+        for (std::uint32_t x = r.x0; x <= std::min(r.x1, sx_ - 1); ++x)
+            h_[static_cast<std::size_t>(z) * sx_ + x] = base.at(x, z) + layer.offset(x, z);
+}
+
+// ---- Sculpt layer ----
+
+float SculptLayer::offset(std::uint32_t x, std::uint32_t z) const noexcept {
+    // Every tile holding a sample has the same value: read the one on its low side (inside the terrain).
+    if (tiles_x_ == 0 || tiles_z_ == 0) return 0.0f;
+    const std::uint32_t tx = std::min(x / kTileCells, tiles_x_ - 1), tz = std::min(z / kTileCells, tiles_z_ - 1);
+    const auto it = tiles_.find({tx, tz});
+    if (it == tiles_.end()) return 0.0f;
+    const std::uint32_t lx = x - tx * kTileCells, lz = z - tz * kTileCells;
+    if (lx >= kTileSamples || lz >= kTileSamples) return 0.0f;
+    return it->second[static_cast<std::size_t>(lz) * kTileSamples + lx];
+}
+
+void SculptLayer::set(std::uint32_t x, std::uint32_t z, float value) {
+    if (tiles_x_ == 0 || tiles_z_ == 0 || x > tiles_x_ * kTileCells || z > tiles_z_ * kTileCells) return;
+    // A sample on a tile edge (or corner) is in up to four tiles: keep them all equal.
+    const std::uint32_t tx_hi = std::min(x / kTileCells, tiles_x_ - 1), tz_hi = std::min(z / kTileCells, tiles_z_ - 1);
+    const std::uint32_t tx_lo = x % kTileCells == 0 && x > 0 ? x / kTileCells - 1 : tx_hi;
+    const std::uint32_t tz_lo = z % kTileCells == 0 && z > 0 ? z / kTileCells - 1 : tz_hi;
+    for (std::uint32_t tz = tz_lo; tz <= tz_hi; ++tz)
+        for (std::uint32_t tx = tx_lo; tx <= tx_hi; ++tx) {
+            auto it = tiles_.find({tx, tz});
+            if (it == tiles_.end()) {
+                if (value == 0.0f) continue;  // nothing to store
+                it = tiles_.emplace(std::pair{tx, tz}, std::vector<float>(static_cast<std::size_t>(kTileSamples) * kTileSamples, 0.0f)).first;
+            }
+            it->second[static_cast<std::size_t>(z - tz * kTileCells) * kTileSamples + (x - tx * kTileCells)] = value;
+        }
+}
+
+std::uint64_t SculptLayer::hash() const noexcept {
+    std::uint64_t h = 1469598103934665603ull;
+    auto add = [&](std::uint32_t v) {
+        h ^= v;
+        h *= 1099511628211ull;
+    };
+    for (const auto& [key, values] : tiles_) {
+        add(key.first);
+        add(key.second);
+        for (const float v : values) add(std::bit_cast<std::uint32_t>(v));
+    }
+    return h;
+}
+
+namespace {
+constexpr char kSculptMagic[8] = {'N', 'S', 'C', 'U', 'L', 'P', 'T', '1'};
+void put_u32(std::string& out, std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) out.push_back(static_cast<char>((v >> (8 * i)) & 0xFF));
+}
+std::uint32_t get_u32(const std::string& in, std::size_t at) {
+    std::uint32_t v = 0;
+    for (std::size_t i = 0; i < 4; ++i) v |= static_cast<std::uint32_t>(static_cast<unsigned char>(in[at + i])) << (8 * i);
+    return v;
+}
+} // namespace
+
+Status SculptLayer::save(const stdfs::path& file) const {
+    std::string out(kSculptMagic, sizeof kSculptMagic);
+    put_u32(out, 1);
+    put_u32(out, tiles_x_);
+    put_u32(out, tiles_z_);
+    put_u32(out, static_cast<std::uint32_t>(tiles_.size()));
+    for (const auto& [key, values] : tiles_) {
+        put_u32(out, key.first);
+        put_u32(out, key.second);
+        for (const float v : values) put_u32(out, std::bit_cast<std::uint32_t>(v));
+    }
+    return fs::write_file_atomic(file, out, false);
+}
+
+Result<SculptLayer> SculptLayer::load(const stdfs::path& file) {
+    auto bytes = fs::read_file(file, 1ull << 30);
+    if (!bytes) return std::unexpected(bytes.error());
+    const std::string& in = *bytes;
+    const auto bad = [&](std::string_view why) {
+        return fail(ErrorCode::ParseError, std::format("sculpt layer {}: {}", file.filename().string(), why));
+    };
+    if (in.size() < 24 || in.compare(0, 8, kSculptMagic, 8) != 0) return bad("not a .noorsculpt file");
+    if (get_u32(in, 8) != 1) return bad(std::format("version {} is newer than this engine reads", get_u32(in, 8)));
+    SculptLayer layer(get_u32(in, 12), get_u32(in, 16));
+    const std::size_t count = get_u32(in, 20);
+    constexpr std::size_t kTileBytes = 8 + static_cast<std::size_t>(kTileSamples) * kTileSamples * 4;
+    if (layer.tiles_x_ == 0 || layer.tiles_z_ == 0 || layer.tiles_x_ > 64 || layer.tiles_z_ > 64 || in.size() != 24 + count * kTileBytes)
+        return bad("damaged (its size doesn't match its header)");
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::size_t at = 24 + i * kTileBytes;
+        std::vector<float> values(static_cast<std::size_t>(kTileSamples) * kTileSamples);
+        for (std::size_t k = 0; k < values.size(); ++k) values[k] = std::bit_cast<float>(get_u32(in, at + 8 + k * 4));
+        layer.tiles_[{get_u32(in, at), get_u32(in, at + 4)}] = std::move(values);
+    }
+    return layer;
+}
+
+std::optional<float> raycast(const Heights& h, math::Vec3 origin, math::Vec3 dir, float max_distance) {
+    // Clip the ray to the terrain's rectangle (x and z), then march.
+    const math::Vec2 o = h.origin();
+    float t_in = 0.0f, t_out = max_distance;
+    auto slab = [&](float p, float d, float lo, float hi) {
+        if (std::fabs(d) < 1e-9f) return p >= lo && p <= hi;
+        float a = (lo - p) / d, b = (hi - p) / d;
+        if (a > b) std::swap(a, b);
+        t_in = std::max(t_in, a);
+        t_out = std::min(t_out, b);
+        return t_in <= t_out;
+    };
+    if (!slab(origin.x, dir.x, o.x, -o.x) || !slab(origin.z, dir.z, o.y, -o.y)) return std::nullopt;
+    auto above = [&](float t) {
+        const math::Vec3 p = origin + dir * t;
+        return p.y - h.height(p.x, p.z);
+    };
+    const float step = h.cell_size() * 0.5f;
+    float prev_t = t_in;
+    if (above(t_in) < 0.0f) return std::nullopt;  // starts under the ground
+    for (int i = 1;; ++i) {
+        const float t = std::min(t_in + step * static_cast<float>(i), t_out);
+        if (above(t) <= 0.0f) {
+            float a = prev_t, b = t;
+            for (int k = 0; k < 20; ++k) {
+                const float m = 0.5f * (a + b);
+                (above(m) > 0.0f ? a : b) = m;
+            }
+            return 0.5f * (a + b);
+        }
+        if (t >= t_out) return std::nullopt;
+        prev_t = t;
+    }
 }
 
 Result<std::shared_ptr<const Heights>> Heights::shared(const Settings& s) {

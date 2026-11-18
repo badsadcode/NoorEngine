@@ -94,6 +94,7 @@ public sealed class InspectorPanel : ScrollViewer
         base.OnAttachedToVisualTree(e);
         _doc.SelectionChanged += Load;
         _doc.SceneChanged += Load;
+        _doc.SculptChanged += Load;
         Load();
     }
 
@@ -102,6 +103,7 @@ public sealed class InspectorPanel : ScrollViewer
         base.OnDetachedFromVisualTree(e);
         _doc.SelectionChanged -= Load;
         _doc.SceneChanged -= Load;
+        _doc.SculptChanged -= Load;
     }
 
     // ---- Used by the editor smoke test: the same path a user's typing takes. ----

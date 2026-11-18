@@ -107,9 +107,16 @@ Status Document::play() {
     if (auto s = require_scene(); !s) return s;
     if (world_) return {};
     cook_csg();  // Play loads cooked CSG models, like a game
+    finish_stroke();
     game::WorldOptions options;
     options.script_host = script_host_;
     options.audio_device = audio_device_;
+    // Terrains collide with what is being sculpted, saved or not.
+    options.terrain_heights = [this](const Json& component, const terrain::Settings& settings) -> std::shared_ptr<const terrain::Heights> {
+        const auto id = asset::guid_field(component, "sculpt");
+        auto edit = id ? terrain_edit(*id, settings) : nullptr;
+        return edit ? edit->snapshot() : nullptr;
+    };
     auto world = game::make_world(project_, registry_, prefabs_, *scene_, options);
     if (!world) return std::unexpected(world.error());
     world_ = std::move(*world);
@@ -296,6 +303,8 @@ Status Document::open_scene(std::string_view relative) {
     scene_ = std::move(*s);
     scene_file_ = *path;
     history_.clear();
+    stroke_.reset();
+    terrain_edits_.clear();  // unsaved sculpting goes with the unsaved scene
     // A scene that was just upgraded differs from its file: it should save as modified.
     if (scene_->migrations_applied.empty()) history_.mark_saved();
     changed();
@@ -316,7 +325,9 @@ Status Document::new_scene(std::string_view relative, std::string_view name) {
 
 Status Document::save_scene() {
     if (auto s = require_scene(); !s) return s;
+    finish_stroke();
     if (auto s = scene_->save(scene_file_); !s) return s;
+    save_sculpt();
     cook_csg();  // games (noor_player on the project) load what was saved
     scene_->migrations_applied.clear();
     history_.mark_saved();
@@ -391,6 +402,7 @@ Status Document::execute(const Json& command) {
     }
     const std::string op = command["op"];
     bool applied = false;
+    finish_stroke();
 
     if (op == "begin") {
         history_.begin_transaction(command.value("label", std::string("Edit")));
@@ -527,12 +539,14 @@ Status Document::add_asset(const Json& command) {
 }
 
 bool Document::undo() {
+    finish_stroke();
     if (!scene_ || world_ || !history_.undo(*scene_)) return false;
     changed();
     return true;
 }
 
 bool Document::redo() {
+    finish_stroke();
     if (!scene_ || world_ || !history_.redo(*scene_)) return false;
     changed();
     return true;
@@ -579,6 +593,14 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr);
     snap->primitives = std::move(view.primitives);
     snap->terrains = std::move(view.terrains);
+    // Sculpted terrains: the live heights (what is being sculpted, saved or not).
+    for (auto& t : snap->terrains) {
+        if (!t.sculpt) continue;
+        if (auto edit = terrain_edit(*t.sculpt, t.settings)) {
+            t.heights = edit->snapshot();
+            t.tile_versions = edit->tile_versions;
+        }
+    }
     snap->lighting = view.lighting;
     snap->environment = view.environment;
     for (const auto& lm : view.light_markers) snap->markers.push_back({math::translation(lm.position), lm.entity, lm.color});
@@ -765,6 +787,238 @@ Json Document::csg_info() const {
                        {"warnings", mesh->warnings}});
     }
     return out;
+}
+
+} // namespace noor::editor
+
+// ---- Terrain sculpting (Milestone 6, part 6) ----
+
+namespace noor::editor {
+
+namespace {
+
+// The tiles whose meshes change when the samples in `r` change (normals reach one sample further).
+void for_tiles(const terrain::SampleRect& r, std::uint32_t tiles_x, std::uint32_t tiles_z, auto&& fn) {
+    const std::uint32_t xa = r.x0 > 0 ? r.x0 - 1 : 0, za = r.z0 > 0 ? r.z0 - 1 : 0;
+    const std::uint32_t xb = r.x1 + 1, zb = r.z1 + 1;
+    const std::uint32_t tx0 = xa > 0 ? (xa - 1) / terrain::kTileCells : 0, tz0 = za > 0 ? (za - 1) / terrain::kTileCells : 0;
+    const std::uint32_t tx1 = std::min(xb / terrain::kTileCells, tiles_x - 1), tz1 = std::min(zb / terrain::kTileCells, tiles_z - 1);
+    for (std::uint32_t tz = tz0; tz <= tz1; ++tz)
+        for (std::uint32_t tx = tx0; tx <= tx1; ++tx) fn(tx, tz);
+}
+
+// One sculpt stroke as an undo step: the offsets of a rectangle before and after.
+class SculptCommand final : public scene::Command {
+public:
+    SculptCommand(std::shared_ptr<TerrainEdit> edit, terrain::SampleRect rect, std::vector<float> before, std::vector<float> after, std::string label)
+        : edit_(std::move(edit)), rect_(rect), before_(std::move(before)), after_(std::move(after)), label_(std::move(label)) {}
+    [[nodiscard]] std::string label() const override { return label_; }
+    bool apply(scene::Scene&) override {
+        edit_->write(rect_, after_);
+        return true;
+    }
+    void revert(scene::Scene&) override { edit_->write(rect_, before_); }
+
+private:
+    std::shared_ptr<TerrainEdit> edit_;
+    terrain::SampleRect rect_;
+    std::vector<float> before_, after_;
+    std::string label_;
+};
+
+std::string safe_file_name(std::string name) {
+    for (char& ch : name)
+        if (std::string_view("<>:\"/\\|?*").find(ch) != std::string_view::npos || static_cast<unsigned char>(ch) < 32) ch = '_';
+    while (!name.empty() && (name.back() == ' ' || name.back() == '.')) name.pop_back();
+    return name.empty() ? std::string("Terrain") : name;
+}
+
+} // namespace
+
+void TerrainEdit::touched(const terrain::SampleRect& rect) {
+    current->recompose(*base, layer, rect);
+    ++revision;
+    for_tiles(rect, current->tiles_x(), current->tiles_z(), [&](std::uint32_t tx, std::uint32_t tz) {
+        tile_versions[static_cast<std::size_t>(tz) * current->tiles_x() + tx] = revision;
+    });
+}
+
+void TerrainEdit::write(const terrain::SampleRect& rect, const std::vector<float>& offsets) {
+    std::size_t i = 0;
+    for (std::uint32_t z = rect.z0; z <= rect.z1; ++z)
+        for (std::uint32_t x = rect.x0; x <= rect.x1; ++x) layer.set(x, z, offsets[i++]);
+    touched(rect);
+    dirty = true;
+}
+
+std::shared_ptr<const terrain::Heights> TerrainEdit::snapshot() {
+    if (published_revision != revision || !published) {
+        published = std::make_shared<const terrain::Heights>(*current);
+        published_revision = revision;
+    }
+    return published;
+}
+
+std::shared_ptr<TerrainEdit> Document::terrain_edit(const Guid& asset, const terrain::Settings& settings) {
+    auto& slot = terrain_edits_[asset];
+    if (!slot) {
+        auto edit = std::make_shared<TerrainEdit>();
+        edit->asset = asset;
+        if (const auto* rec = registry_.find(asset))
+            if (auto file = project_.resolve(rec->path)) edit->file = *file;
+        if (edit->file.empty()) {
+            NOOR_LOG_WARN("Editor", "Terrain: its sculpt layer {} isn't in the project", asset.to_string());
+            terrain_edits_.erase(asset);
+            return nullptr;
+        }
+        if (auto layer = terrain::SculptLayer::load(edit->file)) {
+            edit->layer = std::move(*layer);
+        } else {
+            NOOR_LOG_ERROR("Editor", "Terrain: {} (starting from an empty layer; saving will replace it)", layer.error().describe());
+            edit->layer = terrain::SculptLayer(settings.tiles_x, settings.tiles_z);
+        }
+        slot = std::move(edit);
+    }
+    TerrainEdit& e = *slot;
+    e.layer.resize(settings.tiles_x, settings.tiles_z);
+    const auto base_settings = settings.base_only();
+    if (auto key = base_settings.key(); key != e.base_key || !e.current) {
+        auto base = terrain::Heights::shared(base_settings);
+        if (!base) {
+            NOOR_LOG_WARN("Editor", "Terrain: {}", base.error().describe());
+            return nullptr;
+        }
+        // A new base (another seed, size or heightmap): the same offsets on top of it.
+        e.base = *base;
+        e.current = std::make_shared<terrain::Heights>(terrain::Heights::compose(*e.base, e.layer));
+        e.base_key = std::move(key);
+        ++e.revision;
+        e.tile_versions.assign(static_cast<std::size_t>(settings.tiles_x) * settings.tiles_z, e.revision);
+    }
+    return slot;
+}
+
+void Document::save_sculpt() {
+    for (auto& [id, edit] : terrain_edits_) {
+        if (!edit->dirty) continue;
+        if (auto s = edit->layer.save(edit->file); !s) {
+            NOOR_LOG_ERROR("Editor", "Terrain: can't save {}: {}", edit->file.filename().string(), s.error().describe());
+            continue;
+        }
+        edit->dirty = false;
+    }
+}
+
+void Document::apply_dabs(const Json& dabs) {
+    if (!stroke_ || !dabs.is_array()) return;
+    Stroke& s = *stroke_;
+    for (const auto& d : dabs) {
+        float p[3];
+        if (!d.is_object() || !d.contains("point") || !read_vec(d["point"], 3, p)) continue;
+        const float seconds = std::clamp(json_float(d, "seconds", 0.0f), 0.0f, 0.25f);  // a stall doesn't make a mountain
+        const math::Vec2 local{p[0] - s.position.x, p[2] - s.position.z};
+        if (s.first_dab) {
+            s.brush.flatten_height = s.edit->current->height(local.x, local.y);  // Flatten levels to where it began
+            s.first_dab = false;
+        }
+        if (auto rect = terrain_edit::apply(*s.edit->current, s.edit->layer, s.brush, local, seconds)) {
+            s.edit->touched(*rect);
+            s.edit->dirty = true;
+            if (s.changed) s.changed->include(*rect);
+            else s.changed = *rect;
+        }
+    }
+}
+
+void Document::finish_stroke() {
+    if (!stroke_) return;
+    Stroke s = std::move(*stroke_);
+    stroke_.reset();
+    if (s.changed && scene_) {
+        const auto& r = *s.changed;
+        std::vector<float> before, after;
+        before.reserve(r.count());
+        after.reserve(r.count());
+        for (std::uint32_t z = r.z0; z <= r.z1; ++z)
+            for (std::uint32_t x = r.x0; x <= r.x1; ++x) {
+                before.push_back(s.before.offset(x, z));
+                after.push_back(s.edit->layer.offset(x, z));
+            }
+        history_.execute(*scene_, std::make_unique<SculptCommand>(s.edit, r, std::move(before), std::move(after), "Sculpt"));
+    }
+    history_.end_transaction();  // opened when the stroke began
+    changed();
+}
+
+Result<Json> Document::sculpt(const Json& command) {
+    if (auto s = require_editable(); !s) return std::unexpected(s.error());
+    const std::string phase = command.value("phase", std::string("dab"));
+    if (phase == "begin") {
+        finish_stroke();
+        auto id = entity_field(command, "terrain");
+        if (!id) return std::unexpected(id.error());
+        const scene::Entity* target = scene_->find(*id);
+        if (!target || !target->has("terrain") || !target->components["terrain"].is_object())
+            return fail(ErrorCode::InvalidArgument, "sculpting needs an editable entity with a terrain component");
+        terrain_edit::Brush brush;
+        if (auto tool = terrain_edit::tool_from_name(command.value("tool", std::string("raise")))) brush.tool = *tool;
+        else return fail(ErrorCode::InvalidArgument, "tool is raise, lower, smooth or flatten");
+        brush.radius = std::clamp(json_float(command, "radius", brush.radius), 0.1f, 500.0f);
+        brush.strength = std::clamp(json_float(command, "strength", brush.strength), 0.0f, 1000.0f);
+        brush.falloff = std::clamp(json_float(command, "falloff", brush.falloff), 0.0f, 1.0f);
+
+        Json component = target->components["terrain"];
+        auto sculpt_id = asset::guid_field(component, "sculpt");
+        std::string label(terrain_edit::tool_name(brush.tool));
+        label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
+        history_.begin_transaction("Sculpt: " + label);  // ended by finish_stroke
+        if (!sculpt_id || !registry_.find(*sculpt_id)) {
+            // The terrain's first stroke: a sculpt layer file of its own, next to the scene's assets.
+            const auto settings = terrain::Settings::from_json(component, {});
+            const auto dir = project_.assets_dir() / "Terrain";
+            std::error_code ec;
+            stdfs::create_directories(dir, ec);
+            const std::string stem = safe_file_name(target->name);
+            stdfs::path file = dir / (stem + std::string(terrain::SculptLayer::kExtension));
+            for (int n = 2; stdfs::exists(file); ++n) file = dir / std::format("{} {}{}", stem, n, terrain::SculptLayer::kExtension);
+            if (auto w = terrain::SculptLayer(settings.tiles_x, settings.tiles_z).save(file); !w) {
+                history_.end_transaction();
+                return std::unexpected(w.error());
+            }
+            if (auto r = registry_.scan(project_); !r) {
+                history_.end_transaction();
+                return std::unexpected(r.error());
+            }
+            const auto rel = project_.relative(file);
+            const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+            if (!rec) {
+                history_.end_transaction();
+                return fail(ErrorCode::Unknown, "the new sculpt layer wasn't registered as an asset");
+            }
+            sculpt_id = rec->guid;
+            component["sculpt"] = rec->guid.to_string();
+            history_.execute(*scene_, scene::set_component(*id, "terrain", component));
+        }
+        const auto settings = terrain::Settings::from_json(component, game::file_resolver(game::registry_asset_path(project_, registry_)));
+        auto edit = terrain_edit(*sculpt_id, settings);
+        if (!edit) {
+            history_.end_transaction();
+            return fail(ErrorCode::Unknown, "the terrain's heights couldn't be built (see the log)");
+        }
+        // Where the terrain is: its entity's world position (it may have parents).
+        const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
+        math::Vec3 position = target->transform.position;
+        for (std::size_t i = 0; i < expanded.scene.entities.size(); ++i)
+            if (expanded.scene.entities[i].id == *id) position = expanded.scene.world_matrix(i).transform_point({0, 0, 0});
+        stroke_ = Stroke{*id, edit, brush, position, edit->layer, std::nullopt, true};
+    }
+    if (!stroke_) return fail(ErrorCode::InvalidArgument, "no sculpt stroke has begun");
+    apply_dabs(command.value("dabs", Json::array()));
+    const Guid asset = stroke_->edit->asset;
+    const bool any = stroke_->changed.has_value();
+    if (phase == "end") finish_stroke();
+    else changed();
+    return Json{{"sculpt", asset.to_string()}, {"changed", any}};
 }
 
 } // namespace noor::editor

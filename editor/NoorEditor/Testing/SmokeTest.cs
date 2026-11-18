@@ -251,6 +251,7 @@ internal static class SmokeTest
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
         await TerrainChecks(window, Check, Shot);
+        await SculptChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -975,6 +976,70 @@ internal static class SmokeTest
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
         await Task.Delay(600);
         check(Triangles() == before, "terrain: deleting it frees its tiles");
+    }
+
+    // Milestone 6, part 6: sculpt a hill with the brush (a test pointer, never the real mouse), undo, save.
+    private static async Task SculptChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var vp = VulkanViewport.Active;
+        doc.Select(null);
+        var id = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.TerrainTemplateName));
+        if (id == null || vp == null)
+        {
+            check(false, "sculpt: a terrain to work on");
+            return;
+        }
+        var flat = (JsonObject)doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]!.DeepClone();
+        flat["base"] = "flat";
+        flat["cell_size"] = 0.25;  // 64 m across: a hill shows up in the picture
+        flat["material"] = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Textures/tiles.noormat")?.Guid;
+        doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = id, ["type"] = "terrain", ["value"] = flat });
+        doc.Select(id);
+        doc.SetBrush(new EditorDocument.SculptBrush("raise", 10, 6, 0.6));
+        doc.SetSculpting(true);
+        _testViewport = vp.EngineHandle;
+        vp.Frame([id]);
+        await Task.Delay(1200);
+
+        // Hold the left button on the terrain, off to one side, for about a second.
+        var at = vp.WorldToScreen(new Vec3(12, 0, 8));
+        if (at is { } p)
+        {
+            await Pointer(p.X, p.Y, 0);
+            await Task.Delay(200);
+            await Pointer(p.X, p.Y, 1);
+            await Task.Delay(1000);
+            await Pointer(p.X, p.Y, 0);
+            await Task.Delay(300);
+            window.ViewportView?.DrainEvents();
+        }
+        var sculptId = doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]?["sculpt"]?.GetValue<string>();
+        check(at != null && doc.Scene.UndoLabel == "Sculpt: Raise" && sculptId != null,
+              $"sculpt: a drag with the Raise brush is one undo step ({doc.Scene.UndoLabel}) and gives the terrain a sculpt layer");
+
+        // The circle sits on the new hill (the pointer hovers beside it) for the screenshot.
+        if (at is { } q) await Pointer(q.X + 40, q.Y + 10, 0);
+        await Task.Delay(500);
+        shot(window, "editor_27_sculpt.png");
+
+        // Saved: the layer file holds the hill (the highest offset is metres, from ~1 s at 6 m/s).
+        doc.Save();
+        var path = sculptId == null ? null : doc.Assets.FirstOrDefault(a => a.Guid == sculptId)?.Path;
+        double highest = 0;
+        if (path != null && File.Exists(Path.Combine(doc.ProjectRoot, path)))
+        {
+            var bytes = File.ReadAllBytes(Path.Combine(doc.ProjectRoot, path));
+            for (var i = 24; i + 4 <= bytes.Length; i += 4) highest = Math.Max(highest, BitConverter.ToSingle(bytes, i));
+        }
+        check(highest is > 2 and < 7, $"sculpt: Save writes the layer ({path}, highest point {highest:0.##} m)");
+        doc.Undo();
+        check(doc.Scene.Entities.First(e => e.Id == id).Components["terrain"]?["sculpt"] == null, "sculpt: undo takes the stroke back");
+
+        doc.SetSculpting(false);
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);  // give the mouse back
+        doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
+        await Task.Delay(300);
     }
 
     // Milestone 6, part 3: click a face, give it a material, cut a window after texturing.

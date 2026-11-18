@@ -79,6 +79,7 @@ public sealed class ViewportPanel : DockPanel
         _doc.SelectionChanged += SyncViewport;
         _doc.SceneChanged += SyncViewport;
         _doc.ToolChanged += OnToolChanged;
+        _doc.SculptChanged += SyncViewport;
         _settings.PreferencesChanged += ApplyPreferences;
         ApplyPreferences();
         SyncToolButtons();
@@ -93,6 +94,7 @@ public sealed class ViewportPanel : DockPanel
         _doc.SelectionChanged -= SyncViewport;
         _doc.SceneChanged -= SyncViewport;
         _doc.ToolChanged -= OnToolChanged;
+        _doc.SculptChanged -= SyncViewport;
         _settings.PreferencesChanged -= ApplyPreferences;
     }
 
@@ -118,9 +120,36 @@ public sealed class ViewportPanel : DockPanel
     {
         var selected = _doc.Selected;
         Viewport.SetSelection(selected == null ? [] : _doc.Subtree(selected.Id));
-        var mode = selected is { FromPrefab: false } && !_doc.Playing ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
+        // Sculpting the selected terrain: the brush takes the left button, the gizmo goes away.
+        var sculpting = _doc.Sculpting && selected is { FromPrefab: false } && selected.Components["terrain"] != null && !_doc.Playing;
+        Viewport.SetBrush(sculpting ? selected!.Id : null, _doc.Brush.Radius);
+        var mode = selected is { FromPrefab: false } && !_doc.Playing && !sculpting ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
         Viewport.SetFaceHighlight(selected != null && _doc.SelectedFace is { } face ? selected.Id : null, _doc.SelectedFace ?? 0);
+    }
+
+    private bool _stroking;
+
+    /// <summary>A sculpt stroke event from the viewport: begin carries the brush; each piece is sent on to the document.</summary>
+    private void Stroke(JsonNode ev)
+    {
+        var phase = ev["phase"]?.GetValue<string>() ?? "dab";
+        var terrain = ev["terrain"]?.GetValue<string>();
+        if (phase == "begin") _stroking = terrain != null;
+        if (!_stroking) return;
+        var command = new JsonObject { ["terrain"] = terrain, ["phase"] = phase, ["dabs"] = new JsonArray() };
+        if (ev["point"] is JsonArray point)
+            ((JsonArray)command["dabs"]!).Add(new JsonObject { ["point"] = point.DeepClone(), ["seconds"] = ev["seconds"]?.GetValue<double>() ?? 0 });
+        if (phase == "begin")
+        {
+            var b = _doc.Brush;
+            command["tool"] = b.Tool;
+            command["radius"] = b.Radius;
+            command["strength"] = b.Strength;
+            command["falloff"] = b.Falloff;
+        }
+        if (phase == "end") _stroking = false;
+        if (!_doc.Sculpt(command, refresh: phase != "dab")) _stroking = false;
     }
 
     /// <summary>Handles the viewport's clicks and gizmo results (also called by the smoke test).</summary>
@@ -138,6 +167,9 @@ public sealed class ViewportPanel : DockPanel
                     _doc.Select(target);
                     // A CSG face: when the click selected the brush itself, remember which face.
                     _doc.SelectFace(target != null && target == hitId && ev["face"] is JsonValue f ? f.GetValue<int>() : null);
+                    break;
+                case "stroke":
+                    Stroke(ev);
                     break;
                 case "mouse_capture":  // a script asked (play mode); the cursor belongs to the UI thread
                     Native.noor_viewport_set_mouse_capture(Viewport.EngineHandle, ev["capture"]?.GetValue<bool>() == true ? 1 : 0);

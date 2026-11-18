@@ -1,8 +1,8 @@
 # Terrain
 
 Milestone 6, part 5 ([ADR-031](../decisions/ADR-031-terrain-heightfields.md)). What works today:
-heightfield terrain generated from a seed or a heightmap picture, drawn in the editor and in games,
-collided with by Jolt. Sculpting (part 6) and painting (part 7) are **planned**, not here yet.
+heightfield terrain generated from a seed or a heightmap picture, **sculpted by hand** (part 6), drawn
+in the editor and in games, collided with by Jolt. Painting (part 7) is **planned**, not here yet.
 
 ## The `terrain` component
 
@@ -14,6 +14,7 @@ collided with by Jolt. Sculpting (part 6) and painting (part 7) are **planned**,
   "seed": 7, "height": 40, "scale": 250, "octaves": 5,     // noise: 0..height metres, features ~scale m
   "heightmap": "<asset guid>", "min_height": 0, "max_height": 50,  // heightmap: black..white
   "flat_height": 0,         // flat
+  "sculpt": "<.noorsculpt guid>",  // hand-sculpted offsets: made by the first stroke (see Sculpting)
   "material": "<.noormat guid or null>",
   "collision": true
 }
@@ -61,13 +62,54 @@ purpose and say so in the changelog.
 The mesh is fat (full vertex format, one LOD). LOD and a lighter terrain vertex format come later;
 sixteen tiles would be ~90 MB of meshes today.
 
+## Sculpting (Milestone 6, part 6)
+
+Select a terrain, press **Sculpt** in its Inspector card, pick a tool and drag on the ground with the
+left mouse button. A circle shows the brush on the ground.
+
+| Tool | What it does | Strength means |
+|---|---|---|
+| Raise | pushes the ground up | metres per second at the brush's centre |
+| Lower | pushes it down | metres per second |
+| Smooth | evens out bumps (towards the average of each sample's neighbours) | how fast: 1 = all the way in a second |
+| Flatten | levels towards the height where the stroke began | metres per second |
+
+**Radius** in metres; **falloff** 0 is a hard edge, 1 is soft from the centre out (smoothstep).
+Each dab counts at most 0.25 s, so a stalled frame can't build a mountain.
+
+**The base never changes.** Brushes write a separate layer of height offsets, added on top of the
+generated base. Change the seed, the size of the hills or the heightmap, and the hand-made edits
+stay where they were, on top of the new ground. (That's the "non-destructive" part of the spec.)
+
+- **Undo:** a whole stroke is one undo step ("Sculpt: Raise"); it stores only the rectangle the
+  stroke touched (before and after), not the terrain.
+- **The layer file:** the first stroke on a terrain creates `Assets/Terrain/<entity name>.noorsculpt`
+  (an asset, importer `terrain_sculpt`) and sets the component's `sculpt`. Save writes it. Only the
+  tiles that were sculpted are stored: 264 KB per tile (257 × 257 floats). Binary, little-endian:
+  `"NSCULPT1"`, version 1, tiles x/z, tile count, then per tile its (x, z) and its offsets.
+- **Play** collides with the sculpting as it is in the editor, saved or not. Games (`noor_cli build`)
+  load the saved file.
+- **Changing size:** a terrain that grows keeps its sculpted tiles; tiles outside a smaller terrain
+  stay in the file but aren't used.
+- **Duplicating** a sculpted terrain makes both use the same layer file (sculpting one changes both).
+  Not handled yet: give the copy a fresh layer by removing its `sculpt` field.
+- Not yet: the plan's "stretch" brushes (noise, ramp), a brush strength curve per pen pressure,
+  sculpting holes or overhangs (heightfields can't).
+
+**In a Debug build** of the editor a stroke is slow on big terrains: rebuilding a tile's mesh takes
+~33 ms in Debug (2.3 ms in Release), and a brush on a tile corner rebuilds four tiles. Only changed
+tiles are rebuilt; updating part of a tile is a later optimisation.
+
 ## Where the code is
 
 - `engine/terrain` (`noor_terrain`, runtime-safe): `Settings`, `Heights` (with a shared cache keyed by
   the settings, so the renderer and physics generate once), `tile_mesh`, `fractal_noise`.
 - `engine/game`: the scene view lists terrains; `SceneRenderer` draws them; physics gets one static
   `HeightFieldShape` body per tile.
-- `engine/editor_api/src/viewport.cpp`: the editor's tile meshes (rebuilt when the settings change).
+- `engine/terrain_edit` (`noor_terrain_edit`, editor and tools only, kept out of games by the
+  runtime-boundary test): the brushes.
+- `engine/editor_api`: `Document::sculpt` (strokes, the undo command, the live layer per sculpt asset,
+  saving), `viewport.cpp` (tile meshes rebuilt per changed tile, the brush circle, stroke events).
 
 ## Tests
 
@@ -76,7 +118,14 @@ import, settings, cache); `golden_Terrain` (rendered hills); `cli.build_terrain`
 (a built game: a character walks up a heightmap ramp and its feet stay on it); editor smoke checks
 (Create ▸ Terrain draws a tile, a new seed rebuilds it, deleting it frees it).
 
+Sculpting: `test_sculpt` (brush weights, raise/lower leave the base alone, flatten, smooth, a hill on
+a tile corner stays seamless, a new seed keeps the hill, file round trip and damaged files, ray casts);
+`api: document api: sculpting…` (a stroke through the editor API is one undo step, makes and saves the
+layer, survives a new base, Play collides with unsaved sculpting); `cli.build_sculpt` +
+`player.sculpted_hill` (a built game: a character walks over a hill that exists only in the sculpt
+layer, feet within 1 cm of it); editor smoke checks (a test pointer drags the Raise brush, undo, save).
+
 ## Not yet
 
-Sculpting, painting, holes, LOD, streaming, triplanar texturing for cliffs, saving terrains as
-asset files (they live in the component until there are sculpt and weight layers to store).
+Painting, holes, LOD, streaming, triplanar texturing for cliffs, partial tile updates while
+sculpting.

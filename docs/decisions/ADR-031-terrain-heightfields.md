@@ -56,6 +56,16 @@ Built and tested; where it differs from the proposal above, this wins.
   build with them.
 - **Shared heights:** renderer and physics share one generated `Heights` per settings key.
 
+## What part 6 settled (2026-11-18)
+- **The sculpt layer is one `.noorsculpt` file per terrain** (an asset referenced by the component's
+  `sculpt`), holding only the sculpted tiles, rather than one file per tile. Simpler to reference,
+  move and pack; the cost is that a save rewrites every sculpted tile of that terrain (264 KB each).
+  If that hurts on big maps, splitting into per-tile files is a format change with a migration.
+- **Strokes are events, the document sculpts:** the viewport reports where the brush lands; the
+  document applies brushes, keeps the live layer and records one undo command per stroke with the
+  touched rectangle's before/after offsets (region undo, as planned).
+- **Brushes live in `noor_terrain_edit`**, which the runtime-boundary test keeps out of games.
+
 ## Consequences
 - Easier: sculpt/paint as image-like operations on tiles; region undo; partial saves and rebuilds.
 - Harder: no overhangs, caves or vertical cliffs (steep slopes stretch textures until triplanar

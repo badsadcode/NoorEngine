@@ -87,6 +87,9 @@ struct noor_viewport {
     std::uint32_t face_index = 0;
     std::uint64_t face_version = 0;
     std::uint64_t options_version = 0;
+    // The sculpt brush (noor_viewport_set_brush), under doc_mutex: the terrain it works on, its size.
+    std::optional<Guid> brush_terrain;
+    float brush_radius = 8.0f;
 
     // The camera of the last drawn frame (for noor_viewport_world_to_screen).
     std::mutex camera_mutex;
@@ -343,9 +346,15 @@ void render_thread_main(noor_viewport* vp) {
     // Terrains on the GPU, by entity: rebuilt when their settings change.
     struct TerrainGpu {
         std::string key;
+        std::vector<std::uint64_t> versions;  // per tile: what it was built from (live heights)
         std::vector<LoadedMesh> tiles;
+        std::shared_ptr<const noor::terrain::Heights> heights;  // what the tiles show (for the brush)
+        Vec3 position{};
     };
     std::unordered_map<Guid, TerrainGpu> terrain_gpu;
+    // Sculpting: a left-drag on the brush's terrain is a stroke; the circle shows where it lands.
+    bool stroking = false;
+    std::optional<Vec3> brush_hit;
     noor::render::MaterialHandle ghost_subtract, ghost_intersect, face_material;
     noor::render::MeshHandle face_mesh;     // the highlighted face, lifted 3 mm off the surface
     Mat4 face_world = Mat4::identity();
@@ -578,25 +587,44 @@ void render_thread_main(noor_viewport* vp) {
                 // Terrains: one draw per tile.
                 for (const auto& t : snap->terrains) {
                     TerrainGpu& tg = terrain_gpu[t.entity];
-                    const std::string key = t.settings.key();
-                    if (tg.key != key) {
+                    const std::size_t count = static_cast<std::size_t>(t.settings.tiles_x) * t.settings.tiles_z;
+                    // Live (sculpted) heights come with a version per tile: only changed tiles are rebuilt.
+                    const bool live = t.heights && t.tile_versions.size() == count;
+                    const std::string key = live ? std::format("live {} {}", t.settings.tiles_x, t.settings.tiles_z) : t.settings.key();
+                    if (tg.key != key || tg.tiles.size() != count) {
                         for (const auto& old : tg.tiles)
                             if (old.handle.valid()) r.destroy_mesh(old.handle);
-                        tg = {key, {}};
-                        if (auto heights = noor::terrain::Heights::shared(t.settings)) {
-                            for (std::uint32_t tz = 0; tz < t.settings.tiles_z; ++tz)
-                                for (std::uint32_t tx = 0; tx < t.settings.tiles_x; ++tx) {
-                                    auto mesh = noor::terrain::tile_mesh(**heights, tx, tz);
-                                    LoadedMesh lm{{}, mesh.lo, mesh.hi, {}, std::move(mesh.indices), {}};
-                                    if (auto h = r.create_mesh({{mesh.vertices.data(), mesh.vertices.size()}, lm.indices, "Terrain tile"})) lm.handle = *h;
-                                    lm.positions.reserve(mesh.vertices.size());
-                                    for (const auto& v : mesh.vertices) lm.positions.push_back(v.position);
-                                    tg.tiles.push_back(std::move(lm));
-                                }
-                        } else {
-                            NOOR_LOG_WARN("Viewport", "Terrain: {}", heights.error().describe());
-                        }
+                        tg.key = key;
+                        tg.tiles.assign(count, LoadedMesh{});
+                        tg.versions.assign(count, ~0ull);
                     }
+                    const auto wanted = [&](std::size_t i) { return live ? t.tile_versions[i] : 0ull; };
+                    bool rebuild = false;
+                    for (std::size_t i = 0; i < count; ++i) rebuild = rebuild || tg.versions[i] != wanted(i);
+                    if (rebuild) {
+                        std::shared_ptr<const noor::terrain::Heights> heights = live ? t.heights : nullptr;
+                        if (!heights) {
+                            if (auto shared = noor::terrain::Heights::shared(t.settings)) heights = *shared;
+                            else NOOR_LOG_WARN("Viewport", "Terrain: {}", shared.error().describe());
+                        }
+                        for (std::uint32_t tz = 0; tz < t.settings.tiles_z; ++tz)
+                            for (std::uint32_t tx = 0; tx < t.settings.tiles_x; ++tx) {
+                                const std::size_t i = static_cast<std::size_t>(tz) * t.settings.tiles_x + tx;
+                                if (tg.versions[i] == wanted(i)) continue;
+                                tg.versions[i] = wanted(i);  // also when it failed: no warning every frame
+                                if (tg.tiles[i].handle.valid()) r.destroy_mesh(tg.tiles[i].handle);
+                                tg.tiles[i] = LoadedMesh{};
+                                if (!heights) continue;
+                                auto mesh = noor::terrain::tile_mesh(*heights, tx, tz);
+                                LoadedMesh lm{{}, mesh.lo, mesh.hi, {}, std::move(mesh.indices), {}};
+                                if (auto h = r.create_mesh({{mesh.vertices.data(), mesh.vertices.size()}, lm.indices, "Terrain tile"})) lm.handle = *h;
+                                lm.positions.reserve(mesh.vertices.size());
+                                for (const auto& v : mesh.vertices) lm.positions.push_back(v.position);
+                                tg.tiles[i] = std::move(lm);
+                            }
+                        if (heights) tg.heights = heights;
+                    }
+                    tg.position = t.position;
                     const auto material = t.material_file.empty() ? noor::render::MaterialHandle{} : materials->file(t.material_file);
                     for (auto& lm : tg.tiles) {
                         if (!lm.handle.valid()) continue;
@@ -878,8 +906,47 @@ void render_thread_main(noor_viewport* vp) {
         const bool released = !pointer.left_down && last_pointer.left_down;
         if (!drag) hovered = target && pointer.inside ? ed::pick_handle(ray, gizmo_mode, gizmo_center, gizmo_size, gizmo_orientation) : ed::Handle::None;
 
+        // ---- Sculpt brush: the ground under the pointer, strokes as events (the document sculpts) ----
+        std::optional<Guid> brush_terrain;
+        float brush_radius = 8.0f;
+        {
+            std::scoped_lock lock(vp->doc_mutex);
+            brush_terrain = vp->brush_terrain;
+            brush_radius = vp->brush_radius;
+        }
+        const bool brush_on = brush_terrain && shown && !shown->camera;
+        const TerrainGpu* brush_tg = nullptr;
+        brush_hit.reset();
+        if (brush_on) {
+            if (auto it = terrain_gpu.find(*brush_terrain); it != terrain_gpu.end() && it->second.heights) brush_tg = &it->second;
+            if (brush_tg && (pointer.inside || stroking)) {
+                if (auto t = noor::terrain::raycast(*brush_tg->heights, ray.origin - brush_tg->position, noor::math::normalize(ray.dir)))
+                    brush_hit = ray.origin + noor::math::normalize(ray.dir) * *t;
+            }
+            auto stroke_event = [&](const char* phase) {
+                noor::asset::Json ev{{"type", "stroke"}, {"phase", phase}, {"terrain", brush_terrain->to_string()}, {"seconds", frame_seconds}};
+                if (brush_hit) ev["point"] = {brush_hit->x, brush_hit->y, brush_hit->z};
+                push_event(vp, std::move(ev));
+            };
+            if (pressed && !alt_orbit && brush_hit) {
+                stroking = true;
+                stroke_event("begin");
+            } else if (stroking && pointer.left_down) {
+                stroke_event("dab");
+            }
+            if (stroking && !pointer.left_down) {
+                stroke_event("end");
+                stroking = false;
+            }
+        } else if (stroking) {
+            push_event(vp, {{"type", "stroke"}, {"phase", "end"}, {"terrain", nullptr}, {"seconds", 0.0}});
+            stroking = false;
+        }
+
         if (pressed && alt_orbit) {
             click_pending = false;
+        } else if (pressed && brush_on) {
+            click_pending = false;  // the brush has the left button
         } else if (pressed) {
             // Hit-test at the press itself (hover tracking may not have run, e.g. a click that
             // arrives without a preceding move).
@@ -1032,7 +1099,7 @@ void render_thread_main(noor_viewport* vp) {
                 face_item.cast_shadow = false;
                 frame_draws.push_back(face_item);
             }
-            if (ground.valid() && (!shown || shown->show_grid)) {
+            if (ground.valid() && (!shown || (shown->show_grid && shown->terrains.empty()))) {  // a terrain is the ground: no grid to fight with
                 const float half = std::max({200.0f, scene_hi.x - scene_lo.x, scene_hi.z - scene_lo.z});
                 const Vec3 c = (scene_lo + scene_hi) * 0.5f;
                 noor::render::DrawItem ground_item{ground, noor::math::translation({c.x, -0.05f, c.z}) * noor::math::scale({half, 0.05f, half})};
@@ -1075,6 +1142,33 @@ void render_thread_main(noor_viewport* vp) {
                 }
                 const auto pixels = r.swapchain_size();
                 hud->build(shown->ui, static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
+            }
+            // The sculpt brush: a circle lying on the ground under the pointer.
+            if (brush_hit && brush_tg) {
+                if (!hud) {
+                    hud.emplace();
+                    if (auto s = r.set_overlay_atlas(hud->atlas_width(), hud->atlas_height(), hud->atlas()); !s)
+                        NOOR_LOG_ERROR("Viewport", "HUD font: {}", s.error().describe());
+                }
+                const Vec4 color{0.85f, 0.75f, 1.0f, stroking ? 1.0f : 0.8f};
+                const Vec3 c = *brush_hit - brush_tg->position;
+                constexpr int kSegments = 64;
+                std::optional<ed::ScreenPoint> prev;
+                for (int i = 0; i <= kSegments; ++i) {
+                    const float a = static_cast<float>(i) / kSegments * 6.2831853f;
+                    const float x = c.x + std::cos(a) * brush_radius, z = c.z + std::sin(a) * brush_radius;
+                    const Vec3 p = Vec3{x, brush_tg->heights->height(x, z) + 0.05f, z} + brush_tg->position;
+                    const auto s = ed::world_to_screen(basis, static_cast<float>(size.width), static_cast<float>(size.height), p);
+                    if (s && prev) {
+                        // A 2-pixel band from the previous point to this one (uv -1: a solid colour).
+                        const float sx = s->x - prev->x, sy = s->y - prev->y, len = std::max(1e-3f, std::sqrt(sx * sx + sy * sy));
+                        const float nx = -sy / len, ny = sx / len;
+                        const noor::render::OverlayVertex v0{{prev->x + nx, prev->y + ny}, {-1, -1}, color}, v1{{s->x + nx, s->y + ny}, {-1, -1}, color};
+                        const noor::render::OverlayVertex v2{{s->x - nx, s->y - ny}, {-1, -1}, color}, v3{{prev->x - nx, prev->y - ny}, {-1, -1}, color};
+                        overlay.insert(overlay.end(), {v0, v1, v2, v0, v2, v3});
+                    }
+                    prev = s;
+                }
             }
             frame.overlay = overlay;
         } else {
@@ -1382,6 +1476,22 @@ NOOR_API int32_t noor_viewport_has_focus(noor_viewport* viewport) {
 
 NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport) {
     return viewport && viewport->window && viewport->window->mouse_captured() ? 1 : 0;
+}
+
+NOOR_API void noor_viewport_set_brush(noor_viewport* viewport, const char* brush_json) {
+    if (!viewport) return;
+    std::optional<Guid> terrain;
+    float radius = 8.0f;
+    if (brush_json) {
+        if (auto j = noor::asset::parse_json(brush_json, "brush"); j && j->is_object()) {
+            if (j->contains("terrain") && (*j)["terrain"].is_string())
+                if (auto id = Guid::parse((*j)["terrain"].get<std::string>())) terrain = *id;
+            if (j->contains("radius") && (*j)["radius"].is_number()) radius = std::clamp((*j)["radius"].get<float>(), 0.1f, 500.0f);
+        }
+    }
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->brush_terrain = terrain;
+    viewport->brush_radius = radius;
 }
 
 NOOR_API void noor_viewport_set_face_highlight(noor_viewport* viewport, const char* brush_id, int32_t face) {

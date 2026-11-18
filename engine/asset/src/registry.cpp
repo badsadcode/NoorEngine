@@ -75,6 +75,7 @@ std::string lower_extension(const stdfs::path& path) {
 
 bool is_prefab(const stdfs::path& path) { return lower_extension(path) == ".noorprefab"; }
 bool is_material(const stdfs::path& path) { return lower_extension(path) == ".noormat"; }
+bool is_sculpt(const stdfs::path& path) { return lower_extension(path) == ".noorsculpt"; }  // terrain sculpt layers (noor/terrain)
 
 // Formats miniaudio decodes out of the box (ADR-011). Ogg Vorbis would need stb_vorbis: later.
 bool is_audio(const stdfs::path& path) {
@@ -94,7 +95,7 @@ std::optional<Guid> prefab_guid(const stdfs::path& source) {
 } // namespace
 
 bool AssetRegistry::is_importable(const stdfs::path& path) {
-    if (is_prefab(path) || is_audio(path) || is_texture_file(path) || is_material(path)) return true;
+    if (is_prefab(path) || is_audio(path) || is_texture_file(path) || is_material(path) || is_sculpt(path)) return true;
     const std::string ext = lower_extension(path);
     if (ext != ".glb" && ext != ".gltf") return false;
     static const std::regex lod(R"(\.lod[0-9]+$)", std::regex::icase);
@@ -193,12 +194,13 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                 const bool audio = is_audio(source);
                 const bool texture = is_texture_file(source);
                 const bool material = is_material(source);
-                const auto from_manifest = prefab || audio || texture || material ? std::nullopt : interchange_guid(source);
+                const bool sculpt = is_sculpt(source);
+                const auto from_manifest = prefab || audio || texture || material || sculpt ? std::nullopt : interchange_guid(source);
                 const auto embedded = prefab ? prefab_guid(source) : from_manifest;
                 meta.json = Json::object();
                 meta.json["noor_meta"] = kMetaFormat;
                 meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
-                meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : texture ? "texture" : material ? "material" : "gltf";
+                meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : texture ? "texture" : material ? "material" : sculpt ? "terrain_sculpt" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
                 // Textures: the first guess at their settings, from the name (ADR-029); edit them later.

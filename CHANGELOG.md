@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 6, part 6: terrain sculpting
+**Added**
+- **Sculpting**: Raise, Lower, Smooth and Flatten brushes with radius, strength and falloff
+  (`noor_terrain_edit`, editor/tools only). Inspector ▸ terrain ▸ **Sculpt**; a circle on the ground
+  shows the brush; left-drag sculpts. A stroke is one undo step (region undo: the touched rectangle).
+- **Sculpt layer** (`terrain::SculptLayer`, `.noorsculpt` asset, importer `terrain_sculpt`): sparse
+  height offsets on top of the generated base, so a new seed or heightmap keeps the manual edits. The
+  first stroke creates `Assets/Terrain/<name>.noorsculpt`; Save writes it; games load it.
+- `terrain::raycast` (where a ray meets the ground), `Heights::compose`/`recompose`.
+- Play collides with unsaved sculpting (`game::WorldOptions::terrain_heights`).
+- Editor API **v17**: `noor_doc_sculpt`, `noor_viewport_set_brush`, "stroke" viewport events.
+- The viewport rebuilds only the terrain tiles that changed.
+
+**Fixed:** the editor's ground grid z-fought with flat terrains at 0 m: the grid is hidden when the
+scene has a terrain (the terrain is the ground).
+
+**Tests:** `test_sculpt` (6 cases); an editor API test (stroke → undo/redo → save → new base keeps the
+hill → Play collides with unsaved sculpting); `cli.build_sculpt` + `player.sculpted_hill` (a built
+game walks over a hill that exists only in the sculpt layer: feet 8 mm from the exact height);
+editor smoke checks driven by a test pointer. The runtime-boundary test now also forbids
+`noor_terrain_edit` in games.
+
 ### 2026-11-18 — Milestone 6, part 5: terrain foundation
 **Added**
 - **`noor_terrain`** (runtime-safe module, [docs/terrain/TERRAIN.md](docs/terrain/TERRAIN.md)):

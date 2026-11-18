@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Platform;
@@ -89,6 +90,16 @@ public sealed class VulkanViewport : NativeControlHost
 
     private string? _faceBrush;
     private int _face;
+    private string? _brushJson;
+
+    /// <summary>The sculpt brush on a terrain (null: off): its circle follows the pointer, drags become "stroke" events.</summary>
+    public void SetBrush(string? terrainId, double radius)
+    {
+        var json = terrainId == null ? null : new JsonObject { ["terrain"] = terrainId, ["radius"] = radius }.ToJsonString();
+        if (json == _brushJson) return;
+        _brushJson = json;
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_brush(_viewport, json);
+    }
 
     /// <summary>Outlines one face of a CSG brush (null: none).</summary>
     public void SetFaceHighlight(string? brush, int face)
@@ -134,6 +145,7 @@ public sealed class VulkanViewport : NativeControlHost
         Native.noor_viewport_set_gizmo(_viewport, _gizmoEntity, _gizmoMode);
         if (_optionsJson != null) Native.noor_viewport_set_options(_viewport, _optionsJson);
         if (_faceBrush != null) Native.noor_viewport_set_face_highlight(_viewport, _faceBrush, _face);
+        if (_brushJson != null) Native.noor_viewport_set_brush(_viewport, _brushJson);
         if (!_preview)
         {
             CreatedCount++;

@@ -34,9 +34,53 @@ public sealed class EditorDocument : IDisposable
 
     public void SetTool(EditorTool tool)
     {
+        SetSculpting(false);  // picking a transform tool puts the brush down
         if (tool == Tool) return;
         Tool = tool;
         ToolChanged?.Invoke();
+    }
+
+    // ---- Terrain sculpting (Milestone 6, part 6): editor state, like the tool ----
+
+    /// <summary>A sculpt brush: tool (raise, lower, smooth, flatten), radius (m), strength, falloff (0 hard .. 1 soft).</summary>
+    public sealed record SculptBrush(string Tool, double Radius, double Strength, double Falloff);
+    public static readonly string[] SculptTools = ["raise", "lower", "smooth", "flatten"];
+
+    public event Action? SculptChanged;
+    /// <summary>On: a left-drag on the selected terrain sculpts it (the gizmo is hidden).</summary>
+    public bool Sculpting { get; private set; }
+    public SculptBrush Brush { get; private set; } = new("raise", 8, 2, 0.5);
+
+    public void SetSculpting(bool on)
+    {
+        if (on == Sculpting) return;
+        Sculpting = on;
+        SculptChanged?.Invoke();
+    }
+
+    public void SetBrush(SculptBrush brush)
+    {
+        if (brush == Brush) return;
+        Brush = brush;
+        SculptChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// One piece of a stroke (noor_doc_sculpt). Panels refresh only when asked (the stroke's start and
+    /// end), not for every dab.
+    /// </summary>
+    public bool Sculpt(JsonObject command, bool refresh)
+    {
+        var result = Native.Sculpt(_handle, command.ToJsonString());
+        if (result == null)
+        {
+            EngineLog.Warn("Sculpt", Native.LastError());
+            return false;
+        }
+        // The terrain's first stroke made its sculpt layer file: show it in the asset list too.
+        if (JsonNode.Parse(result)?["sculpt"]?.GetValue<string>() is { } layer && Assets.All(a => a.Guid != layer)) RefreshAssets(false);
+        if (refresh) Refresh();
+        return true;
     }
 
     /// <summary>Native handle for noor_viewport_set_document. Valid until Dispose.</summary>
