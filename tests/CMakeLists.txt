@@ -55,7 +55,7 @@ if(WIN32)
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
     target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain doctest::doctest)
-    target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    target_compile_definitions(noor_editor_api_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data" NOOR_SAMPLES_DIR="${PROJECT_SOURCE_DIR}/samples")
     noor_set_target_options(noor_editor_api_tests)
     set_target_properties(noor_editor_api_tests PROPERTIES FOLDER "Tests")
     add_custom_command(TARGET noor_editor_api_tests POST_BUILD
@@ -184,6 +184,24 @@ foreach(name IN ITEMS Showroom_Sun Showroom_Studio Showroom_Evening Showroom_Ven
     # The first run compresses the sample's textures (cached in samples/PBR-Showroom/.noor after that).
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK pbr_showroom_cache)
 endforeach()
+# The Milestone 6 sample (samples/Hillside, built by tools/samples/build_hillside.py through the editor
+# API): its golden render, and a built game whose walker follows the path into the house.
+add_test(NAME render.golden_Hillside
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache)
+add_test(NAME cli.build_hillside
+    COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/Hillside ${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game)
+set_tests_properties(cli.build_hillside PROPERTIES LABELS "cli;sample" TIMEOUT 180 FIXTURES_SETUP built_hillside_game RESOURCE_LOCK hillside_cache
+                     PASS_REGULAR_EXPRESSION "1 CSG model[(]s[)] cooked")
+add_test(NAME player.hillside_walk
+    COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game/Hillside.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_check.cmake)
+set_tests_properties(player.hillside_walk PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120 FIXTURES_REQUIRED built_hillside_game)
 # The judge must notice a different picture: today's daylight against the sunset reference fails.
 add_test(NAME render.golden_catches_a_change
     COMMAND noor_image_compare ${CMAKE_CURRENT_BINARY_DIR}/render_golden_Daylight/screenshot.bmp

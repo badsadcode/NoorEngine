@@ -1,0 +1,12 @@
+{
+  "noor_material": 1,
+  "parent": "b395611f-637a-4a0b-a611-ede096f2bb79",
+  "overrides": {
+    "base_color": [
+      0.55,
+      0.9,
+      0.4,
+      1
+    ]
+  }
+}

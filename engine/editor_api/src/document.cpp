@@ -1132,4 +1132,26 @@ Result<Json> Document::sculpt(const Json& command) {
     return result;
 }
 
+Result<float> Document::terrain_height(const Guid& terrain, float x, float z) {
+    if (auto s = require_scene(); !s) return std::unexpected(s.error());
+    const auto expanded = scene::expand_prefabs(*scene_, prefabs_.resolver());
+    for (std::size_t i = 0; i < expanded.scene.entities.size(); ++i) {
+        const auto& e = expanded.scene.entities[i];
+        if (e.id != terrain) continue;
+        if (!e.has("terrain") || !e.components["terrain"].is_object()) break;
+        const Json& component = e.components["terrain"];
+        const auto settings = terrain::Settings::from_json(component, game::file_resolver(game::registry_asset_path(project_, registry_)));
+        const math::Vec3 centre = expanded.scene.world_matrix(i).transform_point({0, 0, 0});
+        std::shared_ptr<const terrain::Heights> heights;
+        if (auto edit = terrain_edit(e.id, asset::guid_field(component, "sculpt"), asset::guid_field(component, "paint"), settings)) heights = edit->snapshot();
+        if (!heights) {
+            auto shared = terrain::Heights::shared(settings);
+            if (!shared) return std::unexpected(shared.error());
+            heights = *shared;
+        }
+        return centre.y + heights->height(x - centre.x, z - centre.z);
+    }
+    return fail(ErrorCode::NotFound, "no terrain entity with that id");
+}
+
 } // namespace noor::editor

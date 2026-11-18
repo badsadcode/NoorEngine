@@ -225,6 +225,8 @@ public:
     // "radius", "strength", "falloff", "dabs": [{"point": [x, y, z] (world), "seconds"}]}. A stroke
     // (begin .. end) is one undo step.
     [[nodiscard]] Result<asset::Json> sculpt(const asset::Json& command);
+    // The ground height of a terrain entity at world (x, z), with its sculpting (saved or not).
+    [[nodiscard]] Result<float> terrain_height(const Guid& terrain, float x, float z);
 
 private:
     // Terrains with hand-made layers, by entity (loaded on first use, saved with the scene).

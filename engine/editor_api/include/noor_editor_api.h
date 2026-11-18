@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 18u
+#define NOOR_EDITOR_API_VERSION 19u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -148,6 +148,9 @@ NOOR_API const char* noor_doc_export_csg(noor_doc* doc, const char* model_id, co
    Returns {"paint": asset id, "layer": index, "changed"} for paint strokes. Fast pointer moves are
    filled in with dabs along the way (sculpting too). */
 NOOR_API const char* noor_doc_sculpt(noor_doc* doc, const char* command_json);
+/* v19: the ground height (world y) of a terrain entity at world (x, z), including sculpting that
+   isn't saved yet (for placing things on the ground). Returns 1, or 0 (noor_last_error). */
+NOOR_API int32_t noor_doc_terrain_height(noor_doc* doc, const char* terrain_id, float x, float z, float* out_height);
 /* {"terrain": entity id | null (off), "radius": metres}. While set, the gizmo and click-to-select
    are off in the viewport. */
 NOOR_API void noor_viewport_set_brush(noor_viewport* viewport, const char* brush_json);

@@ -7,6 +7,7 @@
 
 #include "noor_editor_api.h"
 
+#include "noor/asset/gltf_import.h"
 #include "noor/asset/json.h"
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
@@ -15,6 +16,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <algorithm>
 #include <string>
 
 namespace stdfs = std::filesystem;
@@ -309,6 +311,12 @@ TEST_CASE("document api: sculpting raises a hill, undoes as one step, saves a la
     CHECK(s["modified"] == true);
     REQUIRE(noor_doc_save_scene(t.doc) == 1);
     CHECK(saved_heights().height(0, 0) == doctest::Approx(6.0f));  // 2 m flat + 4 m
+    float ground = 0;
+    REQUIRE(noor_doc_terrain_height(t.doc, id.c_str(), 10, 0, &ground) == 1);  // world (10, 0) is the hill's top
+    CHECK(ground == doctest::Approx(6.0f));
+    REQUIRE(noor_doc_terrain_height(t.doc, id.c_str(), 40, 40, &ground) == 1);
+    CHECK(ground == doctest::Approx(2.0f));
+    CHECK(noor_doc_terrain_height(t.doc, first["sculpt"].get<std::string>().c_str(), 0, 0, &ground) == 0);  // not a terrain entity
 
     // Undo takes the whole stroke back (and the layer it made); redo brings it back.
     REQUIRE(noor_doc_undo(t.doc) == 1);
@@ -436,4 +444,51 @@ TEST_CASE("document api: painting adds material layers to a terrain, one undo st
     layer = noor::terrain::PaintLayer::load(t.dir / "Assets" / "Terrain" / "Field.noorpaint");
     REQUIRE(layer);
     CHECK(noor::terrain::PaintLayer::weight(layer->get(128, 128), 0) == doctest::Approx(1.0f));
+}
+
+// Milestone 6, part 8: the Hillside sample's house exports as a Noor Interchange GLB that reads back.
+TEST_CASE("document api: the Hillside sample opens, and its house exports as a GLB that reads back") {
+    const stdfs::path dir = stdfs::temp_directory_path() / ("noor_hillside_" + noor::Guid::generate().to_string());
+    // A copy (the test must not touch the sample), without its derived data.
+    stdfs::create_directories(dir);
+    for (auto it = stdfs::recursive_directory_iterator(stdfs::path(NOOR_SAMPLES_DIR) / "Hillside"); it != stdfs::recursive_directory_iterator(); ++it) {
+        const auto rel = it->path().lexically_relative(stdfs::path(NOOR_SAMPLES_DIR) / "Hillside");
+        if (*rel.begin() == ".noor") {
+            it.disable_recursion_pending();
+            continue;
+        }
+        if (it->is_directory()) stdfs::create_directories(dir / rel);
+        else stdfs::copy_file(it->path(), dir / rel);
+    }
+    noor_doc* doc = noor_doc_open_project(dir.string().c_str());
+    REQUIRE(doc != nullptr);
+    REQUIRE(noor_doc_open_scene(doc, "Scenes/Hillside.noorscene") == 1);
+    const Json scene = json(noor_doc_scene(doc));
+    const Json* house = find_entity(scene, "House");
+    const Json* terrain = find_entity(scene, "Hillside");
+    REQUIRE(house != nullptr);
+    REQUIRE(terrain != nullptr);
+    CHECK((*terrain)["components"]["terrain"]["layers"].size() == 3);  // meadow, rock, dirt
+    // The house stands on the terrain (its floor is the flattened pad).
+    float ground = 0;
+    REQUIRE(noor_doc_terrain_height(doc, (*terrain)["id"].get<std::string>().c_str(), 20, 0, &ground) == 1);
+    CHECK((*house)["transform"]["position"][1].get<float>() == doctest::Approx(ground).epsilon(0.01));
+
+    const Json csg = json(noor_doc_csg(doc));
+    REQUIRE(csg.size() == 1);
+    const auto glb = dir / "Exports" / "House.glb";
+    REQUIRE(noor_doc_export_csg(doc, (*house)["id"].get<std::string>().c_str(), glb.string().c_str()) != nullptr);
+    auto model = noor::asset::import_gltf(glb);
+    REQUIRE_MESSAGE(model, (model ? "" : model.error().describe()));
+    const auto collision = std::ranges::find_if(model->nodes, [](const auto& n) { return n.is_collision(); });
+    REQUIRE(collision != model->nodes.end());
+    CHECK(collision->name == "House-colonly");
+    CHECK(model->images.size() >= 2);  // brick and planks maps, embedded
+    std::size_t triangles = 0;
+    for (const auto& sm : model->meshes[0].submeshes) triangles += sm.index_count / 3;
+    CHECK(triangles == csg[0]["triangles"].get<std::size_t>());
+    CHECK(model->meshes[0].submeshes.size() >= 2);  // runs of brick and planks (one or more per brush)
+    noor_doc_close(doc);
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
 }

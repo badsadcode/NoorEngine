@@ -79,6 +79,11 @@ left mouse button. A circle shows the brush on the ground.
 **Radius** in metres; **falloff** 0 is a hard edge, 1 is soft from the centre out (smoothstep).
 Each dab counts at most 0.25 s, so a stalled frame can't build a mountain.
 
+**Dabs add up.** A spot under the brush gets every dab that reaches it: going over the same ground
+again, or a line of dabs closer together than the radius, adds each time. Building the Hillside
+sample, a line of dabs 3 m apart under a 28 m brush reached each spot about 17 times per pass:
+0.25 s × 3 m/s × 17 × 4 passes is a 50 m "ridge". Lower the strength for long strokes with a big brush.
+
 **The base never changes.** Brushes write a separate layer of height offsets, added on top of the
 generated base. Change the seed, the size of the hills or the heightmap, and the hand-made edits
 stay where they were, on top of the new ground. (That's the "non-destructive" part of the spec.)

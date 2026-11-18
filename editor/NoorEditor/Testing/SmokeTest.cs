@@ -831,7 +831,9 @@ internal static class SmokeTest
         window.DockFactory.SetActiveDockable(dockable);
         await Task.Delay(1200);  // two refreshes
         var panel = window.GetVisualDescendants().OfType<RenderPanel>().FirstOrDefault();
-        panel?.Refresh();
+        // GPU pass timings arrive a frame or two after the frame (timestamp queries): wait for them
+        // rather than reading once (a single read flaked on 2026-11-18).
+        await WaitFor(() => { panel?.Refresh(); return (int?)((panel?.Last?["passes"] as JsonArray)?.Count ?? 0); }, n => n == 5, 5);
         var last = panel?.Last;
         long N(string key) => last?[key]?.GetValue<long>() ?? -1;
         check(panel != null && N("draw_calls") > 0 && N("triangles") > 0 && N("render_target_bytes") > 0 &&

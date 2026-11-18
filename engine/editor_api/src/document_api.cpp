@@ -214,6 +214,18 @@ NOOR_API const char* noor_doc_sculpt(noor_doc* doc, const char* command_json) {
     });
 }
 
+NOOR_API int32_t noor_doc_terrain_height(noor_doc* doc, const char* terrain_id, float x, float z, float* out_height) {
+    if (!doc || !terrain_id || !out_height) return 0;
+    return guarded<>(int32_t{0}, [&]() -> int32_t {
+        const auto id = noor::Guid::parse(terrain_id);
+        if (!id) return fail_with(id.error());
+        auto h = doc->doc->terrain_height(*id, x, z);
+        if (!h) return fail_with(h.error());
+        *out_height = *h;
+        return 1;
+    });
+}
+
 NOOR_API int32_t noor_doc_execute(noor_doc* doc, const char* command_json) {
     if (!doc || !command_json) return 0;
     return guarded<>(int32_t{0}, [&]() -> int32_t {

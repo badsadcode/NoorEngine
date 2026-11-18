@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 6, part 8: the Hillside sample and the gate review
+**Added**
+- **`samples/Hillside`**: a sculpted, painted landscape (meadow, rock, a dirt path) and a brick
+  house from brushes (doorway and windows cut out, plank floor and roof), sun and HDRI sky, and a
+  walker that follows the path into the house. Built by **`tools/samples/build_hillside.py`**
+  through the editor API (ctypes), the same calls the editor's tools make; rerunnable.
+- **`noor_doc_terrain_height`** (editor API **v19**): a terrain's ground height at a world point,
+  including unsaved sculpting.
+- CC0 texture sets from Poly Haven for the sample: Leafy Grass, Rock Face, Dry Ground 01 (1K).
+- [Milestone 6 review](docs/milestones/M6_REVIEW.md): the gate passes, with seven tracked exceptions.
+
+**Fixed:** the Render panel smoke check read the GPU pass timings once after a fixed delay and
+flaked when they arrived a frame late; it now waits for them (up to 5 s).
+
+**Tests:** `render.golden_Hillside`; `cli.build_hillside` + `player.hillside_walk` (the walker ends
+inside the house, on its floor); an API test that opens a copy of the sample and exports its house
+as a GLB that reads back with its collision node and triangles; a terrain-height API test.
+
 ### 2026-11-18 — Milestone 6, part 7: painting
 **Added**
 - **Terrain painting**: up to four material layers per terrain (`"layers": [{"material", "tiling"}]`),
