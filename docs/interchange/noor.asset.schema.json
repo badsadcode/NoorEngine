@@ -209,7 +209,36 @@
           "triangles": {
             "type": "integer",
             "minimum": 0
+          },
+          "max_distance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "v0.4: metres from the camera up to which this level is used, for a 60 degree vertical field of view (engines scale it for theirs). 0 or missing on the last level: no limit."
+          },
+          "billboard": {
+            "type": "boolean",
+            "description": "v0.4: this level is camera-facing cards (an impostor/billboard)."
           }
+        }
+      }
+    },
+    "family": {
+      "description": "v0.4: variants that belong together (a variety pack).",
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "variant": { "type": "string" },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "wind": {
+      "description": "v0.4: where wind data lives in the vertex attributes, e.g. {\"bend\": \"TEXCOORD_1.x\"}.",
+      "type": "object",
+      "properties": {
+        "channels": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "pattern": "^(TEXCOORD_[0-9]+|COLOR_[0-9]+)\\.[xyzw]$" }
         }
       }
     },

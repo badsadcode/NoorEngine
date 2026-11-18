@@ -61,7 +61,7 @@ oaks from it are on the dev machine (`test_tree/`, local only).
 | 2 | **Cache, invalidation, jobs, headless**: content-addressed results in `.noor/cache/procgraph` (keyed by node version + params + seed stream + input keys); only changed nodes and what depends on them rerun; a job system with progress and cancellation (background threads, ordered results so threads can't change outputs); execution trace (ms and bytes per node, cache hits); **`noor_cli generate`** writes outputs and a fingerprint file | Change one parameter: exactly that node and its dependants rerun (counted in a test); cancel mid-run and nothing half-written is kept; the CLI and the editor produce identical bytes |
 | 3 | **Terrain as a client**: height-field nodes (noise, heightmap import, terrace, erode-lite *(stretch)*, stamp with bounds), mask nodes (slope, height band, paint layer, distance to a path/footprint); the terrain component's base can be a graph output (`"base": "graph"`); **tiles as regions**: a node with bounds only dirties the tiles it touches | Regenerate with a new seed: sculpt and paint survive (already true) **and** a stamp moved in one corner recomputes only that corner's tiles (tile hashes compared in a test) |
 | 4 | **Graph editor MVP** in NoorEditor: a canvas with nodes, typed coloured pins and wires; add/delete/move nodes, connect/disconnect (undoable: graph edits are document commands); node parameters in the Inspector; Run with progress and Cancel; errors and timings shown on nodes; a 2D preview of height fields and masks | A graph built and edited in the editor, saved, reopened, run, undone; the smoke test drives it like a user |
-| 5 | **Generated assets in, Noor Interchange**: import NoorForm tree packs and NoorMD rocks as assets with their LODs (`Oak_01_LOD0..3.glb`: reconcile `_LOD0` with the registry's `.lod0`), materials, recipe, seed and provenance kept and shown; wind data kept but not used yet; a spec proposal for "generator packs" in Noor Interchange (or NoorMD writing `.noor.json`: Tom's call) | One oak variant imports as one asset with four LODs, and its manifest's distances, recipe and seed are visible in the editor |
+| 5 | **Generated assets in, Noor Interchange**: import trees and rocks from NoorMD's NoorEngine export mode ([guide](../interchange/NOORMD_NOORENGINE_EXPORT.md): `<name>.glb` + `.lodN.glb` + `.noor.json` v0.4) as one asset with its levels, `max_distance`s, materials, recipe, seed, family and provenance kept and shown; wind data kept but not used yet; a shared fixture with NoorMD's tests | One oak variant imports as one asset with four LODs, and its manifest's distances, recipe and seed are visible in the editor |
 | 6 | **Instanced rendering and LOD** (ADR-032): instance buffers (one draw per mesh part per LOD, not per object), per-instance LOD by distance, alpha-cutout two-sided foliage verified, instanced shadows (culled per cascade), measured on a forest scene: CPU, GPU per pass, draws, memory (spec 16.3) | 2,000 trees (four LODs) at 60 FPS in a Release build on the dev GPU, with numbers in MEASUREMENTS.md; a golden render of a small forest |
 | 7 | **Scatter (NoorVegetation-lite)**: an instance-set node: candidate points by deterministic Poisson-disk sampling (seed stream), filtered by masks (slope, height, paint layer weight, exclusions from paths and CSG footprints), per-species density and scale/rotation ranges; a **hand-made layer** (add, remove, move instances in the viewport) that regeneration never touches; trunk collision (capsules from the asset's bounds) *(stretch)*; export of an instance set as a file another tool can read | Change the seed: the forest rearranges, the trees you placed or deleted by hand stay placed or deleted; the exported instance set loads in a tiny standalone reader (outside the generator) |
 | 8 | **Sample + review**: Hillside grows a forest (oaks and rocks from NoorMD, placed by a graph around the house and off the path), a meadow mask from the paint; the gate tests (reproducible fingerprint across runs and CLI/editor, override survival, region invalidation, an output used outside); built game walk through the forest; Milestone 7 review | The gate |
@@ -78,9 +78,9 @@ oaks from it are on the dev machine (`test_tree/`, local only).
    Noor Interchange's `<name>.noor.json`; that must be reconciled by a spec proposal, not a silent
    special case. Regenerating trees from recipes inside a graph needs a headless NoorForm (it has
    none today): until then the engine records recipe + seed and imports the files.
-5. **Asset size in the repository.** The oaks are 2–7 MB per LOD file (about 170 MB for nine
-   variants). The sample needs a smaller, committed set (fewer variants, LOD1–3, or a lighter export
-   from NoorMD), with Tom's OK before anything of his goes into the repository.
+5. **Asset size in the repository.** Today's oaks are 2–7 MB per LOD file (about 170 MB for nine),
+   three quarters of it duplicated PNG textures. Tom's OK: they go in if they fit; NoorMD's
+   NoorEngine export mode (JPEG, smaller far-level maps) should bring an oak to about 4 MB.
 
 ## Not in Milestone 7 (planned later)
 Subgraphs/macros, comments and groups in the editor; a material graph (ADR-030's future); erosion
@@ -94,9 +94,11 @@ for huge worlds; plugin-provided nodes (ADR-007); a headless NoorForm (NoorMD's 
 - A small hand-made `.noorgraph` set for tests (terrain, masks, scatter).
 
 ## Open questions for Tom (and Noor)
-1. Should NoorMD write a Noor Interchange `<name>.noor.json` next to each exported variant, or should
-   the spec grow a "generator pack" manifest that matches NoorForm's `Oak.manifest.json`? (Proposal in
-   part 5 either way.)
-2. Is a headless NoorForm (`noorform --recipe Oak_01.noortree.json --out dir`) something NoorMD wants?
+1. ~~Manifest format.~~ **Answered (Tom, 2026-11-18):** NoorMD adapts to the engine, with a new
+   **NoorEngine export mode**. The changes are written up in
+   [NOORMD_NOORENGINE_EXPORT.md](../interchange/NOORMD_NOORENGINE_EXPORT.md) (Noor Interchange v0.4
+   added the optional fields it needs). NoorEngine imports only that layout.
+2. Is a headless NoorForm (`noorform --recipe Oak_01.recipe.json --out dir`) something NoorMD wants?
    Not needed for the gate; it would let graphs regenerate trees, not just place them.
-3. Which oaks and LODs may go into the repository for the sample, or would a lighter export be easier?
+3. ~~Assets in the repository.~~ **Answered (Tom):** "if it fits, it can go to the repo." With the
+   export mode's JPEG textures an oak should be about 4 MB instead of 19, so a pack fits.

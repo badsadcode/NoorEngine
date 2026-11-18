@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Noor Interchange v0.4 and NoorMD's NoorEngine export mode
+- [docs/interchange/NOORMD_NOORENGINE_EXPORT.md](docs/interchange/NOORMD_NOORENGINE_EXPORT.md): what a new
+  "NoorEngine" export mode in NoorMD should write for trees and rocks (Tom's decision: NoorMD adapts
+  to the engine), checked against NoorMD `4905b22` and a real nine-oak pack: Interchange file names,
+  one `.noor.json` per asset with a stable UUID v5 id (NoorForm namespace fixed in the guide),
+  `extras.noor` blocks, collision flags, JPEG textures (three quarters of today's 170 MB pack is
+  duplicated PNG textures), a checklist.
+- **Noor Interchange v0.4** (optional additions, v0.3 files stay valid): `max_distance` and `billboard`
+  for LOD levels, `family` for variety packs, `wind` channels (never in `COLOR_0`), the vegetation pivot.
+  Schema updated. NoorEngine's own CSG export still writes v0.3 (it uses none of the new fields).
+- M7 plan: two of the three open questions answered (export mode; assets go in the repository if they fit).
+
 ### 2026-11-18 — Milestone 7 plan: procedural graph and first generation tools
 - [docs/milestones/M7_PLAN.md](docs/milestones/M7_PLAN.md): eight parts toward the gate (reproducible
   outputs, overrides that survive regeneration, region-limited invalidation, outputs used outside the

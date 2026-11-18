@@ -1,6 +1,6 @@
-# Noor Interchange v0.3
+# Noor Interchange v0.4
 
-**Status:** Draft (v0.3, 2026-11-15). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
+**Status:** Draft (v0.4, 2026-11-18). Owner: Bad Ideas Works. Decision record: [ADR-023](../decisions/ADR-023-noor-interchange.md).
 Changes since v0.1: [section 8](#8-changes).
 
 The shared rules for everything a Noor tool **exports** (NoorMD benches, Noor generators such as
@@ -38,7 +38,8 @@ Same as [ADR-022](../decisions/ADR-022-math-and-coordinate-conventions.md) and g
 - **Right-handed, +Y up, metres, kilograms, seconds.** Angles in data are radians (degrees only in UI).
 - **The front of an asset faces +Z** (the glTF convention).
 - **Pivot (origin):**
-  - props, vegetation, rocks, buildings, vehicles, ships: **bottom centre** of the footprint, ground at y = 0;
+  - props, rocks, buildings, vehicles, ships: **bottom centre** of the footprint, ground at y = 0;
+  - vegetation: the **base of the trunk (or stem) on the ground**, y = 0; roots may go below it (v0.4);
   - levels and worlds: the level's own origin (usually the player start area or a corner); markers carry absolute positions;
   - materials: no geometry; a preview mesh is optional.
 - **Scale 1.0 on the root node.** Never bake a unit conversion into a node scale.
@@ -103,6 +104,10 @@ table first (one PR), then use them. Never invent a marker silently.
   cleanly everywhere and let an engine load only the levels it needs.
   *Allowed alternative* (for tools that need one file): top-level wrapper nodes `<base>_LOD0`,
   `<base>_LOD1`, … each with `"noor": {"v": 1, "lod": n}`. Noor importers accept both.
+  *(v0.4)* A level's root node may also say when it's used: `"max_distance"` (metres from the camera
+  up to which the level is shown, for a 60° vertical field of view; engines scale it for theirs; `0`
+  or missing on the last level means no limit) and `"billboard": true` for camera-facing card levels.
+  The manifest's `lods` list carries the same two fields.
 - **Collision: the `extras` flag is the rule; the name is the hint.** Collision nodes carry
   `"noor": {"v": 1, "collision": "mesh"}` (or `convex`, `box`, `sphere`, `capsule`).
   **Importers must never render a node that has `extras.noor.collision`.** For engines that only
@@ -175,6 +180,12 @@ Field rules (full detail in the schema):
   games collect these lines into their credits automatically**, so nobody has to remember which
   building came from where. If an asset combines several sources, separate lines with `"; "`.
 - **`markers`**: counts per marker type, for galleries and quick checks.
+- **`lods[].max_distance`, `lods[].billboard`** *(v0.4, optional)*: as on the level nodes (section 3.5).
+- **`family`** *(v0.4, optional)*: `{"name": "Oak", "variant": "A", "count": 9}` for variants that belong
+  together (a variety pack); each variant is still its own asset with its own manifest and id.
+- **`wind`** *(v0.4, optional)*: where wind data lives, e.g.
+  `{"channels": {"bend": "TEXCOORD_1.x", "flutter": "TEXCOORD_1.y", "phase": "TEXCOORD_2.x", "sway": "TEXCOORD_2.y"}}`.
+  Engines without wind ignore it; wind data must never be in `COLOR_0`, which glTF multiplies into the colour.
 - **`provenance`** (optional): which values were measured vs guessed, e.g.
   `{ "osm": ["levels"], "inferred": ["roof"] }` as NoorArchitect/BadBuilding already does.
 - **Tool-specific data** goes in one top-level block named after the tool in lower case, e.g.
@@ -216,6 +227,14 @@ Field rules (full detail in the schema):
 *The mapping is a proposal; final names are Tom's call.*
 
 ## 8. Changes
+
+### v0.4 (2026-11-18), for NoorMD's NoorEngine export mode ([guide](NOORMD_NOORENGINE_EXPORT.md))
+- **LOD switching:** `max_distance` and `billboard` on level root nodes (`extras.noor`) and in the
+  manifest's `lods` (NoorForm already computes both).
+- **`family`**: variants of one kind grouped (variety packs).
+- **`wind`**: which vertex attribute channels hold wind data; never `COLOR_0`.
+- **Vegetation pivot:** the base of the trunk on the ground; roots may go below y = 0.
+- All additions are optional: v0.3 files remain valid v0.4 files.
 
 ### v0.3 (2026-11-15)
 - **Seeds** are unsigned 64-bit (a real BadBuilding seed is 13,795,972,169,680,155,491, above 2^63).
