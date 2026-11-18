@@ -5,17 +5,17 @@
 
 ## This week we actually did
 
-**Environments are things now, and they come in a box of six.**
+**Environments are things now, and they come in a box (of six, then nine: see the update at the end).**
 
-![Six small pictures of the same test objects under six skies: a clear deep-blue noon, a pink golden evening with clouds, a pale overcast, a peach foggy dawn, a dark moonlit night with stars, and a grey blustery afternoon](img/devlog053_presets.png)
+![Nine small pictures of the same test objects under nine skies: a clear deep-blue noon, the same with fair-weather clouds, a peach golden evening, a violet dusk, a pale grey overcast, a gold foggy dawn, a pink mist, a starry moonlit night with the last twilight on the horizon, and a dark crimson storm](img/devlog053_presets.png)
 
-*The six built-in presets: Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night and Stormy Coast. The
-engine draws these pictures itself, from the same settings you get when you apply one.*
+*The built-in presets as they ship after the tuning below. The engine draws these pictures itself, from the same
+settings you get when you apply one.*
 
 - **An environment in a file.** Everything that makes a sky (time of day, haze, fog, clouds, moon, stars, even the
   exposure) can live in an `.noorenv` file. A scene points at one, and can still change any setting just for
   itself.
-- **Presets that can't be broken.** The six presets are built into the engine. Applying one copies it into your
+- **Presets that can't be broken.** The presets are built into the engine. Applying one copies it into your
   project, where you can change it as much as you like. The original never changes, and **Reset** gets it back.
 - **A gallery in the editor.** The new Environments tab shows them all as pictures. Double-click to apply,
   duplicate one to try a variation, and edit any setting while the scene updates as you type. It's all one
@@ -46,7 +46,16 @@ these six looks want tuning by an artist's eye.
 thrown away. It found nothing there and failed, correctly but for the wrong reason. A classic, now fixed.
 
 **Not done:** your own environments show their preset's picture marked "edited" (rendering a picture of any
-environment needs an off-screen render path in the editor), and the presets' looks are a first pass.
+environment needs an off-screen render path in the editor).
+
+## Update, later the same evening: nine skies
+
+The six presets were tuned the way you tune anything visual: three rendered variants of each, side by side on
+Hillside, and a pick. Most of the variants were good, and choosing one per preset meant throwing good skies away,
+so the good ones all stayed. **Fair Weather** (noon with drifting cumulus), **Dusk** (the violet minutes after sunset)
+and **Pink Mist** (pink twilight in the fog) joined the original six. Overcast got heavier and greyer. Moonlit Night
+became a half moon in a sky full of stars. And Stormy Coast finally became a storm: dark clouds and a red sky where
+the low sun breaks through. The two variants that were simply too dark didn't ship.
 
 ## Next engineering target
 **Part 7: weather zones.** Walk from a clear meadow into a foggy valley and the sky blends between the two.

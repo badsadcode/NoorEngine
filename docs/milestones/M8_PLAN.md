@@ -101,13 +101,14 @@ automatic exposure decided by measuring (an incident meter with a night bias; ri
 `Hillside_Night` and `Space`. Not done: textured bodies (they're coloured spheres), eye adaptation.
 
 ## Part 6 result (2026-11-18)
-Done. `.noorenv` environment assets (every setting, exposure included), scenes pointing at one with overrides, six
-built-in presets that are never written, the editor's Environments gallery (pictures, Apply, Duplicate, Edit, Reset)
+Done. `.noorenv` environment assets (every setting, exposure included), scenes pointing at one with overrides, nine
+built-in presets (the plan's six, tuned from rendered variants, plus Fair Weather, Dusk and Pink Mist where two variants
+were worth keeping) that are never written, the editor's Environments gallery (pictures, Apply, Duplicate, Edit, Reset)
 and the editor API v24. Proven: applying a preset changes sky, sun, fog and exposure together in one undo step (API test
 on what a game draws, and the editor smoke test); duplicates and edits never touch the installed preset; an edited
 environment saves, reopens and builds into a game identically (pixel-identical, the same metered EV). Corrected on
 the way: a cloud's diffuse light now depends on its thickness, in its shading and in automatic exposure. Not done:
-pictures for a project's own environments (they show their preset's), and the presets' looks want tuning.
+pictures for a project's own environments (they show their preset's).
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to

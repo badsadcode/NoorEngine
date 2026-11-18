@@ -94,8 +94,7 @@ that from an **environment**: an HDRI photo, or a procedural sky when the scene 
 
 An environment can live in its own file, `Assets/Environments/<name>.noorenv`, and a scene can point at it:
 `"environment": {"asset": "<id>"}`; any field written beside `"asset"` overrides the file's. The editor's
-**Environments** tab (bottom dock) shows six built-in presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn,
-Moonlit Night, Stormy Coast) and the project's own environments: **Apply** (or double-click) points the scene at one
+**Environments** tab (bottom dock) shows nine built-in presets (Clear Noon, Fair Weather, Golden Evening, Dusk, Overcast, Foggy Dawn, Pink Mist, Moonlit Night, Stormy Coast) and the project's own environments: **Apply** (or double-click) points the scene at one
 (a preset is copied into the project first, once; one undo step), **Duplicate** copies a project environment,
 **Edit** shows every setting (changes are saved as you type and the scene follows), **Reset** puts a copy back to the
 preset it came from. The built-in presets themselves never change. An environment can set the exposure

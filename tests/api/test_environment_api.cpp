@@ -68,11 +68,11 @@ struct EnvDoc {
 
 } // namespace
 
-TEST_CASE("environment api: six built-in presets, every one a complete environment") {
+TEST_CASE("environment api: nine built-in presets, every one a complete environment") {
     const Json presets = parsed(noor_environment_presets());
-    REQUIRE(presets.size() == 6);
-    const char* names[] = {"Clear Noon", "Golden Evening", "Overcast", "Foggy Dawn", "Moonlit Night", "Stormy Coast"};
-    for (std::size_t i = 0; i < 6; ++i) {
+    const char* names[] = {"Clear Noon", "Fair Weather", "Golden Evening", "Dusk", "Overcast", "Foggy Dawn", "Pink Mist", "Moonlit Night", "Stormy Coast"};
+    REQUIRE(presets.size() == std::size(names));
+    for (std::size_t i = 0; i < std::size(names); ++i) {
         CAPTURE(names[i]);
         CHECK(presets[i]["name"] == names[i]);
         CHECK(!presets[i]["description"].get<std::string>().empty());
@@ -128,7 +128,7 @@ TEST_CASE("environment api: duplicate, edit and reset never touch the installed 
 
     // Reset: back to the built-in preset, by name.
     const Json reset = d.env({{"op", "reset"}, {"asset", copy["path"]}});
-    CHECK(reset["environment"] == presets_before[1]["environment"]);
+    CHECK(reset["environment"] == presets_before[2]["environment"]);  // Golden Evening
     CHECK(parsed(noor_environment_presets()) == presets_before);
 
     // Applying the preset again keeps the project's copy (and its edits), it doesn't overwrite it.

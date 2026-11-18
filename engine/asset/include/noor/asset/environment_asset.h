@@ -7,7 +7,7 @@
 //   {"noor_environment": 1, "name": "Golden Evening", "preset": "Golden Evening",
 //    "environment": {"sky": "atmosphere", "time_of_day": 19.3, ..., "ev100": "auto"}}
 //
-// Six presets are built into the engine (environment_presets()): they're never written, so editing or duplicating
+// Nine presets are built into the engine (environment_presets()): they're never written, so editing or duplicating
 // an environment can't change them. Applying one writes a copy into the project (Assets/Environments) that
 // remembers which preset it came from ("preset"), so it can be reset to it.
 
@@ -31,8 +31,8 @@ struct EnvironmentPreset {
     Json environment;  // the environment component's fields
 };
 
-// The built-in presets, in gallery order: Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night,
-// Stormy Coast.
+// The built-in presets, in gallery order: Clear Noon, Fair Weather, Golden Evening, Dusk, Overcast, Foggy Dawn, Pink Mist,
+// Moonlit Night, Stormy Coast.
 [[nodiscard]] const std::vector<EnvironmentPreset>& environment_presets();
 [[nodiscard]] const EnvironmentPreset* find_environment_preset(std::string_view name);
 

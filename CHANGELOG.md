@@ -9,8 +9,8 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 - **`.noorenv` environment assets** (`asset/environment_asset.h`): every environment setting in a file (importer
   `environment`); a scene's environment component `{"asset": id, ...overrides}`; an environment's `ev100` (number or
   "auto") wins over the camera's.
-- **Six built-in presets**: Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast (never
-  written; applied as project copies that remember their preset).
+- **Nine built-in presets**: Clear Noon, Fair Weather, Golden Evening, Dusk, Overcast, Foggy Dawn, Pink Mist, Moonlit Night, Stormy Coast (never written; applied as project copies that remember their preset). Tuned
+  by rendering three variants of each on Hillside; where more than one was good, both shipped.
 - **Editor API v24**: `noor_environment_presets`, `noor_doc_environment` (list, read, apply, duplicate, reset, save).
 - **Editor**: the **Environments** tab (gallery with pictures, Apply, Duplicate, Edit, Reset);
   `tools/samples/render_environment_thumbnails.py` renders the presets' pictures from the engine.

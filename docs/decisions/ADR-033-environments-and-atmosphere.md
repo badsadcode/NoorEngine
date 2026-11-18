@@ -103,8 +103,7 @@ must agree, or the picture falls apart.
   "preset"?, "environment": {...}}`) holds every setting of the environment component; a scene's component points at
   one with `{"asset": id}` and may override any field beside it. An environment may set `ev100` (a number or
   "auto"): the environment's exposure wins over the camera's, so a preset changes sky, light, fog and exposure
-  together. Six **presets** are built into the engine (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit
-  Night, Stormy Coast); they are never written: applying one copies it into the project's Assets/Environments
+  together. Nine **presets** are built into the engine (Clear Noon, Fair Weather, Golden Evening, Dusk, Overcast, Foggy Dawn, Pink Mist, Moonlit Night, Stormy Coast); they are never written: applying one copies it into the project's Assets/Environments
   (kept, with its edits, once there), and Reset puts a copy back to the preset it remembers. Editor API v24:
   `noor_environment_presets`, `noor_doc_environment` (list, read, apply, duplicate, reset, save). The editor's
   **Environments** tab: a gallery with pictures (rendered from the engine's own presets by
@@ -153,7 +152,7 @@ must agree, or the picture falls apart.
 
 ## Unresolved
 - Thumbnails rendered for a project's own environments (needs an offscreen render path in the editor API).
-- The presets are a first pass: their look is to be tuned (Stormy Coast is more grey than dramatic).
+- The presets were tuned once from rendered variants (2026-11-18); a look is taste, so expect more passes.
 - Textured celestial bodies, eclipses, the moon's own shadow on the ground at an eclipse, real lunar calendars.
 - Exposure that adapts over time (eye adaptation) as an option on top of the metered value.
 - The `.noorenv` asset format and overrides (part 6), and blending two atmospheres (part 7: blend
