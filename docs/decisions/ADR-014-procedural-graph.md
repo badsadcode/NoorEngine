@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7, parts 1–2 decide the details) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Proposed (Milestone 7; part 1 done, part 2 settles the cache and jobs) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds
@@ -58,6 +58,18 @@ BadBuilding) are separate .NET programs connected by files.
 - **Plugins (ADR-007, open):** the node registry is designed for external registration (C ABI,
   versioned), but Milestone 7 ships built-in nodes only. External generators (NoorForm, BadShip…)
   enter through files until then.
+
+## What part 1 settled (2026-11-18)
+- **Units:** one `field` type with units (metres = height field, ratio = mask) rather than separate
+  height-field and mask types. Pins may take any unit or take their unit from an input; units chosen
+  by a parameter (`constant`, `remap`) are checked while running. A unitless number goes with anything.
+- **Blame:** a broken link is the receiving node's problem (or the graph's), never the source's, so a
+  healthy node never stops because someone linked to it badly.
+- **Keys** hash parameters with defaults filled in and keys sorted: the same parameters always give
+  the same key.
+- **Evaluation** is single-threaded in part 1 (jobs come in part 2); the order is fixed by dependencies
+  then node id.
+- **Fingerprint** of the test graph identical in Debug and Release (MSVC x64), pinned in CI.
 
 ## Consequences
 - Easier: reproducibility tests are hash comparisons; invalidation is "which keys changed"; the CLI

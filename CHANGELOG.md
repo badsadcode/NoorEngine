@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 6 in progress (manual creation tools)
 
+### 2026-11-18 — Milestone 7, part 1: procedural graph core
+**Added**
+- **`noor_procgraph`** (editor/tools only; the runtime-boundary test forbids it in games;
+  [docs/procgraph/PROCGRAPH.md](docs/procgraph/PROCGRAPH.md)): `.noorgraph` files (format 1, deterministic
+  save, unknown fields kept), typed pins with units (field in metres = height field, in ratio = mask),
+  a node registry with versions and parameter schemas, validation with every mistake on its node,
+  deterministic evaluation (dependency order, ties by id) with per-node seed streams, keys and a trace
+  (ms and bytes per node).
+- Built-in nodes: `constant`, `math`, `noise` (the terrain's noise, bit-identical), `combine`, `clamp`, `remap`.
+- `.noorgraph` assets (importer `procgraph`); the editor explains them when added to a scene.
+
+**Tests:** `test_procgraph` (6 cases): file round trip (seeds above 2^63 included), evaluation order,
+a pinned fingerprint (Debug = Release), node randomness independent of other nodes, noise identical to
+the terrain's, keys that change exactly downstream of an edit, every kind of mistake reported on the
+right node while the healthy rest still runs, failures while running skipping their dependants.
+
 ### 2026-11-18 — Noor Interchange v0.4 and NoorMD's NoorEngine export mode
 - [docs/interchange/NOORMD_NOORENGINE_EXPORT.md](docs/interchange/NOORMD_NOORENGINE_EXPORT.md): what a new
   "NoorEngine" export mode in NoorMD should write for trees and rocks (Tom's decision: NoorMD adapts

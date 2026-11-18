@@ -1,0 +1,222 @@
+#pragma once
+// The procedural graph (Milestone 7, ADR-014): graphs are data (`.noorgraph`), nodes are typed,
+// versioned functions in a registry, and evaluation is pure: a node's result depends only on its
+// type and version, its parameters, its own seed stream and its inputs. That makes every result
+// reproducible and gives it a key (a hash of exactly those things) for caching and invalidation.
+//
+// Editor and tools only (noor_cli, the editor): games load what graphs produce, never this code
+// (the runtime-boundary test checks).
+//
+// A `.noorgraph` file (JSON, format 1):
+//   { "noor_graph": 1, "seed": 7,
+//     "nodes":   [{"id": "hills", "type": "noise", "version": 1, "params": {...}, "position": [x, y]}],
+//     "links":   [{"from": "hills.height", "to": "flat.a"}],
+//     "outputs": [{"name": "terrain", "from": "flat.out"}] }
+// Node ids are stable names chosen by whoever adds the node; they also seed the node's randomness,
+// so adding, removing or reordering other nodes never changes a node's result.
+#include "noor/asset/json.h"
+#include "noor/foundation/error.h"
+#include "noor/foundation/guid.h"
+#include "noor/foundation/math.h"
+
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace noor::procgraph {
+
+// ---- Types and values ----
+
+enum class PinType : std::uint8_t { Scalar, Vector, Seed, Field, InstanceSet, AssetRef };
+// Units on pins: a link between different units is an error, never a silent conversion. A height
+// field is a Field in metres; a mask is a Field in ratio (0..1). `Any` (inputs only) accepts every
+// unit; an output declared `SameAs` takes the unit of one of the node's inputs.
+enum class Unit : std::uint8_t { None, Metres, Ratio, Degrees, Any, SameAs };
+[[nodiscard]] std::string_view type_name(PinType type);
+[[nodiscard]] std::string_view unit_name(Unit unit);
+
+// A grid of samples (row by row, z rows of x samples), `cell` metres apart, centred on the origin
+// like a terrain (sample (0, 0) is at -width/2, -depth/2).
+struct Field {
+    std::uint32_t sx = 0, sz = 0;
+    float cell = 1.0f;
+    std::vector<float> v;
+    [[nodiscard]] float at(std::uint32_t x, std::uint32_t z) const noexcept { return v[static_cast<std::size_t>(z) * sx + x]; }
+};
+
+struct Instance {
+    Guid asset;
+    math::Vec3 position;
+    math::Quat rotation;
+    float scale = 1.0f;
+    std::uint64_t seed = 0;
+};
+
+struct Value {
+    PinType type = PinType::Scalar;
+    Unit unit = Unit::None;
+    double scalar = 0.0;
+    math::Vec3 vector{};
+    std::uint64_t seed = 0;
+    std::shared_ptr<const Field> field;
+    std::shared_ptr<const std::vector<Instance>> instances;
+    Guid asset;
+    // A fingerprint of the value's content (bits of every number), the same on every machine.
+    [[nodiscard]] std::uint64_t hash() const noexcept;
+};
+
+// ---- Randomness: explicit streams, no shared generator ----
+
+// SplitMix64: integer maths only, so the same seed gives the same numbers everywhere.
+class Random {
+public:
+    explicit Random(std::uint64_t seed) : state_(seed) {}
+    [[nodiscard]] std::uint64_t next() noexcept;
+    [[nodiscard]] double uniform() noexcept;  // [0, 1), from the top 53 bits (exact, no library maths)
+private:
+    std::uint64_t state_;
+};
+[[nodiscard]] std::uint64_t mix(std::uint64_t x) noexcept;
+[[nodiscard]] std::uint64_t hash_text(std::string_view text) noexcept;  // FNV-1a 64
+
+// ---- The graph file ----
+
+struct PinRef {
+    std::string node, pin;
+    [[nodiscard]] std::string text() const { return node + "." + pin; }
+    friend bool operator==(const PinRef&, const PinRef&) = default;
+};
+
+struct Node {
+    std::string id;
+    std::string type;
+    std::uint32_t version = 1;
+    asset::Json params = asset::Json::object();
+    math::Vec2 position{};
+    asset::Json extra = asset::Json::object();  // fields this engine doesn't know: kept as they were
+};
+
+struct Link {
+    PinRef from, to;
+};
+
+struct Output {
+    std::string name;
+    PinRef from;
+};
+
+struct Graph {
+    static constexpr int kFormat = 1;
+    static constexpr std::string_view kExtension = ".noorgraph";
+    std::uint64_t seed = 0;
+    std::vector<Node> nodes;
+    std::vector<Link> links;
+    std::vector<Output> outputs;
+
+    [[nodiscard]] static Result<Graph> from_json(const asset::Json& json);
+    [[nodiscard]] asset::Json to_json() const;
+    [[nodiscard]] static Result<Graph> load(const std::filesystem::path& file);
+    [[nodiscard]] Status save(const std::filesystem::path& file) const;
+    [[nodiscard]] const Node* find(std::string_view id) const;
+};
+
+// ---- Node types ----
+
+struct PinSpec {
+    std::string name;
+    PinType type = PinType::Scalar;
+    Unit unit = Unit::None;
+    bool optional = false;       // inputs: may be left unconnected
+    std::string same_as;         // outputs with Unit::SameAs: which input's unit
+};
+
+struct ParamSpec {
+    enum class Kind : std::uint8_t { Number, Integer, Choice, Text, Flag } kind = Kind::Number;
+    std::string name;
+    asset::Json fallback;               // the default
+    double min = -1e300, max = 1e300;   // numbers and integers
+    std::vector<std::string> choices;   // Kind::Choice
+    std::string help;
+};
+
+// What a node's function gets.
+struct NodeContext {
+    const Node& node;
+    std::map<std::string, Value> inputs;  // connected inputs only
+    asset::Json params;                   // the node's parameters with defaults filled in and ranges applied
+    std::uint64_t seed = 0;               // the node's own seed stream root
+    [[nodiscard]] Random stream(std::string_view name) const { return Random(mix(seed ^ hash_text(name))); }
+    [[nodiscard]] double number(const char* name) const { return params.at(name).get<double>(); }
+    [[nodiscard]] std::int64_t integer(const char* name) const { return params.at(name).get<std::int64_t>(); }
+    [[nodiscard]] std::string choice(const char* name) const { return params.at(name).get<std::string>(); }
+    [[nodiscard]] const Value* input(const std::string& name) const {
+        const auto it = inputs.find(name);
+        return it == inputs.end() ? nullptr : &it->second;
+    }
+};
+
+using Outputs = std::map<std::string, Value>;
+
+struct NodeType {
+    std::string name;
+    std::uint32_t version = 1;
+    std::string help;
+    std::vector<PinSpec> inputs, outputs;
+    std::vector<ParamSpec> params;
+    std::vector<std::string> same_units;  // these inputs must share a unit (when connected)
+    std::function<Result<Outputs>(const NodeContext&)> run;
+};
+
+class Registry {
+public:
+    // The built-in nodes (Milestone 7, part 1: constant, math, noise, combine, clamp, remap).
+    [[nodiscard]] static const Registry& builtin();
+    void add(NodeType type);
+    [[nodiscard]] const NodeType* find(std::string_view name) const;
+    [[nodiscard]] const std::map<std::string, NodeType, std::less<>>& all() const noexcept { return types_; }
+
+private:
+    std::map<std::string, NodeType, std::less<>> types_;
+};
+
+// ---- Checking ----
+
+struct Issue {
+    std::string node;   // empty: the graph as a whole
+    std::string pin;    // optional
+    std::string message;
+};
+
+// Everything wrong with a graph, each on the node (and pin) it concerns. A graph with issues still
+// loads, saves and evaluates its healthy parts.
+[[nodiscard]] std::vector<Issue> validate(const Graph& graph, const Registry& registry);
+
+// ---- Evaluation ----
+
+struct NodeResult {
+    enum class State : std::uint8_t { Done, Failed, Skipped } state = State::Skipped;
+    Outputs outputs;
+    std::uint64_t key = 0;  // hash(type, version, params, seed stream, input keys): what the result depends on
+    std::string message;    // Failed / Skipped: why
+    double ms = 0.0;
+    std::uint64_t bytes = 0;  // size of the outputs
+};
+
+struct Evaluation {
+    std::vector<Issue> issues;                       // from validation and from running
+    std::map<std::string, NodeResult> nodes;         // by node id
+    std::vector<std::string> order;                  // the order nodes ran in
+    std::map<std::string, Value> outputs;            // the graph's declared outputs that could be made
+    [[nodiscard]] std::uint64_t fingerprint() const; // of the outputs (names + value hashes)
+};
+
+// Runs every node that can run, in dependency order (ties by node id, so the order is fixed).
+[[nodiscard]] Evaluation evaluate(const Graph& graph, const Registry& registry = Registry::builtin());
+
+} // namespace noor::procgraph

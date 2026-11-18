@@ -28,6 +28,7 @@ add_executable(noor_unit_tests
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
+    unit/test_procgraph.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -37,7 +38,7 @@ foreach(source IN LISTS noor_unit_sources)
         message(FATAL_ERROR "${source}: a TEST_CASE name contains ';' (ctest would run nothing for it): use a comma")
     endif()
 endforeach()
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit doctest::doctest stb::image)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -297,7 +298,7 @@ endfunction()
 set(noor_boundary_report "")
 foreach(runtime_target IN ITEMS noor_player noor_runtime noor_game noor_scene noor_render noor_physics)
     noor_collect_links(${runtime_target} links)
-    foreach(forbidden IN ITEMS noor_csg manifold noor_terrain_edit)
+    foreach(forbidden IN ITEMS noor_csg manifold noor_terrain_edit noor_procgraph)
         if(forbidden IN_LIST links)
             string(APPEND noor_boundary_report "${runtime_target} links ${forbidden}\n")
         endif()
@@ -305,7 +306,7 @@ foreach(runtime_target IN ITEMS noor_player noor_runtime noor_game noor_scene no
 endforeach()
 # The walker must see what is there: the unit tests do link the CSG module and Manifold.
 noor_collect_links(noor_unit_tests links)
-if(NOT noor_csg IN_LIST links OR NOT manifold IN_LIST links OR NOT noor_terrain_edit IN_LIST links)
+if(NOT noor_csg IN_LIST links OR NOT manifold IN_LIST links OR NOT noor_terrain_edit IN_LIST links OR NOT noor_procgraph IN_LIST links)
     string(APPEND noor_boundary_report "the link walk is broken: it doesn't find noor_csg/manifold in noor_unit_tests
 ")
 endif()

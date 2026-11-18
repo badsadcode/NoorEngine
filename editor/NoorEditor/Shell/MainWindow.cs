@@ -741,9 +741,14 @@ public sealed class MainWindow : Window
                 FrameEntity(sid);
             return;
         }
-        if (asset.Importer == "terrain_sculpt")
+        if (asset.Importer is "terrain_sculpt" or "terrain_paint")
         {
-            _ = Dialogs.Ask(this, "A sculpt layer", "This file holds a terrain's hand-sculpted edits. The terrain that made it uses it; it isn't added to scenes by itself.", "OK");
+            _ = Dialogs.Ask(this, "A terrain layer", "This file holds a terrain's hand-made sculpting or paint. The terrain that made it uses it; it isn't added to scenes by itself.", "OK");
+            return;
+        }
+        if (asset.Importer == "procgraph")
+        {
+            _ = Dialogs.Ask(this, "A procedural graph", "Graphs make things (terrain, masks, and later forests) rather than being placed themselves. The graph editor comes in Milestone 7, part 4, and noor_cli generate in part 2.", "OK");
             return;
         }
         if (Doc.AddAsset(asset, new Vec3(0, 0, 0)) && Doc.SelectedId is { } id) FrameEntity(id);
