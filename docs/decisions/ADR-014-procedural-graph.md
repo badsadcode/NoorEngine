@@ -1,6 +1,6 @@
 # ADR-014: Procedural graph: typed node assets, pure cached evaluation, override layers
 
-**Status:** Proposed (Milestone 7; parts 1–4 done: core, cache, jobs, headless, tiles, terrain, graph editor) · **Date:** 2026-11-18 · **Milestone:** 7
+**Status:** Proposed (Milestone 7; parts 1–7 done: core, cache, jobs, headless, tiles, terrain, graph editor, scatter) · **Date:** 2026-11-18 · **Milestone:** 7
 
 ## Context
 Spec 15.1 asks for one shared procedural graph system: typed pins with units, deterministic seeds
@@ -102,6 +102,18 @@ BadBuilding) are separate .NET programs connected by files.
   edits would be a larger, separate decision (all asset editors at once).
 - **A run keeps its evaluation** (per-node states and outputs) for the editor: per-node results in the
   status, previews as small greyscale pictures. Files are still written only when every output exists.
+
+## What part 7 settled (2026-11-18)
+- **Instance sets are files games read:** `<output>.instances.json` (plain JSON, ids as 16 hex digits,
+  positions bit-exact), read by the `game` module; the graph code stays out of games.
+- **Overrides for instances are id lists in the scene, not a layer file:** `removed` (generated ids)
+  and `added` (hand-placed instances) live in the `scatter` component, so they are undoable scene edits
+  and survive regeneration by construction. Ids are per grid cell under the seed; a new seed gives new
+  ids (the removed ones simply no longer exist), which is the honest meaning of "the trees you deleted
+  stay deleted" when the whole forest rearranges.
+- **Scatter is one candidate per cell from its own stream** (not Bridson's algorithm, whose result
+  depends on visiting order): deterministic and independent per cell; density near the packing limit
+  is lower than asked (documented, tested).
 
 ## Consequences
 - Easier: reproducibility tests are hash comparisons; invalidation is "which keys changed"; the CLI

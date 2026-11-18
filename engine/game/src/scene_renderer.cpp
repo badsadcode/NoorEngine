@@ -78,6 +78,13 @@ void SceneRenderer::add_mesh(std::vector<render::DrawItem>& out, const Model& m,
     }
 }
 
+const ModelLods& SceneRenderer::lods_for(const std::filesystem::path& file) {
+    const std::string key = file.generic_string();
+    auto it = lods_.find(key);
+    if (it == lods_.end()) it = lods_.emplace(key, read_model_lods(file)).first;
+    return it->second;
+}
+
 std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     environment_.apply(view.environment);
     std::vector<render::DrawItem> out;
@@ -88,10 +95,7 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     const math::Vec3 eye = math::inverse(cam.view).transform_point({0, 0, 0});
     std::unordered_map<Guid, int> lowered;  // model root -> level (> 0)
     for (const auto& md : view.models) {
-        const std::string key = md.asset_path.generic_string();
-        auto lit = lods_.find(key);
-        if (lit == lods_.end()) lit = lods_.emplace(key, read_model_lods(md.asset_path)).first;
-        const ModelLods& lods = lit->second;
+        const ModelLods& lods = lods_for(md.asset_path);
         if (!lods.switches()) continue;
         const math::Mat4& w = md.world;
         const float scale = std::max({math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), math::length(math::Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
@@ -106,6 +110,22 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     for (const auto& m : view.meshes) {
         if (!m.model_root.is_nil() && lowered.contains(m.model_root)) continue;
         if (const Model* md = model(m.asset_path)) add_mesh(out, *md, m.mesh_index, m.world);
+    }
+    // Scattered instances (Milestone 7, part 7): whole models from their files, a level per instance.
+    for (const auto& sv : view.scatters) {
+        for (const auto& group : sv.groups) {
+            const ModelLods& lods = lods_for(group.asset_path);
+            for (const auto& w : group.worlds) {
+                int level = 0;
+                if (lods.switches()) {
+                    const float scale = math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z});
+                    level = choose_lod(lods, math::length(w.transform_point({0, 0, 0}) - eye), cam.fov_y, scale);
+                }
+                const Model* lm = model(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file : group.asset_path);
+                if (!lm) continue;
+                for (const auto& [mesh_index, local] : lm->nodes) add_mesh(out, *lm, mesh_index, w * local);
+            }
+        }
     }
     for (const auto& t : view.terrains) {
         TerrainMeshes& tm = terrains_[t.entity];

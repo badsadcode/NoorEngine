@@ -98,6 +98,23 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan) {
     });
 }
 
+NOOR_API const char* noor_doc_scatter_edit(noor_doc* doc, const char* command) {
+    if (!doc || !command) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(command, "scatter command");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto r = doc->doc->scatter_edit(*json);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
 NOOR_API const char* noor_doc_asset_details(noor_doc* doc, const char* asset_id) {
     if (!doc || !asset_id) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {

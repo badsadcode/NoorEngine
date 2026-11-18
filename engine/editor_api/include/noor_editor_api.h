@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 22u
+#define NOOR_EDITOR_API_VERSION 23u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -115,6 +115,12 @@ NOOR_API const char* noor_doc_assets(noor_doc* doc, int32_t rescan); /* [{guid, 
    "collision_nodes", "parts", "issues"}], "level_bytes"}), "model": {"triangles", "materials", "images",
    "nodes"} for a model without a manifest}. Cached until its files change. NULL if there's no such asset. */
 NOOR_API const char* noor_doc_asset_details(noor_doc* doc, const char* asset_id);
+/* v23 (Milestone 7, part 7): hand-editing a scatter component's instances: {"scatter": entity id, "phase":
+   "begin" | "dab" | "end", "tool": "plant" | "remove", "radius" (m), "asset" (plant: the model; default: the
+   set's first), "dabs": [{"point": [x, y, z]}] (world)}. Plant adds one tree per `radius` along a drag;
+   remove takes out every instance within `radius` (generated ones by id into "removed", hand-placed ones
+   from "added"). A stroke is one undo step. Returns {"planted", "removed"} or NULL. */
+NOOR_API const char* noor_doc_scatter_edit(noor_doc* doc, const char* command);
 /* v10: a material from the texture set `texture_path` (project-relative) belongs to, written beside
    it as <set>.noormat (kept if it exists). Returns {"path", "created", "maps": [{"role", "path"}]} or NULL. */
 NOOR_API const char* noor_doc_make_material(noor_doc* doc, const char* texture_path);

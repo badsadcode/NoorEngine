@@ -1,5 +1,6 @@
 // Milestone 7, part 2: values as bytes, the results cache, and generating files (headless).
 #include "noor/procgraph/procgraph.h"
+#include "noor/asset/instance_set.h"
 
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
@@ -256,6 +257,17 @@ Result<std::pair<Field, Unit>> load_field(const stdfs::path& file) {
 
 // ---- Generating ----
 
+asset::InstanceSet to_instance_set(const std::vector<Instance>& list) {
+    asset::InstanceSet set;
+    std::map<Guid, std::uint32_t> index;  // assets in order of first use
+    for (const auto& i : list) {
+        auto [it, fresh] = index.try_emplace(i.asset, static_cast<std::uint32_t>(set.assets.size()));
+        if (fresh) set.assets.push_back(i.asset);
+        set.items.push_back({it->second, i.seed, i.position, i.rotation, i.scale});
+    }
+    return set;
+}
+
 Result<GenerateReport> generate(const Graph& graph, const Registry& registry, const GenerateOptions& options) {
     GenerateReport report;
     report.evaluation = evaluate(graph, registry, options.run);
@@ -299,6 +311,13 @@ Result<GenerateReport> generate(const Graph& graph, const Registry& registry, co
             if (auto s = write_if_changed(file, field_bytes(*v.field, v.unit)); !s) return std::unexpected(s.error());
             report.files.push_back(file);
             o["file"] = file.filename().generic_string();
+        } else if (v.type == PinType::InstanceSet && v.instances) {
+            // An instance set: a plain JSON file any tool can read (noor/asset/instance_set.h).
+            const auto file = options.out / (name + ".instances.json");
+            if (auto s = write_if_changed(file, to_instance_set(*v.instances).to_text()); !s) return std::unexpected(s.error());
+            report.files.push_back(file);
+            o["file"] = file.filename().generic_string();
+            o["count"] = v.instances->size();
         } else if (v.type == PinType::Scalar) {
             o["value"] = v.scalar;
         } else if (v.type == PinType::Seed) {

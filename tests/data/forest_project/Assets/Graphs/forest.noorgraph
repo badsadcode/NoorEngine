@@ -1,0 +1,128 @@
+{
+  "noor_graph": 1,
+  "seed": 11,
+  "nodes": [
+    {
+      "id": "ground",
+      "type": "noise",
+      "params": {
+        "tiles_x": 1,
+        "tiles_z": 1,
+        "cell_size": 1,
+        "height": 14,
+        "scale": 140,
+        "octaves": 4
+      },
+      "position": [
+        40,
+        40
+      ]
+    },
+    {
+      "id": "steep",
+      "type": "slope",
+      "params": {
+        "min_degrees": 14,
+        "max_degrees": 24
+      },
+      "position": [
+        300,
+        40
+      ]
+    },
+    {
+      "id": "gentle",
+      "type": "remap",
+      "params": {
+        "from_min": 0,
+        "from_max": 1,
+        "to_min": 1,
+        "to_max": 0,
+        "unit": "ratio"
+      },
+      "position": [
+        560,
+        40
+      ]
+    },
+    {
+      "id": "clear",
+      "type": "exclude",
+      "params": {
+        "tiles_x": 1,
+        "tiles_z": 1,
+        "cell_size": 1,
+        "paths": "-128,60 -60,30 0,10 60,-20 128,-50",
+        "width": 7,
+        "circles": "25,45,16",
+        "soft": 3
+      },
+      "position": [
+        300,
+        260
+      ]
+    },
+    {
+      "id": "where",
+      "type": "combine",
+      "params": {
+        "op": "multiply"
+      },
+      "position": [
+        820,
+        120
+      ]
+    },
+    {
+      "id": "trees",
+      "type": "scatter",
+      "params": {
+        "asset": "719beb3e-327d-56ed-8d54-be8882f405fd",
+        "density": 0.45,
+        "spacing": 13,
+        "scale_min": 0.85,
+        "scale_max": 1.15
+      },
+      "position": [
+        1080,
+        120
+      ]
+    }
+  ],
+  "links": [
+    {
+      "from": "ground.height",
+      "to": "steep.in"
+    },
+    {
+      "from": "steep.out",
+      "to": "gentle.in"
+    },
+    {
+      "from": "gentle.out",
+      "to": "where.a"
+    },
+    {
+      "from": "clear.mask",
+      "to": "where.b"
+    },
+    {
+      "from": "ground.height",
+      "to": "trees.height"
+    },
+    {
+      "from": "where.out",
+      "to": "trees.mask"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "ground",
+      "from": "ground.height"
+    },
+    {
+      "name": "trees",
+      "from": "trees.instances"
+    }
+  ]
+}

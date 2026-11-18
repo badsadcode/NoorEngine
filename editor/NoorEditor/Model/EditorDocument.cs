@@ -36,6 +36,7 @@ public sealed class EditorDocument : IDisposable
     {
         SetSculpting(false);  // picking a transform tool puts the brush down
         SetPainting(false);
+        SetScattering(null);
         if (tool == Tool) return;
         Tool = tool;
         ToolChanged?.Invoke();
@@ -56,8 +57,43 @@ public sealed class EditorDocument : IDisposable
     {
         if (on == Sculpting) return;
         Sculpting = on;
-        if (on) Painting = false;
+        if (on) { Painting = false; Scattering = null; }
         SculptChanged?.Invoke();
+    }
+
+    // ---- Scatter editing (Milestone 7, part 7): plant and remove trees with the brush ----
+
+    /// <summary>"plant" or "remove": left-drags on the selected scatter's ground plant or remove trees. Null: off.</summary>
+    public string? Scattering { get; private set; }
+    /// <summary>The model to plant (a model asset id), or null: the scatter's own.</summary>
+    public string? ScatterAsset { get; private set; }
+
+    public void SetScattering(string? tool)
+    {
+        if (tool == Scattering) return;
+        Scattering = tool;
+        if (tool != null) { Sculpting = false; Painting = false; }
+        SculptChanged?.Invoke();
+    }
+
+    public void SetScatterAsset(string? asset)
+    {
+        if (asset == ScatterAsset) return;
+        ScatterAsset = asset;
+        SculptChanged?.Invoke();
+    }
+
+    /// <summary>One piece of a planting stroke (noor_doc_scatter_edit); panels refresh at its start and end.</summary>
+    public JsonObject? ScatterEdit(JsonObject command, bool refresh)
+    {
+        var result = Native.ScatterEdit(_handle, command.ToJsonString());
+        if (result == null)
+        {
+            EngineLog.Warn("Scatter", Native.LastError());
+            return null;
+        }
+        if (refresh) Refresh();
+        return JsonNode.Parse(result) as JsonObject;
     }
 
     // ---- Painting (Milestone 6, part 7): one tool for terrains (strokes) and CSG faces (clicks) ----
@@ -71,7 +107,7 @@ public sealed class EditorDocument : IDisposable
     {
         if (on == Painting) return;
         Painting = on;
-        if (on) Sculpting = false;
+        if (on) { Sculpting = false; Scattering = null; }
         SculptChanged?.Invoke();
     }
 

@@ -4,6 +4,35 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 7 in progress (procedural graph and first generation tools)
 
+### 2026-11-18 — Milestone 7, part 7: scatter
+**Added**
+- Graph nodes **`scatter`** (blue-noise placement: one candidate per grid cell from its own random stream,
+  density × mask, minimum spacing, random turn and size, stable ids; on a height field or a flat area),
+  **`exclude`** (a mask that keeps paths and circles clear) and **`merge`** (two instance sets, the second
+  kept away from the first). Deterministic turns (sine/cosine from + − ×). Debug and Release write the
+  same bytes (fingerprint pinned).
+- **Instance set files** (`noor/asset/instance_set.h`, `<output>.instances.json`): plain JSON, one row per
+  instance, bit-exact; written by `noor_cli generate` and cooking. Proposed for Noor Interchange (v0.5 draft).
+- **`scatter` component** (`noor/game/scatter.h`): draws a graph's cooked instance set with levels of
+  detail and instancing (no entities per tree), standing on a terrain if it names one; a hand-made layer
+  of `removed` ids and `added` instances that regeneration never touches.
+- **Editor:** Create ▸ Scatter; the scatter card (graph, output and ground pickers, Plant and Remove brushes,
+  radius, the model to plant); instance-set previews (dots from above) and counts in the graph editor.
+  Editor API **v23**: `noor_doc_scatter_edit` (strokes, one undo step each).
+- Cooking (editor Save, `noor_cli cook`/`build`) covers every graph a scene uses: terrain bases and scatter
+  components (`game::graphs_used`). CLI messages say "graph(s)".
+- **A standalone reader** (`tests/tools/instance_reader.cpp`): reads the file with only a JSON parser.
+- Test data: `tests/data/forest_project` gains a graph making hills and a forest, and `Scenes/Scattered`.
+
+**Not yet:** trunk collision for scattered trees; moving one tree; masks from paint layers (Hillside's
+meadow, part 8).
+
+**Tests:** six unit tests (determinism, spacing, masks, ids; density near and under the packing limit;
+merge; mistakes on the node; the file round trip; hand-made edits surviving two reseeds; graphs a scene
+needs), an API test (remove, undo, plant along a drag, reseed keeps both), `cli.cook_forest`,
+`cli.generate_forest` (pinned fingerprint), `tools.instance_reader`, `render.golden_Scattered`,
+`render.scatter_check`, four editor smoke checks.
+
 ### 2026-11-18 — Milestone 7, part 6: instanced drawing and levels of detail
 **Added**
 - **Instanced drawing** (ADR-032, `render/src/vulkan_instancing.cpp`): each frame the renderer culls draw

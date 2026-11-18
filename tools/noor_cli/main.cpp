@@ -36,6 +36,7 @@
 #include "noor/csg/scene_csg.h"
 #include "noor/game/cooked_csg.h"
 #include "noor/game/game.h"
+#include "noor/game/scatter.h"
 #include "noor/procgraph/procgraph.h"
 
 #include <chrono>
@@ -254,7 +255,7 @@ int cmd_add_model(const std::vector<std::string>& a) {
     return 0;
 }
 
-// Cooks the procedural graphs that terrains use as their base (Milestone 7) into `root`/.noor/cooked/graphs.
+// Cooks the procedural graphs a scene uses (terrain bases, scatter components; Milestone 7) into `root`/.noor/cooked/graphs.
 // Returns the number cooked, or -1 if one failed.
 int cook_graphs(const asset::Project& p, const asset::AssetRegistry& registry, const stdfs::path& root, const scene::Scene& expanded,
                 std::set<std::string>& done) {
@@ -264,19 +265,18 @@ int cook_graphs(const asset::Project& p, const asset::AssetRegistry& registry, c
         auto path = rec ? p.resolve(rec->path) : Result<stdfs::path>(fail(ErrorCode::NotFound, "unknown asset"));
         return path ? std::optional(*path) : std::nullopt;
     };
-    for (const auto& e : expanded.entities) {
-        if (!e.has("terrain") || !e.components["terrain"].is_object() || e.components["terrain"].value("base", std::string()) != "graph") continue;
-        const auto graph = asset::guid_field(e.components["terrain"], "graph");
-        if (!graph || !done.insert(graph->to_string()).second) continue;
+    for (const Guid& g : game::graphs_used(expanded)) {  // terrains on a graph base, scatter components
+        const std::optional<Guid> graph = g;
+        if (!done.insert(graph->to_string()).second) continue;
         const auto file = resolve(*graph);
         if (!file) {
-            NOOR_LOG_ERROR("CLI", "Terrain {}: its graph {} isn't in the project", e.name, graph->to_string());
+            NOOR_LOG_ERROR("CLI", "The graph {} (used by a terrain or a scatter) isn't in the project", graph->to_string());
             return -1;
         }
         procgraph::Cache cache(p.root() / ".noor" / "cache" / "procgraph");
         auto r = procgraph::cook(*file, game::cooked_graph_folder(root, *graph), &cache, resolve);
         if (!r) {
-            NOOR_LOG_ERROR("CLI", "Terrain {}: graph {}: {}", e.name, file->filename().string(), r.error().describe());
+            NOOR_LOG_ERROR("CLI", "Graph {}: {}", file->filename().string(), r.error().describe());
             return -1;
         }
         ++cooked;
@@ -329,7 +329,7 @@ int cmd_cook(const std::vector<std::string>& a) {
     const int n = cook_project(*p, registry, p->root(), &graphs);
     if (n < 0) return 1;
     std::printf("Cooked %d CSG model(s) into %s\n", n, (p->root() / ".noor" / "cooked" / "csg").generic_string().c_str());
-    if (graphs > 0) std::printf("Cooked %d terrain graph(s) into %s\n", graphs, (p->root() / ".noor" / "cooked" / "graphs").generic_string().c_str());
+    if (graphs > 0) std::printf("Cooked %d graph(s) into %s\n", graphs, (p->root() / ".noor" / "cooked" / "graphs").generic_string().c_str());
     return 0;
 }
 
@@ -813,7 +813,7 @@ int cmd_build(const std::vector<std::string>& a) {
             return 1;
         }
         if (models > 0) std::printf("  %d CSG model(s) cooked\n", models);
-        if (graphs > 0) std::printf("  %d terrain graph(s) cooked\n", graphs);
+        if (graphs > 0) std::printf("  %d graph(s) cooked\n", graphs);
     }
 
     const asset::Json manifest{{"noor_game", 1},

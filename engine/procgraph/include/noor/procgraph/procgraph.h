@@ -14,6 +14,7 @@
 //     "outputs": [{"name": "terrain", "from": "flat.out"}] }
 // Node ids are stable names chosen by whoever adds the node; they also seed the node's randomness,
 // so adding, removing or reordering other nodes never changes a node's result.
+#include "noor/asset/instance_set.h"
 #include "noor/asset/json.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/guid.h"
@@ -347,6 +348,10 @@ struct GenerateReport {
 // A `.noorfield` file: "NFIELD01", u32 version 1, u32 sx, u32 sz, f32 cell, u32 unit, sx*sz f32
 // (little-endian, row by row). Readable by any tool: see docs/procgraph/PROCGRAPH.md.
 [[nodiscard]] Status save_field(const std::filesystem::path& file, const Field& field, Unit unit);
+
+// Instance set outputs are written as `<output>.instances.json` (noor/asset/instance_set.h): ids are
+// the instances' seeds, assets in order of first use.
+[[nodiscard]] asset::InstanceSet to_instance_set(const std::vector<Instance>& list);
 
 // Cooking for games (Milestone 7, part 3): runs a graph file and writes its outputs into `out` (the
 // editor and noor_cli both use this; games read the files, never the graph).

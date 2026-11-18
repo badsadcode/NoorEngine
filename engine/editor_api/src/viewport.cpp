@@ -1128,6 +1128,38 @@ void render_thread_main(noor_viewport* vp) {
                     }
                 }
             }
+            // Scattered instances (Milestone 7, part 7): whole models from their files, a level per instance
+            // (they're not entities: the scatter entity is selected in the hierarchy, not by clicking a tree).
+            if (shown) {
+                for (const auto& sc : shown->scattered) {
+                    const std::string key = std::format("{}@{}", sc.asset_path, sc.asset_version);
+                    auto lit = lod_cache.find(key);
+                    if (lit == lod_cache.end()) lit = lod_cache.emplace(key, noor::game::read_model_lods(sc.asset_path)).first;
+                    const auto& lods = lit->second;
+                    const bool picked = std::ranges::find(selection, sc.entity) != selection.end();
+                    for (const auto& w : sc.worlds) {
+                        int level = 0;
+                        if (lods.switches())
+                            level = noor::game::choose_lod(lods, noor::math::length(w.transform_point({0, 0, 0}) - basis.eye), basis.fov_y,
+                                                           noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}));
+                        const CachedAsset& ca = load_asset(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file.generic_string() : sc.asset_path, sc.asset_version);
+                        if (!ca.meshes) continue;
+                        for (const auto& [mesh_index, local] : ca.nodes) {
+                            if (mesh_index < 0 || mesh_index >= static_cast<int>(ca.meshes->size())) continue;
+                            const LoadedMesh& lm = (*ca.meshes)[static_cast<std::size_t>(mesh_index)];
+                            if (!lm.handle.valid()) continue;
+                            for (const auto& part : lm.parts) {
+                                noor::render::DrawItem piece{lm.handle, w * local};
+                                piece.first_index = part.first_index;
+                                piece.index_count = part.index_count;
+                                piece.material = part.material;
+                                if (picked) piece.tint = highlight;
+                                frame_draws.push_back(piece);
+                            }
+                        }
+                    }
+                }
+            }
             for (std::size_t i = 0; i < scene_draws.size(); ++i) {
                 if (!scene_draws[i].model_root.is_nil() && lowered.contains(scene_draws[i].model_root)) continue;
                 noor::render::DrawItem item = scene_draws[i].item;
@@ -1258,6 +1290,8 @@ void render_thread_main(noor_viewport* vp) {
             stats_json = noor::asset::Json{{"gpu_ms", fs.gpu_ms},
                                            {"passes", std::move(passes)},
                                            {"draw_calls", fs.draw_calls},
+                                           {"instances", fs.instances},
+                                           {"culled", fs.culled},
                                            {"triangles", fs.triangles},
                                            {"shadow_draw_calls", fs.shadow_draw_calls},
                                            {"shadow_draws_culled", fs.shadow_draws_culled},

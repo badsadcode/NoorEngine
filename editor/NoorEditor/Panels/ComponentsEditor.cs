@@ -103,6 +103,67 @@ public sealed class ComponentsEditor : StackPanel
         return panel;
     }
 
+    // ---- Scatter (Milestone 7, part 7): the hand-made layer and its brush ----
+
+    private Control ScatterEditor(JsonObject scatter)
+    {
+        var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
+        var removed = (scatter["removed"] as JsonArray)?.Count ?? 0;
+        var added = (scatter["added"] as JsonArray)?.Count ?? 0;
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"By hand: {removed} removed · {added} planted. Regenerating the graph (a new seed, new settings) keeps these.",
+            FontSize = 11, TextWrapping = TextWrapping.Wrap, Classes = { "muted" },
+        });
+        var groundId = scatter["ground"]?.GetValue<string>();
+        var hasGround = groundId != null && _doc.Scene.Entities.Any(e => e.Id == groundId && e.Components["terrain"] != null);
+        Avalonia.Controls.Primitives.ToggleButton Tool(string tool, string label, string tip)
+        {
+            var b = new Avalonia.Controls.Primitives.ToggleButton { Content = label, IsChecked = _doc.Scattering == tool, IsEnabled = hasGround, Classes = { "tool" },
+                                                                    HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(1, 0) };
+            ToolTip.SetTip(b, tip);
+            b.Click += (_, _) => _doc.SetScattering(b.IsChecked == true ? tool : null);
+            return b;
+        }
+        panel.Children.Add(new Avalonia.Controls.Primitives.UniformGrid
+        {
+            Rows = 1, Columns = 2,
+            Children =
+            {
+                Tool("plant", _doc.Scattering == "plant" ? "Planting: drag" : "Plant", "Left-drag on the ground: a tree every brush radius"),
+                Tool("remove", _doc.Scattering == "remove" ? "Removing: drag" : "Remove", "Left-drag on the ground: trees within the brush go"),
+            },
+        });
+        if (!hasGround)
+            panel.Children.Add(new TextBlock { Text = "Choose a terrain as the ground to plant and remove trees with the brush.", FontSize = 10,
+                                               TextWrapping = TextWrapping.Wrap, Classes = { "muted" } });
+        if (_doc.Scattering != null)
+        {
+            var text = new TextBlock { Text = "Radius (m)", FontSize = 12, Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center };
+            var box = NumberBox(_doc.Brush.Radius, x => _doc.SetBrush(_doc.Brush with { Radius = Math.Clamp(x, 0.5, 200) }));
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("96,*") };
+            Grid.SetColumn(box, 1);
+            grid.Children.Add(text);
+            grid.Children.Add(box);
+            panel.Children.Add(grid);
+        }
+        if (_doc.Scattering == "plant")
+        {
+            var models = _doc.Assets.Where(a => a.Importer == "gltf").ToList();
+            var items = new List<string> { "(the scatter's own)" };
+            items.AddRange(models.Select(m => m.Path));
+            var current = models.FirstOrDefault(m => m.Guid == _doc.ScatterAsset)?.Path ?? "(the scatter's own)";
+            var combo = new ComboBox { ItemsSource = items, SelectedItem = current, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+            ToolTip.SetTip(combo, "The model to plant");
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (combo.SelectedItem is string path && path != current) _doc.SetScatterAsset(models.FirstOrDefault(m => m.Path == path)?.Guid);
+            };
+            panel.Children.Add(combo);
+        }
+        return panel;
+    }
+
     // ---- Painting (Milestone 6, part 7) ----
 
     private Avalonia.Controls.Primitives.ToggleButton PaintToggle(string tip)
@@ -519,7 +580,9 @@ public sealed class ComponentsEditor : StackPanel
         {
             if (type == "terrain") body.Children.Add(SculptEditor());
             foreach (var (field, fieldValue) in obj)
-                if (!(type == "brush" && field == "faces") && !(type == "terrain" && field == "layers")) body.Children.Add(FieldRow(type, field, field, fieldValue));
+                if (!(type == "brush" && field == "faces") && !(type == "terrain" && field == "layers") && !(type == "scatter" && field is "removed" or "added"))
+                    body.Children.Add(FieldRow(type, field, field, fieldValue));
+            if (type == "scatter") body.Children.Add(ScatterEditor(obj));
             if (type == "terrain") body.Children.Add(LayersEditor(obj));
             if (type == "brush") body.Children.Add(FacesEditor(obj));
             var addField = new Button { Content = "+ Field", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };
@@ -594,6 +657,46 @@ public sealed class ComponentsEditor : StackPanel
                 var combo = new ComboBox { ItemsSource = options, SelectedItem = options.Contains(choice) ? choice : null, Classes = { "field" },
                                            HorizontalAlignment = HorizontalAlignment.Stretch };
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
+                editor = combo;
+                break;
+            }
+            case var _ when type == "scatter" && field == "graph":
+            {
+                // The graph whose instance set output this shows: any procedural graph in the project.
+                var current = (value as JsonValue)?.GetValue<string>();
+                var graphs = _doc.Assets.Where(a => a.Importer == "procgraph").ToList();
+                var items = new List<string> { "(none)" };
+                items.AddRange(graphs.Select(m => m.Path));
+                var selected = current == null ? "(none)" : graphs.FirstOrDefault(m => m.Guid == current)?.Path ?? "(missing graph)";
+                if (!items.Contains(selected)) items.Add(selected);
+                var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+                ToolTip.SetTip(combo, "The procedural graph that places the instances (its output named below)");
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string path || path == selected || path == "(missing graph)") return;
+                    var guid = path == "(none)" ? null : graphs.FirstOrDefault(m => m.Path == path)?.Guid;
+                    SetField(type, field, guid == null ? null : JsonValue.Create(guid));
+                };
+                editor = combo;
+                break;
+            }
+            case var _ when type == "scatter" && field == "ground":
+            {
+                // A terrain to stand on (its sculpting included); the brush plants and removes on it.
+                var current = (value as JsonValue)?.GetValue<string>();
+                var terrains = _doc.Scene.Entities.Where(e => e.Components["terrain"] != null).ToList();
+                var items = new List<string> { "(none)" };
+                items.AddRange(terrains.Select(e => e.Name));
+                var selected = current == null ? "(none)" : terrains.FirstOrDefault(e => e.Id == current)?.Name ?? "(missing terrain)";
+                if (!items.Contains(selected)) items.Add(selected);
+                var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+                ToolTip.SetTip(combo, "A terrain the instances stand on (they follow its sculpting); the Plant and Remove brushes work on it");
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string name || name == selected || name == "(missing terrain)") return;
+                    var id = name == "(none)" ? null : terrains.FirstOrDefault(e => e.Name == name)?.Id;
+                    SetField(type, field, id == null ? null : JsonValue.Create(id));
+                };
                 editor = combo;
                 break;
             }

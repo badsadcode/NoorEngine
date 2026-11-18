@@ -56,6 +56,7 @@ private:
     std::unordered_map<std::string, ModelLods> lods_;               // by model file
     const Model* model(const std::filesystem::path& file);
     void add_mesh(std::vector<render::DrawItem>& out, const Model& model, int mesh_index, const math::Mat4& world) const;
+    const ModelLods& lods_for(const std::filesystem::path& file);
     TextureLibrary textures_;
     MaterialLibrary materials_;
     EnvironmentLibrary environment_;

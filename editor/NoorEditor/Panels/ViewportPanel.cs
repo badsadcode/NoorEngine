@@ -123,7 +123,11 @@ public sealed class ViewportPanel : DockPanel
         // Sculpting the selected terrain: the brush takes the left button, the gizmo goes away.
         var sculpting = (_doc.Sculpting || (_doc.Painting && _doc.PaintMaterial != null)) && selected is { FromPrefab: false } &&
                         selected.Components["terrain"] != null && !_doc.Playing;
-        Viewport.SetBrush(sculpting ? selected!.Id : null, _doc.Brush.Radius);
+        // Planting and removing scattered trees: the brush works on the scatter's ground terrain.
+        var ground = _doc.Scattering != null && selected is { FromPrefab: false } && !_doc.Playing ? selected.Components["scatter"]?["ground"]?.GetValue<string>() : null;
+        if (ground != null && _doc.Scene.Entities.All(e => e.Id != ground)) ground = null;
+        sculpting = sculpting || ground != null;
+        Viewport.SetBrush(ground ?? (sculpting ? selected!.Id : null), _doc.Brush.Radius);
         var mode = selected is { FromPrefab: false } && !_doc.Playing && !sculpting ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
         Viewport.SetFaceHighlight(selected != null && _doc.SelectedFace is { } face ? selected.Id : null, _doc.SelectedFace ?? 0);
@@ -141,6 +145,21 @@ public sealed class ViewportPanel : DockPanel
         var command = new JsonObject { ["terrain"] = terrain, ["phase"] = phase, ["dabs"] = new JsonArray() };
         if (ev["point"] is JsonArray point)
             ((JsonArray)command["dabs"]!).Add(new JsonObject { ["point"] = point.DeepClone(), ["seconds"] = ev["seconds"]?.GetValue<double>() ?? 0 });
+        if (_doc.Scattering != null && _doc.Selected?.Components["scatter"] != null)
+        {
+            // Planting or removing scattered trees (Milestone 7, part 7).
+            command.Remove("terrain");
+            command["scatter"] = _doc.Selected.Id;
+            if (phase == "begin")
+            {
+                command["tool"] = _doc.Scattering;
+                command["radius"] = _doc.Brush.Radius;
+                if (_doc.ScatterAsset != null) command["asset"] = _doc.ScatterAsset;
+            }
+            if (phase == "end") _stroking = false;
+            if (_doc.ScatterEdit(command, refresh: phase != "dab") == null) _stroking = false;
+            return;
+        }
         if (phase == "begin")
         {
             var b = _doc.Brush;

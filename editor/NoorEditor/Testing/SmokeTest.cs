@@ -255,6 +255,7 @@ internal static class SmokeTest
         await PaintChecks(window, Check, Shot);
         await GraphChecks(window, Check, Shot);
         await OakChecks(window, Check, Shot);
+        await ScatterChecks(window, Check, Shot);
         CodeEditorChecks(window, results, Check);
 
         // 8. Layout: panel sizes are remembered and restored; Reset Layout restores the default.
@@ -1112,6 +1113,91 @@ internal static class SmokeTest
         doc.Undo();
         doc.Undo();
         window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        await Task.Delay(300);
+    }
+
+    // Milestone 7, part 7: a forest scattered by a graph on a terrain, trees removed and planted by hand
+    // (as the Plant and Remove brushes do), the graph editor's preview of the instance set.
+    private static async Task ScatterChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var oak = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Trees/Oak_01.glb");
+        if (oak == null)
+        {
+            check(false, "scatter: the oak from the NoorMD checks is in the project");
+            return;
+        }
+        var file = Path.Combine(doc.ProjectRoot, "Assets", "Graphs", "forest.noorgraph");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, $$"""
+            { "noor_graph": 1, "seed": 4,
+              "nodes": [
+                {"id": "clear", "type": "exclude", "params": {"tiles_x": 1, "tiles_z": 1, "cell_size": 1, "circles": "0,0,20", "soft": 2}, "position": [40, 40]},
+                {"id": "trees", "type": "scatter", "params": {"asset": "{{oak.Guid}}", "density": 0.4, "spacing": 14, "width": 200, "depth": 200}, "position": [320, 40]}
+              ],
+              "links": [{"from": "clear.mask", "to": "trees.mask"}],
+              "outputs": [{"name": "trees", "from": "trees.instances"}] }
+            """);
+        doc.RefreshAssets(true);
+        var graph = doc.Assets.FirstOrDefault(a => a.Path == "Assets/Graphs/forest.noorgraph");
+        var terrain = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.TerrainTemplateName));
+        if (graph == null || terrain == null)
+        {
+            check(false, "scatter: a graph and a terrain to stand on");
+            return;
+        }
+        var scatter = EntityTemplates.Scatter();
+        scatter["graph"] = graph.Guid;
+        scatter["ground"] = terrain;
+        var forest = doc.Create("Forest", new JsonObject { ["scatter"] = scatter }, new Vec3(0, 0, 0));
+        if (forest == null)
+        {
+            check(false, "scatter: Create ▸ Scatter makes a scatter entity");
+            return;
+        }
+        doc.Select(forest);
+        window.ViewportView?.Viewport.Frame(doc.Subtree(terrain));
+        long Drawn() => VulkanViewport.Active?.RenderStats() is { } st && JsonNode.Parse(st) is JsonObject o ? o["instances"]?.GetValue<long>() ?? 0 : 0;
+        var drawn = await WaitFor(() => (long?)Drawn(), n => n > 60, 60);  // tree parts (two per oak) and the terrain's tiles
+        check(drawn > 60, $"scatter: the graph's forest stands on the terrain in the viewport ({drawn} objects drawn)");
+
+        // Remove: a brush stroke in the clearing's edge removes nothing; one at a tree removes it.
+        var trees = Path.Combine(doc.ProjectRoot, ".noor", "cooked", "graphs", graph.Guid, "trees.instances.json");
+        var rows = File.Exists(trees) ? (JsonNode.Parse(File.ReadAllText(trees))?["instances"] as JsonArray) : null;
+        check(rows is { Count: > 50 }, $"scatter: the graph was cooked into an instance set ({rows?.Count ?? 0} trees)");
+        if (rows is not { Count: > 0 }) return;
+        var row = (JsonArray)rows[rows.Count / 2]!;
+        var at = new JsonArray(row[2]!.GetValue<double>(), 0.0, row[4]!.GetValue<double>());
+        doc.ScatterEdit(new JsonObject { ["scatter"] = forest, ["phase"] = "begin", ["tool"] = "remove", ["radius"] = 3 }, false);
+        var removed = doc.ScatterEdit(new JsonObject { ["scatter"] = forest, ["phase"] = "end", ["dabs"] = new JsonArray(new JsonObject { ["point"] = at }) }, true);
+        doc.ScatterEdit(new JsonObject { ["scatter"] = forest, ["phase"] = "begin", ["tool"] = "plant", ["radius"] = 5 }, false);
+        var planted = doc.ScatterEdit(new JsonObject { ["scatter"] = forest, ["phase"] = "end",
+                                                       ["dabs"] = new JsonArray(new JsonObject { ["point"] = new JsonArray(0.0, 0.0, 0.0) }) }, true);
+        var comp = doc.Scene.Entities.First(e => e.Id == forest).Components["scatter"];
+        check(removed?["removed"]?.GetValue<int>() == 1 && planted?["planted"]?.GetValue<int>() == 1 &&
+              (comp?["removed"] as JsonArray)?.Count == 1 && (comp?["added"] as JsonArray)?.Count == 1,
+              "scatter: a Remove stroke takes out one tree, a Plant stroke adds one in the clearing (both kept in the component)");
+        await Task.Delay(1200);
+        shot(window, "editor_31_scatter.png");
+        doc.Undo();
+        comp = doc.Scene.Entities.First(e => e.Id == forest).Components["scatter"];
+        check((comp?["added"] as JsonArray)?.Count == 0 && (comp?["removed"] as JsonArray)?.Count == 1, "scatter: undo takes back the planting stroke only");
+
+        // The graph editor previews the instance set (dots from above) and counts it.
+        var tab = window.OpenGraph("Assets/Graphs/forest.noorgraph");
+        if (tab != null)
+        {
+            await Task.Delay(300);
+            tab.Run();
+            await tab.WaitForRun();
+            check(tab.Preview("trees", "instances", 96) != null && tab.Result("trees")?["outputs"]?["instances"]?["count"]?.GetValue<int>() == rows.Count,
+                  "scatter: the graph editor shows the instance set's preview and count");
+            window.DockFactory.CloseDockable(tab);
+            window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        }
+        doc.Undo();  // the removal
+        doc.Undo();  // the forest
+        doc.Undo();  // the terrain
         await Task.Delay(300);
     }
 

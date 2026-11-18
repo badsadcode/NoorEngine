@@ -27,6 +27,7 @@ Every exported asset is a small set of files sharing one base name:
 | `<name>.recipe.json` | ✅ for generated assets | Everything needed to regenerate it: tool-specific format, but must contain `seed` and a `version` |
 | `<name>.validation.json` | optional | The tool's own checks and the Khronos glTF validator report |
 | `<name>.preview.png` | optional | Thumbnail, 256–512 px |
+| `<name>.instances.json` | *proposed (v0.5 draft)* | An **instance set**: many placements of listed assets (a forest, a rock field), kind `vegetation.scatter`. Format in NoorEngine's [PROCGRAPH.md](../procgraph/PROCGRAPH.md#the-instance-set-file-outputinstancesjson); proposed for tools such as NoorVegetation to write the same file |
 
 Several assets may share one folder. A level or a building with many parts is **one asset** (one
 GLB with many nodes), not many files, unless the parts are meant to be reused separately.

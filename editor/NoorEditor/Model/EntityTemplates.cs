@@ -69,7 +69,17 @@ public static class EntityTemplates
         // Terrain (Milestone 6, part 5, ADR-031): generated from these settings, centred on the entity
         // (its rotation and scale are ignored). Tiles of 256 cells; height and scale in metres.
         new(TerrainTemplateName, () => new JsonObject { ["terrain"] = Terrain() }, new Vec3(0, 0, 0)),
+        // Scatter (Milestone 7, part 7): a procedural graph's instance set output (a forest), with trees
+        // removed and planted by hand on top. Pick the graph and a terrain to stand on in the Inspector.
+        new(ScatterTemplateName, () => new JsonObject { ["scatter"] = Scatter() }, new Vec3(0, 0, 0)),
     ];
+
+    public const string ScatterTemplateName = "Scatter";
+
+    public static JsonObject Scatter() => new()
+    {
+        ["graph"] = null, ["output"] = "trees", ["ground"] = null, ["removed"] = new JsonArray(), ["added"] = new JsonArray(),
+    };
 
     public const string TerrainTemplateName = "Terrain";
 

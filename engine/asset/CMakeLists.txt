@@ -6,6 +6,7 @@ noor_add_module(asset
         src/gltf_import.cpp
         src/gltf_export.cpp
         src/interchange.cpp
+        src/instance_set.cpp
         src/migration.cpp
         src/file_watcher.cpp
         src/texture.cpp

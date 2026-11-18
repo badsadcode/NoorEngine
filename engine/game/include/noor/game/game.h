@@ -63,6 +63,19 @@ struct SceneView {
         math::Mat4 world;
     };
     std::vector<Model> models;
+    // Scattered instances (`scatter` components, noor/game/scatter.h): whole models drawn from their
+    // files at each instance (no entities), grouped by model file, levels of detail per instance.
+    struct Scatter {
+        Guid entity;
+        struct Group {
+            std::filesystem::path asset_path;
+            std::vector<math::Mat4> worlds;
+        };
+        std::vector<Group> groups;
+        std::size_t count = 0;
+        std::string warning;  // why some or all are missing (an output that isn't cooked yet)
+    };
+    std::vector<Scatter> scatters;
     // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
     // Their surface: "material": <.noormat asset id>, or material fields right on the component
     // (the .noormat names: "base_color_map", "normal_map", "roughness", "metallic", "uv_scale", …).

@@ -7,8 +7,10 @@
 #include "noor/terrain/terrain.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <format>
+#include <unordered_map>
 
 namespace noor::procgraph {
 using asset::Json;
@@ -89,6 +91,82 @@ Result<std::vector<float>> map_tile(const NodeContext& c, const TileInfo& t, F&&
     const Field& in = *c.input("in")->field;
     std::vector<float> out(kTileSize);
     each_sample(t, [&](std::size_t g, std::size_t l) { out[l] = fn(in.v[g]); });
+    return out;
+}
+
+// sin and cos of 0 <= x < 2 pi from + - * only (Taylor series to x^17 on [0, pi/2] after folding), so
+// scattered rotations are the same on every machine.
+std::pair<double, double> sin_cos(double x) {
+    constexpr double kPi = 3.14159265358979323846;
+    x = std::clamp(x, 0.0, 2.0 * kPi);
+    double s_sign = 1.0, c_sign = 1.0;
+    if (x > kPi) {  // sin(x) = -sin(x - pi), cos(x) = -cos(x - pi)
+        x -= kPi;
+        s_sign = -1.0;
+        c_sign = -1.0;
+    }
+    if (x > 0.5 * kPi) {  // sin(x) = sin(pi - x), cos(x) = -cos(pi - x)
+        x = kPi - x;
+        c_sign = -c_sign;
+    }
+    const double x2 = x * x;
+    double st = x, s = x, ct = 1.0, c = 1.0;
+    for (int n = 1; n <= 8; ++n) {
+        st *= -x2 / static_cast<double>((2 * n) * (2 * n + 1));
+        ct *= -x2 / static_cast<double>((2 * n - 1) * (2 * n));
+        s += st;
+        c += ct;
+    }
+    return {s_sign * s, c_sign * c};
+}
+
+// Bilinear sample of a field at (x, z) metres in its centred space; outside: the nearest edge.
+double sample(const Field& f, double x, double z) {
+    const double fx = std::clamp(x / f.cell + 0.5 * (f.sx - 1), 0.0, static_cast<double>(f.sx - 1));
+    const double fz = std::clamp(z / f.cell + 0.5 * (f.sz - 1), 0.0, static_cast<double>(f.sz - 1));
+    const auto x0 = static_cast<std::uint32_t>(fx), z0 = static_cast<std::uint32_t>(fz);
+    const std::uint32_t x1 = std::min(x0 + 1, f.sx - 1), z1 = std::min(z0 + 1, f.sz - 1);
+    const double tx = fx - x0, tz = fz - z0;
+    const double a = f.at(x0, z0) + (f.at(x1, z0) - f.at(x0, z0)) * tx;
+    const double b = f.at(x0, z1) + (f.at(x1, z1) - f.at(x0, z1)) * tx;
+    return a + (b - a) * tz;
+}
+
+// "x,z x,z ...; x,z ..." -> polylines (exclude's paths); "x,z,r; ..." -> circles. Bad text: an error.
+Result<std::vector<std::vector<double>>> parse_groups(const std::string& text, std::size_t per_point, const char* what) {
+    std::vector<std::vector<double>> groups;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t end = std::min(text.find(';', start), text.size());
+        std::vector<double> numbers;
+        std::string part = text.substr(start, end - start);
+        for (char& ch : part)
+            if (ch == ',') ch = ' ';
+        const char* p = part.c_str();
+        const char* e = p + part.size();
+        while (p < e) {
+            while (p < e && (*p == ' ' || *p == '\t' || *p == '\n')) ++p;
+            if (p >= e) break;
+            double v = 0;
+            const auto [next, ec] = std::from_chars(p, e, v);
+            if (ec != std::errc{}) return fail(ErrorCode::InvalidArgument, std::format("{}: \"{}\" isn't a list of numbers", what, part));
+            numbers.push_back(v);
+            p = next;
+        }
+        if (!numbers.empty()) {
+            if (numbers.size() % per_point != 0)
+                return fail(ErrorCode::InvalidArgument, std::format("{}: each point needs {} numbers (\"{}\")", what, per_point, part));
+            groups.push_back(std::move(numbers));
+        }
+        start = end + 1;
+    }
+    return groups;
+}
+
+Value instances_value(std::vector<Instance> list) {
+    Value out;
+    out.type = PinType::InstanceSet;
+    out.instances = std::make_shared<const std::vector<Instance>>(std::move(list));
     return out;
 }
 
@@ -326,6 +404,163 @@ const Registry& Registry::builtin() {
                    std::error_code ec;
                    if (!file || !std::filesystem::exists(*file, ec)) return "missing";
                    return std::format("{} {}", std::filesystem::file_size(*file, ec), std::filesystem::last_write_time(*file, ec).time_since_epoch().count());
+               }});
+        // ---- Scatter (part 7): instance sets ----
+
+        auto exclude_params = size_params();
+        exclude_params.push_back(text("paths", "Paths to keep clear: points \"x,z x,z ...\" (m, the terrain's space); several paths separated by \";\""));
+        exclude_params.push_back(number("width", 4.0, 0.0, 1e4, "A path's width (m)"));
+        exclude_params.push_back(text("circles", "Round areas to keep clear: \"x,z,radius; ...\" (m): houses, clearings"));
+        exclude_params.push_back(number("soft", 2.0, 0.0, 1e4, "Fade from 0 to 1 over this distance (m)"));
+        r.add({.name = "exclude", .version = 1,
+               .help = "A mask that is 0 on paths and in circles and 1 elsewhere (fading over `soft` metres): multiply a scatter's "
+                       "mask by it to keep trees off paths and away from houses.",
+               .outputs = {{"mask", PinType::Field, Unit::Ratio, false, ""}},
+               .params = exclude_params,
+               .shape = shape_from_params,
+               .run_tile = [](const NodeContext& c, const TileInfo& t) -> Result<std::vector<float>> {
+                   auto paths = parse_groups(c.choice("paths"), 2, "paths");
+                   if (!paths) return std::unexpected(paths.error());
+                   auto circles = parse_groups(c.choice("circles"), 3, "circles");
+                   if (!circles) return std::unexpected(circles.error());
+                   const double half = 0.5 * c.number("width"), soft = c.number("soft");
+                   const double cell = t.shape.cell, ox = -0.5 * cell * (t.shape.samples_x() - 1), oz = -0.5 * cell * (t.shape.samples_z() - 1);
+                   std::vector<float> out(kTileSize);
+                   for (std::uint32_t z = 0; z < kTileSamples; ++z)
+                       for (std::uint32_t x = 0; x < kTileSamples; ++x) {
+                           const double px = ox + (t.x0() + x) * cell, pz = oz + (t.z0() + z) * cell;
+                           double inside = 1e300;  // distance outside the nearest shape's edge (negative: inside)
+                           for (const auto& path : *paths) {
+                               for (std::size_t k = 0; k + 1 < path.size(); k += 2) {
+                                   const double ax = path[k], az = path[k + 1];
+                                   const double bx = k + 3 < path.size() ? path[k + 2] : ax, bz = k + 3 < path.size() ? path[k + 3] : az;
+                                   const double dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+                                   const double u = len2 > 0.0 ? std::clamp(((px - ax) * dx + (pz - az) * dz) / len2, 0.0, 1.0) : 0.0;
+                                   const double qx = ax + u * dx - px, qz = az + u * dz - pz;
+                                   inside = std::min(inside, std::sqrt(qx * qx + qz * qz) - half);
+                                   if (k + 3 >= path.size()) break;
+                               }
+                           }
+                           for (const auto& cs : *circles)
+                               for (std::size_t k = 0; k + 2 < cs.size(); k += 3) {
+                                   const double dx = px - cs[k], dz = pz - cs[k + 1];
+                                   inside = std::min(inside, std::sqrt(dx * dx + dz * dz) - cs[k + 2]);
+                               }
+                           const double m = inside <= 0.0 ? 0.0 : soft <= 0.0 ? 1.0 : smoothstep(inside / soft);
+                           out[static_cast<std::size_t>(z) * kTileSamples + x] = static_cast<float>(m);
+                       }
+                   return out;
+               }});
+
+        r.add({.name = "scatter", .version = 1,
+               .help = "Places copies of an asset (a tree, a rock) naturally: no two closer than `spacing`, about `density` per "
+                       "100 m² where the mask is 1 (fewer where it's lower, none where it's 0), each turned and sized at random. "
+                       "With a height field, over its area and standing on it; otherwise `width` x `depth` metres at height 0. "
+                       "Each copy has a stable id, so trees removed by hand stay removed when you change other settings.",
+               .inputs = {{"height", PinType::Field, Unit::Metres, true, ""}, {"mask", PinType::Field, Unit::Ratio, true, ""}},
+               .outputs = {{"instances", PinType::InstanceSet, Unit::None, false, ""}},
+               .params = {text("asset", "The model to place (an asset id)"),
+                          number("density", 1.0, 0.0, 10000.0, "Copies per 100 m² where the mask is 1 (at most what the spacing allows)"),
+                          number("spacing", 6.0, 0.1, 1e4, "No two copies closer than this (m)"),
+                          number("scale_min", 0.85, 0.01, 100.0, "Smallest size"), number("scale_max", 1.15, 0.01, 100.0, "Largest size"),
+                          number("width", 200.0, 1.0, 1e5, "Area across (m), without a height field"),
+                          number("depth", 200.0, 1.0, 1e5, "Area deep (m), without a height field"),
+                          integer("max_count", 100000, 1, 10000000, "Stop with an error beyond this many (a typo in density shouldn't plant millions)")},
+               .run = [](const NodeContext& c) -> Result<Outputs> {
+                   const auto asset = Guid::parse(c.choice("asset"));
+                   if (!asset) return fail(ErrorCode::InvalidArgument, "\"asset\" isn't an asset id: pick the model to place");
+                   const double smin = c.number("scale_min"), smax = c.number("scale_max");
+                   if (smin > smax) return fail(ErrorCode::InvalidArgument, "scale_min is above scale_max");
+                   const Field* height = c.input("height") ? c.input("height")->field.get() : nullptr;
+                   const Field* mask = c.input("mask") ? c.input("mask")->field.get() : nullptr;
+                   const double width = height ? height->cell * (height->sx - 1) : c.number("width");
+                   const double depth = height ? height->cell * (height->sz - 1) : c.number("depth");
+                   const double spacing = c.number("spacing");
+                   // One candidate per grid cell (half the spacing's square: at most one copy fits), each from its
+                   // own random stream: a cell's copy doesn't depend on any other cell.
+                   const double g = spacing * 0.70710678118654752;
+                   const auto nx = static_cast<std::uint64_t>(std::ceil(width / g)), nz = static_cast<std::uint64_t>(std::ceil(depth / g));
+                   if (nx * nz > 400'000'000ull) return fail(ErrorCode::InvalidArgument, "the area is too big for this spacing");
+                   const double expected = std::min(1.0, c.number("density") / 100.0 * g * g);  // copies per cell where the mask is 1
+                   const std::uint64_t root = c.stream("scatter").next();
+                   const auto max_count = static_cast<std::size_t>(c.integer("max_count"));
+                   constexpr double kTwoPi = 6.28318530717958647692;
+                   std::vector<Instance> out;
+                   std::unordered_map<std::uint64_t, std::size_t> grid;  // cell -> accepted copy
+                   for (std::uint64_t cz = 0; cz < nz; ++cz) {
+                       if (c.cancelled()) return fail(ErrorCode::Cancelled, "cancelled");
+                       for (std::uint64_t cx = 0; cx < nx; ++cx) {
+                           const std::uint64_t cell = cz * nx + cx;
+                           Random rng(mix(root ^ mix(cell + 1)));
+                           const double x = -0.5 * width + (static_cast<double>(cx) + rng.uniform()) * g;
+                           const double z = -0.5 * depth + (static_cast<double>(cz) + rng.uniform()) * g;
+                           const double keep = rng.uniform(), yaw = rng.uniform() * kTwoPi, size = rng.uniform();
+                           if (x > 0.5 * width || z > 0.5 * depth) continue;  // the last row and column overhang the area
+                           const double m = mask ? std::clamp(sample(*mask, x, z), 0.0, 1.0) : 1.0;
+                           if (keep >= expected * m) continue;
+                           bool clear = true;  // no accepted copy within `spacing` (they're at most two cells away)
+                           for (std::int64_t dz = -2; dz <= 2 && clear; ++dz)
+                               for (std::int64_t dx = -2; dx <= 2 && clear; ++dx) {
+                                   const std::int64_t qx = static_cast<std::int64_t>(cx) + dx, qz = static_cast<std::int64_t>(cz) + dz;
+                                   if (qx < 0 || qz < 0 || qx >= static_cast<std::int64_t>(nx) || qz >= static_cast<std::int64_t>(nz)) continue;
+                                   const auto it = grid.find(static_cast<std::uint64_t>(qz) * nx + static_cast<std::uint64_t>(qx));
+                                   if (it == grid.end()) continue;
+                                   const auto& o = out[it->second];
+                                   const double ex = o.position.x - x, ez = o.position.z - z;
+                                   clear = ex * ex + ez * ez >= spacing * spacing;
+                               }
+                           if (!clear) continue;
+                           if (out.size() >= max_count)
+                               return fail(ErrorCode::InvalidArgument, std::format("more than {} copies: lower the density or raise max_count", max_count));
+                           const auto [s, co] = sin_cos(0.5 * yaw);
+                           Instance inst;
+                           inst.asset = *asset;
+                           inst.position = {static_cast<float>(x), height ? static_cast<float>(sample(*height, x, z)) : 0.0f, static_cast<float>(z)};
+                           inst.rotation = {0.0f, static_cast<float>(s), 0.0f, static_cast<float>(co)};
+                           inst.scale = static_cast<float>(smin + (smax - smin) * size);
+                           inst.seed = mix(root ^ mix(cell + 0x5bd1e995ull));  // the copy's stable id
+                           grid.emplace(cell, out.size());
+                           out.push_back(inst);
+                       }
+                   }
+                   return Outputs{{"instances", instances_value(std::move(out))}};
+               }});
+
+        r.add({.name = "merge", .version = 1,
+               .help = "Two instance sets as one (oaks and rocks): `b`'s copies closer than `spacing` to one of `a`'s are left out, "
+                       "so `a` wins where they meet.",
+               .inputs = {{"a", PinType::InstanceSet, Unit::None, false, ""}, {"b", PinType::InstanceSet, Unit::None, false, ""}},
+               .outputs = {{"instances", PinType::InstanceSet, Unit::None, false, ""}},
+               .params = {number("spacing", 2.0, 0.0, 1e4, "Keep b's copies at least this far from a's (m; 0: keep all)")},
+               .run = [](const NodeContext& c) -> Result<Outputs> {
+                   const auto& a = *c.input("a")->instances;
+                   const auto& b = *c.input("b")->instances;
+                   const double s = c.number("spacing");
+                   std::vector<Instance> out(a.begin(), a.end());
+                   if (s <= 0.0) {
+                       out.insert(out.end(), b.begin(), b.end());
+                   } else {
+                       std::unordered_map<std::uint64_t, std::vector<std::size_t>> grid;  // cells of `s` metres
+                       const auto key = [s](double x, double z) {
+                           return (static_cast<std::uint64_t>(static_cast<std::int64_t>(std::floor(x / s)) & 0xffffffff) << 32) |
+                                  static_cast<std::uint64_t>(static_cast<std::int64_t>(std::floor(z / s)) & 0xffffffff);
+                       };
+                       for (std::size_t i = 0; i < a.size(); ++i) grid[key(a[i].position.x, a[i].position.z)].push_back(i);
+                       for (const auto& inst : b) {
+                           bool clear = true;
+                           for (int dz = -1; dz <= 1 && clear; ++dz)
+                               for (int dx = -1; dx <= 1 && clear; ++dx) {
+                                   const auto it = grid.find(key(inst.position.x + dx * s, inst.position.z + dz * s));
+                                   if (it == grid.end()) continue;
+                                   for (const std::size_t i : it->second) {
+                                       const double ex = a[i].position.x - inst.position.x, ez = a[i].position.z - inst.position.z;
+                                       if (ex * ex + ez * ez < s * s) clear = false;
+                                   }
+                               }
+                           if (clear) out.push_back(inst);
+                       }
+                   }
+                   return Outputs{{"instances", instances_value(std::move(out))}};
                }});
         return r;
     }();

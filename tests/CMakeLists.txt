@@ -31,6 +31,7 @@ add_executable(noor_unit_tests
     unit/test_procgraph.cpp
     unit/test_interchange.cpp
     unit/test_lod.cpp
+    unit/test_scatter.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -183,7 +184,7 @@ endif()
 add_test(NAME cli.build_graph_terrain
     COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/procgraph_project ${CMAKE_CURRENT_BINARY_DIR}/built_graph_game)
 set_tests_properties(cli.build_graph_terrain PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP built_graph_game
-                     PASS_REGULAR_EXPRESSION "1 terrain graph[(]s[)] cooked")
+                     PASS_REGULAR_EXPRESSION "1 graph[(]s[)] cooked")
 add_test(NAME player.graph_terrain
     COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_graph_game/Graph Test.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_graph
         -P ${CMAKE_CURRENT_SOURCE_DIR}/graph_terrain_check.cmake)
@@ -242,6 +243,37 @@ add_test(NAME render.forest_instancing_lod
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/forest_check -P ${CMAKE_CURRENT_SOURCE_DIR}/forest_check.cmake)
 set_tests_properties(render.forest_instancing_lod PROPERTIES LABELS "gpu;render" TIMEOUT 180 RESOURCE_LOCK "forest_cache;gpu_timing")
+# Scatter (Milestone 7, part 7): cook the test forest's graph (hills + oaks), read its instance set with a
+# reader that links no engine code, draw it (golden + check).
+add_executable(noor_instance_reader tools/instance_reader.cpp)
+target_link_libraries(noor_instance_reader PRIVATE nlohmann_json::nlohmann_json)
+noor_set_target_options(noor_instance_reader)
+add_test(NAME cli.cook_forest COMMAND $<TARGET_FILE:noor_cli> cook ${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project)
+set_tests_properties(cli.cook_forest PROPERTIES LABELS "cli" TIMEOUT 120 FIXTURES_SETUP forest_cooked RESOURCE_LOCK forest_cache
+                     PASS_REGULAR_EXPRESSION "Cooked 1 graph[(]s[)]")
+# The scatter graph's result is pinned: the same bytes in Debug and Release, on every run (no cache).
+add_test(NAME cli.generate_forest
+    COMMAND $<TARGET_FILE:noor_cli> generate ${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project Assets/Graphs/forest.noorgraph
+            --out ${CMAKE_CURRENT_BINARY_DIR}/generated_forest --no-cache)
+set_tests_properties(cli.generate_forest PROPERTIES LABELS "cli" TIMEOUT 120 PASS_REGULAR_EXPRESSION "fingerprint 4ef35d5bf74670fb")
+add_test(NAME tools.instance_reader
+    COMMAND noor_instance_reader ${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project/.noor/cooked/graphs/59de2071-f6e9-54bd-8215-beac941677ed/trees.instances.json)
+set_tests_properties(tools.instance_reader PROPERTIES LABELS "cli" TIMEOUT 30 FIXTURES_REQUIRED forest_cooked
+                     PASS_REGULAR_EXPRESSION "^[1-9][0-9][0-9]+ instances of 1 asset[(]s[)].*ids unique: yes")
+add_test(NAME render.golden_Scattered
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project -DSCENE=Scenes/Scattered.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Scattered.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Scattered
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Scattered PROPERTIES LABELS "gpu;render" TIMEOUT 180 FIXTURES_REQUIRED forest_cooked
+                     RESOURCE_LOCK "forest_cache;gpu_timing")
+add_test(NAME render.scatter_check
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/scatter_check -P ${CMAKE_CURRENT_SOURCE_DIR}/scatter_check.cmake)
+set_tests_properties(render.scatter_check PROPERTIES LABELS "gpu;render" TIMEOUT 180 FIXTURES_REQUIRED forest_cooked
+                     RESOURCE_LOCK "forest_cache;gpu_timing")
 add_test(NAME cli.build_hillside
     COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/Hillside ${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game)
 set_tests_properties(cli.build_hillside PROPERTIES LABELS "cli;sample" TIMEOUT 180 FIXTURES_SETUP built_hillside_game RESOURCE_LOCK hillside_cache

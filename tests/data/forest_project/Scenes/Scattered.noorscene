@@ -1,0 +1,140 @@
+{
+  "noor_scene": 2,
+  "id": "f465bd19-287c-556e-bdc2-d3e94768660a",
+  "name": "Scattered",
+  "entities": [
+    {
+      "id": "d04cbef6-70de-5116-81b3-0f32c56d6424",
+      "name": "Hills",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "terrain": {
+          "base": "graph",
+          "graph": "59de2071-f6e9-54bd-8215-beac941677ed",
+          "graph_output": "ground",
+          "material": "9afbe565-61c6-5882-9f17-85bd5bc9d53d",
+          "collision": true
+        }
+      }
+    },
+    {
+      "id": "a56ceee3-894e-554c-aa6f-6da2a537b82d",
+      "name": "Forest",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "scatter": {
+          "graph": "59de2071-f6e9-54bd-8215-beac941677ed",
+          "output": "trees",
+          "ground": "d04cbef6-70de-5116-81b3-0f32c56d6424",
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    {
+      "id": "51e89e6c-fd02-5993-bd34-db328841cc84",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          -0.2241,
+          -0.483,
+          -0.1294,
+          0.8365
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF1DC",
+          "illuminance": 90000,
+          "shadow_distance": 120
+        }
+      }
+    },
+    {
+      "id": "6b7d478c-6d17-5e9b-bbfa-a303e20e710a",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          24,
+          118
+        ],
+        "rotation": [
+          -0.0958,
+          0,
+          0,
+          0.9954
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1,
+          "ev100": 14
+        }
+      }
+    }
+  ]
+}

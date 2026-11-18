@@ -398,6 +398,7 @@ public sealed class GraphPanel : DockPanel
     {
         "field" => NoorTheme.Cyan,
         "scalar" => NoorTheme.Warn,
+        "instance set" => NoorTheme.Good,
         _ => NoorTheme.TextMuted,
     };
 
@@ -522,7 +523,7 @@ public sealed class GraphPanel : DockPanel
         }
         var body = new StackPanel { Children = { header, rows } };
         // A thumbnail of the first field output.
-        var field = outputs.FirstOrDefault(o => o["type"]?.GetValue<string>() == "field");
+        var field = outputs.FirstOrDefault(o => o["type"]?.GetValue<string>() is "field" or "instance set");
         if (field != null && state == "done" && Graph.Preview(id, field["name"]!.GetValue<string>(), 96) is { } thumb)
             body.Children.Add(new Image { Source = thumb, Width = ThumbSize, Height = ThumbSize, Margin = new Thickness(0, 4, 0, 6), HorizontalAlignment = HorizontalAlignment.Center });
 
@@ -694,9 +695,10 @@ public sealed class GraphPanel : DockPanel
             _side.Children.Add(Row("Graph output", outName, "A name makes this a graph output: written to a file by Run and noor_cli generate, usable as a terrain's base. Empty: not an output"));
             if (result?["outputs"]?[pin] is JsonObject r)
             {
-                var line = r["value"] != null ? $"value {r["value"]}" : r["min"] != null ? $"{r["min"]?.GetValue<double>():0.##} … {r["max"]?.GetValue<double>():0.##}  ({r["samples"]?[0]} × {r["samples"]?[1]} samples)" : "";
+                var line = r["value"] != null ? $"value {r["value"]}" : r["count"] != null ? $"{r["count"]} instance(s)" :
+                           r["min"] != null ? $"{r["min"]?.GetValue<double>():0.##} … {r["max"]?.GetValue<double>():0.##}  ({r["samples"]?[0]} × {r["samples"]?[1]} samples)" : "";
                 _side.Children.Add(new TextBlock { Text = line, FontSize = 11, Classes = { "muted" } });
-                if (o["type"]?.GetValue<string>() == "field" && Graph.Preview(id, pin, 256) is { } big)
+                if (o["type"]?.GetValue<string>() is "field" or "instance set" && Graph.Preview(id, pin, 256) is { } big)
                     _side.Children.Add(new Image { Source = big, Width = 256, Height = 256, HorizontalAlignment = HorizontalAlignment.Left });
             }
         }

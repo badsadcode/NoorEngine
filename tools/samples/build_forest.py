@@ -91,6 +91,8 @@ def main():
     ap.add_argument("--area", type=float, default=260.0, help="side of the square the trees stand in (m)")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--name", default="Forest")
+    ap.add_argument("--scatter", action="store_true",
+                    help="also write Scenes/Scattered.noorscene: a terrain and a forest both made by one graph (Milestone 7, part 7)")
     a = ap.parse_args()
 
     out = Path(a.out)
@@ -143,6 +145,67 @@ def main():
     path = out / "Scenes" / f"{a.name}.noorscene"
     path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"{path}: {placed} oaks, {len(ents)} entities, {path.stat().st_size / 1e6:.1f} MB")
+    if a.scatter:
+        write_scatter(out, asset_id)
+
+
+SCATTER_GRAPH_ID = gid("graph forest")
+
+
+def write_scatter(out, oak_id):
+    """A graph that makes the hills and plants the oaks on them (off steep slopes, a path and a clearing),
+    and a scene that shows both: a terrain on the graph's `ground`, a scatter of its `trees` standing on it."""
+    graphs = out / "Assets" / "Graphs"
+    graphs.mkdir(parents=True, exist_ok=True)
+    graph = {
+        "noor_graph": 1, "seed": 11,
+        "nodes": [
+            {"id": "ground", "type": "noise", "params": {"tiles_x": 1, "tiles_z": 1, "cell_size": 1, "height": 14, "scale": 140, "octaves": 4}, "position": [40, 40]},
+            {"id": "steep", "type": "slope", "params": {"min_degrees": 14, "max_degrees": 24}, "position": [300, 40]},
+            {"id": "gentle", "type": "remap", "params": {"from_min": 0, "from_max": 1, "to_min": 1, "to_max": 0, "unit": "ratio"}, "position": [560, 40]},
+            {"id": "clear", "type": "exclude", "params": {"tiles_x": 1, "tiles_z": 1, "cell_size": 1, "paths": "-128,60 -60,30 0,10 60,-20 128,-50",
+                                                           "width": 7, "circles": "25,45,16", "soft": 3}, "position": [300, 260]},
+            {"id": "where", "type": "combine", "params": {"op": "multiply"}, "position": [820, 120]},
+            {"id": "trees", "type": "scatter", "params": {"asset": oak_id, "density": 0.45, "spacing": 13, "scale_min": 0.85, "scale_max": 1.15},
+             "position": [1080, 120]},
+        ],
+        "links": [
+            {"from": "ground.height", "to": "steep.in"}, {"from": "steep.out", "to": "gentle.in"},
+            {"from": "gentle.out", "to": "where.a"}, {"from": "clear.mask", "to": "where.b"},
+            {"from": "ground.height", "to": "trees.height"}, {"from": "where.out", "to": "trees.mask"},
+        ],
+        "outputs": [{"name": "ground", "from": "ground.height"}, {"name": "trees", "from": "trees.instances"}],
+    }
+    gfile = graphs / "forest.noorgraph"
+    gfile.write_text(json.dumps(graph, indent=2) + "\n", encoding="utf-8", newline="\n")
+    meta = {"guid": SCATTER_GRAPH_ID, "importer": "procgraph", "noor_meta": 1, "settings": {},
+            "source_sha256": hashlib.sha256(gfile.read_bytes()).hexdigest()}
+    (graphs / "forest.noorgraph.noormeta").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8", newline="\n")
+    # A plain grass colour for the hills (no textures in this project).
+    mats = out / "Assets" / "Materials"
+    mats.mkdir(parents=True, exist_ok=True)
+    mfile = mats / "grass.noormat"
+    mfile.write_text(json.dumps({"noor_material": 1, "base_color": [0.16, 0.24, 0.08, 1], "roughness": 0.95}, indent=2) + "\n",
+                     encoding="utf-8", newline="\n")
+    grass_id = gid("material grass")
+    mmeta = {"guid": grass_id, "importer": "material", "noor_meta": 1, "settings": {}, "source_sha256": hashlib.sha256(mfile.read_bytes()).hexdigest()}
+    (mats / "grass.noormat.noormeta").write_text(json.dumps(mmeta, indent=2) + "\n", encoding="utf-8", newline="\n")
+    terrain_id = gid("scatter terrain")
+    ents = [
+        entity(terrain_id, "Hills", None, [0, 0, 0], [0, 0, 0, 1], [1, 1, 1],
+               {"terrain": {"base": "graph", "graph": SCATTER_GRAPH_ID, "graph_output": "ground", "material": grass_id, "collision": True}}),
+        entity(gid("scatter forest"), "Forest", None, [0, 0, 0], [0, 0, 0, 1], [1, 1, 1],
+               {"scatter": {"graph": SCATTER_GRAPH_ID, "output": "trees", "ground": terrain_id, "removed": [], "added": []}}),
+        entity(gid("scatter sun"), "Sun", None, [0, 30, 0], [-0.2241, -0.4830, -0.1294, 0.8365], [1, 1, 1],
+               {"light": {"type": "directional", "color": "#FFF1DC", "illuminance": 90000, "shadow_distance": 120}}),
+        # Above the hills' south edge, looking north along the path, a little down.
+        entity(gid("scatter camera"), "Camera", None, [0, 24, 118], [-0.0958, 0, 0, 0.9954], [1, 1, 1],
+               {"camera": {"fov": 60, "near": 0.1, "ev100": 14}}),
+    ]
+    scene = {"noor_scene": 2, "id": gid("scene Scattered"), "name": "Scattered", "entities": ents}
+    path = out / "Scenes" / "Scattered.noorscene"
+    path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(f"{path}: a terrain and a scattered forest from {gfile.name}")
 
 
 if __name__ == "__main__":

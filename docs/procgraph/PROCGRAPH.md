@@ -4,7 +4,8 @@ Milestone 7 ([plan](../milestones/M7_PLAN.md), [ADR-014](../decisions/ADR-014-pr
 **Works:** the graph file, typed nodes in a registry, validation, deterministic evaluation with keys
 (part 1); the results cache, worker threads with progress and Cancel, `noor_cli generate` and the
 editor API's background runs (part 2); tiles as regions, terrain nodes, terrains built on graphs
-(part 3); the graph editor (part 4). **Planned:** scatter (part 7).
+(part 3); the graph editor (part 4); scatter, instance sets and the scatter component with its
+hand-made layer (part 7).
 
 ## A graph file (`.noorgraph`, format 1)
 
@@ -66,6 +67,74 @@ migration yet) and that node doesn't run.
 | `height_band` | `in` (metres) → `out` (mask) | `min`, `max`, `soft` (fade width at each edge, m) |
 | `slope` | `in` (metres) → `out` (mask) | `min_degrees`, `max_degrees`: 0 flatter than min, 1 steeper than max (its angle thresholds use a cosine made of + − × only) |
 | `heightmap` | → `height` (metres) | `image` (a picture asset's id), `min_height`, `max_height`, `tiles_x`, `tiles_z`, `cell_size`: the terrain's own heightmap reading |
+
+## Scatter: instance sets (part 7)
+
+| Node | Pins | Parameters |
+|---|---|---|
+| `scatter` | `height` (metres, optional), `mask` (ratio, optional) → `instances` | `asset` (the model's id), `density` (copies per 100 m² where the mask is 1), `spacing` (no two closer, m), `scale_min`, `scale_max`, `width`, `depth` (without a height field), `max_count` |
+| `exclude` | → `mask` (ratio) | `paths` ("x,z x,z …; …"), `width`, `circles` ("x,z,r; …"), `soft`, `tiles_x`, `tiles_z`, `cell_size`: 0 on paths and in circles, 1 elsewhere |
+| `merge` | `a`, `b` (instance sets) → `instances` | `spacing`: `b`'s copies closer than this to one of `a`'s are left out |
+
+**How `scatter` places things.** The area is cut into cells of `spacing / √2`, and each cell gets
+one candidate from **its own random stream** (the node's seed mixed with the cell's number): a
+random point in the cell, a turn, a size, and a roll against `density × mask`. The candidates are
+taken in cell order; one closer than `spacing` to a copy already kept is dropped. That gives
+natural, even spacing (blue noise), and every copy depends only on its cell, so the result is the
+same on every machine and every run. Turns use a sine and cosine made of + − × only. Each copy's
+**id** is a hash of its cell under the seed: the same seed and settings give the same ids, which is
+what hand-made edits refer to.
+
+`density` is what you ask for; spacing limits what you get. Random placement can't pack copies
+tighter than about 1.1 per 100 m² at 8 m spacing, so near that limit many candidates are dropped
+(the unit test's forest keeps 210 of the 377 asked for at density 1, spacing 8). Well under it you get
+close to what you asked (the test asks for about 75 at density 0.2 and accepts 55 to 90).
+
+Masks are ordinary fields: a gentle-slopes mask (`slope`, then `remap` 1 → 0), a height band,
+`exclude` for paths and clearings, multiplied together with `combine`. Several species: one
+`scatter` each, joined by `merge` (the first wins where they meet).
+
+### The instance set file (`<output>.instances.json`)
+
+`noor_cli generate` and cooking write each instance set output as plain JSON
+(`noor/asset/instance_set.h`), readable by any tool:
+
+```json
+{ "noor_instances": 1,
+  "space": {"up": "+Y", "handedness": "right", "units": "meters"},
+  "assets": ["719beb3e-327d-56ed-8d54-be8882f405fd"],
+  "fields": ["asset", "id", "x", "y", "z", "qx", "qy", "qz", "qw", "scale"],
+  "instances": [
+    [0, "9f3c0a1b2c3d4e5f", 12.5, 3.25, -40.0, 0, 0.38, 0, 0.92, 1.07]
+  ] }
+```
+
+One row per instance: an index into `assets`, the stable id (16 hex digits), the position in metres
+(in the set's space: the scatter entity's), a unit quaternion, a uniform scale. Numbers read back
+bit for bit. `tests/tools/instance_reader.cpp` reads it with nothing but a JSON parser (no engine
+code); the test `tools.instance_reader` runs it on the test forest.
+
+### In a scene: the `scatter` component
+
+```json
+"scatter": { "graph": <.noorgraph id>, "output": "trees", "ground": <terrain entity id> | null,
+             "removed": ["9f3c0a1b2c3d4e5f"],
+             "added": [{"id": "…", "asset": <model id>, "position": [x, y, z], "yaw": 30, "scale": 1}] }
+```
+
+- **Drawn** from the cooked output (`.noor/cooked/graphs/<graph id>/<output>.instances.json`, made on
+  Save in the editor and by `noor_cli build` / `cook`), with levels of detail per instance and
+  instancing (ADR-032). No entity per tree, so thousands cost little CPU.
+- **Ground:** with a terrain named, every instance stands on it, sculpting included (as saved).
+- **The hand-made layer:** in the Inspector, **Plant** and **Remove** brushes (left-drag on the
+  ground; radius in the card; Plant puts a tree every radius along the drag, of the scatter's own
+  model or one you pick). Removing a generated tree adds its id to `removed`; planting adds to
+  `added`. Each stroke is one undo step. Regenerating (a new seed, new settings) never touches
+  these lists: planted trees stay; a removed tree stays removed (with another seed it doesn't exist
+  anyway, and if the seed comes back, it's still removed).
+- **Not yet:** trunk collision for scattered trees (scattered instances have no colliders); moving a
+  single tree (remove it and plant one); a live preview while sculpting the ground under a forest
+  (the trees follow when it's saved).
 
 ## Tiles: regions that change alone (part 3)
 

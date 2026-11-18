@@ -10,6 +10,7 @@
 #include "noor/asset/gltf_import.h"
 #include "noor/asset/interchange.h"
 #include "noor/game/game.h"
+#include "noor/game/scatter.h"
 #include "noor/foundation/log.h"
 
 #include <algorithm>
@@ -337,6 +338,99 @@ Result<Json> Document::asset_details(const Guid& id) {
     }
     details_[id] = {key, j};
     return j;
+}
+
+Result<Json> Document::scatter_edit(const Json& command) {
+    if (auto s = require_editable(); !s) return std::unexpected(s.error());
+    const std::string phase = command.value("phase", std::string("dab"));
+    if (phase == "begin") {
+        finish_stroke();
+        if (scatter_stroke_) history_.end_transaction();
+        scatter_stroke_.reset();
+        auto id = entity_field(command, "scatter");
+        if (!id) return std::unexpected(id.error());
+        const scene::Entity* target = scene_->find(*id);
+        if (!target || !target->has("scatter") || !target->components["scatter"].is_object())
+            return fail(ErrorCode::InvalidArgument, "planting and removing need an editable entity with a scatter component");
+        ScatterStroke s;
+        s.entity = *id;
+        const std::string tool = command.value("tool", std::string("plant"));
+        if (tool != "plant" && tool != "remove") return fail(ErrorCode::InvalidArgument, "tool is plant or remove");
+        s.plant = tool == "plant";
+        s.radius = std::clamp(command.contains("radius") && command["radius"].is_number() ? command["radius"].get<float>() : s.radius, 0.1f, 500.0f);
+        s.asset = asset::guid_field(command, "asset");
+        if (s.plant && !s.asset) {
+            // The set's first model: what it's made of.
+            const auto items = game::scatter_items(target->components["scatter"], project_.root());
+            if (!items.empty()) s.asset = items.front().asset;
+            if (!s.asset) return fail(ErrorCode::InvalidArgument, "choose the model to plant (\"asset\"): this scatter has no instances to take one from");
+        }
+        scatter_stroke_ = s;
+        history_.begin_transaction(s.plant ? "Plant trees" : "Remove trees");
+        return Json{{"ok", true}};
+    }
+    if (!scatter_stroke_) return fail(ErrorCode::InvalidArgument, "no planting stroke: send \"begin\" first");
+    ScatterStroke& s = *scatter_stroke_;
+    const auto index = std::ranges::find(scene_->entities, s.entity, &scene::Entity::id) - scene_->entities.begin();
+    if (index >= static_cast<std::ptrdiff_t>(scene_->entities.size())) {
+        history_.end_transaction();
+        scatter_stroke_.reset();
+        return fail(ErrorCode::NotFound, "the scatter entity is gone");
+    }
+    const math::Mat4 world = scene_->world_matrix(static_cast<std::size_t>(index));
+    const math::Mat4 to_local = math::inverse(world);
+    for (const auto& dab : command.value("dabs", Json::array())) {
+        float p[3];
+        if (!dab.is_object() || !dab.contains("point") || !read_vec(dab["point"], 3, p)) continue;
+        const math::Vec3 point{p[0], p[1], p[2]};
+        Json comp = scene_->entities[static_cast<std::size_t>(index)].components["scatter"];
+        bool edited = false;
+        if (s.plant) {
+            const auto flat = [](math::Vec3 a, math::Vec3 b) { return std::hypot(a.x - b.x, a.z - b.z); };
+            if (s.last && flat(*s.last, point) < std::max(1.0f, s.radius)) continue;
+            s.last = point;
+            const math::Vec3 local = to_local.transform_point(point);
+            procgraph::Random rng(game::new_instance_id());
+            const std::uint64_t id = game::new_instance_id();
+            Json added = comp.contains("added") && comp["added"].is_array() ? comp["added"] : Json::array();
+            added.push_back({{"id", asset::instance_id_text(id)}, {"asset", s.asset->to_string()}, {"position", {local.x, local.y, local.z}},
+                             {"yaw", std::round(rng.uniform() * 3600.0) / 10.0}, {"scale", std::round((0.9 + rng.uniform() * 0.2) * 1000.0) / 1000.0}});
+            comp["added"] = std::move(added);
+            ++s.planted;
+            edited = true;
+        } else {
+            Json removed = comp.contains("removed") && comp["removed"].is_array() ? comp["removed"] : Json::array();
+            Json added = comp.contains("added") && comp["added"].is_array() ? comp["added"] : Json::array();
+            for (const auto& it : game::scatter_items(comp, project_.root())) {
+                const math::Vec3 w = world.transform_point(it.position);
+                if (std::hypot(w.x - point.x, w.z - point.z) > s.radius) continue;
+                const std::string id = asset::instance_id_text(it.id);
+                if (it.added) {
+                    for (std::size_t k = 0; k < added.size(); ++k)
+                        if (added[k].is_object() && added[k].value("id", std::string()) == id) {
+                            added.erase(k);
+                            break;
+                        }
+                } else {
+                    removed.push_back(id);
+                }
+                ++s.removed;
+                edited = true;
+            }
+            comp["removed"] = std::move(removed);
+            comp["added"] = std::move(added);
+        }
+        if (edited)
+            if (auto e = execute({{"op", "set_component"}, {"entity", s.entity.to_string()}, {"type", "scatter"}, {"value", comp}}); !e)
+                return std::unexpected(e.error());
+    }
+    Json result{{"planted", s.planted}, {"removed", s.removed}};
+    if (phase == "end") {
+        history_.end_transaction();
+        scatter_stroke_.reset();
+        changed();
+    }
+    return result;
 }
 
 Json Document::scenes() const {
@@ -694,6 +788,12 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
         snap->models.push_back({md.entity, std::move(key), md.world, version});
     }
+    for (auto& sv : view.scatters)
+        for (auto& g : sv.groups) {
+            std::string key = g.asset_path.generic_string();
+            const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
+            snap->scattered.push_back({sv.entity, std::move(key), version, std::move(g.worlds)});
+        }
     channel_->publish(std::move(snap));
 }
 
@@ -1316,6 +1416,7 @@ Status Document::generate_start(std::string_view graph_path, const std::filesyst
                     o["max"] = hi;
                     o["samples"] = {v.field->sx, v.field->sz};
                 }
+                if (v.instances) o["count"] = v.instances->size();  // instance sets (Milestone 7, part 7)
                 outs[pin] = std::move(o);
             }
             n["outputs"] = std::move(outs);
@@ -1372,6 +1473,35 @@ Result<Json> Document::generate_preview(std::string_view node, std::string_view 
     if (out == it->second.outputs.end()) return fail(ErrorCode::NotFound, std::format("node \"{}\" has no result for \"{}\" (it didn't run, or no such output)", node, pin));
     const auto& v = out->second;
     Json j{{"type", std::string(procgraph::type_name(v.type))}, {"unit", std::string(procgraph::unit_name(v.unit))}};
+    if (v.instances) {
+        // An instance set (Milestone 7, part 7): a dot per instance, seen from above, over the square that
+        // holds them all (rows from -z to +z like fields).
+        size = std::clamp(size, 8, 1024);
+        float x0 = 1e30f, x1 = -1e30f, z0 = 1e30f, z1 = -1e30f;
+        for (const auto& i : *v.instances) {
+            x0 = std::min(x0, i.position.x), x1 = std::max(x1, i.position.x);
+            z0 = std::min(z0, i.position.z), z1 = std::max(z1, i.position.z);
+        }
+        const float span = std::max({x1 - x0, z1 - z0, 1.0f});
+        std::vector<std::uint8_t> px(static_cast<std::size_t>(size) * size, 24);
+        const int r = size >= 128 ? 1 : 0;  // dots of 3 x 3 pixels on bigger previews
+        for (const auto& i : *v.instances) {
+            const int cx = static_cast<int>((i.position.x - x0) / span * static_cast<float>(size - 1) + 0.5f);
+            const int cy = static_cast<int>((i.position.z - z0) / span * static_cast<float>(size - 1) + 0.5f);
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    const int x = cx + dx, y = cy + dy;
+                    if (x >= 0 && y >= 0 && x < size && y < size) px[static_cast<std::size_t>(y) * size + x] = 235;
+                }
+        }
+        j["width"] = size;
+        j["height"] = size;
+        j["count"] = v.instances->size();
+        j["min"] = 0;
+        j["max"] = 1;
+        j["pixels"] = base64(px);
+        return j;
+    }
     if (!v.field) {
         if (v.type == procgraph::PinType::Scalar) j["value"] = v.scalar;
         return j;
@@ -1401,10 +1531,10 @@ Result<Json> Document::generate_preview(std::string_view node, std::string_view 
 }
 
 void Document::cook_graphs(const scene::Scene& expanded, bool force) {
-    for (const auto& e : expanded.entities) {
-        if (!e.has("terrain") || !e.components["terrain"].is_object() || e.components["terrain"].value("base", std::string()) != "graph") continue;
-        const auto graph = asset::guid_field(e.components["terrain"], "graph");
-        const auto* rec = graph ? registry_.find(*graph) : nullptr;
+    // Terrains on a graph base and scatter components (Milestone 7, parts 3 and 7).
+    for (const Guid& g : game::graphs_used(expanded)) {
+        const std::optional<Guid> graph = g;
+        const auto* rec = registry_.find(g);
         if (!rec) continue;  // terrain_settings/Heights::build report a missing graph
         auto file = project_.resolve(rec->path);
         if (!file) continue;
@@ -1419,8 +1549,8 @@ void Document::cook_graphs(const scene::Scene& expanded, bool force) {
             auto p = a ? project_.resolve(a->path) : Result<stdfs::path>(fail(ErrorCode::NotFound, "unknown asset"));
             return p ? std::optional(*p) : std::nullopt;
         });
-        if (!r) NOOR_LOG_WARN("Editor", "Terrain {}: graph {}: {}", e.name, file->filename().string(), r.error().describe());
-        else NOOR_LOG_INFO("Editor", "Terrain {}: graph {} cooked ({} node(s) ran, {} from the cache)", e.name, file->filename().string(), r->evaluation.ran, r->evaluation.cached);
+        if (!r) NOOR_LOG_WARN("Editor", "Graph {}: {}", file->filename().string(), r.error().describe());
+        else NOOR_LOG_INFO("Editor", "Graph {} cooked ({} node(s) ran, {} from the cache)", file->filename().string(), r->evaluation.ran, r->evaluation.cached);
     }
 }
 

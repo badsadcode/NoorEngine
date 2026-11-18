@@ -115,6 +115,14 @@ struct RenderSnapshot {
         std::uint64_t asset_version = 0;
     };
     std::vector<Model> models;
+    // Scattered instances (Milestone 7, part 7), one entry per scatter entity and model file.
+    struct Scattered {
+        Guid entity;
+        std::string asset_path;
+        std::uint64_t asset_version = 0;
+        std::vector<math::Mat4> worlds;
+    };
+    std::vector<Scattered> scattered;
     // Every entity of the expanded scene, for picking, highlighting and gizmos.
     struct Entity {
         Guid id;
@@ -252,8 +260,22 @@ public:
     // Interchange manifest, the manifest (generator, recipe, seed, family, wind...) and each level of
     // detail opened and compared with it. Cached until the files change.
     [[nodiscard]] Result<asset::Json> asset_details(const Guid& asset);
+    // Hand-editing scattered instances (Milestone 7, part 7): {"scatter": entity id, "phase": "begin" |
+    // "dab" | "end", "tool": "plant" | "remove", "radius", "asset" (plant: the model; default: the set's
+    // first), "dabs": [{"point": [x, y, z] (world)}]}. A stroke (begin .. end) is one undo step; the edits
+    // go into the component's "removed" and "added" lists, which regenerating the graph never touches.
+    [[nodiscard]] Result<asset::Json> scatter_edit(const asset::Json& command);
 
 private:
+    struct ScatterStroke {
+        Guid entity;
+        bool plant = true;
+        float radius = 4.0f;
+        std::optional<Guid> asset;
+        std::optional<math::Vec3> last;  // where the last tree was planted (one per `radius` along a drag)
+        std::size_t planted = 0, removed = 0;
+    };
+    std::optional<ScatterStroke> scatter_stroke_;
     struct DetailsCache {
         std::string key;  // the files' sizes and times: a change makes it stale
         asset::Json json;

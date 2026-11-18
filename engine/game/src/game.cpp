@@ -1,4 +1,5 @@
 #include "noor/game/game.h"
+#include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
 
 #include "noor/asset/gltf_import.h"
@@ -11,6 +12,7 @@
 #include "noor/scripting/lua_scripts.h"
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <string>
 #include <unordered_map>
@@ -181,6 +183,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         return it->second;
     };
     std::unordered_map<std::size_t, std::optional<Guid>> root_asset;  // a model root's asset id, parsed once
+    std::vector<std::size_t> scatter_entities;  // handled after the loop (they may stand on a terrain listed later)
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
@@ -192,6 +195,8 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool local = is_light && (light_type == "point" || light_type == "spot");
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
         const bool model = e.has("model") && e.components["model"].is_object();
+        const bool scatter = e.has("scatter") && e.components["scatter"].is_object();
+        if (scatter) scatter_entities.push_back(i);
         if (!camera && !primitive && !mesh && !model && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
         if (env) {
             const auto& en = e.components["environment"];
@@ -325,6 +330,45 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 view.meshes.push_back({*path, m.value("mesh_index", -1), world, e.id, same ? entities[static_cast<std::size_t>(root)].id : Guid{}});
             }
         }
+    }
+    // Scattered instances (Milestone 7, part 7): the cooked output with its hand-made layer, standing on
+    // their terrain if they name one.
+    for (const std::size_t si : scatter_entities) {
+        const auto& e = entities[si];
+        const auto& comp = e.components["scatter"];
+        SceneView::Scatter sv;
+        sv.entity = e.id;
+        const auto items = scatter_items(comp, project_root, &sv.warning);
+        const math::Mat4 world = world_of(si, 0);
+        std::shared_ptr<const terrain::Heights> ground;
+        math::Vec3 ground_at{};
+        if (const auto gid = asset::guid_field(comp, "ground")) {
+            for (const auto& t : view.terrains) {
+                if (t.entity != *gid) continue;
+                if (t.heights) {
+                    ground = t.heights;
+                } else if (auto h = terrain::Heights::shared(t.settings)) {
+                    ground = *h;
+                }
+                ground_at = t.position;
+            }
+        }
+        std::map<Guid, std::size_t> group_of;
+        for (const auto& it : items) {
+            const auto& path = asset_path ? asset_file(it.asset) : std::optional<std::filesystem::path>{};
+            if (!path) continue;
+            auto [g, fresh] = group_of.try_emplace(it.asset, sv.groups.size());
+            if (fresh) sv.groups.push_back({*path, {}});
+            math::Vec3 p = world.transform_point(it.position);
+            if (ground) p.y = ground_at.y + ground->height(p.x - ground_at.x, p.z - ground_at.z);
+            // The entity's rotation and scale apply to the instance too; its position is where the set starts.
+            const math::Mat4 local = math::compose({0, 0, 0}, it.rotation, {it.scale, it.scale, it.scale});
+            math::Mat4 m = world * local;
+            m.m[3] = {p.x, p.y, p.z, 1.0f};
+            sv.groups[g->second].worlds.push_back(m);
+            ++sv.count;
+        }
+        view.scatters.push_back(std::move(sv));
     }
     // The environment: an HDRI, or a procedural sky from the sun's sky settings (or the defaults).
     if (view.environment.hdri.empty()) {

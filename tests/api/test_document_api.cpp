@@ -8,6 +8,7 @@
 #include "noor_editor_api.h"
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/instance_set.h"
 #include "noor/asset/json.h"
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/guid.h"
@@ -690,4 +691,67 @@ TEST_CASE("document api: asset details tell a NoorForm oak's story, and notice a
     d = json(noor_doc_asset_details(t.doc, oak));
     CHECK(d["interchange"]["levels"][2]["exists"] == false);
     CHECK_FALSE(d["interchange"]["issues"].empty());
+}
+
+// Milestone 7, part 7: a scattered forest in the editor: cooked when the scene opens, trees removed and
+// planted by hand (one undo step per stroke), and those edits kept when the graph gets a new seed.
+TEST_CASE("document api: scattered trees are removed and planted by hand, and that survives a new seed") {
+    const stdfs::path src = kData / "forest_project";
+    const stdfs::path dir = stdfs::temp_directory_path() / ("noor_scatter_" + noor::Guid::generate().to_string());
+    stdfs::create_directories(dir);
+    for (const char* part : {"Assets", "Scenes"}) stdfs::copy(src / part, dir / part, stdfs::copy_options::recursive);
+    stdfs::copy_file(src / "Forest.noorproj", dir / "Forest.noorproj");
+    noor_doc* doc = noor_doc_open_project(dir.string().c_str());
+    REQUIRE(doc != nullptr);
+    REQUIRE(noor_doc_open_scene(doc, "Scenes/Scattered.noorscene") == 1);
+    const stdfs::path cooked = dir / ".noor" / "cooked" / "graphs" / "59de2071-f6e9-54bd-8215-beac941677ed" / "trees.instances.json";
+    auto set = noor::asset::InstanceSet::load(cooked);  // cooked when the scene was opened
+    REQUIRE(set);
+    REQUIRE(set->items.size() > 100);
+    const auto forest_id = [&] { return (*find_entity(json(noor_doc_scene(doc)), "Forest"))["id"].get<std::string>(); };
+    const auto component = [&] { return (*find_entity(json(noor_doc_scene(doc)), "Forest"))["components"]["scatter"]; };
+    const std::string id = forest_id();
+
+    // Remove: a 3 m brush on one tree takes out that tree (and only trees that close).
+    const auto& target = set->items[set->items.size() / 2];
+    const Json remove_begin{{"scatter", id}, {"phase", "begin"}, {"tool", "remove"}, {"radius", 3}};
+    REQUIRE(noor_doc_scatter_edit(doc, remove_begin.dump().c_str()) != nullptr);
+    const Json dab{{"scatter", id}, {"phase", "end"}, {"dabs", Json::array({{{"point", {target.position.x, target.position.y, target.position.z}}}})}};
+    const Json removed = json(noor_doc_scatter_edit(doc, dab.dump().c_str()));
+    CHECK(removed["removed"] == 1);  // spacing is 13 m: one tree within 3 m
+    REQUIRE(component()["removed"].size() == 1);
+    CHECK(component()["removed"][0] == noor::asset::instance_id_text(target.id));
+    REQUIRE(noor_doc_undo(doc) == 1);  // the whole stroke
+    CHECK(component()["removed"].empty());
+    REQUIRE(noor_doc_redo(doc) == 1);
+
+    // Plant: a drag of 30 m with a 10 m brush plants a tree every 10 m (the model: the set's own).
+    const Json plant_begin{{"scatter", id}, {"phase", "begin"}, {"tool", "plant"}, {"radius", 10}};
+    REQUIRE(noor_doc_scatter_edit(doc, plant_begin.dump().c_str()) != nullptr);
+    Json dabs = Json::array();
+    for (int x = 0; x <= 30; x += 2) dabs.push_back({{"point", {x - 60.0, 0.0, 90.0}}});
+    const Json planted = json(noor_doc_scatter_edit(doc, (Json{{"scatter", id}, {"phase", "end"}, {"dabs", dabs}}).dump().c_str()));
+    CHECK(planted["planted"] == 4);  // at 0, 10, 20 and 30 m
+    REQUIRE(component()["added"].size() == 4);
+    CHECK(component()["added"][0]["asset"] == "719beb3e-327d-56ed-8d54-be8882f405fd");
+    REQUIRE(noor_doc_save_scene(doc) == 1);
+
+    // A new seed: a different forest; the planted trees and the removal are still in the scene.
+    auto graph = noor::procgraph::Graph::load(dir / "Assets" / "Graphs" / "forest.noorgraph");
+    REQUIRE(graph);
+    graph->seed = 12;
+    REQUIRE(graph->save(dir / "Assets" / "Graphs" / "forest.noorgraph"));
+    REQUIRE(noor_doc_assets(doc, 1) != nullptr);
+    REQUIRE(noor_doc_save_scene(doc) == 1);  // Save always cooks
+    auto reseeded = noor::asset::InstanceSet::load(cooked);
+    REQUIRE(reseeded);
+    CHECK(reseeded->items.front().id != set->items.front().id);
+    CHECK(component()["added"].size() == 4);
+    CHECK(component()["removed"].size() == 1);
+    // Mistakes: no stroke started, an unknown tool.
+    CHECK(noor_doc_scatter_edit(doc, (Json{{"scatter", id}, {"phase", "dab"}}).dump().c_str()) == nullptr);
+    CHECK(noor_doc_scatter_edit(doc, (Json{{"scatter", id}, {"phase", "begin"}, {"tool", "grow"}}).dump().c_str()) == nullptr);
+    noor_doc_close(doc);
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
 }
