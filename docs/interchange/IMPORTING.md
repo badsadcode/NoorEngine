@@ -35,9 +35,13 @@ Assets/Trees/Oak_01.recipe.json    how to make it again (the generator's own for
   float, `+Z` up, a path that leaves the folder (`../`), levels with gaps or distances that don't
   grow, a newer major version. Errors make `noor_cli validate` fail; warnings are printed.
 
-Not yet (Milestone 7, part 6): **switching levels by distance.** Today the editor and games draw
-level 0 at every distance; the levels and their `max_distance`s are read and ready for instanced
-rendering with LOD (ADR-032). Changing only a `.lodN.glb` file doesn't trigger a live reload yet.
+**Levels switch by distance** (Milestone 7, part 6, [ADR-032](../decisions/ADR-032-instancing-and-lod.md)):
+a placed model is drawn whole at one level, chosen by its distance from the camera against the
+manifest's `max_distance`s (which are for a 60° view: a narrower view, or a bigger model, keeps
+detail further away). Level 0 is the model's own entities, so edits to its nodes show up close;
+lower levels come from their files. In the editor and in games alike; picking uses level 0. No
+cross-fade (levels pop) and no hysteresis yet. Changing only a `.lodN.glb` file doesn't trigger a
+live reload yet.
 
 ## Where you see it
 

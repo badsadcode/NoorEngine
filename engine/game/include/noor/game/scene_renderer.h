@@ -5,6 +5,7 @@
 #include "noor/game/geometry.h"
 #include "noor/game/environment_library.h"
 #include "noor/game/material_library.h"
+#include "noor/game/model_lod.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
@@ -49,8 +50,12 @@ private:
         std::vector<render::MeshHandle> meshes;
         std::vector<std::vector<asset::Submesh>> submeshes;  // per mesh
         std::vector<render::MaterialHandle> materials;
+        std::vector<std::pair<int, math::Mat4>> nodes;  // drawn nodes (mesh, world in the file): for a level of detail
     };
     std::unordered_map<std::string, std::optional<Model>> models_;  // nullopt: failed
+    std::unordered_map<std::string, ModelLods> lods_;               // by model file
+    const Model* model(const std::filesystem::path& file);
+    void add_mesh(std::vector<render::DrawItem>& out, const Model& model, int mesh_index, const math::Mat4& world) const;
     TextureLibrary textures_;
     MaterialLibrary materials_;
     EnvironmentLibrary environment_;

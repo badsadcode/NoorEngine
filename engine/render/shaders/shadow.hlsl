@@ -4,10 +4,6 @@
 
 struct PushConstants
 {
-    float4 world_row0;
-    float4 world_row1;
-    float4 world_row2;
-    float4 tint;
     uint4 ids;  // x: material slot, y: cascade
     float4 splat_tiling;  // (the scene pass's; unused here)
 };
@@ -43,6 +39,9 @@ struct VertexInput
 {
     [[vk::location(0)]] float3 position : POSITION;
     [[vk::location(3)]] float2 uv : TEXCOORD0;
+    [[vk::location(5)]] float4 world_row0 : INSTANCE0;  // per instance (ADR-032)
+    [[vk::location(6)]] float4 world_row1 : INSTANCE1;
+    [[vk::location(7)]] float4 world_row2 : INSTANCE2;
 };
 
 struct VertexOutput
@@ -54,7 +53,7 @@ struct VertexOutput
 VertexOutput VSMain(VertexInput input)
 {
     const float4 p = float4(input.position, 1.0);
-    const float3 world = float3(dot(pc.world_row0, p), dot(pc.world_row1, p), dot(pc.world_row2, p));
+    const float3 world = float3(dot(input.world_row0, p), dot(input.world_row1, p), dot(input.world_row2, p));
     VertexOutput output;
     output.position = mul(frame.cascades[pc.ids.y], float4(world, 1.0));
     output.uv = input.uv;

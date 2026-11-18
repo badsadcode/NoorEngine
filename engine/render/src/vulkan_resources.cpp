@@ -291,18 +291,24 @@ VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool displa
     stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vs, "VSMain", nullptr};
     stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, ps, "PSMain", &specialization};
 
-    const VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    const VkVertexInputAttributeDescription attributes[5] = {
+    // Binding 0: the mesh's vertices. Binding 1: one GpuInstance per instance (ADR-032).
+    const VkVertexInputBindingDescription bindings[2] = {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX},
+                                                         {1, sizeof(GpuInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+    const VkVertexInputAttributeDescription attributes[9] = {
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)},
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)},
         {2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, color)},
         {3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv)},
         {4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, tangent)},
+        {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row0)},
+        {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row1)},
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row2)},
+        {8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, tint)},
     };
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    vertex_input.vertexBindingDescriptionCount = 1;
-    vertex_input.pVertexBindingDescriptions = &binding;
-    vertex_input.vertexAttributeDescriptionCount = 5;
+    vertex_input.vertexBindingDescriptionCount = 2;
+    vertex_input.pVertexBindingDescriptions = bindings;
+    vertex_input.vertexAttributeDescriptionCount = 9;
     vertex_input.pVertexAttributeDescriptions = attributes;
 
     VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
@@ -466,79 +472,17 @@ std::uint32_t Renderer::Impl::material_slot(MaterialHandle material) const noexc
 }
 
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass) {
-    const bool gizmos = pass == DrawPass::Gizmos;
-    // Which draws, in which order. See-through ones go back to front (by their bounding sphere's
-    // centre: right for separate objects, not for objects inside each other).
-    std::vector<std::uint32_t> order;
-    order.reserve(frame.draws.size());
-    for (std::uint32_t i = 0; i < frame.draws.size(); ++i) {
-        const DrawItem& item = frame.draws[i];
-        if (item.overlay != gizmos) continue;
-        if (!gizmos && (materials[material_slot(item)].alpha == AlphaMode::Blend) != (pass == DrawPass::Transparent)) continue;
-        order.push_back(i);
-    }
-    if (order.empty()) return;
-    if (pass == DrawPass::Transparent) {
-        const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
-        std::vector<float> distance(frame.draws.size(), 0.0f);
-        for (const std::uint32_t i : order) {
-            const DrawItem& item = frame.draws[i];
-            math::Vec3 c = item.world_from_object.transform_point({0, 0, 0});
-            if (item.mesh.valid() && item.mesh.id <= meshes.size()) c = item.world_from_object.transform_point(meshes[item.mesh.id - 1].center);
-            distance[i] = math::length(c - eye);
-        }
-        std::ranges::stable_sort(order, [&](std::uint32_t a, std::uint32_t b) { return distance[a] > distance[b]; });
-        stats.transparent_draws = static_cast<std::uint32_t>(order.size());
-        begin_label(cmd, "See-through (sorted)", {0.6f, 0.85f, 1.0f, 1.0f});
-    }
-
+    (void)frame;  // planned in plan_frame
+    const auto& batches = pass == DrawPass::Opaque ? plan.opaque : pass == DrawPass::Transparent ? plan.transparent : plan.gizmos;
+    if (batches.empty()) return;
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
-    VkPipeline bound = VK_NULL_HANDLE;
-    bool sets_bound = false;
-    for (const std::uint32_t i : order) {
-        const DrawItem& item = frame.draws[i];
-        if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) continue;
-        const GpuMesh& mesh = meshes[item.mesh.id - 1];
-        const std::uint32_t material = material_slot(item);
-        const bool two_sided = materials[material].double_sided;
-        const VkPipeline pipeline = gizmos                         ? gizmo_pipeline
-                                    : pass == DrawPass::Transparent ? (two_sided ? blend_double_sided_pipeline : blend_pipeline)
-                                    : two_sided                    ? double_sided_pipeline
-                                                                   : mesh_pipeline;
-        if (!sets_bound) {
-            vkCmdSetViewport(cmd, 0, 1, &vp);
-            vkCmdSetScissor(cmd, 0, 1, &scissor);
-        }
-        if (pipeline != bound) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            bound = pipeline;
-        }
-        if (!sets_bound) {
-            const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
-            sets_bound = true;
-        }
-        // A submesh range, clamped to the mesh (draw items may come from imported files).
-        const std::uint32_t first = std::min(item.first_index, mesh.index_count);
-        const std::uint32_t count = item.index_count == 0 ? mesh.index_count - first : std::min(item.index_count, mesh.index_count - first);
-        if (count == 0) continue;
-        const math::Mat4& w = item.world_from_object;
-        const MeshPushConstants push{{w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
-                                     {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
-                                     {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
-                                     item.tint,
-                                     {material, item.splat && !gizmos ? 0x80000000u | material_slot(item.splat_layers[0]) : 0u,
-                                      material_slot(item.splat_layers[1]), material_slot(item.splat_layers[2])},
-                                     item.splat_tiling};
-        vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
-        const VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
-        vkCmdBindIndexBuffer(cmd, mesh.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, count, 1, first, 0, 0);
-        ++stats.draw_calls;
-        stats.triangles += count / 3;
-    }
+    vkCmdSetViewport(cmd, 0, 1, &vp);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
+    if (pass == DrawPass::Transparent) begin_label(cmd, "See-through (sorted)", {0.6f, 0.85f, 1.0f, 1.0f});
+    record_batches(cmd, batches, false);
     if (pass == DrawPass::Transparent) end_label(cmd);
 }
 

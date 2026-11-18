@@ -190,6 +190,36 @@ math::Mat4 Scene::world_matrix(std::size_t index) const {
     return m;
 }
 
+std::vector<math::Mat4> Scene::world_matrices() const {
+    std::unordered_map<Guid, std::size_t> index;
+    index.reserve(entities.size());
+    for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
+    std::vector<math::Mat4> world(entities.size());
+    std::vector<std::uint8_t> state(entities.size(), 0);  // 0 not yet, 1 in progress (a cycle), 2 done
+    std::vector<std::size_t> chain;
+    for (std::size_t start = 0; start < entities.size(); ++start) {
+        if (state[start] == 2) continue;
+        // Walk up to the first ancestor already known (or the root), then fill in on the way down.
+        chain.clear();
+        std::size_t i = start;
+        while (true) {
+            chain.push_back(i);
+            state[i] = 1;
+            const auto parent = entities[i].parent ? index.find(*entities[i].parent) : index.end();
+            if (parent == index.end() || state[parent->second] != 0) break;
+            i = parent->second;
+        }
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+            const std::size_t k = *it;
+            const auto parent = entities[k].parent ? index.find(*entities[k].parent) : index.end();
+            const bool known = parent != index.end() && state[parent->second] == 2;
+            world[k] = known ? world[parent->second] * entities[k].transform.matrix() : entities[k].transform.matrix();
+            state[k] = 2;
+        }
+    }
+    return world;
+}
+
 Guid instantiate_model(Scene& scene, const Guid& asset, const asset::ImportedModel& model, std::string_view root_name,
                        const Transform& root_transform) {
     Entity root;

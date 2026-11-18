@@ -562,6 +562,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     stats.transparent_draws = 0;
     stats.msaa_samples = scene_samples;
     update_frame_uniforms(frame_desc);
+    if (auto planned = plan_frame(frame_desc); !planned) return std::unexpected(planned.error());
     const std::string frame_label = std::format("NoorEngine frame {}", frames_presented);
     begin_label(frame.cmd, frame_label.c_str(), {0.42f, 0.25f, 0.85f, 1.0f});  // Noor purple
 
@@ -757,6 +758,7 @@ void Renderer::Impl::destroy() {
             destroy_buffer(capture.buffer);
         }
         destroy_shadows();
+        destroy_instance_buffers();
         destroy_environment();
         destroy_mesh_pipeline();
         destroy_msaa_targets();

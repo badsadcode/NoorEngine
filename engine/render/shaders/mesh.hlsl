@@ -12,12 +12,9 @@
 
 [[vk::constant_id(0)]] const bool kDisplay = false;
 
+// What a batch of instances shares (ADR-032). Each instance's matrix and tint come per instance.
 struct PushConstants
 {
-    float4 world_row0;  // the model matrix's top three rows (3x4: rotation/scale + translation)
-    float4 world_row1;
-    float4 world_row2;
-    float4 tint;        // rgb linear colour, a = how much of it replaces the vertex colour
     uint4 ids;          // x: material slot (splat layer 0); y: 0x80000000 | layer 1 for a splat; z, w: layers 2, 3
     float4 splat_tiling;  // UV multiplier per splat layer
 };
@@ -83,6 +80,12 @@ struct VertexInput
     [[vk::location(2)]] float3 color : COLOR;
     [[vk::location(3)]] float2 uv : TEXCOORD0;
     [[vk::location(4)]] float4 tangent : TANGENT;
+    // Per instance (vertex binding 1): the model matrix's top three rows and the tint (rgb linear
+    // colour, a = how much of it replaces the vertex colour).
+    [[vk::location(5)]] float4 world_row0 : INSTANCE0;
+    [[vk::location(6)]] float4 world_row1 : INSTANCE1;
+    [[vk::location(7)]] float4 world_row2 : INSTANCE2;
+    [[vk::location(8)]] float4 tint : INSTANCE3;
 };
 
 struct VertexOutput
@@ -98,20 +101,20 @@ struct VertexOutput
 
 bool is_splat() { return (pc.ids.y & 0x80000000u) != 0u; }
 
-float3 to_world_vector(float3 v)
+float3 to_world_vector(VertexInput input, float3 v)
 {
-    return float3(dot(pc.world_row0.xyz, v), dot(pc.world_row1.xyz, v), dot(pc.world_row2.xyz, v));
+    return float3(dot(input.world_row0.xyz, v), dot(input.world_row1.xyz, v), dot(input.world_row2.xyz, v));
 }
 
 VertexOutput VSMain(VertexInput input)
 {
     VertexOutput output;
     const float4 p = float4(input.position, 1.0);
-    output.world_position = float3(dot(pc.world_row0, p), dot(pc.world_row1, p), dot(pc.world_row2, p));
+    output.world_position = float3(dot(input.world_row0, p), dot(input.world_row1, p), dot(input.world_row2, p));
     output.position = mul(frame.clip_from_world, float4(output.world_position, 1.0));
-    output.normal = to_world_vector(input.normal);  // rotation/uniform scale; non-uniform scale later
-    output.tangent = float4(to_world_vector(input.tangent.xyz), input.tangent.w);
-    output.color = lerp(is_splat() ? float3(1.0, 1.0, 1.0) : input.color, pc.tint.rgb, pc.tint.a);
+    output.normal = to_world_vector(input, input.normal);  // rotation/uniform scale; non-uniform scale later
+    output.tangent = float4(to_world_vector(input, input.tangent.xyz), input.tangent.w);
+    output.color = lerp(is_splat() ? float3(1.0, 1.0, 1.0) : input.color, input.tint.rgb, input.tint.a);
     output.weights = is_splat() ? input.color : float3(0.0, 0.0, 0.0);
     output.uv = input.uv;
     return output;

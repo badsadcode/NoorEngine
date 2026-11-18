@@ -247,8 +247,10 @@ struct FrameDesc {
 };
 
 struct FrameStats {
-    std::uint32_t draw_calls = 0;
-    std::uint64_t triangles = 0;
+    std::uint32_t draw_calls = 0;  // GPU draw calls: one draws many instances (ADR-032)
+    std::uint64_t triangles = 0;   // in the scene pass (all instances)
+    std::uint64_t instances = 0;   // draw items drawn in the scene pass (after culling)
+    std::uint32_t culled = 0;      // draw items skipped because they were outside the camera's view
     // CPU time spent recording and submitting the frame (excludes waiting for the GPU/vsync).
     double cpu_record_ms = 0.0;
     // GPU time of the most recent frame whose results are available (lags 1â€“2 frames).

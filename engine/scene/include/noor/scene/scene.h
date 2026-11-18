@@ -57,6 +57,9 @@ public:
 
     [[nodiscard]] const Entity* find(const Guid& id) const;
     // World matrix of entity `index` (parents applied). Missing parents are treated as roots.
+    // Every entity's world matrix at once, in entity order: each parent's is computed once and reused
+    // (world_matrix() looks parents up one by one, which is quadratic over a whole scene).
+    [[nodiscard]] std::vector<math::Mat4> world_matrices() const;
     [[nodiscard]] math::Mat4 world_matrix(std::size_t index) const;
 };
 

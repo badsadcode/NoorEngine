@@ -8,6 +8,7 @@ noor_add_module(render
         src/shadows.cpp
         src/vulkan_frame.cpp
         src/vulkan_shadows.cpp
+        src/vulkan_instancing.cpp
         src/vulkan_environment.cpp
         src/vulkan_textures.cpp
         src/vulkan_overlay.cpp

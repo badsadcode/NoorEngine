@@ -23,6 +23,7 @@
 #include "noor/foundation/log.h"
 #include "noor/game/geometry.h"
 #include "noor/game/hud.h"
+#include "noor/game/model_lod.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
@@ -332,8 +333,20 @@ void render_thread_main(noor_viewport* vp) {
         bool loaded = false;
         std::uint64_t version = 0;
         std::optional<std::vector<LoadedMesh>> meshes;  // nullopt: failed to load
+        std::vector<std::pair<int, Mat4>> nodes;        // drawn nodes (mesh, world in the file): levels of detail
     };
     std::unordered_map<std::string, CachedAsset> assets;
+    // Levels of detail (Milestone 7, part 6): per model file and version, and this snapshot's placed models.
+    std::unordered_map<std::string, noor::game::ModelLods> lod_cache;
+    struct ViewModel {
+        Guid entity;
+        std::string path;
+        std::uint64_t version = 0;
+        Mat4 world;
+        const noor::game::ModelLods* lods = nullptr;
+    };
+    std::vector<ViewModel> view_models;
+    std::unordered_map<Guid, bool> model_selected;  // per model root: one of its draws is selected
     // CSG models on the GPU, by build key (ADR-016): one mesh per model; per brush a LoadedMesh
     // that shares it (its own parts and, for picking, its triangles); see-through ghosts for
     // subtract and intersect brushes. Unused builds are dropped after each new snapshot.
@@ -376,6 +389,7 @@ void render_thread_main(noor_viewport* vp) {
         Guid entity;
         const LoadedMesh* mesh = nullptr;  // null for markers
         bool colored = false;              // primitives: item.tint is their color
+        Guid model_root;                   // models: the placed model (a lower level of detail replaces it)
     };
     std::vector<SceneDraw> scene_draws;
     std::unordered_map<Guid, const ed::RenderSnapshot::Entity*> entity_by_id;
@@ -429,6 +443,48 @@ void render_thread_main(noor_viewport* vp) {
             }
         }
         return set;
+    };
+
+    // A model file on the GPU (meshes, materials, the nodes that draw them), loaded on first use and
+    // again when the snapshot carries a newer version of it (the document saw the file change).
+    auto load_asset = [&](const std::string& path, std::uint64_t version) -> CachedAsset& {
+        CachedAsset& cached = assets.try_emplace(path).first->second;
+        if (cached.loaded && cached.version == version) return cached;
+        const bool reload = cached.loaded;
+        if (cached.meshes) {
+            for (const auto& old : *cached.meshes)
+                if (old.handle.valid()) r.destroy_mesh(old.handle);
+        }
+        cached = {true, version, std::nullopt, {}};
+        if (auto model = noor::asset::import_gltf(path)) {
+            std::vector<LoadedMesh> loaded;
+            for (const auto& mesh : model->meshes) {
+                auto h = r.create_mesh({{reinterpret_cast<const noor::render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
+                                        mesh.indices, mesh.name});
+                LoadedMesh lm{h ? *h : noor::render::MeshHandle{}, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, {}, {}};
+                lm.positions.reserve(mesh.vertices.size());
+                for (const auto& v : mesh.vertices) {
+                    lm.positions.push_back(v.position);
+                    grow(lm.lo, lm.hi, v.position);
+                }
+                lm.indices.assign(mesh.indices.begin(), mesh.indices.end());
+                loaded.push_back(std::move(lm));
+            }
+            const auto model_materials = materials->model(path, *model);
+            for (std::size_t mi = 0; mi < model->meshes.size(); ++mi)
+                for (const auto& sm : model->meshes[mi].submeshes)
+                    loaded[mi].parts.push_back({sm.first_index, sm.index_count,
+                                                sm.material >= 0 && sm.material < static_cast<int>(model_materials.size())
+                                                    ? model_materials[static_cast<std::size_t>(sm.material)]
+                                                    : noor::render::MaterialHandle{}});
+            cached.meshes = std::move(loaded);
+            for (std::size_t n = 0; n < model->nodes.size(); ++n)
+                if (model->nodes[n].mesh >= 0 && !model->nodes[n].is_collision()) cached.nodes.emplace_back(model->nodes[n].mesh, model->world_matrix(n));
+            if (reload) NOOR_LOG_INFO("Viewport", "Reloaded {}", std::filesystem::path(path).filename().string());
+        } else {
+            NOOR_LOG_WARN("Viewport", "{}", model.error().describe());
+        }
+        return cached;
     };
 
     while (!vp->stop.load()) {
@@ -509,51 +565,23 @@ void render_thread_main(noor_viewport* vp) {
                     if (e.parent) children[*e.parent].push_back(e.id);
                 }
                 for (const auto& m : snap->meshes) {
-                    auto it = assets.try_emplace(m.asset_path).first;
-                    CachedAsset& cached = it->second;
-                    if (!cached.loaded || cached.version != m.asset_version) {
-                        const bool reload = cached.loaded;
-                        if (cached.meshes) {
-                            for (const auto& old : *cached.meshes)
-                                if (old.handle.valid()) r.destroy_mesh(old.handle);
-                        }
-                        cached = {true, m.asset_version, std::nullopt};
-                        if (auto model = noor::asset::import_gltf(m.asset_path)) {
-                            std::vector<LoadedMesh> loaded;
-                            for (const auto& mesh : model->meshes) {
-                                auto h = r.create_mesh({{reinterpret_cast<const noor::render::Vertex*>(mesh.vertices.data()),
-                                                         mesh.vertices.size()},
-                                                        mesh.indices, mesh.name});
-                                LoadedMesh lm{h ? *h : noor::render::MeshHandle{}, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, {}, {}};
-                                lm.positions.reserve(mesh.vertices.size());
-                                for (const auto& v : mesh.vertices) {
-                                    lm.positions.push_back(v.position);
-                                    grow(lm.lo, lm.hi, v.position);
-                                }
-                                lm.indices.assign(mesh.indices.begin(), mesh.indices.end());
-                                loaded.push_back(std::move(lm));
-                            }
-                            const auto model_materials = materials->model(m.asset_path, *model);
-                            for (std::size_t mi = 0; mi < model->meshes.size(); ++mi)
-                                for (const auto& sm : model->meshes[mi].submeshes)
-                                    loaded[mi].parts.push_back({sm.first_index, sm.index_count,
-                                                                sm.material >= 0 && sm.material < static_cast<int>(model_materials.size())
-                                                                    ? model_materials[static_cast<std::size_t>(sm.material)]
-                                                                    : noor::render::MaterialHandle{}});
-                            cached.meshes = std::move(loaded);
-                            if (reload) NOOR_LOG_INFO("Viewport", "Reloaded {}", std::filesystem::path(m.asset_path).filename().string());
-                        } else {
-                            NOOR_LOG_WARN("Viewport", "{}", model.error().describe());
-                        }
-                    }
+                    CachedAsset& cached = load_asset(m.asset_path, m.asset_version);
                     if (!cached.meshes || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(cached.meshes->size())) continue;
                     const LoadedMesh& lm = (*cached.meshes)[static_cast<std::size_t>(m.mesh_index)];
                     if (!lm.handle.valid()) continue;
-                    scene_draws.push_back({{lm.handle, m.world}, m.entity, &lm});
+                    scene_draws.push_back({{lm.handle, m.world}, m.entity, &lm, false, m.model_root});
                     for (int c = 0; c < 8; ++c) {
                         grow(lo, hi, m.world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));
                         any = true;
                     }
+                }
+                // Placed models and their levels of detail (read once per file version).
+                view_models.clear();
+                for (const auto& md : snap->models) {
+                    const std::string key = std::format("{}@{}", md.asset_path, md.asset_version);
+                    auto lit = lod_cache.find(key);
+                    if (lit == lod_cache.end()) lit = lod_cache.emplace(key, noor::game::read_model_lods(md.asset_path)).first;
+                    if (lit->second.switches()) view_models.push_back({md.entity, md.asset_path, md.asset_version, md.world, &lit->second});
                 }
                 if (marker.valid()) {
                     for (const auto& mk : snap->markers) {
@@ -799,9 +827,11 @@ void render_thread_main(noor_viewport* vp) {
             const auto moving = gizmo_entity ? subtree_of(*gizmo_entity) : std::unordered_set<Guid>{};
             draw_selected.assign(scene_draws.size(), 0);
             draw_in_gizmo_subtree.assign(scene_draws.size(), 0);
+            model_selected.clear();
             for (std::size_t i = 0; i < scene_draws.size(); ++i) {
                 draw_selected[i] = selected.contains(scene_draws[i].entity);
                 draw_in_gizmo_subtree[i] = moving.contains(scene_draws[i].entity);
+                if (!scene_draws[i].model_root.is_nil() && draw_selected[i]) model_selected[scene_draws[i].model_root] = true;
             }
         }
 
@@ -1071,7 +1101,35 @@ void render_thread_main(noor_viewport* vp) {
             r.set_clear_color({srgb(0x14121C).x, srgb(0x14121C).y, srgb(0x14121C).z, 1.0f});
             frame_draws.reserve(scene_draws.size() + 8);
             const Vec4 highlight = tint(0x9B7BFF, 0.45f);
+            // Levels of detail (Milestone 7, part 6): a model far enough from this camera is drawn whole
+            // from a lower level's file instead of its own entities (picking still uses level 0).
+            std::unordered_map<Guid, int> lowered;
+            for (const auto& vm : view_models) {
+                const Mat4& w = vm.world;
+                const float scale = std::max({noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), noor::math::length(Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
+                                              noor::math::length(Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
+                const int level = noor::game::choose_lod(*vm.lods, noor::math::length(w.transform_point({0, 0, 0}) - basis.eye), basis.fov_y, scale);
+                if (level <= 0) continue;
+                const CachedAsset& la = load_asset(vm.lods->levels[static_cast<std::size_t>(level)].file.generic_string(), vm.version);
+                if (!la.meshes) continue;  // failed: keep level 0
+                lowered.emplace(vm.entity, level);
+                const bool picked = model_selected.contains(vm.entity);
+                for (const auto& [mesh_index, local] : la.nodes) {
+                    if (mesh_index < 0 || mesh_index >= static_cast<int>(la.meshes->size())) continue;
+                    const LoadedMesh& lm = (*la.meshes)[static_cast<std::size_t>(mesh_index)];
+                    if (!lm.handle.valid()) continue;
+                    for (const auto& part : lm.parts) {
+                        noor::render::DrawItem piece{lm.handle, w * local};
+                        piece.first_index = part.first_index;
+                        piece.index_count = part.index_count;
+                        piece.material = part.material;
+                        if (picked) piece.tint = highlight;
+                        frame_draws.push_back(piece);
+                    }
+                }
+            }
             for (std::size_t i = 0; i < scene_draws.size(); ++i) {
+                if (!scene_draws[i].model_root.is_nil() && lowered.contains(scene_draws[i].model_root)) continue;
                 noor::render::DrawItem item = scene_draws[i].item;
                 if (preview && i < draw_in_gizmo_subtree.size() && draw_in_gizmo_subtree[i]) item.world_from_object = preview->delta * item.world_from_object;
                 if (i < draw_selected.size() && draw_selected[i]) {

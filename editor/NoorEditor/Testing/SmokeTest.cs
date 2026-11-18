@@ -980,7 +980,9 @@ internal static class SmokeTest
         shot(window, "editor_26_terrain.png");
         doc.Execute(new JsonObject { ["op"] = "remove", ["entity"] = id });
         await Task.Delay(600);
-        check(Triangles() == before, "terrain: deleting it frees its tiles");
+        // Triangles count what the camera sees (Milestone 7, part 6: culling), and the camera moved to
+        // frame the terrain, so compare with the framed view: the tile's triangles are gone.
+        check(Triangles() <= with - 2 * 256 * 256, $"terrain: deleting it frees its tiles ({with} → {Triangles()} triangles)");
     }
 
     // Milestone 6, part 6: sculpt a hill with the brush (a test pointer, never the real mouse), undo, save.
@@ -1065,8 +1067,6 @@ internal static class SmokeTest
 
         window.DockFactory.SetActiveDockable(window.FindDockable("Content")!);
         long Drawn() => VulkanViewport.Active?.RenderStats() is { } st && JsonNode.Parse(st) is JsonObject o ? o["triangles"]?.GetValue<long>() ?? 0 : 0;
-        await Task.Delay(700);
-        var before = Drawn();
         browser.Select(oak);
         var levels = browser.Details?["interchange"]?["levels"] as JsonArray;
         var text = browser.DetailsText;
@@ -1084,17 +1084,31 @@ internal static class SmokeTest
         // Out of the building at the origin, onto the floor PhysicsChecks made (around x = -25).
         if (root != null && doc.Scene.Entities.FirstOrDefault(e => e.Id == root) is { } placed)
             doc.SetTransform(root, placed.Transform with { Position = new Vec3(-25, 0, -6) }, "Move oak");
-        // The viewport loads the model (and compresses its textures) on its own thread: wait until it draws it.
-        var drawn = await WaitFor(() => (long?)Drawn(), t => t >= before + 15000, 60);
-        check(drawn >= before + 15000, $"NoorMD oak: the viewport draws it (LOD0: {drawn - before} more triangles; 15,268 expected)");
         var bottom = window.FindDock("Bottom");
         var height = bottom?.Proportion ?? 0.28;
         if (bottom != null) bottom.Proportion = 0.5;  // room for the details in the screenshot
         await Task.Delay(400);
         if (root != null) window.ViewportView?.Viewport.Frame(doc.Subtree(root));
-        await Task.Delay(1000);
+        // The viewport loads the model (and compresses its textures) on its own thread: wait until it
+        // draws it. Framed close up it's level 0 (15,268 triangles); the view counts only what the
+        // camera sees (culling), so at least that many.
+        var drawn = await WaitFor(() => (long?)Drawn(), t => t >= 15268, 60);
+        check(drawn >= 15268, $"NoorMD oak: the viewport draws it ({drawn} triangles in view; its level 0 has 15,268)");
+        await Task.Delay(600);
         shot(window, "editor_30_noorform_oak.png");
         if (bottom != null) bottom.Proportion = height;
+        // Levels of detail in the viewport (Milestone 7, part 6): a model counts as further away the
+        // smaller it is, so the same oak at 2% of its size is drawn from its billboard level (8 triangles).
+        var full = Drawn();
+        var lowered = false;
+        if (root != null && doc.Scene.Entities.FirstOrDefault(e => e.Id == root) is { } oakNow)
+        {
+            doc.SetTransform(root, oakNow.Transform with { Scale = new Vec3(0.02, 0.02, 0.02) }, "Shrink oak");
+            var small = await WaitFor(() => (long?)Drawn(), t => t <= full - 15000, 20);
+            check(small <= full - 15000, $"NoorMD oak: the viewport switches it to a lower level of detail ({full} → {small} triangles in view)");
+            lowered = true;
+        }
+        if (lowered) doc.Undo();
         doc.Undo();
         doc.Undo();
         window.DockFactory.SetActiveDockable(window.ViewportDockable);

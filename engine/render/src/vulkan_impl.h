@@ -105,20 +105,35 @@ struct GpuMesh {
 // Which draws record_draws records.
 enum class DrawPass : std::uint8_t { Opaque, Transparent, Gizmos };
 
-// Push constants for mesh.hlsl (must match its PushConstants struct; at most 128 bytes).
-// The model matrix's top three rows (rotation/scale and translation) give world positions and
-// normals; the camera's clip_from_world is in FrameUniforms.
+// One instance of a draw (ADR-032), in the per-frame instance buffer (vertex binding 1, per
+// instance): the model matrix's top three rows (rotation/scale and translation) and the tint.
+struct GpuInstance {
+    math::Vec4 row0;
+    math::Vec4 row1;
+    math::Vec4 row2;
+    math::Vec4 tint;  // rgb = linear color, a = blend amount (0 = mesh colors)
+};
+static_assert(sizeof(GpuInstance) == 64);
+
+// Push constants for mesh.hlsl and shadow.hlsl (must match their PushConstants struct): what a whole
+// batch shares. The camera's clip_from_world is in FrameUniforms; matrices come per instance.
 struct MeshPushConstants {
-    math::Vec4 world_row0;
-    math::Vec4 world_row1;
-    math::Vec4 world_row2;
-    math::Vec4 tint;            // rgb = linear color, a = blend amount (0 = mesh colors)
     // x: material slot (splat layer 0). Scene pass: y = 0x80000000 | layer 1's slot for a splat (else 0),
     // z, w: layers 2 and 3. Shadow pass: y = cascade.
     std::uint32_t ids[4];
     math::Vec4 splat_tiling;    // UV multiplier per splat layer
 };
-static_assert(sizeof(MeshPushConstants) == 96);
+static_assert(sizeof(MeshPushConstants) == 32);
+
+// One GPU draw of `instance_count` instances of a mesh range (vulkan_instancing.cpp).
+struct DrawBatch {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    std::uint32_t mesh = 0;  // MeshHandle id
+    std::uint32_t first = 0, count = 0;
+    std::uint32_t ids[4]{};
+    math::Vec4 splat_tiling{1, 1, 1, 1};
+    std::uint32_t instance_offset = 0, instance_count = 0;
+};
 
 // mesh.hlsl's GpuMaterial (std430), one per material slot.
 struct GpuMaterial {
@@ -332,6 +347,16 @@ struct Renderer::Impl {
     std::array<bool, kFramesInFlight> timestamps_written{};
 
     std::vector<GpuMesh> meshes;  // MeshHandle.id = index + 1
+
+    // Instanced drawing (vulkan_instancing.cpp, ADR-032): this frame's batches and their instances.
+    using Batch = DrawBatch;
+    struct FramePlan {
+        std::vector<GpuInstance> instances;
+        std::vector<Batch> opaque, transparent, gizmos;
+        std::array<std::vector<Batch>, kShadowCascades> shadows;
+    } plan;
+    std::array<GpuBuffer, kFramesInFlight> instance_buffers{};
+    std::array<std::size_t, kFramesInFlight> instance_capacity{};
     bool capture_requested = false;
     PendingCapture capture;
 
@@ -403,6 +428,10 @@ struct Renderer::Impl {
     void destroy_mesh(MeshHandle handle);
     // The scene's opaque draws, its see-through ones (sorted back to front), or the editor gizmos.
     void record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass);
+    // vulkan_instancing.cpp: culling and batching (call after update_frame_uniforms: it needs the cascades).
+    Status plan_frame(const FrameDesc& frame);
+    void record_batches(VkCommandBuffer cmd, std::span<const Batch> batches, bool shadow);
+    void destroy_instance_buffers();
     [[nodiscard]] std::uint32_t material_slot(const DrawItem& item) const noexcept;
     [[nodiscard]] std::uint32_t material_slot(MaterialHandle material) const noexcept;
 

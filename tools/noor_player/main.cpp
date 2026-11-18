@@ -298,6 +298,13 @@ int run(const Options& o) {
                 noor::render::FrameDesc last_frame_desc;  // the final frame, redrawn if its picture was missed
                 std::vector<noor::render::DrawItem> last_draws;
                 std::vector<noor::render::OverlayVertex> last_overlay;
+                // Frame timings for --report (Milestone 7, part 6): wall time per frame, and where the CPU
+                // spent it (the game, collecting the view, recording the frame), plus the GPU's own time.
+                struct Timing {
+                    double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1;
+                };
+                std::vector<Timing> timings;
+                double frame_start = noor::platform::time_seconds();
                 double last = noor::platform::time_seconds();
                 while (o.frames == 0 || (*world)->frame_count() < o.frames) {
                     const auto events = noor::platform::pump_events();
@@ -329,7 +336,9 @@ int run(const Options& o) {
                         --ignore_motion;
                         game_in.mouse_delta = {0, 0};
                     }
+                    const double t_game = noor::platform::time_seconds();
                     (*world)->frame(dt, game_in);
+                    const double t_game_done = noor::platform::time_seconds();
                     if (now - last_refresh > 0.5) {  // materials and textures edited while the game runs
                         scene_renderer.refresh();
                         last_refresh = now;
@@ -340,7 +349,9 @@ int run(const Options& o) {
                         NOOR_LOG_WARN("Player", "The scene has no camera; showing it from above. Add a camera component (or Create ▸ Player) to see the game's view");
                         warned_no_camera = true;
                     }
+                    const double t_collected = noor::platform::time_seconds();
                     const auto draws = scene_renderer.draws(view);
+                    const double t_view_done = noor::platform::time_seconds();
                     const bool last_frame = o.frames && (*world)->frame_count() == o.frames;
                     if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture();
                     overlay.clear();
@@ -353,6 +364,13 @@ int run(const Options& o) {
                         break;
                     }
                     if (*frame == noor::render::FrameResult::Skipped && (*window)->is_minimized()) noor::platform::wait_for_events(50);
+                    {
+                        const double t_end = noor::platform::time_seconds();
+                        const auto& fs = (*renderer)->last_frame_stats();
+                        timings.push_back({(t_end - frame_start) * 1000.0, (t_game_done - t_game) * 1000.0,
+                                           (t_view_done - t_game_done) * 1000.0, (t_collected - t_game_done) * 1000.0, fs.cpu_record_ms, fs.gpu_ms});
+                        frame_start = t_end;
+                    }
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
                     if (last_frame) {
                         last_draws = draws;
@@ -410,6 +428,8 @@ int run(const Options& o) {
                     const auto& fs = (*renderer)->last_frame_stats();
                     report["render"] = {{"gpu_ms", fs.gpu_ms},
                                         {"draw_calls", fs.draw_calls},
+                                        {"instances", fs.instances},
+                                        {"culled", fs.culled},
                                         {"triangles", fs.triangles},
                                         {"shadow_draw_calls", fs.shadow_draw_calls},
                                         {"shadow_draws_culled", fs.shadow_draws_culled},
@@ -420,6 +440,24 @@ int run(const Options& o) {
                                         {"render_target_bytes", (*renderer)->render_target_memory()},
                                         {"width", last_capture ? last_capture->width : 0u},
                                         {"height", last_capture ? last_capture->height : 0u}};
+                    // Timings without the first second (loading, first uploads): median and 95th percentile.
+                    if (timings.size() > 70) {
+                        const auto stat = [&](double Timing::*field) {
+                            std::vector<double> v;
+                            for (std::size_t i = 60; i < timings.size(); ++i)
+                                if (timings[i].*field >= 0) v.push_back(timings[i].*field);
+                            if (v.empty()) return Json(nullptr);
+                            std::ranges::sort(v);
+                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}};
+                        };
+                        report["timing_ms"] = {{"frames", timings.size() - 60},
+                                               {"wall", stat(&Timing::wall)},
+                                               {"game", stat(&Timing::game)},
+                                               {"view", stat(&Timing::view)},
+                                               {"collect", stat(&Timing::collect)},
+                                               {"record", stat(&Timing::record)},
+                                               {"gpu", stat(&Timing::gpu)}};
+                    }
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }

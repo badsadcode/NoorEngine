@@ -133,19 +133,23 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     bool has_environment = false;
     float env_intensity = 8000.0f;
     // World matrices, with render poses in place of the simulated ones (and children following).
+    // Each is computed once and kept (a parent's matrix is reused by all its children): the scene's
+    // own world_matrix() searches for every parent, which is quadratic and took 190 ms a frame for a
+    // 2,000-tree forest (Milestone 7, part 6).
     std::unordered_map<Guid, std::size_t> index;
-    std::vector<std::optional<math::Mat4>> memo;
+    index.reserve(entities.size());
+    for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
+    std::vector<std::optional<math::Mat4>> memo(entities.size());
     const bool blended = render_poses && !render_poses->empty();
-    if (blended) {
-        for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
-        memo.resize(entities.size());
-    }
     std::function<math::Mat4(std::size_t, int)> world_of = [&](std::size_t i, int depth) -> math::Mat4 {
-        if (!blended) return scene.world_matrix(i);
         if (memo[i]) return *memo[i];
         math::Mat4 m;
-        if (const auto it = render_poses->find(entities[i].id); it != render_poses->end()) {
-            m = it->second;
+        const math::Mat4* pose = nullptr;
+        if (blended) {
+            if (const auto it = render_poses->find(entities[i].id); it != render_poses->end()) pose = &it->second;
+        }
+        if (pose) {
+            m = *pose;
         } else {
             m = entities[i].transform.matrix();
             const auto parent = entities[i].parent ? index.find(*entities[i].parent) : index.end();
@@ -154,6 +158,29 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         memo[i] = m;
         return m;
     };
+    // The placed model an entity belongs to: the nearest ancestor (or itself) with a `model` component.
+    std::vector<int> model_root(entities.size(), -2);  // -2: not known yet, -1: none
+    std::function<int(std::size_t, int)> root_walk = [&](std::size_t i, int depth) -> int {
+        if (model_root[i] != -2) return model_root[i];
+        int r = -1;
+        if (entities[i].has("model") && entities[i].components["model"].is_object()) {
+            r = static_cast<int>(i);
+        } else if (const auto p = entities[i].parent ? index.find(*entities[i].parent) : index.end(); p != index.end() && depth < 256) {
+            r = root_walk(p->second, depth + 1);
+        }
+        model_root[i] = r;
+        return r;
+    };
+    const auto model_root_of = [&](std::size_t i) { return root_walk(i, 0); };
+    // Asset files by id, resolved once per call: a forest has thousands of meshes but few assets, and
+    // resolving a path (checks, normalising) every frame for each was most of a 2,000-tree frame.
+    std::unordered_map<Guid, std::optional<std::filesystem::path>> files;
+    const auto asset_file = [&](const Guid& id) -> const std::optional<std::filesystem::path>& {
+        auto it = files.find(id);
+        if (it == files.end()) it = files.emplace(id, asset_path(id)).first;
+        return it->second;
+    };
+    std::unordered_map<std::size_t, std::optional<Guid>> root_asset;  // a model root's asset id, parsed once
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
@@ -164,7 +191,8 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool sun = is_light && !view.has_sun && light_type == "directional";
         const bool local = is_light && (light_type == "point" || light_type == "spot");
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
-        if (!camera && !primitive && !mesh && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
+        const bool model = e.has("model") && e.components["model"].is_object();
+        if (!camera && !primitive && !mesh && !model && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
         if (env) {
             const auto& en = e.components["environment"];
             if (const auto id = asset::guid_field(en, "hdri"); id && asset_path)
@@ -277,11 +305,25 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             const auto model_index = static_cast<std::size_t>(&e - entities.data());
             view.csg.push_back({e.id, world, csg_model_key(scene, model_index)});
         }
+        if (model && asset_path) {
+            if (const auto guid = asset::guid_field(e.components["model"], "asset"))
+                if (const auto& path = asset_file(*guid)) view.models.push_back({e.id, *path, world});
+        }
         if (mesh && asset_path) {
             const auto& m = e.components["mesh"];
             const auto guid = asset::guid_field(m, "asset");
             if (!guid) continue;
-            if (auto path = asset_path(*guid)) view.meshes.push_back({std::move(*path), m.value("mesh_index", -1), world, e.id});
+            if (const auto& path = asset_file(*guid)) {
+                const int root = model_root_of(i);
+                bool same = false;
+                if (root >= 0) {
+                    const auto r = static_cast<std::size_t>(root);
+                    auto it = root_asset.find(r);
+                    if (it == root_asset.end()) it = root_asset.emplace(r, asset::guid_field(entities[r].components["model"], "asset")).first;
+                    same = it->second == guid;
+                }
+                view.meshes.push_back({*path, m.value("mesh_index", -1), world, e.id, same ? entities[static_cast<std::size_t>(root)].id : Guid{}});
+            }
         }
     }
     // The environment: an HDRI, or a procedural sky from the sun's sky settings (or the defaults).

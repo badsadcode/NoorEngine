@@ -30,6 +30,7 @@ add_executable(noor_unit_tests
     unit/test_sculpt.cpp
     unit/test_procgraph.cpp
     unit/test_interchange.cpp
+    unit/test_lod.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -129,7 +130,8 @@ if(WIN32 AND NOOR_DOTNET)
             -DDATA=${CMAKE_CURRENT_SOURCE_DIR}/data
             -DCONFIG=$<CONFIG>
             -P ${CMAKE_CURRENT_SOURCE_DIR}/editor_smoke.cmake)
-    set_tests_properties(editor.smoke PROPERTIES LABELS "gpu;editor" TIMEOUT 300)
+    # gpu_timing: the smoke test measures play-mode update rates; the GPU-heavy forest tests don't run beside it.
+    set_tests_properties(editor.smoke PROPERTIES LABELS "gpu;editor" TIMEOUT 300 RESOURCE_LOCK gpu_timing)
 endif()
 
 # Golden-image render tests (Milestone 5, ADR-012): scenes drawn by noor_player, compared with
@@ -226,6 +228,20 @@ add_test(NAME render.golden_Hillside
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache)
+# Instancing and levels of detail (Milestone 7, part 6): the test forest (tests/data/forest_project,
+# built by tools/samples/build_forest.py), its golden render and its draw/LOD numbers.
+add_test(NAME render.golden_Forest
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project -DSCENE=Scenes/Forest.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Forest.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Forest
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Forest PROPERTIES LABELS "gpu;render" TIMEOUT 180 RESOURCE_LOCK "forest_cache;gpu_timing")
+add_test(NAME render.forest_instancing_lod
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/forest_project
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/forest_check -P ${CMAKE_CURRENT_SOURCE_DIR}/forest_check.cmake)
+set_tests_properties(render.forest_instancing_lod PROPERTIES LABELS "gpu;render" TIMEOUT 180 RESOURCE_LOCK "forest_cache;gpu_timing")
 add_test(NAME cli.build_hillside
     COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/Hillside ${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game)
 set_tests_properties(cli.build_hillside PROPERTIES LABELS "cli;sample" TIMEOUT 180 FIXTURES_SETUP built_hillside_game RESOURCE_LOCK hillside_cache

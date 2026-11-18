@@ -40,11 +40,12 @@ MaterialLibrary::~MaterialLibrary() {
 }
 
 render::MaterialDesc MaterialLibrary::desc(const asset::Material& m, const asset::ImportedModel* model) {
-    const auto texture = [&](const asset::TextureRef& ref, asset::TextureKind kind) -> render::TextureHandle {
+    const auto texture = [&](const asset::TextureRef& ref, asset::TextureKind kind, float alpha_coverage = 0.0f) -> render::TextureHandle {
         if (ref.empty()) return {};
         if (ref.embedded_image < 0) return textures_.get(ref.file);
         if (!model || ref.embedded_image >= static_cast<int>(model->images.size())) return renderer_.missing_texture();
-        return textures_.get_embedded(ref.file, ref.embedded_image, model->images[static_cast<std::size_t>(ref.embedded_image)].bytes, kind);
+        return textures_.get_embedded(ref.file, ref.embedded_image, model->images[static_cast<std::size_t>(ref.embedded_image)].bytes, kind,
+                                      alpha_coverage);
     };
     render::MaterialDesc d;
     d.base_color = m.base_color;
@@ -58,7 +59,8 @@ render::MaterialDesc MaterialLibrary::desc(const asset::Material& m, const asset
     d.double_sided = m.double_sided;
     d.uv_scale = m.uv_scale;
     d.uv_offset = m.uv_offset;
-    d.base_color_texture = texture(m.base_color_map, asset::TextureKind::Color);
+    // Cutout (leaves): the base colour's mips keep their coverage, so far leaves don't fade away.
+    d.base_color_texture = texture(m.base_color_map, asset::TextureKind::Color, m.alpha == asset::AlphaMode::Cutout ? m.alpha_cutoff : 0.0f);
     d.metallic_roughness_texture = texture(m.metallic_roughness_map, asset::TextureKind::Data);
     d.roughness_texture = texture(m.roughness_map, asset::TextureKind::Data);
     d.metallic_texture = texture(m.metallic_map, asset::TextureKind::Data);

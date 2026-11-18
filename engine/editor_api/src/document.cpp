@@ -645,9 +645,10 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         return math::normalize_quat(q);
     };
     snap->entities.reserve(entities.size());
+    const auto worlds = expanded.world_matrices();
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
-        const math::Mat4 world = expanded.world_matrix(i);
+        const math::Mat4& world = worlds[i];
         snap->entities.push_back({e.id, e.parent, world, world_rotation(i), e.transform, !world_ && authored.contains(e.id)});
         if (e.has("marker")) snap->markers.push_back({world, e.id, std::nullopt});
     }
@@ -680,13 +681,18 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         if (!entities[i].has("csg_model")) continue;
         auto mesh = build_csg(expanded, i);
         if (!mesh) continue;
-        snap->csg.push_back({entities[i].id, expanded.world_matrix(i), mesh});
+        snap->csg.push_back({entities[i].id, worlds[i], mesh});
         csg_last_.emplace_back(entities[i].id, std::move(mesh));
     }
     for (auto& m : view.meshes) {
         std::string key = m.asset_path.generic_string();
         const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
-        snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version});
+        snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version, m.model_root});
+    }
+    for (auto& md : view.models) {
+        std::string key = md.asset_path.generic_string();
+        const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
+        snap->models.push_back({md.entity, std::move(key), md.world, version});
     }
     channel_->publish(std::move(snap));
 }

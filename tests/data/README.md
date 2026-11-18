@@ -36,3 +36,15 @@ python tools/interchange/noormd_engine_export.py test_tree "Oak 01" tests/data/n
 - `Oak_01.recipe.json`: NoorForm's recipe, unchanged
 
 6.5 MB in all. When NoorMD's export mode exists, its own export of this oak replaces these files.
+
+## `forest_project/`
+120 copies of the oak above on a 260 m square, with a sun and a camera at the edge (Milestone 7, part 6:
+instancing and levels of detail), written by
+
+```bash
+python tools/samples/build_forest.py tests/data/forest_project --trees 120 --area 260 --name Forest
+```
+
+The oak's files are the same bytes as `noorform_oak/` (git stores them once). Each oak is placed the way
+the editor places a model (a root with a `model` component and an entity per node), deterministically
+(seed 7). Used by `render.golden_Forest` and `render.forest_instancing_lod`.

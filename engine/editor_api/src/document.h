@@ -105,7 +105,16 @@ struct RenderSnapshot {
         math::Mat4 world;
         Guid entity;             // expanded entity id
         std::uint64_t asset_version = 0;  // bumps when the file changes on disk: reload it
+        Guid model_root;         // the placed model it belongs to (levels of detail switch it as a whole), nil if none
     };
+    // Placed models (Milestone 7, part 6): levels of detail are chosen per model and frame.
+    struct Model {
+        Guid entity;
+        std::string asset_path;
+        math::Mat4 world;
+        std::uint64_t asset_version = 0;
+    };
+    std::vector<Model> models;
     // Every entity of the expanded scene, for picking, highlighting and gizmos.
     struct Entity {
         Guid id;

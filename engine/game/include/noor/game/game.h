@@ -53,7 +53,16 @@ struct SceneView {
         int mesh_index = -1;
         math::Mat4 world;
         Guid entity;
+        Guid model_root;  // the placed model it belongs to (an ancestor with a `model` component of the same asset); nil if none
     };
+    // Placed models (entities with a `model` component): levels of detail switch them as a whole
+    // (noor/game/model_lod.h).
+    struct Model {
+        Guid entity;
+        std::filesystem::path asset_path;
+        math::Mat4 world;
+    };
+    std::vector<Model> models;
     // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).
     // Their surface: "material": <.noormat asset id>, or material fields right on the component
     // (the .noormat names: "base_color_map", "normal_map", "roughness", "metallic", "uv_scale", …).

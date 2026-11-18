@@ -58,7 +58,47 @@ used big texture sets.
 its frame images are small. Revisit when the Content Browser gets material thumbnails or several
 previews are open at once.
 
+## A forest: instancing and levels of detail (Milestone 7, part 6)
+
+**What:** 2,000 NoorForm oaks (`tests/data/noorform_oak`: four levels, 15,268 / 12,256 / 5,178 / 8
+triangles) on a 900 m square, a sun with shadows, the camera at the edge at eye height. 10,003
+entities (each oak is a root and four node entities, as the editor places a model). Built with
+`python tools/samples/build_forest.py <folder> --trees 2000 --area 900 --name Forest2000` (not
+committed: 6.5 MB of scene).
+
+**How:** `noor_player` (RelWithDebInfo) `--frames 300 --report`, MSAA 4×, 1280×720, vsync on (60 Hz),
+NVIDIA GeForce RTX 3080, Windows 10, 2026-11-18. Times are the median of frames 60–300 (the
+report's new `timing_ms`: wall time per frame; CPU split into the game, collecting the scene and
+building draws, recording; GPU from timestamps). The final row is the median of three runs.
+
+| Step | Frame | CPU: game / view (collect) / record | GPU | Draw calls | Triangles |
+|---|---|---|---|---|---|
+| Before part 6 | 192 ms (5 FPS) | 1.5 / 189 / 0.7 ms | 22.4 ms (p95 29.8) | 4,784 | 30.5 M |
+| Scene matrices in O(n) (not quadratic) + instancing + camera culling | 16.7 ms (60 FPS) | 0.8 / 9.0 / 0.6 ms | 6.1 ms | 16 | 23.9 M |
+| + levels of detail | 15.7 ms (p95 21) | 0.8 / 12.8 (11.3) / 0.3 ms | 2.8 ms | 24 | 0.43 M |
+| + asset paths resolved once per frame, not per mesh; cutout mips | **16.7 ms (60 FPS, vsync)** | **1.2 / 7.7 (5.9) / 0.35 ms** | **2.5 ms** (p95 3.7) | **24** | **0.43 M** |
+
+- **The gate holds:** 2,000 trees with four levels at 60 FPS in a Release build, with CPU (about
+  9 ms) and GPU (2.5 ms) both well inside a 16.7 ms frame.
+- **The first win wasn't the GPU.** 189 of the 192 ms were the CPU finding each entity's parents one
+  by one, every frame (quadratic in the number of entities). Batching took 4,784 draw calls to 16.
+- **Levels of detail** cut the triangles 55× (most trees are 72–180 m away: level 2, 5,178 triangles;
+  beyond that, an 8-triangle billboard). Shadows are now the biggest GPU pass (about 2 ms of 2.5).
+- **What's left is CPU, and it's the scene's shape:** reading 10,000 entities' JSON components each
+  frame costs about 6 ms. Part 7 places forests as instance sets (one record per tree, no entities),
+  which removes most of it. Until then, a few thousand placed models are fine; tens of thousands
+  aren't.
+- One of the three final runs had a p95 of 24 ms (single hitches, not a slow average); the other two
+  17.4–17.5 ms. With vsync, a frame that misses 16.7 ms waits for the next refresh.
+- Memory: the instance buffers grow to what a frame needs: 64 bytes per instance, scene and shadow
+  instances together (about 10,000 here, so roughly 1 MB per frame in flight with headroom; worked
+  out from the counts, not read from the GPU). Textures 3.5 MB (only the levels in view are loaded),
+  meshes 1.5 MB.
+
+The committed test forest (`tests/data/forest_project`, 120 oaks) is a golden render
+(`render.golden_Forest`) and a check (`render.forest_instancing_lod`): 152 objects in 10 scene draw
+calls, 42 culled, 0.32 M triangles.
+
 ## Not measured yet
-CPU time per frame in release builds of large scenes, a scene with hundreds of textured
-materials, integrated GPUs, and 4K screens (frame images scale with pixels: about 4× the numbers
-above at 3840×2160).
+A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale
+with pixels: about 4× the numbers above at 3840×2160).

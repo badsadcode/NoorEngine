@@ -4,6 +4,39 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 7 in progress (procedural graph and first generation tools)
 
+### 2026-11-18 — Milestone 7, part 6: instanced drawing and levels of detail
+**Added**
+- **Instanced drawing** (ADR-032, `render/src/vulkan_instancing.cpp`): each frame the renderer culls draw
+  items against the camera and batches the ones that share a mesh range, material and pipeline into one
+  instanced draw; matrices and tints come from a per-frame instance buffer (vertex binding 1). Shadows
+  are culled and batched per cascade. Callers don't change. Push constants 96 → 32 bytes.
+  `FrameStats` gains `instances` and `culled`.
+- **Levels of detail** (`noor/game/model_lod.h`): a placed model switches as a whole between its
+  manifest's levels by camera distance (scaled for the field of view and the model's size), in the
+  player and the editor viewport. The scene view records each mesh's model root and the placed models.
+- **Cutout mipmaps keep their coverage** (`TextureSettings::alpha_coverage`, used for cutout base colours
+  in models), so foliage doesn't thin out with distance.
+- `Scene::world_matrices()`: every entity's world matrix in one pass.
+- `noor_player --report` gains `timing_ms` (wall, game, view, collect, record, GPU: median and p95) and
+  the render stats `instances` and `culled`.
+- `tools/samples/build_forest.py` and the test forest `tests/data/forest_project` (120 oaks).
+
+**Fixed (performance):** collecting a scene's view was quadratic (each entity's parents looked up one by
+one): 189 ms a frame for 10,000 entities, now about 6 ms; the editor's snapshots use the one-pass
+matrices too. Asset paths are resolved once per frame instead of once per mesh.
+
+**Measured** (`docs/rendering/MEASUREMENTS.md`): a 2,000-oak forest went from 5 FPS (192 ms; GPU 22 ms,
+4,784 draws, 30.5 M triangles) to 60 FPS (vsync; CPU about 9 ms, GPU 2.5 ms, 24 draws, 0.43 M triangles).
+
+**Not yet:** level cross-fades and hysteresis; persistent instance buffers; GPU culling. Forests of
+entities cost CPU (6 ms for 10,000 entities): part 7's instance sets are the fix.
+
+**Tests:** five unit tests (levels from the manifest and chosen by distance/view/size, no switching
+without a usable manifest, model roots in the scene view, one-pass world matrices, coverage-keeping
+mips), `render.golden_Forest`, `render.forest_instancing_lod` (batching, culling, LOD numbers, Vulkan
+validation), an editor smoke check (the viewport switches the oak's level). Smoke checks that counted
+triangles now account for culling.
+
 ### 2026-11-18 — Milestone 7, part 5: generated assets in (Noor Interchange)
 **Added**
 - **Manifest reader** (`noor/asset/interchange.h`): reads a `<name>.noor.json` (v0.4 and older) into the

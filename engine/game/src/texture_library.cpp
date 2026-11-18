@@ -77,13 +77,14 @@ render::TextureHandle TextureLibrary::get(const std::filesystem::path& file) {
 }
 
 render::TextureHandle TextureLibrary::get_embedded(const std::filesystem::path& model, int image, std::span<const std::uint8_t> bytes,
-                                                   asset::TextureKind kind) {
+                                                   asset::TextureKind kind, float alpha_coverage) {
     // Keyed by content too: a re-exported model with a new picture at the same index gets the new one.
     const auto content = std::hash<std::string_view>{}(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-    const std::string key = std::format("{}#{}#{}#{:x}", model.generic_string(), image, asset::kind_name(kind), content);
+    const std::string key = std::format("{}#{}#{}#{:x}#{}", model.generic_string(), image, asset::kind_name(kind), content, alpha_coverage);
     if (const auto it = textures_.find(key); it != textures_.end()) return it->second.handle;
     asset::TextureSettings settings;
     settings.kind = kind;
+    settings.alpha_coverage = alpha_coverage;
     const std::string name = std::format("{} image {}", model.filename().string(), image);
     Entry e;
     e.handle = upload(asset::load_texture_memory(bytes, settings, name, cache_dir_), name);

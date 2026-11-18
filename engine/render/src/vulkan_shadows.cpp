@@ -77,15 +77,19 @@ Status Renderer::Impl::ensure_shadows() {
     VkPipelineShaderStageCreateInfo stages[2]{};
     stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vs, "VSMain", nullptr};
     stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, ps, "PSMain", nullptr};
-    const VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    const VkVertexInputAttributeDescription attributes[2] = {
+    const VkVertexInputBindingDescription bindings[2] = {{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX},
+                                                         {1, sizeof(GpuInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+    const VkVertexInputAttributeDescription attributes[5] = {
         {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)},
         {3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv)},
+        {5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row0)},
+        {6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row1)},
+        {7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(GpuInstance, row2)},
     };
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    vertex_input.vertexBindingDescriptionCount = 1;
-    vertex_input.pVertexBindingDescriptions = &binding;
-    vertex_input.vertexAttributeDescriptionCount = 2;
+    vertex_input.vertexBindingDescriptionCount = 2;
+    vertex_input.pVertexBindingDescriptions = bindings;
+    vertex_input.vertexAttributeDescriptionCount = 5;
     vertex_input.pVertexAttributeDescriptions = attributes;
     VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -174,40 +178,7 @@ void Renderer::Impl::record_shadows(VkCommandBuffer cmd, const FrameDesc& frame)
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_pipeline);
             const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
-            for (const DrawItem& item : frame.draws) {
-                if (item.overlay || !item.cast_shadow) continue;
-                if (!item.mesh.valid() || item.mesh.id > meshes.size() || !meshes[item.mesh.id - 1].alive) continue;
-                const GpuMesh& mesh = meshes[item.mesh.id - 1];
-                const std::uint32_t first = std::min(item.first_index, mesh.index_count);
-                const std::uint32_t count = item.index_count == 0 ? mesh.index_count - first : std::min(item.index_count, mesh.index_count - first);
-                if (count == 0) continue;
-                const math::Mat4& w = item.world_from_object;
-                {
-                    // Skip casters that can't reach this cascade (world sphere: centre moved, radius
-                    // scaled by the largest axis scale).
-                    const float scale = std::max({math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z}),
-                                                  math::length(math::Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
-                                                  math::length(math::Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
-                    if (!sphere_touches_cascade(cascades[c], w.transform_point(mesh.center), mesh.radius * scale)) {
-                        ++stats.shadow_draws_culled;
-                        continue;
-                    }
-                }
-                const std::uint32_t material = material_slot(item);
-                const MeshPushConstants push{{w.m[0].x, w.m[1].x, w.m[2].x, w.m[3].x},
-                                             {w.m[0].y, w.m[1].y, w.m[2].y, w.m[3].y},
-                                             {w.m[0].z, w.m[1].z, w.m[2].z, w.m[3].z},
-                                             item.tint,
-                                             {material, c, 0, 0},
-                                             item.splat_tiling};
-                vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
-                const VkDeviceSize offset = 0;
-                vkCmdBindVertexBuffers(cmd, 0, 1, &mesh.vertices.buffer, &offset);
-                vkCmdBindIndexBuffer(cmd, mesh.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdDrawIndexed(cmd, count, 1, first, 0, 0);
-                ++stats.draw_calls;
-                ++stats.shadow_draw_calls;
-            }
+            record_batches(cmd, plan.shadows[c], true);  // culled per cascade and batched in plan_frame
             vkCmdEndRendering(cmd);
         }
         end_label(cmd);

@@ -40,41 +40,72 @@ render::MeshHandle SceneRenderer::upload(const Geometry& g, const char* name) {
     return *h;
 }
 
+const SceneRenderer::Model* SceneRenderer::model(const std::filesystem::path& file) {
+    const std::string key = file.generic_string();
+    auto it = models_.find(key);
+    if (it == models_.end()) {
+        std::optional<Model> loaded;
+        if (auto model = asset::import_gltf(file)) {
+            loaded.emplace();
+            for (const auto& mesh : model->meshes) {
+                auto h = renderer_.create_mesh({{reinterpret_cast<const render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
+                                                mesh.indices, mesh.name});
+                loaded->meshes.push_back(h ? *h : render::MeshHandle{});
+                loaded->submeshes.push_back(mesh.submeshes);
+            }
+            loaded->materials = materials_.model(file, *model);
+            for (std::size_t n = 0; n < model->nodes.size(); ++n)
+                if (model->nodes[n].mesh >= 0 && !model->nodes[n].is_collision()) loaded->nodes.emplace_back(model->nodes[n].mesh, model->world_matrix(n));
+        } else {
+            NOOR_LOG_WARN("Game", "{}", model.error().describe());
+        }
+        it = models_.emplace(key, std::move(loaded)).first;
+    }
+    return it->second ? &*it->second : nullptr;
+}
+
+void SceneRenderer::add_mesh(std::vector<render::DrawItem>& out, const Model& m, int mesh_index, const math::Mat4& world) const {
+    if (mesh_index < 0 || mesh_index >= static_cast<int>(m.meshes.size())) return;
+    const auto index = static_cast<std::size_t>(mesh_index);
+    const auto h = m.meshes[index];
+    if (!h.valid()) return;
+    for (const auto& sm : m.submeshes[index]) {  // one draw per material
+        render::DrawItem item{h, world};
+        item.first_index = sm.first_index;
+        item.index_count = sm.index_count;
+        if (sm.material >= 0 && sm.material < static_cast<int>(m.materials.size())) item.material = m.materials[static_cast<std::size_t>(sm.material)];
+        out.push_back(item);
+    }
+}
+
 std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     environment_.apply(view.environment);
     std::vector<render::DrawItem> out;
     out.reserve(view.meshes.size() + view.primitives.size());
+    // Levels of detail (Milestone 7, part 6): a model far enough away is drawn whole from a lower
+    // level's file, in place of its own node entities.
+    const render::Camera cam = camera(view);
+    const math::Vec3 eye = math::inverse(cam.view).transform_point({0, 0, 0});
+    std::unordered_map<Guid, int> lowered;  // model root -> level (> 0)
+    for (const auto& md : view.models) {
+        const std::string key = md.asset_path.generic_string();
+        auto lit = lods_.find(key);
+        if (lit == lods_.end()) lit = lods_.emplace(key, read_model_lods(md.asset_path)).first;
+        const ModelLods& lods = lit->second;
+        if (!lods.switches()) continue;
+        const math::Mat4& w = md.world;
+        const float scale = std::max({math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), math::length(math::Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
+                                      math::length(math::Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
+        const int level = choose_lod(lods, math::length(w.transform_point({0, 0, 0}) - eye), cam.fov_y, scale);
+        if (level <= 0) continue;
+        const Model* lm = model(lods.levels[static_cast<std::size_t>(level)].file);
+        if (!lm) continue;  // the level failed to load: keep drawing level 0
+        lowered.emplace(md.entity, level);
+        for (const auto& [mesh_index, local] : lm->nodes) add_mesh(out, *lm, mesh_index, w * local);
+    }
     for (const auto& m : view.meshes) {
-        const std::string key = m.asset_path.generic_string();
-        auto it = models_.find(key);
-        if (it == models_.end()) {
-            std::optional<Model> loaded;
-            if (auto model = asset::import_gltf(m.asset_path)) {
-                loaded.emplace();
-                for (const auto& mesh : model->meshes) {
-                    auto h = renderer_.create_mesh({{reinterpret_cast<const render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
-                                                    mesh.indices, mesh.name});
-                    loaded->meshes.push_back(h ? *h : render::MeshHandle{});
-                    loaded->submeshes.push_back(mesh.submeshes);
-                }
-                loaded->materials = materials_.model(m.asset_path, *model);
-            } else {
-                NOOR_LOG_WARN("Game", "{}", model.error().describe());
-            }
-            it = models_.emplace(key, std::move(loaded)).first;
-        }
-        if (!it->second || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(it->second->meshes.size())) continue;
-        const auto index = static_cast<std::size_t>(m.mesh_index);
-        const auto h = it->second->meshes[index];
-        if (!h.valid()) continue;
-        for (const auto& sm : it->second->submeshes[index]) {  // one draw per material
-            render::DrawItem item{h, m.world};
-            item.first_index = sm.first_index;
-            item.index_count = sm.index_count;
-            if (sm.material >= 0 && sm.material < static_cast<int>(it->second->materials.size()))
-                item.material = it->second->materials[static_cast<std::size_t>(sm.material)];
-            out.push_back(item);
-        }
+        if (!m.model_root.is_nil() && lowered.contains(m.model_root)) continue;
+        if (const Model* md = model(m.asset_path)) add_mesh(out, *md, m.mesh_index, m.world);
     }
     for (const auto& t : view.terrains) {
         TerrainMeshes& tm = terrains_[t.entity];

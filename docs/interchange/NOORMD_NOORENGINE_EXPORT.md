@@ -230,6 +230,12 @@ turned up four things for whoever implements the mode:
    between: radius 0.68 m, which matches the recipe's `trunkRadius` 0.69. NoorForm knows the trunk's
    real curve and radius, so writing the capsule from the recipe is better than measuring the mesh.
 
+5. **Root knees read as stray spikes from a distance.** Oak 01's recipe has `knees: 7`, so small
+   root knees stand 3–5 m around the trunk. Up close they're roots; in a forest seen from 40 m and
+   more they look like dark spikes scattered over the ground (NoorEngine's forest test shows it).
+   Oaks don't usually have knees (bald cypresses do), so maybe a recipe default to look at, not an
+   exporter change.
+
 And one confirmation: `COLOR_0` in the oak is a genuine tint (0.66–1.0, a darkening toward the inside
 of the crown), with wind in the UV channels, so this mode can keep it as it is.
 

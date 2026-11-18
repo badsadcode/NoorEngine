@@ -36,6 +36,10 @@ struct TextureSettings {
     bool mips = true;
     std::uint32_t max_size = 4096;  // larger images are halved until they fit
     bool compress = true;           // "compression": "auto" (BC7/BC5) or "none"
+    // Cutout textures (leaves, fences): > 0 is the material's alpha cutoff, and each mip's alpha is
+    // scaled so the same share of texels passes it as in the full-size image. Without it, averaging
+    // makes alpha fade with distance and far leaves vanish (Milestone 7, part 6). 0: off.
+    float alpha_coverage = 0.0f;
 
     [[nodiscard]] Json to_json() const;
     [[nodiscard]] static TextureSettings from_json(const Json& settings);

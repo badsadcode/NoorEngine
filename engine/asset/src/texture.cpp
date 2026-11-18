@@ -131,6 +131,31 @@ TextureMip encode(const Image& img, TextureFormat format) {
     return mip;
 }
 
+// The share of texels whose alpha is at least `cutoff`.
+float coverage(const Image& img, float cutoff) {
+    std::size_t in = 0;
+    const std::size_t n = img.rgba.size() / 4;
+    for (std::size_t i = 0; i < n; ++i) in += img.rgba[i * 4 + 3] >= cutoff ? 1 : 0;
+    return n ? static_cast<float>(in) / static_cast<float>(n) : 0.0f;
+}
+
+// A copy of `img` with alpha scaled so that `target` of its texels reach `cutoff` (Castano's
+// coverage-preserving mipmaps): the alpha below which the top `target` share lies becomes the cutoff.
+Image keep_coverage(const Image& img, float cutoff, float target) {
+    const std::size_t n = img.rgba.size() / 4;
+    if (n == 0 || target <= 0.0f) return img;
+    std::vector<float> alpha(n);
+    for (std::size_t i = 0; i < n; ++i) alpha[i] = img.rgba[i * 4 + 3];
+    const auto k = static_cast<std::size_t>(std::clamp(static_cast<double>(n) * (1.0 - target), 0.0, static_cast<double>(n - 1)));
+    std::ranges::nth_element(alpha, alpha.begin() + static_cast<std::ptrdiff_t>(k));
+    const float threshold = alpha[k];
+    if (threshold <= 1e-4f) return img;
+    const float scale = cutoff / threshold;
+    Image out = img;
+    for (std::size_t i = 0; i < n; ++i) out.rgba[i * 4 + 3] = std::min(1.0f, img.rgba[i * 4 + 3] * scale);
+    return out;
+}
+
 Result<TextureData> process(Image img, const TextureSettings& s, std::string_view name) {
     TextureData out;
     out.source_width = img.width;
@@ -151,11 +176,13 @@ Result<TextureData> process(Image img, const TextureSettings& s, std::string_vie
                       img.width, img.height, max_size);
     }
     out.mips.push_back(encode(img, out.format));
+    const bool cutout = s.alpha_coverage > 0.0f && s.kind == TextureKind::Color;
+    const float wanted = cutout ? coverage(img, s.alpha_coverage) : 0.0f;
     if (s.mips) {
         while (img.width > 1 || img.height > 1) {
-            img = half_size(img);
+            img = half_size(img);  // the chain itself stays unscaled, so scaling never compounds
             if (s.kind == TextureKind::Normal) renormalize(img);
-            out.mips.push_back(encode(img, out.format));
+            out.mips.push_back(encode(cutout ? keep_coverage(img, s.alpha_coverage, wanted) : img, out.format));
         }
     }
     const TextureFormat target = compressed_format_for(s, out.width(), out.height());
@@ -259,11 +286,13 @@ std::string_view kind_name(TextureKind kind) noexcept {
 }
 
 Json TextureSettings::to_json() const {
-    return Json{{"kind", std::string(kind_name(kind))},
-                {"normal_convention", directx_normals ? "directx" : "opengl"},
-                {"mips", mips},
-                {"max_size", max_size},
-                {"compression", compress ? "auto" : "none"}};
+    Json j{{"kind", std::string(kind_name(kind))},
+           {"normal_convention", directx_normals ? "directx" : "opengl"},
+           {"mips", mips},
+           {"max_size", max_size},
+           {"compression", compress ? "auto" : "none"}};
+    if (alpha_coverage > 0.0f) j["alpha_coverage"] = alpha_coverage;  // only when used: older metas stay as they are
+    return j;
 }
 
 TextureSettings TextureSettings::from_json(const Json& j) {
@@ -275,6 +304,7 @@ TextureSettings TextureSettings::from_json(const Json& j) {
     s.mips = j.value("mips", true);
     if (j.contains("max_size") && j["max_size"].is_number_unsigned()) s.max_size = std::clamp(j["max_size"].get<std::uint32_t>(), 1u, 16384u);
     s.compress = j.value("compression", std::string("auto")) != "none";  // older metas: auto
+    if (j.contains("alpha_coverage") && j["alpha_coverage"].is_number()) s.alpha_coverage = std::clamp(j["alpha_coverage"].get<float>(), 0.0f, 1.0f);
     return s;
 }
 

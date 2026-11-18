@@ -24,8 +24,10 @@ public:
     [[nodiscard]] render::TextureHandle get(const std::filesystem::path& file);
 
     // An image inside a model file (`image` = its index there): `bytes` encoded PNG/JPEG, decoded as `kind`.
+    // `alpha_coverage` > 0: a cutout material's base colour with that cutoff (mips keep their coverage).
     [[nodiscard]] render::TextureHandle get_embedded(const std::filesystem::path& model, int image,
-                                                     std::span<const std::uint8_t> bytes, asset::TextureKind kind);
+                                                     std::span<const std::uint8_t> bytes, asset::TextureKind kind,
+                                                     float alpha_coverage = 0.0f);
 
     // Reloads texture files that changed on disk (content or .noormeta), keeping their handles.
     // Returns how many were reloaded. Cheap enough for a few times a second.

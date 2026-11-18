@@ -30,6 +30,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [029](ADR-029-textures.md) | Textures: stb_image, colour-space kinds in `.noormeta`, linear-light mips, BC7/BC5 compression, cache | Accepted (Milestone 5; .exr/BC6H open) |
 | [030](ADR-030-materials.md) | Materials: `.noormat` (glTF metallic-roughness channels) + instances; the future graph outputs the same channels | Accepted (Milestone 5; graph future) |
 | [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Accepted (Milestone 6, part 5) |
+| [032](ADR-032-instancing-and-lod.md) | Instanced drawing (the renderer culls and batches draw items itself) and levels of detail per placed model, by distance | Proposed (implemented and measured, Milestone 7, part 6) |
 
 Still open from the register: 007 plugin ABI, 013 world coordinates,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.
