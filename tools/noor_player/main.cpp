@@ -5,9 +5,11 @@
 //
 // Options: [--scene <Scenes/X.noorscene>] [--title <text>] [--frames N] [--report <file.json>]
 //          [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8]
-//          [--cpu-sky]
+//          [--cpu-sky] [--trace-environment]
 // --cpu-sky: build an atmosphere sky on the CPU (the reference implementation) instead of the GPU, to
 // compare the two (tests); a moving sun then costs about 120 ms a move.
+// --trace-environment: the report gets "environment_trace", one entry a frame: the camera's position, the fog density,
+// the exposure and each weather zone's weight (tests of blending, Milestone 8A part 7).
 // --no-input: the game gets no keyboard or mouse (automated tests: a click on the window by
 // whoever sits at the PC must not change the result).
 //
@@ -64,6 +66,7 @@ struct Options {
     bool validation = false;
     std::uint32_t msaa = 4;
     bool cpu_sky = false;
+    bool trace_environment = false;
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -81,6 +84,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--validation") o.validation = true;
         else if (a == "--msaa" && more) o.msaa = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (a == "--cpu-sky") o.cpu_sky = true;
+        else if (a == "--trace-environment") o.trace_environment = true;
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
     }
@@ -310,6 +314,7 @@ int run(const Options& o) {
                     double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1;
                 };
                 std::vector<Timing> timings;
+                Json environment_trace = Json::array();
                 double frame_start = noor::platform::time_seconds();
                 double last = noor::platform::time_seconds();
                 while (o.frames == 0 || (*world)->frame_count() < o.frames) {
@@ -352,6 +357,14 @@ int run(const Options& o) {
 
                     auto view = noor::game::collect_view((*world)->scene(), asset_path, &(*world)->render_poses(), project->root());
                     view.lighting.time = static_cast<float>((*world)->time());  // the clouds drift with the game
+                    if (o.trace_environment) {
+                        Json zones = Json::array();
+                        for (const auto& z : view.weather) zones.push_back(z.weight);
+                        const auto eye = view.camera ? view.camera->world.transform_point({0, 0, 0}) : noor::math::Vec3{0, 0, 0};
+                        environment_trace.push_back({{"frame", (*world)->frame_count()}, {"camera", {eye.x, eye.y, eye.z}},
+                                                     {"fog_density", view.lighting.fog.density}, {"ev100", view.lighting.ev100},
+                                                     {"zones", std::move(zones)}});
+                    }
                     if (!view.camera && !warned_no_camera) {
                         NOOR_LOG_WARN("Player", "The scene has no camera; showing it from above. Add a camera component (or Create ▸ Player) to see the game's view");
                         warned_no_camera = true;
@@ -472,6 +485,7 @@ int run(const Options& o) {
                                                {"environment_gpu", stat(&Timing::environment)}};
                     }
                     report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
+                    if (o.trace_environment) report["environment_trace"] = std::move(environment_trace);
                     report["sky_builds"] = {{"tables", (*renderer)->atmosphere_table_builds()}, {"sky", (*renderer)->atmosphere_sky_builds()}};
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
@@ -493,7 +507,7 @@ int main(int argc, char** argv) {
     Options options;
     if (!parse(argc, argv, options)) {
         NOOR_LOG_ERROR("Player", "Usage: noor_player [project folder] [--scene <path>] [--title <text>] [--frames N] "
-                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8] [--cpu-sky]");
+                                 "[--report <file.json>] [--screenshot <file.bmp>] [--no-audio] [--no-input] [--validation] [--log <file>] [--msaa 1|2|4|8] [--cpu-sky] [--trace-environment]");
         return 64;
     }
     // There's no console (a windowed program): the log goes to a file, by default <exe name>.log

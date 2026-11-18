@@ -1,6 +1,7 @@
 #include "noor/game/game.h"
 
 #include "noor/asset/environment_asset.h"
+#include "noor/game/weather.h"
 #include "noor/render/exposure.h"
 #include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
@@ -228,6 +229,16 @@ float number(const Json& j, const char* key, float fallback) {
     return j.contains(key) && j[key].is_number() ? j[key].get<float>() : fallback;
 }
 
+// The atmosphere an environment's settings ask for (the scene-facing knobs over Earth's defaults).
+asset::AtmosphereSettings atmosphere_settings_of(const Json& en) {
+    asset::AtmosphereSettings as;
+    as.turbidity = std::clamp(number(en, "turbidity", as.turbidity), 0.0f, 20.0f);
+    as.altitude_m = std::clamp(number(en, "altitude", as.altitude_m), 0.0f, 90000.0f);
+    const float albedo = std::clamp(number(en, "ground_albedo", as.ground_albedo.x), 0.0f, 1.0f);
+    as.ground_albedo = {albedo, albedo, albedo};
+    return as;
+}
+
 math::Vec3 color_of(const Json& primitive, math::Vec3 color = {0.55f, 0.52f, 0.62f}) {
     if (!primitive.contains("color") || !primitive["color"].is_string()) return color;
     const std::string hex = primitive["color"].get<std::string>();
@@ -315,6 +326,30 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     };
     std::unordered_map<std::size_t, std::optional<Guid>> root_asset;  // a model root's asset id, parsed once
     std::vector<std::size_t> scatter_entities;  // handled after the loop (they may stand on a terrain listed later)
+    // Weather zones (Milestone 8A, part 7): where the viewer (the scene's first camera) is decides how much of each
+    // zone's environment blends over the scene's own.
+    struct Zone {
+        std::size_t index;
+        float priority;
+        float weight;
+    };
+    std::vector<Zone> zones;
+    std::vector<std::size_t> zone_entities;  // every zone, on or not (their atmospheres are built up front)
+    math::Vec3 viewer{0, 0, 0};
+    for (std::size_t i = 0; i < entities.size(); ++i)
+        if (entities[i].has("camera") && entities[i].components["camera"].is_object()) {
+            viewer = world_of(i, 0).transform_point({0, 0, 0});
+            break;
+        }
+    for (std::size_t i = 0; i < entities.size(); ++i) {
+        if (!entities[i].has("weather_zone") || !entities[i].components["weather_zone"].is_object()) continue;
+        const auto& z = entities[i].components["weather_zone"];
+        const float w = weather_zone_weight(z, world_of(i, 0), viewer);
+        view.weather.push_back({entities[i].id, w});
+        zone_entities.push_back(i);
+        if (w > 0.0f) zones.push_back({i, number(z, "priority", 0.0f), w});
+    }
+    std::ranges::stable_sort(zones, [](const Zone& a, const Zone& b) { return a.priority < b.priority; });
     for (std::size_t i = 0; i < entities.size(); ++i) {
         const auto& e = entities[i];
         const bool camera = !view.camera && e.has("camera") && e.components["camera"].is_object();
@@ -334,7 +369,23 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             !e.has("terrain"))
             continue;
         if (env) {
-            const Json en = resolved_environment(e.components["environment"], asset_path);
+            Json en = resolved_environment(e.components["environment"], asset_path);
+            const auto zone_settings = [&](std::size_t zone_index) {
+                const auto& z = entities[zone_index].components["weather_zone"];
+                if (z.contains("environment") && z["environment"].is_string())
+                    return resolved_environment(Json{{"asset", z["environment"]}}, asset_path);
+                if (z.contains("environment") && z["environment"].is_object()) return z["environment"];
+                return Json(Json::object());
+            };
+            // The atmosphere tables every blend here can need, built now (in parallel) rather than one per frame
+            // while the camera walks in: from the scene's own settings to each zone's, fully on.
+            if (!zone_entities.empty()) {
+                std::vector<asset::AtmosphereSettings> ends{atmosphere_settings_of(en)};
+                for (std::size_t z : zone_entities) ends.push_back(atmosphere_settings_of(asset::blend_environments(en, zone_settings(z), 1.0f)));
+                asset::Atmosphere::prewarm(ends);
+            }
+            for (const Zone& zone : zones)  // weather zones over the scene's own environment
+                en = asset::blend_environments(en, zone_settings(zone.index), zone.weight);
             if (en.contains("ev100") && (en["ev100"].is_number() || en["ev100"].is_string())) environment_ev100 = en["ev100"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
             render::FogParams& fog = view.lighting.fog;
@@ -374,11 +425,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             if (sky_mode == "space") view.environment.space = true;
             if (sky_mode == "atmosphere") {
                 view.environment.atmosphere = true;
-                auto& as = view.environment.atmosphere_settings;
-                as.turbidity = std::clamp(number(en, "turbidity", as.turbidity), 0.0f, 20.0f);
-                as.altitude_m = std::clamp(number(en, "altitude", as.altitude_m), 0.0f, 90000.0f);
-                const float albedo = std::clamp(number(en, "ground_albedo", as.ground_albedo.x), 0.0f, 1.0f);
-                as.ground_albedo = {albedo, albedo, albedo};
+                view.environment.atmosphere_settings = atmosphere_settings_of(en);
             } else if (const auto id = asset::guid_field(en, "hdri"); id && asset_path && sky_mode != "gradient") {
                 if (auto file = asset_path(*id)) view.environment.hdri = std::move(*file);
             }
@@ -590,20 +637,21 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         // The sun's light after the air it crosses: its own colour (white unless given) times the
         // transmittance; the sky's radiance is relative to the sun's illuminance outside the atmosphere.
         const math::Vec3 own = sun_color_given ? view.lighting.sun_color : math::Vec3{1, 1, 1};
-        const math::Vec3 t = asset::Atmosphere::shared(view.environment.atmosphere_settings)->sun_transmittance(to_sun);
+        // A bracket, not the exact settings: a weather blend moves them every frame (see Atmosphere::Bracket).
+        const auto atmosphere = asset::Atmosphere::bracket(view.environment.atmosphere_settings);
+        const math::Vec3 t = atmosphere.sun_transmittance(to_sun);
         view.lighting.sun_color = {own.x * t.x, own.y * t.y, own.z * t.z};
         view.lighting.environment_intensity = view.lighting.sun_illuminance;
         view.lighting.environment_rotation = 0.0f;  // built in world space, around the real sun
         view.lighting.sun_disc = true;
         // Part 5: the sky's sun disc, stars and the moon.
-        const auto atmosphere = asset::Atmosphere::shared(view.environment.atmosphere_settings);
         render::SkyObjects& sky = view.lighting.sky;
         const float sun_lux = view.lighting.sun_illuminance;
         sky.sun_direction = to_sun;
         sky.sun_outer = own * sun_lux;
         sky.sun_seen = view.lighting.sun_color * sun_lux;
         const float observer_km = view.environment.atmosphere_settings.altitude_m * 0.001f;
-        sky.zenith_transmittance = atmosphere->transmittance(observer_km, 1.0f);
+        sky.zenith_transmittance = atmosphere.transmittance(observer_km, 1.0f);
         sky.stars = night.stars;
         sky.star_brightness = night.star_brightness;
         sky.star_seed = night.star_seed;
@@ -627,7 +675,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             sky.moon_direction = to_moon;
             sky.moon_relative = sun_lux > 0.0f ? moon_lux / sun_lux : 0.0f;
             // When the moon outshines the sun on the ground, it becomes the light that casts shadows.
-            const math::Vec3 t_moon = atmosphere->sun_transmittance(to_moon);
+            const math::Vec3 t_moon = atmosphere.sun_transmittance(to_moon);
             const auto luminance = [](math::Vec3 v) { return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z; };
             if (to_moon.y > 0.0f && moon_lux * luminance(t_moon) > sun_lux * luminance(view.lighting.sun_color)) {
                 view.lighting.sun_direction = to_moon * -1.0f;
@@ -698,11 +746,11 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         for (const auto& l : view.lighting.lights)
             if (l.type == render::LocalLight::Type::Directional) lux += l.lux * luminance(l.color) * std::max(0.0f, -l.direction.y);
         if (view.environment.atmosphere) {
-            const auto atmosphere = asset::Atmosphere::shared(view.environment.atmosphere_settings);
+            const auto atmosphere = asset::Atmosphere::bracket(view.environment.atmosphere_settings);
             const float sun_lux = luminance(sky_objects.sun_outer);
-            lux += atmosphere->sky_illuminance(std::asin(std::clamp(view.environment.to_sun.y, -1.0f, 1.0f))) * sun_lux;
+            lux += atmosphere.sky_illuminance(std::asin(std::clamp(view.environment.to_sun.y, -1.0f, 1.0f))) * sun_lux;
             if (sky_objects.moon_relative > 0.0f)
-                lux += atmosphere->sky_illuminance(std::asin(std::clamp(sky_objects.moon_direction.y, -1.0f, 1.0f))) *
+                lux += atmosphere.sky_illuminance(std::asin(std::clamp(sky_objects.moon_direction.y, -1.0f, 1.0f))) *
                        sky_objects.moon_relative * sun_lux;
             lux += 0.002f;  // starlight and airglow: a moonless night isn't pitch black
         } else if (!view.environment.space) {

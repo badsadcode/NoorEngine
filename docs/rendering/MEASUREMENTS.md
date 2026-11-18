@@ -173,6 +173,20 @@ Environment pass stayed at 0.02 ms, the scene pass within its usual range).
 waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
 compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.
 
+### Weather zones (part 7)
+Weather_Walk (render_scenes): a camera walks at 10 m/s into a fog bank (fog, overcast deck), 1280×720, vsync, RTX
+3080, 540 frames, the last 480 timed.
+
+| | First version | With the atmosphere grid |
+|---|---|---|
+| Frame (median) | about 50 ms (20 FPS) | 16.66 ms (60 FPS) |
+| Gathering the scene, `collect_view` (median / worst) | about 240 ms on blending frames | 0.50 / 1.02 ms |
+
+The first version built a new CPU atmosphere (transmittance, multiple scattering and skylight tables, 0.24 s on
+one core) on every frame the haze changed. Now atmospheres on a coarse grid are built in parallel when the scene
+loads and blended (`Atmosphere::Bracket`); `cli.weather_walk` fails if gathering the scene takes over 8 ms at p95, or
+any frame over 120 ms (once, with six tests in parallel, the OS held one frame for 46 ms; a rebuild is 240).
+
 ## Not measured yet
 A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale
 with pixels: about 4× the numbers above at 3840×2160).

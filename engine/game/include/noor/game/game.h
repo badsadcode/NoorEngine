@@ -173,6 +173,8 @@ struct SceneView {
     // "rings": {"inner": 1.3, "outer": 2.4, "color", "tilt": 25}}) are planets and moons in the sky, towards the
     // entity's forward (-Z), rings across its +Y leaned towards the viewer by "tilt" degrees. Directional lights after the first are extra suns (no shadows).
     // A camera's "ev100": "auto" meters the light on the ground (render/exposure.h).
+    // Weather zones (part 7): entities with a `weather_zone` blend their environment over this one by where the
+    // scene's first camera is (noor/game/weather.h).
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)
@@ -183,6 +185,13 @@ struct SceneView {
         bool space = false;           // sky "space": no air, a black sky (part 5)
     };
     Environment environment;
+
+    // Weather zones (Milestone 8A, part 7; noor/game/weather.h): every zone and how much of it applied this time.
+    struct WeatherWeight {
+        Guid zone;
+        float weight;
+    };
+    std::vector<WeatherWeight> weather;
 };
 
 // Finds a model asset's file from the `mesh` component's asset id.

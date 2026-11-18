@@ -29,6 +29,7 @@ add_executable(noor_unit_tests
     unit/test_fog.cpp
     unit/test_clouds.cpp
     unit/test_night.cpp
+    unit/test_weather.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -167,6 +168,15 @@ add_test(NAME cli.environment_builds_identically
         -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/environment_build
         -P ${CMAKE_CURRENT_SOURCE_DIR}/environment_build_check.cmake)
 set_tests_properties(cli.environment_builds_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 180)
+# Weather zones (Milestone 8A, part 7): a built game's camera walks into a fog bank; the blend is checked frame by frame.
+add_executable(noor_trace_check tools/trace_check.cpp)
+target_link_libraries(noor_trace_check PRIVATE nlohmann_json::nlohmann_json)
+noor_set_target_options(noor_trace_check)
+add_test(NAME cli.weather_walk
+    COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player> -DCHECK=$<TARGET_FILE:noor_trace_check>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/weather_walk
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/weather_walk_check.cmake)
+set_tests_properties(cli.weather_walk PROPERTIES LABELS "gpu;cli" TIMEOUT 180 RESOURCE_LOCK gpu_timing)
 # Clouds (Milestone 8A, part 4): what they cost against the same scene without them.
 add_test(NAME render.clouds_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes

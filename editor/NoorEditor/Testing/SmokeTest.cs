@@ -863,6 +863,15 @@ internal static class SmokeTest
         shot(window, "editor_23_environment_gallery.png");
         doc.Undo();
         check(Component()?.ToJsonString() == before, "environments: one undo puts the old environment back");
+
+        // Part 7: Create ▸ Weather zone makes a fog bank the scene's camera can walk into; one undo removes it.
+        var count = doc.Scene.Entities.Count;
+        var zoneId = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.WeatherZoneTemplateName));
+        var zone = doc.Scene.Entities.FirstOrDefault(e => e.Id == zoneId)?.Components["weather_zone"];
+        check(zone?["environment"]?["fog_density"]?.GetValue<double>() > 0 && zone?["blend"]?.GetValue<double>() > 0,
+              "weather zones: Create ▸ Weather zone makes a fog bank with a blend distance");
+        doc.Undo();
+        check(doc.Scene.Entities.Count == count, "weather zones: one undo removes the zone");
     }
 
     // Milestone 5, part 7: the Render panel's numbers, and anti-aliasing switched from Preferences.

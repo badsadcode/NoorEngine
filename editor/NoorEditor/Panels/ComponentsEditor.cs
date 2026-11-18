@@ -701,6 +701,39 @@ public sealed class ComponentsEditor : StackPanel
                 editor = combo;
                 break;
             }
+            case var _ when type == "weather_zone" && field == "environment":
+            {
+                // A weather zone's environment (part 7): one of the project's .noorenv files, or settings of its own
+                // (written inline; a preset's are copied in, so the zone doesn't change when the preset list does).
+                var current = (value as JsonValue)?.TryGetValue<string>(out var g) == true ? g : null;
+                var envs = (_doc.Environment(new JsonObject { ["op"] = "list" }) as JsonArray ?? []).OfType<JsonObject>()
+                    .Select(e => (Guid: e["guid"]?.GetValue<string>(), Label: e["path"]?.GetValue<string>() ?? "")).Where(e => e.Guid != null).ToList();
+                var envPresets = EditorDocument.EnvironmentPresets().OfType<JsonObject>().ToList();
+                const string Inline = "(its own settings)";
+                var items = new List<string> { Inline };
+                items.AddRange(envs.Select(e => e.Label));
+                items.AddRange(envPresets.Select(p => "Copy preset: " + p["name"]!.GetValue<string>()));
+                var selected = current == null ? Inline : envs.FirstOrDefault(e => e.Guid == current).Label ?? "(missing environment)";
+                if (!items.Contains(selected)) items.Add(selected);
+                var combo = new ComboBox { ItemsSource = items, SelectedItem = selected, Classes = { "field" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+                ToolTip.SetTip(combo, value is JsonObject own ? own.ToJsonString() : "The environment inside the zone, blended in by where the camera is");
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is not string pick || pick == selected || pick == "(missing environment)") return;
+                    if (pick == Inline)
+                        SetField(type, field, new JsonObject());
+                    else if (pick.StartsWith("Copy preset: ", StringComparison.Ordinal))
+                    {
+                        var name = pick["Copy preset: ".Length..];
+                        if (envPresets.FirstOrDefault(p => p["name"]?.GetValue<string>() == name)?["environment"] is JsonObject settings)
+                            SetField(type, field, settings.DeepClone());
+                    }
+                    else if (envs.FirstOrDefault(e => e.Label == pick).Guid is { } guid)
+                        SetField(type, field, JsonValue.Create(guid));
+                };
+                editor = combo;
+                break;
+            }
             case var _ when type == "terrain" && field == "sculpt":
             {
                 // The sculpt layer: made by the first stroke, written on Save. Not for typing into.

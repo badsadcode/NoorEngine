@@ -72,7 +72,19 @@ public static class EntityTemplates
         // Scatter (Milestone 7, part 7): a procedural graph's instance set output (a forest), with trees
         // removed and planted by hand on top. Pick the graph and a terrain to stand on in the Inspector.
         new(ScatterTemplateName, () => new JsonObject { ["scatter"] = Scatter() }, new Vec3(0, 0, 0)),
+        // Weather zone (Milestone 8A, part 7): a box where the environment is different (a fog bank here), blended
+        // in over `blend` metres by where the scene's camera is. Pick a project environment in the Inspector, or
+        // copy a preset in.
+        new(WeatherZoneTemplateName, () => new JsonObject { ["weather_zone"] = WeatherZone() }, new Vec3(0, 0, 0)),
     ];
+
+    public const string WeatherZoneTemplateName = "Weather zone";
+
+    public static JsonObject WeatherZone() => new()
+    {
+        ["shape"] = "box", ["size"] = new JsonArray(40, 20, 40), ["blend"] = 15, ["priority"] = 0,
+        ["environment"] = new JsonObject { ["fog_density"] = 0.02, ["fog_height"] = 10, ["fog_color"] = "#C8CCD2" },
+    };
 
     public const string ScatterTemplateName = "Scatter";
 

@@ -56,7 +56,7 @@ export mode).
 | 4 ✅ | **Clouds (layered)**: one or two cloud layers from tileable noise (coverage, density, altitude, wind speed and direction), lit by the sun (bright edges, dark bases at sunset), moving over time; deterministic from a seed | The same seed and time give the same clouds (golden); overcast coverage dims the sun and softens shadows as documented; the clouds cost under 0.5 ms (measured) |
 | 5 ✅ | **Night and space**: moon (phase, light), stars (a deterministic star field), exposure for night that keeps silhouettes readable; `sky: "space"`: no scattering, a black sky with stars, **celestial bodies** (planets, moons, rings: textured spheres or discs at a direction and size, lit by the sun), several suns allowed | A night golden where the house and trees read against the sky; a space golden (a planet with a lit and a dark side, a second sun); the Alien World preset's look becomes possible (later) |
 | 6 ✅ | **`.noorenv` assets and presets**: environment assets with every setting, scenes referencing them (with overrides), six presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast), the editor's environment gallery (thumbnails, apply, duplicate, edit, reset) and inspector | Applying a preset changes sky, light, fog and exposure together (smoke test); duplicating a preset never changes the installed one; a custom environment saves, reopens and builds into a game identically (tests) |
-| 7 | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
+| 7 ✅ | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
 | 8 | **Sample + review**: Hillside shown under the six presets (one golden each), a space scene, performance notes (each feature's GPU cost, low and high settings), the 8A review | The 8A gate |
 
 ## Part 1 result (2026-11-18)
@@ -109,6 +109,21 @@ on what a game draws, and the editor smoke test); duplicates and edits never tou
 environment saves, reopens and builds into a game identically (pixel-identical, the same metered EV). Corrected on
 the way: a cloud's diffuse light now depends on its thickness, in its shading and in automatic exposure. Not done:
 pictures for a project's own environments (they show their preset's).
+
+## Part 7 result (2026-11-19)
+Done. `weather_zone` components (box or sphere on their entity, a blend distance, a priority, an environment that is
+a project `.noorenv` or settings of its own, an optional script-set weight) blend over the scene's environment by
+the scene camera's position (`asset::blend_environments`: numbers linear, periodic fields the short way, colours in
+linear light, switches and seeds at the halfway point). Scripts drive zones, the environment and the time through
+the usual `entity:get`/`entity:set`. Editor: Create ▸ Weather zone, and an environment picker for zones in the
+Inspector. Proven: `cli.weather_walk` walks a built game's camera into a fog bank for 540 frames (fog monotone, at
+most 1.2% of the way per frame, exposure steps of 0.01 EV at most, the zone fully on at the end, the built game
+identical to the project frame by frame, gathering the scene under 8 ms for 95% of frames and never as long as an atmosphere build; it measured 0.5 ms
+median, 1 ms worst, frames 16.66 ms); a unit test rolls a storm in and runs the clock from Luau scripts; the scripted time-of-day
+loop's 60 FPS is `render.day_cycle`'s. Fixed on the way: blending rebuilt the CPU atmosphere's tables every frame
+(20 FPS), now answered from a prewarmed grid of atmospheres (`Atmosphere::Bracket`); and a zone fully on replaced the
+whole environment instead of what it mentions. Not done: the editor's viewport blends by the scene camera, not the
+fly camera.
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to

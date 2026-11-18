@@ -131,6 +131,48 @@ TEST_CASE("atmosphere: haze and altitude do what they say") {
     CHECK(luminance(up.sky_radiance({0, 1, 0}, sun)) < 0.3f * luminance(earth().sky_radiance({0, 1, 0}, sun)));
 }
 
+TEST_CASE("atmosphere: a blend's settings are answered from two cached grid atmospheres, smoothly") {
+    // On a grid point (turbidity 1, 2.5, 4...: every preset) the bracket is exactly that atmosphere.
+    const auto on = asset::Atmosphere::bracket({});
+    CHECK(on.lo.get() == &earth());
+    CHECK(on.t == 0.0f);
+    const Vec3 sun = sun_at(25.0f);
+    CHECK(on.sun_transmittance(sun).y == earth().sun_transmittance(sun).y);
+    CHECK(on.sky_illuminance(0.4f) == earth().sky_illuminance(0.4f));
+    // Between grid points: between the neighbours, and close to what its own tables would say.
+    asset::AtmosphereSettings mid;
+    mid.turbidity = 1.25f;
+    const auto b = asset::Atmosphere::bracket(mid);
+    CHECK(b.lo->settings().turbidity == 1.0f);
+    CHECK(b.hi->settings().turbidity == 1.5f);
+    CHECK(b.t == doctest::Approx(0.5f));
+    const asset::Atmosphere exact(mid);
+    CHECK(b.sun_transmittance(sun).y == doctest::Approx(exact.sun_transmittance(sun).y).epsilon(0.01));
+    CHECK(b.sky_illuminance(0.4f) == doctest::Approx(exact.sky_illuminance(0.4f)).epsilon(0.01));
+    // A haze rolling in (turbidity 1 to 4 a little at a time) never jumps, crossing grid points included.
+    asset::Atmosphere::prewarm({asset::AtmosphereSettings{}, [] {
+                                    asset::AtmosphereSettings s;
+                                    s.turbidity = 4.0f;
+                                    return s;
+                                }()});
+    float last_lux = -1.0f, last_t = -1.0f;
+    for (float turbidity = 1.0f; turbidity <= 4.0f; turbidity += 0.01f) {
+        asset::AtmosphereSettings s;
+        s.turbidity = turbidity;
+        const auto k = asset::Atmosphere::bracket(s);
+        const float lux = k.sky_illuminance(0.4f), t = k.sun_transmittance(sun).y;
+        if (last_lux >= 0.0f) {
+            CHECK(std::abs(lux - last_lux) < 0.01f * last_lux);
+            CHECK(t <= last_t + 1e-6f);  // more haze, less sun
+        }
+        last_lux = lux, last_t = t;
+    }
+    // The observer's height is used as it is for the sun's light (only the sky's table snaps it to the grid).
+    asset::AtmosphereSettings up;
+    up.altitude_m = 1234.0f;
+    CHECK(asset::Atmosphere::bracket(up).sun_transmittance(sun).y == asset::Atmosphere(up).sun_transmittance(sun).y);
+}
+
 TEST_CASE("atmosphere: the sky image follows the equirect layout and is deterministic") {
     const auto& a = earth();
     const Vec3 sun = sun_at(20.0f);

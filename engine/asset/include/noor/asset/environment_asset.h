@@ -42,6 +42,16 @@ struct EnvironmentPreset {
 // Reads and checks a `.noorenv` file (the format, an "environment" object). Returns the whole file's JSON.
 [[nodiscard]] Result<Json> load_environment_file(const std::filesystem::path& file);
 
+// Blends two environments' settings (Milestone 8A, part 7: weather zones). w = 0 gives `from`, 1 gives `to`:
+//   - numbers blend linearly; time_of_day (24 h), moon_phase (1), day_of_year (365) and north (360) the short way
+//     round; seeds switch at w = 0.5;
+//   - colours ("#RRGGBB") blend in linear light;
+//   - anything else (sky mode, switches, "auto") switches at w = 0.5;
+//   - a setting only one side has blends from its neutral value where it has one (no fog, no cloud cover, turbidity 1,
+//     aerial scale 1, star brightness 1), and is taken as it is where it hasn't (a cloud layer's altitude, the sky
+//     mode): a zone that only says "fog_density" keeps the scene's sky, time and sun, even fully on.
+[[nodiscard]] Json blend_environments(const Json& from, const Json& to, float w);
+
 // The settings a scene's environment component ends up with: the asset's fields, then the component's own
 // (everything but "asset") on top.
 [[nodiscard]] Json merge_environment(const Json& asset_environment, const Json& component);

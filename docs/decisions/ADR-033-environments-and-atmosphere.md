@@ -112,6 +112,17 @@ must agree, or the picture falls apart.
 - **Clouds and light through them** (part 6 correction): a cloud's diffuse transmission now depends on its
   thickness (the two-stream approximation, 1 / (1 + 0.75 tau (1 - g)), g 0.85), in its shading and in automatic
   exposure alike: thick clouds go dark underneath, and overcast days are metered with the light the clouds pass on.
+- **Weather zones** (part 7): a `weather_zone` component (`game/weather.h`: box or sphere on its entity, `blend`
+  metres, `priority`, `environment` as a `.noorenv` id or inline settings, an optional `weight` that scripts set)
+  blends its environment over the scene's by the scene camera's position. **Blend the parameters, not the results**
+  (the question left open in part 6): `asset::blend_environments` blends numbers linearly (time, moon phase, day and
+  north the short way round), colours in linear light, and switches sky modes, flags and seeds at the halfway point;
+  a field the zone doesn't mention keeps the scene's value, or goes to its neutral value (no fog, no cloud, turbidity
+  1) where it has one. The GPU builds whatever results the blended parameters give, as it does every frame anyway.
+  The CPU side (sun colour, metering) can't build an atmosphere a frame (a quarter of a second each), so it answers
+  from cached atmospheres on a coarse grid (turbidity steps of 0.5, ground albedo 0.05, altitude 50 m and up),
+  built in parallel when a scene with zones loads and interpolated by turbidity (`Atmosphere::Bracket`); on a grid
+  point (every preset) that is exactly the atmosphere it was.
 - **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
   the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
   hour angle from the time; no equation of time or refraction).
@@ -135,6 +146,10 @@ must agree, or the picture falls apart.
   reopens and builds into a game that draws it identically (tests: `noor_editor_api_tests` "environment api",
   `cli.environment_builds_identically`, the editor smoke test's gallery checks). Thumbnails are of the presets only:
   a project's own environments show their preset's picture marked "edited", or a plain gradient.
+- **Weather zones** (part 7): a built game's camera walking into a fog bank blends smoothly and identically to the
+  project, frame by frame, at 60 FPS (`cli.weather_walk`, which also fails if gathering the scene stalls: p95 over 8 ms, or any
+  frame as long as an atmosphere build); scripts roll zones in and run the clock (`weather:` unit tests). The editor's viewport blends by the scene's
+  camera, not the fly camera.
 - **Night and space** (part 5): goldens `Hillside_Night` (the house and trees against the moonlit sky) and `Space`
   (a ringed planet with a lit and a dark side and its shadow on the rings, two suns). Bodies are untextured yet.
 - **Clouds cost** 26-28 µs a frame at 1280×720 (fastest frames, two layers, against the same scene without),
@@ -155,7 +170,6 @@ must agree, or the picture falls apart.
 - The presets were tuned once from rendered variants (2026-11-18); a look is taste, so expect more passes.
 - Textured celestial bodies, eclipses, the moon's own shadow on the ground at an eclipse, real lunar calendars.
 - Exposure that adapts over time (eye adaptation) as an option on top of the metered value.
-- The `.noorenv` asset format and overrides (part 6), and blending two atmospheres (part 7: blend
-  parameters, or blend the results?).
+- Weather zones blending by the editor's fly camera while editing (today: the scene's camera).
 - Other planets (Mars-like coefficients) are possible with the same settings; no preset yet.
 - Exposure across day and night (part 5).

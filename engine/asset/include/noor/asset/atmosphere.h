@@ -115,6 +115,24 @@ public:
     // Built once per settings (they're a few megabytes of tables) and shared. Thread-safe.
     [[nodiscard]] static std::shared_ptr<const Atmosphere> shared(const AtmosphereSettings& settings);
 
+    // Settings that move every frame (a weather zone blending the haze in) can't each get their own tables: a build
+    // takes a quarter of a second. A Bracket answers for any settings from two cached atmospheres on a coarse grid
+    // (turbidity steps of 0.5 up to 5, then 1, then 2.5; ground albedo to 0.05; altitude to 50 m below 1 km, 250 m
+    // below 10 km, 2.5 km above), interpolated by turbidity. On a grid point (every preset) it's exactly that
+    // atmosphere. Thread-safe.
+    struct Bracket {
+        std::shared_ptr<const Atmosphere> lo, hi;
+        float t = 0.0f;           // how far from lo to hi
+        float altitude_m = 0.0f;  // the observer's real height (transmittance uses it as it is)
+        [[nodiscard]] math::Vec3 sun_transmittance(math::Vec3 to_sun) const;
+        [[nodiscard]] math::Vec3 transmittance(float height_km, float cos_zenith) const;
+        [[nodiscard]] float sky_illuminance(float elevation) const;
+    };
+    [[nodiscard]] static Bracket bracket(const AtmosphereSettings& settings);
+    // Builds, in parallel, every grid atmosphere a blend between any two of `settings` can need (do it when a scene
+    // loads, not when the camera walks into the haze). Cheap when they're already built.
+    static void prewarm(const std::vector<AtmosphereSettings>& settings);
+
 private:
     AtmosphereSettings s_;
     float bottom_ = 0, top_ = 0;  // radii (km)

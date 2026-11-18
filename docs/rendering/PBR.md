@@ -100,6 +100,23 @@ An environment can live in its own file, `Assets/Environments/<name>.noorenv`, a
 preset it came from. The built-in presets themselves never change. An environment can set the exposure
 (`"ev100": "auto"` or a number), which then wins over the camera's: the presets all meter automatically.
 
+### Weather zones (Milestone 8A, part 7)
+
+A `weather_zone` component makes the environment different somewhere: a fog bank, a hazy valley.
+
+```json
+"weather_zone": {"shape": "box", "size": [40, 20, 40], "blend": 15, "priority": 0,
+                 "environment": {"fog_density": 0.02, "fog_height": 10, "fog_color": "#C8CCD2"}}
+```
+
+The zone sits on its entity (position and rotation; `size` and `radius` are metres, not scaled by the entity).
+Inside, its environment is fully on; outside, it fades out smoothly over `blend` metres, judged from the scene's
+first camera. `environment` is a project `.noorenv` id or settings of its own, and it only needs what's different:
+a zone that sets fog keeps the scene's sky, sun and time. Overlapping zones apply in `priority` order (higher on
+top). A script can set `"weight"` (0 to 1) to roll a zone in by time instead of distance, and can change the
+environment and its `time_of_day` with `entity:set`. Create ▸ Weather zone in the editor adds a fog bank; the
+Inspector picks its environment. The editor's viewport blends by the scene's camera, not the view you fly.
+
 ### The atmosphere sky (Milestone 8A, [ADR-033](../decisions/ADR-033-environments-and-atmosphere.md))
 
 ```json

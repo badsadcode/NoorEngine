@@ -2,7 +2,12 @@
 
 #include "noor/foundation/file_io.h"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
 #include <format>
+#include <optional>
 
 namespace noor::asset {
 
@@ -121,6 +126,92 @@ Result<Json> load_environment_file(const std::filesystem::path& file) {
     if (!json->contains("environment") || !(*json)["environment"].is_object())
         return fail(ErrorCode::ParseError, std::format("{}: no \"environment\" settings", file.filename().string()));
     return std::move(*json);
+}
+
+namespace {
+
+// A setting's neutral value: what an environment without it behaves as.
+const Json* neutral(const std::string& key) {
+    static const Json values = Json{{"fog_density", 0.0}, {"cloud_coverage", 0.0}, {"cloud2_coverage", 0.0}, {"turbidity", 1.0},
+                                    {"aerial_scale", 1.0}, {"star_brightness", 1.0}, {"ground_albedo", 0.3}, {"altitude", 0.0}};
+    const auto it = values.find(key);
+    return it == values.end() ? nullptr : &*it;
+}
+
+// The period of a setting that goes round (0 for none).
+double period(const std::string& key) {
+    if (key == "time_of_day") return 24.0;
+    if (key == "moon_phase") return 1.0;
+    if (key == "day_of_year") return 365.0;
+    if (key == "north") return 360.0;
+    return 0.0;
+}
+
+std::optional<std::array<double, 3>> linear_color(const Json& v) {
+    if (!v.is_string()) return std::nullopt;
+    const std::string hex = v.get<std::string>();
+    if (hex.size() != 7 || hex[0] != '#') return std::nullopt;
+    std::array<double, 3> c{};
+    for (int i = 0; i < 3; ++i) {
+        const auto digits = hex.substr(static_cast<std::size_t>(1 + 2 * i), 2);
+        if (!std::isxdigit(static_cast<unsigned char>(digits[0])) || !std::isxdigit(static_cast<unsigned char>(digits[1]))) return std::nullopt;
+        const double s = std::stoi(digits, nullptr, 16) / 255.0;
+        c[static_cast<std::size_t>(i)] = s <= 0.04045 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+    }
+    return c;
+}
+
+std::string hex_of(const std::array<double, 3>& linear) {
+    std::string out = "#";
+    for (const double l : linear) {
+        const double s = l <= 0.0031308 ? l * 12.92 : 1.055 * std::pow(l, 1.0 / 2.4) - 0.055;
+        out += std::format("{:02X}", static_cast<int>(std::lround(std::clamp(s, 0.0, 1.0) * 255.0)));
+    }
+    return out;
+}
+
+Json blend_value(const std::string& key, const Json& a, const Json& b, double w) {
+    if (a.is_number() && b.is_number() && key.find("seed") == std::string::npos) {
+        const double x = a.get<double>(), y = b.get<double>();
+        if (const double p = period(key); p > 0.0) {
+            double d = std::fmod(y - x, p);  // the short way round
+            if (d > p / 2) d -= p;
+            if (d < -p / 2) d += p;
+            double r = std::fmod(x + d * w, p);
+            if (r < 0) r += p;
+            return r;
+        }
+        return x + (y - x) * w;
+    }
+    if (const auto ca = linear_color(a), cb = linear_color(b); ca && cb) {
+        std::array<double, 3> c{};
+        for (std::size_t i = 0; i < 3; ++i) c[i] = (*ca)[i] + ((*cb)[i] - (*ca)[i]) * w;
+        return hex_of(c);
+    }
+    return w < 0.5 ? a : b;
+}
+
+} // namespace
+
+Json blend_environments(const Json& from, const Json& to, float weight) {
+    const double w = std::clamp(static_cast<double>(weight), 0.0, 1.0);
+    const Json a = from.is_object() ? from : Json::object(), b = to.is_object() ? to : Json::object();
+    if (w <= 0.0) return a;
+    // Fully on is the same rule as nearly on (not just `to`): what the zone doesn't mention without a neutral value
+    // (the sky mode, the time of day) stays the scene's. A fog zone over an atmosphere sky keeps the atmosphere.
+    const bool full = w >= 1.0;
+    Json out = Json::object();
+    for (const auto& [key, va] : a.items()) {
+        if (b.contains(key)) out[key] = full ? b[key] : blend_value(key, va, b[key], w);
+        else if (const Json* n = neutral(key)) out[key] = full ? *n : blend_value(key, va, *n, w);
+        else out[key] = va;
+    }
+    for (const auto& [key, vb] : b.items()) {
+        if (a.contains(key)) continue;
+        if (const Json* n = neutral(key)) out[key] = full ? vb : blend_value(key, *n, vb, w);
+        else out[key] = vb;
+    }
+    return out;
 }
 
 Json merge_environment(const Json& asset_environment, const Json& component) {

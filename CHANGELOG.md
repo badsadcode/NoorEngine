@@ -4,6 +4,31 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8A, part 7: weather zones
+**Added**
+- **`weather_zone` components** (`game/weather.h`): a box or sphere on its entity with a `blend` distance, a
+  `priority` and an environment (a `.noorenv` id or its own settings); blended over the scene's environment by the
+  scene camera's position (`game::weather_zone_weight`, smoothstep over the blend distance). A `"weight"` field set by
+  a script replaces the distance. `SceneView::weather` reports each zone's weight.
+- **`asset::blend_environments`**: numbers linearly (time of day, moon phase, day of year and north the short way
+  round), colours in linear light, sky modes, switches and seeds at the halfway point; a field one side lacks goes
+  to its neutral value (no fog, no cloud, turbidity 1...) or keeps the other side's.
+- **`Atmosphere::Bracket` and `Atmosphere::prewarm`**: CPU-side atmosphere answers for settings that move every frame,
+  from cached atmospheres on a coarse grid (interpolated by turbidity), built in parallel up front. Exact on grid
+  points (every preset). The cache holds 64 atmospheres instead of 16.
+- **noor_player `--trace-environment`**: fog, exposure, camera and zone weights per frame in the report;
+  `noor_trace_check` judges a trace (smooth, monotone, the same in two runs, time spent gathering the scene).
+- **Editor**: Create ▸ Weather zone (a fog bank); the Inspector picks a zone's environment (a project environment, or
+  a copy of a preset).
+
+**Fixed (before release):** blending rebuilt the CPU atmosphere's tables every frame (0.24 s each: 20 FPS); a zone
+fully on replaced the whole environment instead of only what it sets (a fog-only zone turned the atmosphere sky off).
+
+**Tests:** `weather:` unit tests (blending rules, zone weights, the view blending by camera position, Luau scripts
+rolling a storm in and running the clock), `atmosphere: a blend's settings are answered from two cached grid
+atmospheres, smoothly`, `cli.weather_walk` (a built game's camera walks into a fog bank: 540 frames smooth, identical
+to the project, gathering the scene under 8 ms at p95 and never 120 ms), the editor smoke test's weather zone checks.
+
 ### 2026-11-18 — Milestone 8A, part 6: environment assets and presets
 **Added**
 - **`.noorenv` environment assets** (`asset/environment_asset.h`): every environment setting in a file (importer

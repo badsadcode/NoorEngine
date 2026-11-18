@@ -352,8 +352,91 @@ std::shared_ptr<const Atmosphere> Atmosphere::shared(const AtmosphereSettings& s
     }
     auto built = std::make_shared<const Atmosphere>(settings);
     std::scoped_lock lock(mutex);
-    if (cache.size() > 16) cache.clear();
+    if (cache.size() > 64) cache.clear();  // a weather blend's grid is a dozen or so; a scene never needs 64
     return cache.emplace(key, std::move(built)).first->second;
+}
+
+namespace {
+
+// The bracket grid (see Atmosphere::Bracket).
+float turbidity_step(float t) { return t < 5.0f ? 0.5f : t < 10.0f ? 1.0f : 2.5f; }
+float turbidity_below(float t) {  // the grid point at or below t
+    if (t < 5.0f) return std::floor(t / 0.5f + 1e-4f) * 0.5f;
+    if (t < 10.0f) return std::floor(t + 1e-4f);
+    return 10.0f + std::floor((t - 10.0f) / 2.5f + 1e-4f) * 2.5f;
+}
+float snap_altitude(float m) {
+    const float step = m < 1000.0f ? 50.0f : m < 10000.0f ? 250.0f : 2500.0f;
+    return std::round(m / step) * step;
+}
+AtmosphereSettings snapped(AtmosphereSettings s, float turbidity) {
+    s.turbidity = turbidity;
+    const float albedo = std::round(s.ground_albedo.x / 0.05f) * 0.05f;
+    s.ground_albedo = {albedo, albedo, albedo};
+    s.altitude_m = snap_altitude(s.altitude_m);
+    return s;
+}
+
+} // namespace
+
+Atmosphere::Bracket Atmosphere::bracket(const AtmosphereSettings& settings) {
+    const float turbidity = std::clamp(settings.turbidity, 0.0f, 50.0f);
+    const float lo = turbidity_below(turbidity);
+    const float hi = lo + turbidity_step(lo);
+    Bracket b;
+    b.altitude_m = settings.altitude_m;
+    b.t = std::clamp((turbidity - lo) / (hi - lo), 0.0f, 1.0f);
+    if (b.t < 1e-4f) b.t = 0.0f;
+    b.lo = shared(snapped(settings, lo));
+    b.hi = b.t > 0.0f ? shared(snapped(settings, hi)) : b.lo;
+    return b;
+}
+
+void Atmosphere::prewarm(const std::vector<AtmosphereSettings>& settings) {
+    if (settings.empty()) return;
+    float t_min = 1e9f, t_max = -1e9f;
+    for (const auto& s : settings) {
+        const float t = std::clamp(s.turbidity, 0.0f, 50.0f);
+        t_min = std::min(t_min, t), t_max = std::max(t_max, t);
+    }
+    // Every turbidity grid point the range touches, for each distinct albedo and altitude the settings have.
+    std::vector<float> turbidities;
+    for (float t = turbidity_below(t_min);; t += turbidity_step(t)) {  // up to the first point at or above the top
+        turbidities.push_back(t);
+        if (t >= t_max - 1e-4f) break;
+    }
+    std::map<std::string, AtmosphereSettings> wanted;
+    for (const auto& s : settings)
+        for (float t : turbidities) {
+            const AtmosphereSettings g = snapped(s, t);
+            wanted.emplace(g.key(), g);
+        }
+    std::vector<AtmosphereSettings> work;
+    work.reserve(wanted.size());
+    for (auto& [key, s] : wanted) work.push_back(s);
+    const unsigned workers = std::max(1u, std::min({std::thread::hardware_concurrency(), 16u, static_cast<unsigned>(work.size())}));
+    std::vector<std::thread> pool;
+    for (unsigned w = 0; w < workers; ++w)
+        pool.emplace_back([&, w] {
+            for (std::size_t i = w; i < work.size(); i += workers) (void)shared(work[i]);
+        });
+    for (auto& t : pool) t.join();
+}
+
+Vec3 Atmosphere::Bracket::transmittance(float height_km, float cos_zenith) const {
+    const Vec3 a = lo->transmittance(height_km, cos_zenith);
+    if (t <= 0.0f) return a;
+    return a * (1.0f - t) + hi->transmittance(height_km, cos_zenith) * t;
+}
+
+Vec3 Atmosphere::Bracket::sun_transmittance(Vec3 to_sun) const {
+    const float h = std::clamp(altitude_m * 0.001f, 0.0f, lo->settings().atmosphere_height_km);
+    return transmittance(h, std::clamp(to_sun.y, -1.0f, 1.0f));
+}
+
+float Atmosphere::Bracket::sky_illuminance(float elevation) const {
+    const float a = lo->sky_illuminance(elevation);
+    return t <= 0.0f ? a : a * (1.0f - t) + hi->sky_illuminance(elevation) * t;
 }
 
 } // namespace noor::asset
