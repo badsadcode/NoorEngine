@@ -155,6 +155,20 @@ measured −875, +878 and −280 µs apart, the day cycle's rebuild 0.16 to 1.3 
 so the tests judge each run's fastest frame (the work itself) and print the medians. Numbers in this file
 from before part 4 are medians on a quieter desktop.
 
+### Night and automatic exposure (part 5)
+The plan left the night's exposure to be decided by measuring. Hillside_Night's environment at different times
+(full moon, 50°N, late August), `ev100: "auto"`:
+
+| Time | 13:00 | 18:30 | 20:00 | 21:00 | 22:00 | 00:30 |
+|---|---|---|---|---|---|---|
+| EV100 chosen | 14.8 | 10.9 | 0.4 | −3.6 | −3.1 | −2.8 |
+| Light | sun | low sun | twilight | twilight + rising moon | moon | moon |
+
+Decision: an incident meter with a night bias (up to 2.5 stops less exposure below 400 lux) is enough for the
+house and the trees to read against the sky at every time above (devlog #052's picture); no histogram or eye
+adaptation was needed. The stars, bodies and the moon's sky cost nothing measurable at this scene's scale (the
+Environment pass stayed at 0.02 ms, the scene pass within its usual range).
+
 **A lesson on the way:** the first GPU version shared one copy of the sky between frames, and its barrier
 waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
 compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.

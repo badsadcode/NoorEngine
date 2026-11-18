@@ -166,6 +166,13 @@ struct SceneView {
     // layer is on), "cloud_density" (optical thickness of a full cloud), "cloud_altitude" (m), "cloud_scale"
     // (m, feature size), "cloud_wind_speed" (m/s), "cloud_wind_direction" (degrees, 0 = towards -Z), "cloud_seed";
     // a second layer with "cloud2_*". The game's time (render::Lighting::time) drifts them.
+    // Night and space (part 5): with "time_of_day" the atmosphere sky has a moon ("moon": true, "moon_phase": 0
+    // new .. 0.5 full, else from the day of the year), which lights the scene when it outshines the sun, and
+    // stars ("stars": true, "star_brightness": 1, "star_seed": 1) that turn with the night. "sky": "space": no air,
+    // a black sky with stars. Entities with a `celestial_body` ({"angular_size": degrees across, "color": albedo,
+    // "rings": {"inner": 1.3, "outer": 2.4, "color", "tilt": 25}}) are planets and moons in the sky, towards the
+    // entity's forward (-Z), rings across its +Y leaned towards the viewer by "tilt" degrees. Directional lights after the first are extra suns (no shadows).
+    // A camera's "ev100": "auto" meters the light on the ground (render/exposure.h).
     struct Environment {
         std::filesystem::path hdri;   // empty: procedural
         math::Vec3 zenith, horizon, ground;  // procedural sky colours (relative)
@@ -173,6 +180,7 @@ struct SceneView {
         asset::AtmosphereSettings atmosphere_settings;
         math::Vec3 to_sun{0, 1, 0};   // atmosphere: towards the sun (unit)
         float aerial_scale = 1.0f;    // atmosphere: render::AtmosphereDesc::aerial_distance_scale
+        bool space = false;           // sky "space": no air, a black sky (part 5)
     };
     Environment environment;
 };

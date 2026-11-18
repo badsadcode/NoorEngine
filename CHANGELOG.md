@@ -4,6 +4,31 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-18 — Milestone 8A, part 5: night and space
+**Added**
+- **The moon** (`asset::lunar_direction`, `moon_illuminance`, `default_moon_phase`): drawn as a lit sphere, its
+  light from the same model (0.16 lux full), the shadow light when it outshines the sun, its glow in the live sky.
+  Environment fields `moon`, `moon_phase`.
+- **Stars** (`render/stars.h`, `shaders/stars.hlsli`): a deterministic field with the real counts by magnitude,
+  colours by temperature, turning about the celestial pole; `stars`, `star_brightness`, `star_seed`.
+- **`sky: "space"`**, **celestial bodies** (`celestial_body` component: angular size, albedo, rings with tilt;
+  `render::CelestialBody`, up to 8), **extra suns** (directional lights after the first: `LocalLight::Type::Directional`).
+- **Automatic exposure**: `ev100: "auto"` (`render/exposure.h`: an incident meter with a night bias);
+  `asset::Atmosphere::sky_illuminance`. The player's report has `ev100`.
+- Hillside_Night (`tools/samples/add_hillside_skies.py`, renamed from add_hillside_haze.py, now writes both
+  scenes); render scene `Space`.
+
+**Changed:** the live sky's images are scaled (`live_sky_scale`) so half floats keep precision at night (the
+night sky had turned into bands); the sun's disc is drawn from `Lighting::sky` (the real sun, even when the moon
+is the light).
+
+**Fixed (on the way):** the night bias first *added* exposure (midnight looked like noon); its test now checks
+that a darker scene never gives a brighter picture.
+
+**Tests:** the moon against astronomy (full opposite the sun, winter full moons higher, a half moon 1/pi of a full
+one), the star field against the real counts, the sky turning about the pole, exposure (sunny 16, the night bias,
+monotone pictures), skylight by sun height; goldens `Hillside_Night`, `Space`.
+
 ### 2026-11-18 — Milestone 8A, part 4: layered clouds
 **Added**
 - **Cloud layers** (`noor/render/clouds.h`, `shaders/clouds.hlsli`; `render::Lighting::clouds`, `Lighting::time`):

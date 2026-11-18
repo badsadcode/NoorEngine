@@ -471,6 +471,7 @@ int run(const Options& o) {
                                                {"gpu", stat(&Timing::gpu)},
                                                {"environment_gpu", stat(&Timing::environment)}};
                     }
+                    report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
                     report["sky_builds"] = {{"tables", (*renderer)->atmosphere_table_builds()}, {"sky", (*renderer)->atmosphere_sky_builds()}};
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());

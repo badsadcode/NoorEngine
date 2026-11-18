@@ -231,9 +231,13 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
 
     // Local lights: the ones nearest the camera (that reach it at all first), up to kMaxLocalLights.
     std::vector<const LocalLight*> lights;
-    for (const auto& light : frame.lighting.lights)
-        if (light.lumens > 0.0f && light.range > 0.0f) lights.push_back(&light);
+    for (const auto& light : frame.lighting.lights) {
+        const bool directional = light.type == LocalLight::Type::Directional;
+        if (directional ? light.lux > 0.0f : light.lumens > 0.0f && light.range > 0.0f) lights.push_back(&light);
+    }
     std::ranges::sort(lights, [&](const LocalLight* a, const LocalLight* b) {
+        const bool da = a->type == LocalLight::Type::Directional, db = b->type == LocalLight::Type::Directional;
+        if (da != db) return da;  // extra suns first: they reach everywhere
         return math::length(a->position - eye) - a->range < math::length(b->position - eye) - b->range;
     });
     const auto count = static_cast<std::uint32_t>(std::min<std::size_t>(lights.size(), kMaxLocalLights));
@@ -241,6 +245,11 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     for (std::uint32_t i = 0; i < count; ++i) {
         const LocalLight& light = *lights[i];
         const math::Vec3 d = math::length(light.direction) > 1e-6f ? math::normalize(light.direction) : math::Vec3{0, -1, 0};
+        if (light.type == LocalLight::Type::Directional) {  // w 2: light travelling along d, lux on a facing surface
+            const math::Vec3 c = light.color * (light.lux * exposure);
+            u.lights[i] = {{0, 0, 0, 0}, {c.x, c.y, c.z, 0}, {d.x, d.y, d.z, 2.0f}, {0, 0, 0, 0}};
+            continue;
+        }
         const float outer = std::clamp(light.outer_angle, 0.01f, math::kPi * 0.5f);
         const float inner = std::clamp(light.inner_angle, 0.0f, outer - 0.001f);
         // Lumens to candela: a point light spreads them over the whole sphere (4π sr); a spot, like
@@ -280,9 +289,39 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
         clouds.b[0].z = live_sky.desc.planet_radius_km;
         clouds.b[0].w = std::max(0.0f, (live_sky.desc.altitude_m + eye.y) * 0.001f);
     }
+    if (live_sky.active && frame.lighting.sky.moon_relative > 0.0f) {
+        const math::Vec3 m = math::normalize(frame.lighting.sky.moon_direction);
+        clouds.moon = {m.x, m.y, m.z, frame.lighting.sky.moon_relative};
+    }
+    // The live sky's images are scaled to stay precise at night (live_sky_scale): take the scale back out of the
+    // intensity they're drawn and lit with.
+    const float sky_scale = live_sky.active ? live_sky_scale(math::normalize(live_sky.desc.to_sun).y, clouds.moon.w) : 1.0f;
+    clouds.scale = {sky_scale, 0.0f, 0.0f, 0.0f};
+    u.environment.x /= sky_scale;
     std::memcpy(u.cloud_a, clouds.a, sizeof(clouds.a));
     std::memcpy(u.cloud_b, clouds.b, sizeof(clouds.b));
     std::memcpy(u.cloud_flags, clouds.flags, sizeof(clouds.flags));
+    // Sky objects (part 5).
+    const SkyObjects& objects = frame.lighting.sky;
+    const math::Vec3 sky_sun = math::length(objects.sun_direction) > 1e-6f ? math::normalize(objects.sun_direction) : math::Vec3{0, 1, 0};
+    const math::Vec3 seen = objects.sun_seen * exposure, outer = objects.sun_outer * exposure;
+    u.sky_sun_direction = {sky_sun.x, sky_sun.y, sky_sun.z, 0.0f};
+    u.sky_sun_seen = {seen.x, seen.y, seen.z, 0.0f};
+    u.sky_sun_outer = {outer.x, outer.y, outer.z, 0.0f};
+    u.sky_params = {objects.space ? 1.0f : 0.0f, objects.stars ? std::max(0.0f, objects.star_brightness) * exposure : 0.0f, objects.sidereal_hours, objects.latitude};
+    u.sky_extinction = {objects.zenith_transmittance.x, objects.zenith_transmittance.y, objects.zenith_transmittance.z, 0.0f};
+    const auto body_count = static_cast<std::uint32_t>(std::min(objects.bodies.size(), kMaxCelestialBodies));
+    u.sky_counts[0] = body_count;
+    u.sky_counts[1] = objects.star_seed;
+    for (std::uint32_t i = 0; i < body_count; ++i) {
+        const CelestialBody& b = objects.bodies[i];
+        const math::Vec3 dir = math::length(b.direction) > 1e-6f ? math::normalize(b.direction) : math::Vec3{0, 1, 0};
+        const math::Vec3 axis = math::length(b.ring_axis) > 1e-6f ? math::normalize(b.ring_axis) : math::Vec3{0, 1, 0};
+        u.bodies[i * 4 + 0] = {dir.x, dir.y, dir.z, std::clamp(b.angular_radius, 1e-5f, 1.5f)};
+        u.bodies[i * 4 + 1] = {b.albedo.x, b.albedo.y, b.albedo.z, 0.0f};
+        u.bodies[i * 4 + 2] = {axis.x, axis.y, axis.z, std::max(0.0f, b.ring_inner)};
+        u.bodies[i * 4 + 3] = {b.ring_color.x, b.ring_color.y, b.ring_color.z, std::max(0.0f, b.ring_outer)};
+    }
     frame_clouds = clouds;
     frame_world_from_clip = u.world_from_clip;
     frame_eye = eye;

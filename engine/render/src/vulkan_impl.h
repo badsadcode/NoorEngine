@@ -186,6 +186,17 @@ struct FrameUniforms {
     math::Vec4 cloud_a[2];
     math::Vec4 cloud_b[2];
     std::uint32_t cloud_flags[4];
+    // Sky objects (part 5; sky.hlsl): the real sun (direction; seen radiance for its disc; outside radiance for the
+    // bodies, both exposed), x space, y star brightness x exposure (0 off), z sidereal hours, w latitude; the air
+    // straight up; counts (bodies, star seed); per body 4 float4: (direction, angular radius), (albedo, -),
+    // (ring axis, ring inner), (ring colour, ring outer).
+    math::Vec4 sky_sun_direction;
+    math::Vec4 sky_sun_seen;
+    math::Vec4 sky_sun_outer;
+    math::Vec4 sky_params;
+    math::Vec4 sky_extinction;
+    std::uint32_t sky_counts[4];
+    math::Vec4 bodies[kMaxCelestialBodies * 4];
 };
 
 // The clouds as the live sky's compute sees them (atmosphere.hlsl binding 10): the same fields as above.
@@ -193,7 +204,17 @@ struct CloudsGpu {
     math::Vec4 a[2];
     math::Vec4 b[2];
     std::uint32_t flags[4];
+    math::Vec4 moon;  // part 5: towards the moon, w its light relative to the sun's (the moonlit sky)
+    math::Vec4 scale; // x: what the live sky's images are multiplied by (live_sky_scale), so night stays precise
 };
+
+// The live sky stores its radiance (relative to a sun of 1) in half floats; at night that is 1e-7 and below, where
+// half floats run out of steps (the sky turns into bands). Each copy is multiplied by this, a pure function of the
+// sun's height and the moon, so its values sit near 1; the frame divides it out of the environment's intensity.
+[[nodiscard]] inline float live_sky_scale(float sun_height, float moon_relative) noexcept {
+    const float twilight = 0.05f * std::exp(40.0f * std::min(0.0f, sun_height));  // the sky dims fast below the horizon
+    return 1.0f / std::max(1e-12f, twilight + 0.05f * std::max(0.0f, moon_relative) + 1e-10f);
+}
 
 // atmosphere.hlsl's push constants (Params): the atmosphere and what this pass works on.
 struct LiveSkyPush {

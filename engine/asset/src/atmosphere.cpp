@@ -62,6 +62,23 @@ Vec3 solar_direction(float hours, float latitude_deg, float day_of_year) noexcep
     return math::normalize(Vec3{east, up, -north});
 }
 
+Vec3 lunar_direction(float hours, float latitude_deg, float day_of_year, float phase) noexcept {
+    const float p = phase - std::floor(phase);
+    return solar_direction(hours - 24.0f * p, latitude_deg, day_of_year + 365.25f * p);
+}
+
+float default_moon_phase(float day_of_year) noexcept {
+    const float cycles = (day_of_year - 11.0f) / 29.530588f;
+    return cycles - std::floor(cycles);
+}
+
+float moon_illuminance(float sun_lux, float phase_angle) noexcept {
+    const float a = std::clamp(phase_angle, 0.0f, kPi);
+    const float lambert = (std::sin(a) + (kPi - a) * std::cos(a)) / kPi;
+    const float solid_angle = kPi * kMoonAngularRadius * kMoonAngularRadius;
+    return (2.0f / 3.0f) * kMoonAlbedo * sun_lux * solid_angle / kPi * lambert;
+}
+
 std::string AtmosphereSettings::key() const {
     return std::format("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", planet_radius_km, atmosphere_height_km, rayleigh_scattering.x,
                        rayleigh_scattering.y, rayleigh_scattering.z, rayleigh_height_km, mie_scattering, mie_absorption, mie_height_km, mie_g,
@@ -192,6 +209,25 @@ Atmosphere::Atmosphere(const AtmosphereSettings& settings) : s_(settings) {
             multiple_[static_cast<std::size_t>(y) * kMS + x] = div_safe(l2, denom);
         }
     }
+
+    // 3. Skylight on level ground by the sun's elevation (photopic luminance): integrate the sky over the upper
+    // hemisphere, cosine-weighted (Fibonacci directions: E = pi * mean of L over cosine-distributed samples).
+    constexpr std::size_t kSkyLux = 128;
+    constexpr int kSamples = 96;
+    sky_illuminance_.resize(kSkyLux);
+    for (std::size_t i = 0; i < kSkyLux; ++i) {
+        const float elevation = (-20.0f + 110.0f * static_cast<float>(i) / (kSkyLux - 1)) * kPi / 180.0f;
+        const Vec3 sun{0.0f, std::sin(elevation), -std::cos(elevation)};
+        double sum = 0.0;
+        for (int k = 0; k < kSamples; ++k) {
+            const float u = (static_cast<float>(k) + 0.5f) / kSamples;
+            const float r = std::sqrt(u), phi = static_cast<float>(k) * 2.39996323f;  // cosine-weighted disc
+            const Vec3 view{r * std::cos(phi), std::sqrt(std::max(0.0f, 1.0f - u)), r * std::sin(phi)};
+            const Vec3 l = sky_radiance(view, sun);
+            sum += 0.2126 * l.x + 0.7152 * l.y + 0.0722 * l.z;
+        }
+        sky_illuminance_[i] = static_cast<float>(kPi * sum / kSamples);
+    }
 }
 
 Vec3 Atmosphere::sun_transmittance(Vec3 to_sun) const {
@@ -272,6 +308,14 @@ Atmosphere::Aerial Atmosphere::aerial_perspective(Vec3 view, float distance_km, 
     out.inscatter = l;
     out.transmittance = t_acc;
     return out;
+}
+
+float Atmosphere::sky_illuminance(float elevation) const {
+    constexpr float lo = -20.0f * kPi / 180.0f, hi = kPi * 0.5f;
+    const float f = std::clamp((elevation - lo) / (hi - lo), 0.0f, 1.0f) * static_cast<float>(sky_illuminance_.size() - 1);
+    const auto i = std::min(static_cast<std::size_t>(f), sky_illuminance_.size() - 2);
+    const float t = f - static_cast<float>(i);
+    return sky_illuminance_[i] * (1.0f - t) + sky_illuminance_[i + 1] * t;
 }
 
 EquirectImage Atmosphere::sky_image(Vec3 to_sun, std::uint32_t width, std::uint32_t height) const {

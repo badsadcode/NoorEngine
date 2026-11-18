@@ -28,6 +28,7 @@ add_executable(noor_unit_tests
     unit/test_atmosphere.cpp
     unit/test_fog.cpp
     unit/test_clouds.cpp
+    unit/test_night.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -143,7 +144,7 @@ endif()
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
 foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain TerrainPaint
-                     Atmosphere_Noon Atmosphere_Sunset Atmosphere_Clouds Atmosphere_Overcast)
+                     Atmosphere_Noon Atmosphere_Sunset Atmosphere_Clouds Atmosphere_Overcast Space)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -260,7 +261,7 @@ add_test(NAME render.golden_Hillside
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                      FIXTURES_REQUIRED hillside_cooked)
-# Fog and aerial perspective (Milestone 8A, part 3): Hillside in haze (tools/samples/add_hillside_haze.py), the
+# Fog and aerial perspective (Milestone 8A, part 3): Hillside in haze (tools/samples/add_hillside_skies.py), the
 # far hills fading into the sky without a seam.
 add_test(NAME render.golden_Hillside_Haze
     COMMAND ${CMAKE_COMMAND}
@@ -270,6 +271,17 @@ add_test(NAME render.golden_Hillside_Haze
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Haze
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside_Haze PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
+                     FIXTURES_REQUIRED hillside_cooked)
+# Night (Milestone 8A, part 5): Hillside at 22:00 under a full moon, automatic exposure; the house and the trees must
+# read against the sky.
+add_test(NAME render.golden_Hillside_Night
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Night.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Night.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Night
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Night PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                      FIXTURES_REQUIRED hillside_cooked)
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).

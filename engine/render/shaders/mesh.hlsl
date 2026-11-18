@@ -41,7 +41,7 @@ struct GpuLight
 {
     float4 position_range;  // xyz world position, w range (m)
     float4 intensity;       // rgb
-    float4 direction_type;  // xyz spot direction, w: 0 point, 1 spot
+    float4 direction_type;  // xyz spot direction (directional: the way its light travels), w: 0 point, 1 spot, 2 directional
     float4 cone;            // x cos(outer), y cos(inner)
 };
 
@@ -227,6 +227,11 @@ float3 local_lights(float3 world, float3 n, float3 v, float3 base_color, float m
     for (uint i = 0; i < frame.light_count.x; ++i)
     {
         const GpuLight light = frame.lights[i];
+        if (light.direction_type.w > 1.5)  // another sun (part 5): everywhere, no falloff, no shadows
+        {
+            sum += brdf_direct(n, v, -light.direction_type.xyz, base_color, metallic, roughness, light.intensity.rgb);
+            continue;
+        }
         const float3 to_light = light.position_range.xyz - world;
         const float d2 = max(dot(to_light, to_light), 1e-4);
         const float range = light.position_range.w;

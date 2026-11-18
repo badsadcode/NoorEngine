@@ -196,8 +196,10 @@ struct AtmosphereDesc {
 // bulb's box says (a 60 W-equivalent bulb is about 800 lm): a point light sends it everywhere, a
 // spot into its cone (so a narrower spot of the same lumens is brighter, like a torch). Light
 // fades with the square of the distance and smoothly reaches zero at `range`.
+// Directional lights after the first (Milestone 8A, part 5: a second sun) are LocalLights of type Directional:
+// light from `direction` everywhere (no range, no shadows), `lux` on a surface facing it.
 struct LocalLight {
-    enum class Type : std::uint8_t { Point, Spot } type = Type::Point;
+    enum class Type : std::uint8_t { Point, Spot, Directional } type = Type::Point;
     math::Vec3 position{0, 0, 0};
     math::Vec3 direction{0, -1, 0};  // spot: the way it points
     math::Vec3 color{1, 1, 1};       // linear
@@ -205,6 +207,38 @@ struct LocalLight {
     float range = 10.0f;             // metres
     float outer_angle = 0.6f;        // spot: half-angle of the cone, radians
     float inner_angle = 0.45f;       // spot: full brightness inside this half-angle
+    float lux = 0.0f;                // directional: illuminance
+};
+
+// A planet, moon or ring system in the sky (Milestone 8A, part 5): a sphere at a direction and angular size, lit
+// by the real sun and any extra suns (Lambert), with optional rings (an annulus in the plane across `ring_axis`,
+// in body radii) that the body shades. The moon is one of these.
+struct CelestialBody {
+    math::Vec3 direction{0, 1, 0};   // towards it (unit)
+    float angular_radius = 0.01f;    // radians
+    math::Vec3 albedo{0.5f, 0.5f, 0.5f};
+    math::Vec3 ring_axis{0, 1, 0};
+    float ring_inner = 0.0f, ring_outer = 0.0f;  // body radii; outer 0: no rings
+    math::Vec3 ring_color{0.8f, 0.75f, 0.65f};
+};
+inline constexpr std::size_t kMaxCelestialBodies = 8;
+
+// What the sky pass draws besides the sky itself (part 5).
+struct SkyObjects {
+    math::Vec3 sun_direction{0, 1, 0};  // towards the real sun (at night the sun light may be the moon)
+    math::Vec3 sun_outer{0, 0, 0};      // its colour x illuminance outside any air (lights the bodies)
+    math::Vec3 sun_seen{0, 0, 0};       // the same as seen from here through the air (its disc)
+    std::vector<CelestialBody> bodies;  // up to kMaxCelestialBodies
+    bool stars = false;
+    float star_brightness = 1.0f;       // 1 = real starlight
+    float sidereal_hours = 0.0f;        // how far the sky has turned (15 degrees an hour)
+    float latitude = 50.0f;             // the celestial pole's height above the north horizon
+    std::uint32_t star_seed = 1;
+    bool space = false;                 // no air: nothing below the horizon is hidden, no extinction
+    math::Vec3 zenith_transmittance{1, 1, 1};  // the air straight up (dims stars and bodies by the air mass)
+    // The moon's glow in the atmosphere sky: its direction and its light relative to the sun's (0: none).
+    math::Vec3 moon_direction{0, 1, 0};
+    float moon_relative = 0.0f;
 };
 
 // The shader handles this many local lights per frame (the nearest to the camera are kept).
@@ -236,6 +270,8 @@ struct Lighting {
     std::array<CloudLayer, kCloudLayers> clouds{};
     // Seconds of game time: the clouds drift with it (the same time always gives the same sky).
     float time = 0.0f;
+    // The sun's disc, the moon, planets and stars (part 5). With sun_disc, the disc is drawn at sky.sun_direction.
+    SkyObjects sky;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;

@@ -54,6 +54,23 @@ struct AtmosphereSettings {
 // move the sun by less than a degree or about 16 minutes. Below the horizon when y < 0.
 [[nodiscard]] math::Vec3 solar_direction(float hours, float latitude_deg, float day_of_year = 172.0f) noexcept;
 
+// The moon (Milestone 8A, part 5). `phase` 0..1: 0 new (beside the sun), 0.25 first quarter, 0.5 full (opposite
+// the sun), 0.75 last quarter. A simple model: the moon runs `phase` of a day behind the sun (a full moon rises at
+// sunset) on the path the sun takes `phase` of a year later (a winter full moon stands high); its 5-degree tilt
+// is left out. Same axes as solar_direction.
+[[nodiscard]] math::Vec3 lunar_direction(float hours, float latitude_deg, float day_of_year, float phase) noexcept;
+// The moon's phase on a day of the year when none is given: a stylised calendar (new moon on day 11, a cycle of
+// 29.53 days), not the real one of any year.
+[[nodiscard]] float default_moon_phase(float day_of_year) noexcept;
+
+// The moon as a sphere lit by the sun (what the sky pass draws): its albedo, angular radius and the light it sends.
+inline constexpr float kMoonAlbedo = 0.12f;
+inline constexpr float kMoonAngularRadius = 0.00452f;  // radians (0.518 degrees across)
+// The illuminance the moon gives (lux, perpendicular to it, outside the air) for a sun of `sun_lux`, by the angle
+// sun-moon-observer (`phase_angle`, radians: 0 full, pi new): a Lambert sphere, (2/3) a E Omega / pi times the
+// Lambert phase function (sin a + (pi - a) cos a) / pi. A full moon under a 100 klx sun: about 0.16 lux.
+[[nodiscard]] float moon_illuminance(float sun_lux, float phase_angle) noexcept;
+
 class Atmosphere {
 public:
     explicit Atmosphere(const AtmosphereSettings& settings);
@@ -86,6 +103,11 @@ public:
     };
     [[nodiscard]] Aerial aerial_perspective(math::Vec3 view, float distance_km, math::Vec3 to_sun, float observer_km) const;
 
+    // The skylight on level ground at the observer (lux per lux of sun, without the sun's direct light), for a
+    // sun `elevation` radians above the horizon (negative: below; twilight still lights the sky). From a table
+    // built once (128 elevations, a cosine-weighted hemisphere of the sky each): what automatic exposure meters.
+    [[nodiscard]] float sky_illuminance(float elevation) const;
+
     // The whole sky as an equirect image (asset::equirect_direction's layout), for the environment
     // pipeline: background, reflections and the light from all around.
     [[nodiscard]] EquirectImage sky_image(math::Vec3 to_sun, std::uint32_t width = 384, std::uint32_t height = 192) const;
@@ -100,6 +122,7 @@ private:
     static constexpr std::uint32_t kMS = 32;              // multiple scattering table (kMS x kMS)
     std::vector<math::Vec3> transmittance_;
     std::vector<math::Vec3> multiple_;
+    std::vector<float> sky_illuminance_;  // kSkyLux elevations from -20 to +90 degrees
 
     struct Medium {
         math::Vec3 scattering_rayleigh;

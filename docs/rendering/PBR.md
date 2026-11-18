@@ -132,6 +132,20 @@ at noon, orange-red at sunset) and its disc is drawn in the sky.
   sun on the ground (shadows drift past); overcast takes nearly all the direct sunlight, so shadows fade and
   the scene is lit by the grey sky. Limits: the layers are thin (no volumes you can fly through), seen from
   below only, and they don't cast shadows on each other.
+- **Night** (atmosphere sky with `time_of_day`): the **moon** rises and sets with its phase (`"moon_phase"`: 0
+  new, 0.5 full; without it, a stylised calendar from `day_of_year`; `"moon": false` hides it). A full moon gives
+  about 0.16 lux and, when it outshines the sun, becomes the light that casts shadows. **Stars**
+  (`"stars": true`, `"star_brightness": 1` real, `"star_seed": 1`) turn about the celestial pole through the
+  night; by day they're there but far too faint to see, as in a real sky.
+- **Space**: `"sky": "space"`: no air, a black sky, stars, the sun as it is. Planets and moons are entities with
+  a `celestial_body` component: `{"angular_size": 20 (degrees across), "color": "#8FA8C8" (albedo), "rings":
+  {"inner": 1.35, "outer": 2.3, "color": "#D8C8A8", "tilt": 28}}`, seen towards the entity's forward (−Z), rings
+  across its +Y leaned towards you by `tilt`. They also work in the other skies (an alien world's sky). **More
+  suns**: directional lights after the first light everything too (no shadows) and show their discs. In a
+  sunlit exposure, stars in space are as invisible as in a real photograph: raise `star_brightness` for a look.
+- **Automatic exposure**: a camera's `"ev100": "auto"` meters the light on level ground (sun, sky, moon,
+  starlight, through the clouds), like a photographer's incident meter: noon about EV 15, moonlight about −3,
+  held back up to 2.5 stops at night so night looks like night. The same light always gives the same exposure.
 - The sky, its reflections and the light from all around are rebuilt **on the GPU** whenever the sun
   moves (about 0.2 ms), so a moving sun costs almost nothing. `noor_player --cpu-sky` builds it on the
   CPU instead (the reference implementation, about 120 ms a move) for comparisons.

@@ -38,7 +38,8 @@ struct AerialCamera
 {
     float4x4 world_from_clip;
     float4 eye;     // xyz: the camera (metres)
-    float4 params;  // x: the volume's far end (km of air), y: distance scale, z: the camera's height above the surface (km)
+    float4 params;  // x: the volume's far end (km of air), y: distance scale, z: the camera's height above the surface (km),
+                    // w: the live sky's scale (inscatter is multiplied by it)
 };
 [[vk::binding(8, 0)]] ConstantBuffer<AerialCamera> aerial_camera;
 [[vk::binding(9, 0)]] [[vk::image_format("rgba16f")]] RWTexture3D<float4> out_volume;
@@ -48,6 +49,8 @@ struct Clouds
     float4 a[2];  // coverage, density, altitude km, scale km
     float4 b[2];  // drift x km, drift z km
     uint4 flags;  // seed 0, seed 1, enabled 0, enabled 1
+    float4 moon;  // towards the moon, w its light relative to the sun's (part 5: the moonlit sky)
+    float4 scale; // x: everything these passes write is multiplied by it (precision at night; the frame divides it out)
 };
 [[vk::binding(10, 0)]] ConstantBuffer<Clouds> clouds;
 [[vk::binding(11, 0)]] RWStructuredBuffer<float4> cloud_light;  // [2i] sun, [2i + 1] sky, at layer i
@@ -305,8 +308,8 @@ void CSCloudLight(uint3 id : SV_DispatchThreadID)
 {
     const float h = clamp(clouds.a[id.x].z, 0.0, height_range() - 0.01);
     const float3 to_sun = normalize(p.sun.xyz);
-    cloud_light[id.x * 2] = float4(transmittance(h, to_sun.y), 0.0);
-    cloud_light[id.x * 2 + 1] = float4(sky_radiance_from(bottom() + h, float3(0, 1, 0), to_sun), 0.0);
+    cloud_light[id.x * 2] = float4(transmittance(h, to_sun.y) * clouds.scale.x, 0.0);
+    cloud_light[id.x * 2 + 1] = float4(sky_radiance_from(bottom() + h, float3(0, 1, 0), to_sun) * clouds.scale.x, 0.0);
 }
 
 // The sky image: without clouds as the background (the sky pass draws sharp clouds over it), with them for
@@ -319,7 +322,9 @@ void CSSky(uint3 id : SV_DispatchThreadID)
     if (id.x >= w || id.y >= h) return;
     const float3 d = equirect_direction((float(id.x) + 0.5) / w, (float(id.y) + 0.5) / h);
     const float3 to_sun = normalize(p.sun.xyz);
-    const float3 clear = sky_radiance(d, to_sun);
+    float3 clear = sky_radiance(d, to_sun);
+    if (clouds.moon.w > 0.0) clear += sky_radiance(d, normalize(clouds.moon.xyz)) * clouds.moon.w;  // the moonlit sky
+    clear *= clouds.scale.x;
     out_background[id.xy] = float4(clear, 1.0);
     float3 color = clear;
     // The higher layer first (it's behind the lower one).
@@ -475,6 +480,6 @@ void CSAerial(uint3 id : SV_DispatchThreadID)
             l += t_acc * (single + multi) * div_safe(1.0 - step_t, m.extinction);
             t_acc *= step_t;
         }
-        out_volume[uint3(id.xy, s)] = float4(l, dot(t_acc, 1.0 / 3.0));
+        out_volume[uint3(id.xy, s)] = float4(l * aerial_camera.params.w, dot(t_acc, 1.0 / 3.0));
     }
 }

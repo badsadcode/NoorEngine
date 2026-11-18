@@ -1,6 +1,6 @@
 # ADR-033: Environments and atmosphere
 
-**Status:** Proposed (Milestone 8A; parts 1-4 implemented: the atmosphere sky on the GPU, time of day, fog and aerial perspective, layered clouds) · **Date:** 2026-11-18 · **Milestone:** 8
+**Status:** Proposed (Milestone 8A; parts 1-5 implemented: the atmosphere sky on the GPU, time of day, fog, aerial perspective, clouds, night and space) · **Date:** 2026-11-18 · **Milestone:** 8
 
 ## Context
 Milestone 8A ([plan](../milestones/M8_PLAN.md), [NoorSky brief](../ideas/NOORSKY.md)) wants skies that
@@ -86,6 +86,19 @@ must agree, or the picture falls apart.
   of their feature size; the scene's shader dims the sun by the clouds between each point and the sun (drifting
   cloud shadows; overcast all but removes direct light, so shadows fade). Reference: `noor/render/clouds.h`;
   shaders: `clouds.hlsli`. Fine noise fades with a pixel's footprint, so far clouds don't shimmer.
+- **Night and space** (part 5): **celestial bodies** (the moon, planets, rings) are Lambert spheres at a direction
+  and angular size, lit by the real sun and any extra suns in the sky pass; rings are an annulus that the planet
+  shades. The moon is one of them: placed by time and phase (`asset::lunar_direction`), its light on the ground
+  follows from the same sphere (`asset::moon_illuminance`: a full moon about 0.16 lux), it becomes the shadow
+  light when it outshines the sun, and its glow is added to the live sky (the moonlit sky lights the scene).
+  **Stars**: a deterministic field (cells on a cube, real counts by magnitude, colours by temperature) turning
+  about the celestial pole, dimmed by the air mass, clouds and fog. **`sky: "space"`**: no air, a black sky,
+  stars, bodies seen in every direction. **Extra suns**: directional lights after the first, without shadows.
+  **Automatic exposure** (`ev100: "auto"`): an incident light meter (sun, sky, moon, starlight, clouds) with a
+  night bias of up to 2.5 stops less exposure, decided by measuring a day (docs/rendering/MEASUREMENTS.md);
+  deterministic, no histogram, no adaptation over time (yet). The live sky's images are scaled by
+  `live_sky_scale` (larger at night) so half floats keep their precision. References and tests:
+  `asset/atmosphere.h` (moon), `render/stars.h`, `render/exposure.h`.
 - **Time of day** (`"time_of_day"`, `"latitude"`, `"day_of_year"`, `"north"` on the environment, any sky):
   the sun's direction from a simple solar model (`asset::solar_direction`: declination from the day,
   hour angle from the time; no equation of time or refraction).
@@ -104,6 +117,8 @@ must agree, or the picture falls apart.
   GPU is clocked down), the tables a fraction of a millisecond once; dragging the time from 5:00 to
   21:00 rebuilds every frame at 60 FPS (`render.day_cycle`). Spreading the work over several frames,
   which the plan expected to need, wasn't.
+- **Night and space** (part 5): goldens `Hillside_Night` (the house and trees against the moonlit sky) and `Space`
+  (a ringed planet with a lit and a dark side and its shadow on the rings, two suns). Bodies are untextured yet.
 - **Clouds cost** 26-28 µs a frame at 1280×720 (fastest frames, two layers, against the same scene without),
   plus a 0.08 ms lighting rebuild a few times a minute while they drift. Goldens `Atmosphere_Clouds`,
   `Atmosphere_Overcast`.
@@ -118,6 +133,8 @@ must agree, or the picture falls apart.
 - Old scenes are unchanged: `sky` is new and optional; the gradient and HDRI paths are untouched.
 
 ## Unresolved
+- Textured celestial bodies, eclipses, the moon's own shadow on the ground at an eclipse, real lunar calendars.
+- Exposure that adapts over time (eye adaptation) as an option on top of the metered value.
 - The `.noorenv` asset format and overrides (part 6), and blending two atmospheres (part 7: blend
   parameters, or blend the results?).
 - Other planets (Mars-like coefficients) are possible with the same settings; no preset yet.

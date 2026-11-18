@@ -84,6 +84,8 @@ bool close_clouds(const CloudsGpu& built, const CloudsGpu& now) {
         const float step = 0.01f * now.a[i].w;
         if (std::abs(built.b[i].x - now.b[i].x) > step || std::abs(built.b[i].y - now.b[i].y) > step) return false;
     }
+    if (std::memcmp(&built.moon, &now.moon, sizeof(now.moon)) != 0) return false;  // the moon moves with the time
+    if (built.scale.x != now.scale.x) return false;
     return built.b[0].z == now.b[0].z && std::abs(built.b[0].w - now.b[0].w) < 0.05f;  // planet; the camera's height (50 m)
 }
 
@@ -521,7 +523,8 @@ void Renderer::Impl::record_live_sky(VkCommandBuffer cmd) {
         AerialCameraGpu camera{};
         camera.world_from_clip = frame_world_from_clip;
         camera.eye = {frame_eye.x, frame_eye.y, frame_eye.z, 1.0f};
-        camera.params = {kAerialFarKm, s.desc.aerial_distance_scale, std::max(0.0f, (s.desc.altitude_m + frame_eye.y) * 0.001f), 0.0f};
+        camera.params = {kAerialFarKm, s.desc.aerial_distance_scale, std::max(0.0f, (s.desc.altitude_m + frame_eye.y) * 0.001f),
+                         frame_clouds.scale.x};
         std::memcpy(c.aerial_camera.mapped, &camera, sizeof(camera));
         vmaFlushAllocation(allocator, c.aerial_camera.allocation, 0, sizeof(camera));
         bind(s.aerial_pipeline, c.aerial_set);

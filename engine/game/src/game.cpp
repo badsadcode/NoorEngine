@@ -1,4 +1,6 @@
 #include "noor/game/game.h"
+
+#include "noor/render/exposure.h"
 #include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
 
@@ -205,6 +207,14 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     bool has_environment = false;
     float env_intensity = 8000.0f;
     bool sun_color_given = false;
+    bool auto_exposure = false;
+    std::vector<render::CelestialBody> bodies;  // celestial_body entities (part 5)
+    struct NightSky {
+        bool moon = true, stars = true;
+        std::optional<float> moon_phase;
+        float star_brightness = 1.0f;
+        std::uint32_t star_seed = 1;
+    } night;
     struct TimeOfDay {
         float hours, latitude, day, north;
     };
@@ -268,11 +278,15 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const std::string light_type = is_light ? e.components["light"].value("type", std::string("directional")) : "";
         const bool sun = is_light && !view.has_sun && light_type == "directional";
         const bool local = is_light && (light_type == "point" || light_type == "spot");
+        const bool extra_sun = is_light && !sun && view.has_sun && light_type == "directional";  // a second sun (part 5)
+        const bool body = e.has("celestial_body") && e.components["celestial_body"].is_object();
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
         const bool model = e.has("model") && e.components["model"].is_object();
         const bool scatter = e.has("scatter") && e.components["scatter"].is_object();
         if (scatter) scatter_entities.push_back(i);
-        if (!camera && !primitive && !mesh && !model && !sun && !local && !env && !e.has("csg_model") && !e.has("terrain")) continue;
+        if (!camera && !primitive && !mesh && !model && !sun && !local && !extra_sun && !body && !env && !e.has("csg_model") &&
+            !e.has("terrain"))
+            continue;
         if (env) {
             const auto& en = e.components["environment"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
@@ -305,6 +319,12 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 time_of_day = TimeOfDay{std::fmod(std::fmod(number(en, "time_of_day", 12.0f), 24.0f) + 24.0f, 24.0f),
                                         std::clamp(number(en, "latitude", 50.0f), -90.0f, 90.0f),
                                         std::clamp(number(en, "day_of_year", 172.0f), 1.0f, 366.0f), number(en, "north", 0.0f)};
+            night.moon = !en.contains("moon") || !en["moon"].is_boolean() || en["moon"].get<bool>();
+            night.stars = !en.contains("stars") || !en["stars"].is_boolean() || en["stars"].get<bool>();
+            if (en.contains("moon_phase") && en["moon_phase"].is_number()) night.moon_phase = en["moon_phase"].get<float>();
+            night.star_brightness = std::clamp(number(en, "star_brightness", 1.0f), 0.0f, 1000.0f);
+            night.star_seed = static_cast<std::uint32_t>(std::max(0.0f, number(en, "star_seed", 1.0f)));
+            if (sky_mode == "space") view.environment.space = true;
             if (sky_mode == "atmosphere") {
                 view.environment.atmosphere = true;
                 auto& as = view.environment.atmosphere_settings;
@@ -326,6 +346,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             view.camera = SceneView::Camera{world, std::clamp(number(cam, "fov", 70.0f), 10.0f, 150.0f),
                                             std::max(0.001f, number(cam, "near", 0.05f)), e.id};
             view.lighting.ev100 = std::clamp(number(cam, "ev100", view.lighting.ev100), -10.0f, 25.0f);
+            auto_exposure = cam.contains("ev100") && cam["ev100"].is_string() && cam["ev100"].get<std::string>() == "auto";
             const std::string tm = cam.value("tonemapper", std::string("neutral"));
             view.lighting.tonemapper = tm == "aces" ? render::Tonemapper::Aces
                                        : tm == "none" ? render::Tonemapper::None
@@ -348,6 +369,37 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             if (l.contains("shadows") && l["shadows"].is_boolean()) view.lighting.sun_shadows = l["shadows"].get<bool>();
             view.lighting.shadow_distance = std::clamp(number(l, "shadow_distance", view.lighting.shadow_distance), 5.0f, 2000.0f);
             view.has_sun = true;
+        }
+        if (extra_sun) {
+            const auto& l = e.components["light"];
+            render::LocalLight light;
+            light.type = render::LocalLight::Type::Directional;
+            const math::Vec3 dir = math::transform_vector(world, {0, 0, -1});
+            light.direction = math::length(dir) > 1e-6f ? math::normalize(dir) : math::Vec3{0, -1, 0};
+            light.color = color_of(l, {1, 1, 1});
+            light.lux = std::clamp(number(l, "illuminance", 100000.0f), 0.0f, 1.0e6f);
+            view.lighting.lights.push_back(light);
+            view.light_markers.push_back({world.transform_point({0, 0, 0}), light.color, e.id});
+        }
+        if (body) {
+            const auto& b = e.components["celestial_body"];
+            render::CelestialBody cb;
+            const math::Vec3 forward = math::transform_vector(world, {0, 0, -1}), up = math::transform_vector(world, {0, 1, 0});
+            cb.direction = math::length(forward) > 1e-6f ? math::normalize(forward) : math::Vec3{0, 1, 0};
+            cb.angular_radius = math::radians(std::clamp(number(b, "angular_size", 2.0f), 0.01f, 170.0f)) * 0.5f;
+            cb.albedo = color_of(b, {0.5f, 0.5f, 0.5f});
+            cb.ring_axis = math::length(up) > 1e-6f ? math::normalize(up) : math::Vec3{0, 1, 0};
+            if (b.contains("rings") && b["rings"].is_object()) {
+                const auto& r = b["rings"];
+                // The entity's +Y is square to the line of sight (its forward), which would show the rings edge-on:
+                // "tilt" leans their axis towards the viewer (0 edge-on, 90 face-on).
+                const float tilt = math::radians(std::clamp(number(r, "tilt", 25.0f), 0.0f, 90.0f));
+                cb.ring_axis = math::normalize(cb.ring_axis * std::cos(tilt) - cb.direction * std::sin(tilt));
+                cb.ring_inner = std::clamp(number(r, "inner", 1.3f), 1.0f, 20.0f);
+                cb.ring_outer = std::clamp(number(r, "outer", 2.3f), cb.ring_inner, 20.0f);
+                cb.ring_color = color_of(r, cb.ring_color);
+            }
+            bodies.push_back(cb);
         }
         if (local) {
             const auto& l = e.components["light"];
@@ -496,6 +548,61 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         view.lighting.environment_intensity = view.lighting.sun_illuminance;
         view.lighting.environment_rotation = 0.0f;  // built in world space, around the real sun
         view.lighting.sun_disc = true;
+        // Part 5: the sky's sun disc, stars and the moon.
+        const auto atmosphere = asset::Atmosphere::shared(view.environment.atmosphere_settings);
+        render::SkyObjects& sky = view.lighting.sky;
+        const float sun_lux = view.lighting.sun_illuminance;
+        sky.sun_direction = to_sun;
+        sky.sun_outer = own * sun_lux;
+        sky.sun_seen = view.lighting.sun_color * sun_lux;
+        const float observer_km = view.environment.atmosphere_settings.altitude_m * 0.001f;
+        sky.zenith_transmittance = atmosphere->transmittance(observer_km, 1.0f);
+        sky.stars = night.stars;
+        sky.star_brightness = night.star_brightness;
+        sky.star_seed = night.star_seed;
+        if (time_of_day) {
+            sky.latitude = time_of_day->latitude;
+            sky.sidereal_hours = time_of_day->hours + time_of_day->day * (24.0f / 365.25f);  // a little further each day
+        }
+        if (time_of_day && night.moon) {
+            const float phase = night.moon_phase ? *night.moon_phase : asset::default_moon_phase(time_of_day->day);
+            const math::Vec3 m = asset::lunar_direction(time_of_day->hours, time_of_day->latitude, time_of_day->day, phase);
+            const float a = math::radians(time_of_day->north), c = std::cos(a), sn = std::sin(a);
+            const math::Vec3 to_moon{c * m.x + sn * m.z, m.y, -sn * m.x + c * m.z};
+            render::CelestialBody moon;
+            moon.direction = to_moon;
+            moon.angular_radius = asset::kMoonAngularRadius;
+            moon.albedo = math::Vec3{1.0f, 0.97f, 0.92f} * asset::kMoonAlbedo;
+            bodies.insert(bodies.begin(), moon);
+            // Its light: the angle sun-moon-earth (the sun is far: pi minus the angle between them in our sky).
+            const float phase_angle = math::kPi - std::acos(std::clamp(math::dot(to_sun, to_moon), -1.0f, 1.0f));
+            const float moon_lux = asset::moon_illuminance(sun_lux, phase_angle);
+            sky.moon_direction = to_moon;
+            sky.moon_relative = sun_lux > 0.0f ? moon_lux / sun_lux : 0.0f;
+            // When the moon outshines the sun on the ground, it becomes the light that casts shadows.
+            const math::Vec3 t_moon = atmosphere->sun_transmittance(to_moon);
+            const auto luminance = [](math::Vec3 v) { return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z; };
+            if (to_moon.y > 0.0f && moon_lux * luminance(t_moon) > sun_lux * luminance(view.lighting.sun_color)) {
+                view.lighting.sun_direction = to_moon * -1.0f;
+                view.lighting.sun_color = {own.x * t_moon.x, own.y * t_moon.y * 0.97f, own.z * t_moon.z * 0.92f};  // a touch warm
+                view.lighting.sun_illuminance = moon_lux;
+            }
+        }
+    } else if (view.environment.space) {
+        // No air: a black sky with stars; the sun as it is.
+        const math::Vec3 to_sun = math::normalize(view.lighting.sun_direction * -1.0f);
+        if (!sun_color_given) view.lighting.sun_color = {1, 1, 1};
+        render::SkyObjects& sky = view.lighting.sky;
+        sky.space = true;
+        sky.sun_direction = to_sun;
+        sky.sun_outer = sky.sun_seen = view.lighting.sun_color * view.lighting.sun_illuminance;
+        sky.stars = night.stars;
+        sky.star_brightness = night.star_brightness;
+        sky.star_seed = night.star_seed;
+        sky.latitude = 90.0f;
+        view.lighting.environment_intensity = 0.0f;
+        view.lighting.environment_rotation = 0.0f;
+        view.lighting.sun_disc = true;
     } else if (view.environment.hdri.empty()) {
         const math::Vec3 sky = view.lighting.sky_color;
         view.environment.zenith = sky;
@@ -507,6 +614,40 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         // The photo has its own sun: no default sun on top of it (add a directional light to get
         // sharp sun shadows, then match its direction to the sun in the photo).
         if (!view.has_sun) view.lighting.sun_illuminance = 0.0f;
+    }
+    // Planets and moons light themselves from the real sun (outside any air): for skies other than the atmosphere
+    // and space, that's the sun light as given.
+    render::SkyObjects& sky_objects = view.lighting.sky;
+    if (!view.environment.atmosphere && !view.environment.space) {
+        sky_objects.sun_direction = math::normalize(view.lighting.sun_direction * -1.0f);
+        sky_objects.sun_outer = sky_objects.sun_seen = view.lighting.sun_color * view.lighting.sun_illuminance;
+    }
+    sky_objects.bodies = std::move(bodies);
+    if (sky_objects.bodies.size() > render::kMaxCelestialBodies) sky_objects.bodies.resize(render::kMaxCelestialBodies);
+    // Automatic exposure (part 5): meter the light falling on level ground, like an incident light meter.
+    if (auto_exposure) {
+        const auto luminance = [](math::Vec3 v) { return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z; };
+        // Clouds take their share of the direct light: the covered fraction lets through e^-density.
+        float cloud_t = 1.0f;
+        for (const auto& layer : view.lighting.clouds)
+            if (layer.enabled) cloud_t *= 1.0f - layer.coverage + layer.coverage * std::exp(-layer.density);
+        const float light_up = std::max(0.0f, -view.lighting.sun_direction.y);
+        float lux = view.lighting.sun_illuminance * luminance(view.lighting.sun_color) * light_up * cloud_t;
+        for (const auto& l : view.lighting.lights)
+            if (l.type == render::LocalLight::Type::Directional) lux += l.lux * luminance(l.color) * std::max(0.0f, -l.direction.y);
+        if (view.environment.atmosphere) {
+            const auto atmosphere = asset::Atmosphere::shared(view.environment.atmosphere_settings);
+            const float sun_lux = luminance(sky_objects.sun_outer);
+            lux += atmosphere->sky_illuminance(std::asin(std::clamp(view.environment.to_sun.y, -1.0f, 1.0f))) * sun_lux;
+            if (sky_objects.moon_relative > 0.0f)
+                lux += atmosphere->sky_illuminance(std::asin(std::clamp(sky_objects.moon_direction.y, -1.0f, 1.0f))) *
+                       sky_objects.moon_relative * sun_lux;
+            lux += 0.002f;  // starlight and airglow: a moonless night isn't pitch black
+        } else if (!view.environment.space) {
+            // A rough figure for the other skies: the sky's radiance over a hemisphere.
+            lux += view.lighting.environment_intensity * math::kPi * (view.environment.hdri.empty() ? luminance(view.lighting.sky_color) : 0.5f);
+        }
+        view.lighting.ev100 = render::auto_ev100(lux);
     }
     return view;
 }

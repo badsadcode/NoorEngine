@@ -69,7 +69,7 @@ void EnvironmentLibrary::apply(const SceneView::Environment& env) {
         }
         return;
     }
-    const std::string key = env.atmosphere ? std::format("atmosphere {} {:.4f} {:.4f} {:.4f}", env.atmosphere_settings.key(), env.to_sun.x,
+    const std::string key = env.space ? std::string("space") : env.atmosphere ? std::format("atmosphere {} {:.4f} {:.4f} {:.4f}", env.atmosphere_settings.key(), env.to_sun.x,
                                                          env.to_sun.y, env.to_sun.z)
                             : env.hdri.empty()
                                 ? std::format("sky {} {} {} {} {} {} {} {} {}", env.zenith.x, env.zenith.y, env.zenith.z, env.horizon.x,
@@ -79,7 +79,10 @@ void EnvironmentLibrary::apply(const SceneView::Environment& env) {
     key_ = key;
 
     asset::EnvironmentData data;
-    if (env.atmosphere) {
+    if (env.space) {
+        // Space (part 5): nothing all around; the sky pass draws the stars, the planets and the suns.
+        data = asset::make_environment(asset::procedural_sky({0, 0, 0}, {0, 0, 0}, {0, 0, 0}, 16, 8), 8);
+    } else if (env.atmosphere) {
         // Rebuilt when the sun moves (on the CPU for now; Milestone 8A part 2 moves it to the GPU).
         const auto start = std::chrono::steady_clock::now();
         const auto atmosphere = asset::Atmosphere::shared(env.atmosphere_settings);
