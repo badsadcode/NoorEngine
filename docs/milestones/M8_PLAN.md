@@ -70,8 +70,8 @@ export mode).
    surfaces and seasonal changes are phases B and C.
 
 ## Open questions
-1. **The Uncounted, Chapter Two: sprite characters or 3D?** (The proposal's question 2, not answered yet.)
-   It doesn't change 8A; it decides how much of 8B goes to sprites, and whether 8C comes sooner.
+1. ~~The Uncounted, Chapter Two: sprite characters or 3D?~~ **Answered (2026-11-18): sprites**, like Chapter
+   Zero. 8B's sprite sheets and 8-direction billboards are what it needs; 8C stays third.
 2. Underwater environments are planned with 8D (they need a water surface); is a "deep sea" scene without
    any surface (a submarine game) wanted earlier? It would fit in 8A part 5 as an environment mode.
 

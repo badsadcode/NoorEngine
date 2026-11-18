@@ -45,7 +45,7 @@ table says where it goes and what it waits on. Moving into a milestone still nee
   billboard sprites**, blends **zones of atmosphere and weather** (fog, rain, dust, music crossfades), and
   uses particles and emitters; its gameplay (dialogue, quests, inventory, combat, saves) is data plus code
   that a game on NoorEngine would carry over as data and scripts. It needs sprites, atmosphere/weather and
-  particles before it needs skeletal animation. Waits on: the items above and below, then a
+  particles before it needs skeletal animation. **Confirmed 2026-11-18: Chapter Two keeps sprite characters.** Waits on: the items above and below, then a
   gameplay-framework pass (dialogue/quest/save as engine-side helpers or as a game template: to decide).
 - **2D sprites and directional billboards** → needed by The Uncounted, so first-class. Builds on instancing
   (ADR-032 batches thousands of billboards) and the texture pipeline (atlases). Waits on: a sprite-sheet

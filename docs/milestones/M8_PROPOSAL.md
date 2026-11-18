@@ -41,7 +41,7 @@ NoorEngine has none yet. The Uncounted has its own, on raylib.
 ## Answers (2026-11-18)
 
 1. **Order:** 8A → 8B → 8C → 8D, as proposed.
-2. Not answered yet (sprites or 3D for The Uncounted, Chapter Two); it doesn't change 8A.
+2. **The Uncounted, Chapter Two keeps sprites** (answered later the same day): 8B serves it directly.
 3. **The six presets:** yes, plus environments for **underwater** and **space** (space: 8A part 5;
    underwater: with 8D's water).
 4. **The NoorSky brief:** yes, in the repository (`docs/ideas/NOORSKY.md`; the images stay out).
