@@ -26,8 +26,8 @@ Assets/Trees/Oak_01.recipe.json    how to make it again (the generator's own for
   manifest are checked against it (a changed file is a warning, not a refusal).
 - **Collision is never drawn.** Nodes with `extras.noor.collision` become colliders when the model is
   placed in a scene: a `capsule`, `box` or `sphere` keeps its size (`radius`, `height`, `size`), a
-  `mesh` uses its triangles. (`convex` is read but the physics doesn't support it yet: it reports
-  an unknown shape. Rocks will need it.)
+  `mesh` uses its triangles, a `convex` piece (rocks) collides as the convex hull of its points (and,
+  unlike a mesh, may move).
 - **Everything else is kept and shown:** generator and version, recipe and seed (an unsigned 64-bit
   integer, never a float), family, tags, licence and attribution, validation, provenance, the
   tool's own block (e.g. `noorform`). **Wind data** (`wind.channels`) is kept but not used yet.

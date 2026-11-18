@@ -238,12 +238,14 @@ set_tests_properties(cli.cook_hillside PROPERTIES LABELS "cli;sample" TIMEOUT 12
 add_test(NAME cli.generate_hillside_forest
     COMMAND $<TARGET_FILE:noor_cli> generate ${PROJECT_SOURCE_DIR}/samples/Hillside Assets/Graphs/forest.noorgraph
             --out ${CMAKE_CURRENT_BINARY_DIR}/generated_hillside_forest --no-cache)
-set_tests_properties(cli.generate_hillside_forest PROPERTIES LABELS "cli;sample" TIMEOUT 120 PASS_REGULAR_EXPRESSION "fingerprint d94d55ed79c3e3b3" FIXTURES_SETUP hillside_generated)
+set_tests_properties(cli.generate_hillside_forest PROPERTIES LABELS "cli;sample" TIMEOUT 120 PASS_REGULAR_EXPRESSION "fingerprint 67a35a8fa217d253" FIXTURES_SETUP hillside_generated)
 # The gate's "the CLI and the editor produce identical bytes", on the sample: generate's file = cook's file.
-add_test(NAME gate.hillside_forest_generate_equals_cook
-    COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/generated_hillside_forest/trees.instances.json
-            ${PROJECT_SOURCE_DIR}/samples/Hillside/.noor/cooked/graphs/6ce16dc2-726d-4e70-a560-17127dc3798f/trees.instances.json)
-set_tests_properties(gate.hillside_forest_generate_equals_cook PROPERTIES LABELS "cli;sample" FIXTURES_REQUIRED "hillside_cooked;hillside_generated")
+foreach(output forest grass)
+    add_test(NAME gate.hillside_${output}_generate_equals_cook
+        COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/generated_hillside_forest/${output}.instances.json
+                ${PROJECT_SOURCE_DIR}/samples/Hillside/.noor/cooked/graphs/6ce16dc2-726d-4e70-a560-17127dc3798f/${output}.instances.json)
+    set_tests_properties(gate.hillside_${output}_generate_equals_cook PROPERTIES LABELS "cli;sample" FIXTURES_REQUIRED "hillside_cooked;hillside_generated")
+endforeach()
 # Instancing and levels of detail (Milestone 7, part 6): the test forest (tests/data/forest_project,
 # built by tools/samples/build_forest.py), its golden render and its draw/LOD numbers.
 add_test(NAME render.golden_Forest

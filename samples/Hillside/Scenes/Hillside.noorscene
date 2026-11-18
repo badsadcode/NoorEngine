@@ -666,7 +666,7 @@
       }
     },
     {
-      "id": "fd23f5f7-a595-44d9-9f5b-189410bf6cc5",
+      "id": "39157e1a-fd77-4ace-abf7-bdd3bb217111",
       "name": "Forest",
       "layer": "default",
       "tags": [],
@@ -692,8 +692,44 @@
       "components": {
         "scatter": {
           "graph": "6ce16dc2-726d-4e70-a560-17127dc3798f",
-          "output": "trees",
+          "output": "forest",
           "ground": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    {
+      "id": "9c9f91e3-a4c0-4ad5-8195-982fc6bdc0db",
+      "name": "Grass",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "scatter": {
+          "graph": "6ce16dc2-726d-4e70-a560-17127dc3798f",
+          "output": "grass",
+          "ground": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+          "draw_distance": 45,
+          "shadows": false,
           "removed": [],
           "added": []
         }

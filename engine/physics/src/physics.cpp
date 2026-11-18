@@ -18,6 +18,7 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
@@ -278,6 +279,18 @@ struct PhysicsSystem::Impl {
             const float radius = std::max(0.005f, number(collider, "radius", 0.3f) * std::max(scale.x, scale.z));
             const float height = number(collider, "height", 1.8f) * scale.y;
             result = JPH::CapsuleShapeSettings(std::max(0.001f, height * 0.5f - radius), radius).Create();
+        } else if (shape == "convex") {
+            // A convex hull of the collision node's (or the entity's meshes') points: rocks (Noor Interchange
+            // `-convcolonly` pieces). Unlike "mesh", a hull can move (dynamic bodies).
+            auto tris = model_triangles(world, e, collider);
+            if (!tris || tris->positions.size() < 4) {
+                error = "no mesh points found for the convex hull";
+                return nullptr;
+            }
+            JPH::Array<JPH::Vec3> pts;
+            pts.reserve(tris->positions.size());
+            for (const auto& p : tris->positions) pts.push_back(JPH::Vec3(p.x, p.y, p.z));
+            result = JPH::ConvexHullShapeSettings(pts).Create();
         } else if (shape == "mesh") {
             if (!may_be_mesh) {
                 error = "mesh colliders can only be static (use box, sphere or capsule for moving bodies)";
@@ -297,7 +310,7 @@ struct PhysicsSystem::Impl {
                 triangles.push_back(JPH::IndexedTriangle(tris->indices[i], tris->indices[i + 1], tris->indices[i + 2], 0));
             result = JPH::MeshShapeSettings(std::move(vertices), std::move(triangles)).Create();
         } else {
-            error = std::format("unknown collider shape \"{}\" (box, sphere, capsule, mesh)", shape);
+            error = std::format("unknown collider shape \"{}\" (box, sphere, capsule, convex, mesh)", shape);
             return nullptr;
         }
         if (result.HasError()) {
@@ -374,17 +387,31 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
             d.terrain_bodies[entity.id].push_back(id);
         }
     }
-    // Scattered instances (Milestone 7, part 8): a static capsule per trunk, all belonging to the scatter entity.
-    if (const auto sc = entity.components.find("scatter"); sc != entity.components.end() && sc->is_object() && impl_->options.scatter_capsules) {
+    // Scattered instances (Milestone 7, part 8): static trunks (capsules) and rock pieces (convex hulls), all
+    // belonging to the scatter entity.
+    if (const auto sc = entity.components.find("scatter"); sc != entity.components.end() && sc->is_object() && impl_->options.scatter_shapes) {
         auto& d = *impl_;
         auto& bi = d.system.GetBodyInterface();
-        const auto capsules = impl_->options.scatter_capsules(entity, world);
-        if (!capsules.empty()) d.entity_of.push_back(entity.id);
-        for (const auto& cap : capsules) {
-            const float r = std::max(0.01f, cap.radius);
-            auto shape = JPH::CapsuleShapeSettings(std::max(0.001f, cap.height * 0.5f - r), r).Create();
+        const auto shapes = impl_->options.scatter_shapes(entity, world);
+        if (!shapes.empty()) d.entity_of.push_back(entity.id);
+        for (const auto& st : shapes) {
+            JPH::ShapeSettings::ShapeResult shape;
+            math::Vec3 at = st.centre;
+            if (st.kind == StaticShape::Kind::Convex) {
+                if (st.points.size() < 4) continue;
+                at = {0, 0, 0};
+                for (const auto& q : st.points) at = at + q;
+                at = at * (1.0f / static_cast<float>(st.points.size()));
+                JPH::Array<JPH::Vec3> pts;
+                pts.reserve(st.points.size());
+                for (const auto& q : st.points) pts.push_back(to_j(q - at));
+                shape = JPH::ConvexHullShapeSettings(pts).Create();
+            } else {
+                const float r = std::max(0.01f, st.radius);
+                shape = JPH::CapsuleShapeSettings(std::max(0.001f, st.height * 0.5f - r), r).Create();
+            }
             if (shape.HasError()) continue;
-            JPH::BodyCreationSettings settings(shape.Get(), to_j(cap.centre), JPH::Quat::sIdentity(), JPH::EMotionType::Static, layers::kStatic);
+            JPH::BodyCreationSettings settings(shape.Get(), to_j(at), JPH::Quat::sIdentity(), JPH::EMotionType::Static, layers::kStatic);
             settings.mFriction = 0.6f;
             settings.mUserData = d.entity_of.size();
             const JPH::BodyID id = bi.CreateAndAddBody(settings, JPH::EActivation::DontActivate);

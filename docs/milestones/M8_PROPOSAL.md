@@ -55,8 +55,9 @@ NoorEngine has none yet. The Uncounted has its own, on raylib.
 
 ## Carried over from Milestone 7 (to schedule somewhere)
 
-Rocks, level-of-detail cross-fades, a procgraph cache size limit, graph editor zoom/subgraphs/comments,
-moving a single scattered tree, trees following unsaved sculpting, convex collision.
+Level-of-detail cross-fades (and a fade at grass's draw distance), a procgraph cache size limit, graph
+editor zoom/subgraphs/comments, moving a single scattered tree, trees following unsaved sculpting.
+(Rocks and convex collision were done after the review.)
 
 When the questions are answered, this becomes `M8_PLAN.md` with parts, proofs and risks, like
 [M7_PLAN.md](M7_PLAN.md).

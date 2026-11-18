@@ -5,6 +5,7 @@
 #include "noor/foundation/log.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace noor::game {
 
@@ -113,17 +114,24 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     }
     // Scattered instances (Milestone 7, part 7): whole models from their files, a level per instance.
     for (const auto& sv : view.scatters) {
+        const float limit2 = sv.draw_distance * sv.draw_distance;
         for (const auto& group : sv.groups) {
             const ModelLods& lods = lods_for(group.asset_path);
-            for (const auto& w : group.worlds) {
+            for (const auto& w : *group.worlds) {
+                const math::Vec3 d{w.m[3].x - eye.x, w.m[3].y - eye.y, w.m[3].z - eye.z};
+                const float dist2 = math::dot(d, d);
+                if (sv.draw_distance > 0.0f && dist2 > limit2) continue;  // grass beyond its draw distance
                 int level = 0;
                 if (lods.switches()) {
                     const float scale = math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z});
-                    level = choose_lod(lods, math::length(w.transform_point({0, 0, 0}) - eye), cam.fov_y, scale);
+                    level = choose_lod(lods, std::sqrt(dist2), cam.fov_y, scale);
                 }
                 const Model* lm = model(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file : group.asset_path);
                 if (!lm) continue;
+                const std::size_t first = out.size();
                 for (const auto& [mesh_index, local] : lm->nodes) add_mesh(out, *lm, mesh_index, w * local);
+                if (!sv.cast_shadows)
+                    for (std::size_t k = first; k < out.size(); ++k) out[k].cast_shadow = false;
             }
         }
     }

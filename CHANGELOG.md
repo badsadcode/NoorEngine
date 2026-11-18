@@ -4,6 +4,27 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 7 complete (procedural graph and first generation tools)
 
+### 2026-11-18 — After the Milestone 7 review: rocks and grass from NoorMD
+**Added**
+- **Rocks:** NoorForm rocks convert to the NoorEngine layout (collision pieces as `extras.noor` blocks, part
+  `detail`); fixture `tests/data/noorform_rock` (Cracked rock 01, three levels, 0.9 MB).
+- **Convex collision** (`"collision": "convex"` / collider shape `convex`): the convex hull of a collision
+  node's points, for placed models (static or moving) and scattered instances (`scatter_shapes`, which
+  replaces `scatter_capsules`).
+- **Plants:** grass packs convert as `vegetation.plant` (no trunk capsule); one folder may hold several
+  single exports.
+- **Scatter:** `draw_distance` and `shadows` fields; placements cached between frames and shared with the
+  renderer and the editor (`game::place_scatter_cached`, `ScatterPlacement`).
+- **Hillside:** 24 rocks (on the painted rock and in the meadow) and 20,179 grass clumps (a `Grass` scatter:
+  45 m draw distance, no shadows). Golden and fingerprint updated.
+
+**Fixed (performance):** a scatter's ground (`terrain::Heights::shared`, weak references only) was rebuilt
+every frame in games (25 ms with grass); collecting a scatter copied every instance's matrix each frame (50 ms
+in Debug for 20,000). Now 2.8 ms in Release, 1.2 ms in Debug.
+
+**Tests:** rock import and convex collision (placed and scattered), the placement cache keeping its ground,
+`gate.hillside_grass_generate_equals_cook`.
+
 ### 2026-11-18 — Milestone 7, part 8: Hillside's forest and the Milestone 7 review
 **Added**
 - **`paint_mask` node**: a terrain paint layer's weight for one material as a mask.

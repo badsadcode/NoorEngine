@@ -1,0 +1,109 @@
+{
+  "noor_interchange": "0.4",
+  "id": "887ce6ce-b21d-5247-bd38-477d1a45b899",
+  "name": "Short_grass",
+  "kind": "vegetation.plant",
+  "generator": {
+    "tool": "NoorForm",
+    "version": "unknown",
+    "determinism": "same_platform"
+  },
+  "recipe": {
+    "file": "Short_grass.recipe.json",
+    "seed": 1,
+    "sha256": "4fa7eccf9f8430f501e2fde7de3b24d2c2a3669d1dd2295f00286979a9dd92ca"
+  },
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      -0.211,
+      0,
+      -0.217
+    ],
+    "max": [
+      0.19,
+      0.279,
+      0.24
+    ]
+  },
+  "files": [
+    {
+      "path": "Short_grass.glb",
+      "role": "model",
+      "sha256": "b2630e3801c47366d6bff89aeea3cc5ae1e6b525ae973d1cfe2ca444fec32da2"
+    },
+    {
+      "path": "Short_grass.lod1.glb",
+      "role": "lod",
+      "sha256": "9bfe85cd16adbfc3171aa5ac67a560540c3f5ba0a59dd29bef4b484fa63f60b3",
+      "lod": 1
+    },
+    {
+      "path": "Short_grass.lod2.glb",
+      "role": "lod",
+      "sha256": "4d7841b996f185f3336c070e46de3249cd271b17b61e17173b1321df1ba2cad5",
+      "lod": 2
+    },
+    {
+      "path": "Short_grass.recipe.json",
+      "role": "recipe"
+    }
+  ],
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 540,
+      "max_distance": 8
+    },
+    {
+      "level": 1,
+      "triangles": 165,
+      "max_distance": 20
+    },
+    {
+      "level": 2,
+      "triangles": 18
+    }
+  ],
+  "collision": "none",
+  "family": {
+    "name": "Short_grass",
+    "variant": "A",
+    "count": 1
+  },
+  "tags": [
+    "short_grass"
+  ],
+  "license": {
+    "spdx": "MIT",
+    "author": "Bad Ideas Works",
+    "attribution": ""
+  },
+  "validation": {
+    "gltf_validator": "not_run"
+  },
+  "noorform": {
+    "species": "short_grass",
+    "height": 0.279,
+    "texture": {
+      "size": 1024,
+      "sampling": "linear",
+      "pixelArt": false
+    },
+    "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says)",
+    "converted_from": "Short_grass.manifest.json + Short_grass_LOD0.glb, Short_grass_LOD1.glb, Short_grass_LOD2.glb (a NoorForm pack from before the NoorEngine export mode; its NoorMD version isn't recorded)"
+  },
+  "wind": {
+    "channels": {
+      "bend": "TEXCOORD_1.x",
+      "flutter": "TEXCOORD_1.y",
+      "phase": "TEXCOORD_2.x",
+      "sway": "TEXCOORD_2.y"
+    }
+  }
+}

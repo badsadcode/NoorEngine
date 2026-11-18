@@ -792,7 +792,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         for (auto& g : sv.groups) {
             std::string key = g.asset_path.generic_string();
             const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
-            snap->scattered.push_back({sv.entity, std::move(key), version, std::move(g.worlds)});
+            snap->scattered.push_back({sv.entity, std::move(key), version, g.worlds, sv.draw_distance, sv.cast_shadows});
         }
     channel_->publish(std::move(snap));
 }

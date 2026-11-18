@@ -119,6 +119,8 @@ code); the test `tools.instance_reader` runs it on the test forest.
 
 ```json
 "scatter": { "graph": <.noorgraph id>, "output": "trees", "ground": <terrain entity id> | null,
+             "draw_distance": 45,     (optional: not drawn further from the camera; grass)
+             "shadows": false,        (optional: cast no shadows; grass)
              "removed": ["9f3c0a1b2c3d4e5f"],
              "added": [{"id": "…", "asset": <model id>, "position": [x, y, z], "yaw": 30, "scale": 1}] }
 ```
@@ -133,11 +135,14 @@ code); the test `tools.instance_reader` runs it on the test forest.
   `added`. Each stroke is one undo step. Regenerating (a new seed, new settings) never touches
   these lists: planted trees stay; a removed tree stays removed (with another seed it doesn't exist
   anyway, and if the seed comes back, it's still removed).
-- **Collision** (part 8): each model's capsule collision node (a NoorForm trunk) becomes a static
-  capsule at every instance in games and Play, where the trunk really stands; leaves don't collide.
-  Models without a capsule don't collide.
+- **Collision** (part 8): each model's collision nodes become static shapes at every instance in games
+  and Play: a tree's capsule trunk (where the trunk really stands; leaves don't collide), a rock's convex
+  pieces. Models without collision nodes (grass) don't collide.
+- **Many small things** (grass): placements are kept between frames and shared with the renderer, so a
+  scatter of 20,000 costs about 3 ms a frame to collect in Release; `draw_distance` keeps far grass from
+  being drawn (the edge is a hard line for now: no fade), `shadows: false` keeps it out of the shadow maps.
 - **Not yet:** moving a single tree (remove it and plant one); trees following live (unsaved)
-  sculpting under them; convex collision (rocks).
+  sculpting under them; a fade at the draw distance.
 
 ## Tiles: regions that change alone (part 3)
 

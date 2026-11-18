@@ -56,6 +56,26 @@ struct PlacedInstance {
 [[nodiscard]] std::vector<PlacedInstance> place_scatter(const std::vector<ScatterItem>& items, const math::Mat4& entity_world,
                                                         const terrain::Heights* ground, math::Vec3 ground_at);
 
+// The same, kept between frames (per scatter entity) and rebuilt only when the component, the entity's
+// matrix, the cooked file or the ground changes: a meadow of grass is tens of thousands of instances,
+// too many to place again every frame. The cache holds the ground it placed on, which also keeps
+// terrain::Heights::shared from rebuilding the terrain every frame. Thread-safe. `warning` as for
+// scatter_items.
+// The instances grouped by model, ready to draw (shared, never copied per frame).
+struct ScatterPlacement {
+    struct Group {
+        Guid asset;
+        std::shared_ptr<const std::vector<math::Mat4>> worlds;
+    };
+    std::vector<Group> groups;  // in order of first use
+    std::size_t count = 0;
+};
+[[nodiscard]] std::shared_ptr<const ScatterPlacement> place_scatter_cached(const Guid& entity, const asset::Json& component,
+                                                                                     const math::Mat4& entity_world,
+                                                                                     const std::filesystem::path& project_root,
+                                                                                     std::shared_ptr<const terrain::Heights> ground, math::Vec3 ground_at,
+                                                                                     std::string* warning = nullptr);
+
 // The graphs a scene needs cooked: terrains on a graph base and scatter components.
 [[nodiscard]] std::vector<Guid> graphs_used(const scene::Scene& scene);
 

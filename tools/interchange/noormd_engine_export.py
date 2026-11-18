@@ -121,7 +121,8 @@ def reencode(raw, keep_alpha, is_normal, scale):
     return out.getvalue(), "image/jpeg"
 
 
-PARTS = {"trunk": "trunk", "leaves": "leaves", "billboard": "leaves"}
+PARTS = {"trunk": "trunk", "leaves": "leaves", "billboard": "leaves", "rock": "detail", "grass": "leaves"}
+PLANT_ARCHETYPES = {"grass", "bush", "shrub", "fern", "flower", "plant"}  # NoorForm recipes that aren't trees
 
 
 def part_of(name):
@@ -174,9 +175,13 @@ def convert_level(src, dst, base, level, info, kind):
         part = part_of(node.get("name", ""))
         if part and "mesh" in node:
             node.setdefault("extras", {})["noor"] = {"v": 1, "part": part}
+        # Collision pieces (rocks: "...-convcolonly" with a flat noor_collision key): the spec's block.
+        flat = node.get("extras", {}).get("noor_collision")
+        if flat:
+            node["extras"] = {"noor": {"v": 1, "collision": flat}}
 
     capsule = None
-    if level == 0:
+    if level == 0 and kind == "vegetation.tree":
         cx, cz, radius = trunk_capsule(doc, blob)
         capsule = {"radius": radius, "height": CAPSULE_HEIGHT}
         doc["nodes"].append({"name": "Trunk-colonly", "translation": [cx, CAPSULE_HEIGHT / 2, cz],
@@ -197,12 +202,20 @@ def main():
         print(__doc__)
         return 2
     pack_dir, variant_name, out_dir = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
-    pack_file = next(pack_dir.glob("*.manifest.json"))
-    pack = json.loads(pack_file.read_text(encoding="utf-8-sig"))
-    variants = pack["variants"]
-    v = next(x for x in variants if x["name"] == variant_name)
+    # A variety pack lists its variants; a single export (grass) is its own only variant. A folder may
+    # hold several manifests: take the one that has this variant.
+    found = None
+    for pack_file in sorted(pack_dir.glob("*.manifest.json")):
+        pack = json.loads(pack_file.read_text(encoding="utf-8-sig"))
+        variants = pack.get("variants", [pack])
+        v = next((x for x in variants if x.get("name") == variant_name), None)
+        if v:
+            found = (pack_file, pack, variants, v)
+            break
+    if not found:
+        sys.exit(f"no manifest in {pack_dir} has a variant named {variant_name!r}")
+    pack_file, pack, variants, v = found
     base = v["name"].replace(" ", "_")
-    kind = {"tree": "vegetation.tree", "rock": "rock"}.get(v["kind"], "vegetation.plant")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # The recipe, renamed (same bytes: it already has version and seed).
@@ -211,6 +224,9 @@ def main():
     recipe_dst.write_bytes(recipe_src.read_bytes())
     recipe = json.loads(recipe_src.read_text(encoding="utf-8-sig"))
     seed = int(recipe["seed"])
+    kind = {"tree": "vegetation.tree", "rock": "rock"}.get(v["kind"], "vegetation.plant")
+    if kind == "vegetation.tree" and recipe.get("archetype") in PLANT_ARCHETYPES:
+        kind = "vegetation.plant"  # grass and bushes: no trunk to collide with
 
     files, lods, capsule = [], [], None
     for lod in v["lods"]:
@@ -230,6 +246,9 @@ def main():
         lods.append(item)
     files.append({"path": recipe_dst.name, "role": "recipe"})
 
+    rock = v["kind"] == "rock"
+    collision = (v.get("collision") or {}).get("shape", "none") if rock else ("capsule" if capsule else "none")
+    variant = v.get("variant") or base.rsplit("_", 1)[-1]  # rock packs name variants by number
     wind = None
     if isinstance(v.get("wind"), dict) and "TEXCOORD_1" in v["wind"].get("channel", ""):
         wind = {"channels": {"bend": "TEXCOORD_1.x", "flutter": "TEXCOORD_1.y", "phase": "TEXCOORD_2.x", "sway": "TEXCOORD_2.y"}}
@@ -247,13 +266,16 @@ def main():
         "bounds": {"min": v["bounds"]["min"], "max": v["bounds"]["max"]},
         "files": files,
         "lods": lods,
-        "collision": "capsule" if capsule else "none",
-        "family": {"name": pack["name"], "variant": v.get("variant", ""), "count": len(variants)},
-        "tags": [v.get("species", "tree"), "broadleaf"] if v.get("species") == "oak" else [v.get("species", "tree")],
+        "collision": collision,
+        "family": {"name": pack["name"].replace(" ", "_"), "variant": variant, "count": len(variants)},
+        "tags": ([v.get("rockKind", "rock"), v.get("style", "")] if rock
+                 else [v.get("species", "tree"), "broadleaf"] if v.get("species") == "oak" else [v.get("species", "tree")]),
         "license": {"spdx": "MIT", "author": "Bad Ideas Works", "attribution": ""},
         "validation": {"gltf_validator": "not_run"},
-        "noorform": {"species": v.get("species"), "height": v.get("heightMetres"), "texture": v.get("texture"),
-                     "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says)",
+        "noorform": {**({"rock_kind": v.get("rockKind"), "style": v.get("style"), "pivot": (v.get("pivot") or {}).get("at"),
+                          "collision_pieces": len((v.get("collision") or {}).get("pieces", []))} if rock else {"species": v.get("species")}),
+                     "height": v.get("heightMetres"), "texture": v.get("texture"),
+                     "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says)" + ("; its alpha is an edge-wear mask" if rock else ""),
                      "converted_from": f"{pack_file.name} + {', '.join(l['file'] for l in v['lods'])} "
                                        "(a NoorForm pack from before the NoorEngine export mode; its NoorMD version isn't recorded)"},
     }

@@ -1,0 +1,109 @@
+{
+  "noor_interchange": "0.4",
+  "id": "79166527-61a8-5c98-a7ec-2878204204d1",
+  "name": "Tall_grass",
+  "kind": "vegetation.plant",
+  "generator": {
+    "tool": "NoorForm",
+    "version": "unknown",
+    "determinism": "same_platform"
+  },
+  "recipe": {
+    "file": "Tall_grass.recipe.json",
+    "seed": 1,
+    "sha256": "82694caf4637f3fa2101897eafb260acf30f3ced132d158f830d30b1752879e7"
+  },
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      -0.755,
+      0,
+      -0.727
+    ],
+    "max": [
+      0.694,
+      0.858,
+      0.779
+    ]
+  },
+  "files": [
+    {
+      "path": "Tall_grass.glb",
+      "role": "model",
+      "sha256": "ae46f187fd1237973a136e9f3db7814dd49fab674f993f503f01ec58c615fa45"
+    },
+    {
+      "path": "Tall_grass.lod1.glb",
+      "role": "lod",
+      "sha256": "5899ded152d10411cae8814abb8512adec2511beab59bd96db894347d380ae98",
+      "lod": 1
+    },
+    {
+      "path": "Tall_grass.lod2.glb",
+      "role": "lod",
+      "sha256": "3b31621c2fa47b112d01d6ec9a6b9b29417fc91e792f8bc5a2664eb4f30a0be7",
+      "lod": 2
+    },
+    {
+      "path": "Tall_grass.recipe.json",
+      "role": "recipe"
+    }
+  ],
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 630,
+      "max_distance": 8
+    },
+    {
+      "level": 1,
+      "triangles": 190,
+      "max_distance": 20
+    },
+    {
+      "level": 2,
+      "triangles": 21
+    }
+  ],
+  "collision": "none",
+  "family": {
+    "name": "Tall_grass",
+    "variant": "A",
+    "count": 1
+  },
+  "tags": [
+    "tall_grass"
+  ],
+  "license": {
+    "spdx": "MIT",
+    "author": "Bad Ideas Works",
+    "attribution": ""
+  },
+  "validation": {
+    "gltf_validator": "not_run"
+  },
+  "noorform": {
+    "species": "tall_grass",
+    "height": 0.858,
+    "texture": {
+      "size": 1024,
+      "sampling": "linear",
+      "pixelArt": false
+    },
+    "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says)",
+    "converted_from": "Tall_grass.manifest.json + Tall_grass_LOD0.glb, Tall_grass_LOD1.glb, Tall_grass_LOD2.glb (a NoorForm pack from before the NoorEngine export mode; its NoorMD version isn't recorded)"
+  },
+  "wind": {
+    "channels": {
+      "bend": "TEXCOORD_1.x",
+      "flutter": "TEXCOORD_1.y",
+      "phase": "TEXCOORD_2.x",
+      "sway": "TEXCOORD_2.y"
+    }
+  }
+}

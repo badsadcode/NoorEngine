@@ -69,11 +69,13 @@ struct SceneView {
         Guid entity;
         struct Group {
             std::filesystem::path asset_path;
-            std::vector<math::Mat4> worlds;
+            std::shared_ptr<const std::vector<math::Mat4>> worlds;  // shared with the placement cache: not copied per frame
         };
         std::vector<Group> groups;
         std::size_t count = 0;
         std::string warning;  // why some or all are missing (an output that isn't cooked yet)
+        float draw_distance = 0.0f;  // "draw_distance": instances further from the camera aren't drawn (grass); 0: no limit
+        bool cast_shadows = true;    // "shadows": false for grass and other small things
     };
     std::vector<Scatter> scatters;
     // Simple shapes from `primitive` components (sizes baked into `world`, unit shapes below).

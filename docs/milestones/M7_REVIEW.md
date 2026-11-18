@@ -3,8 +3,8 @@
 **Date:** 2026-11-18 · **Reviewed by:** Sage (engineering) · Tom and Noor to look at the forest.
 
 **Goal (spec):** implement reusable generation infrastructure before many specialised generators.
-**Verdict:** the gate passes. Terrain and trees are real clients of the graph; rocks are not (no
-NoorMD rocks exist in the export layout yet). That and the other exceptions are written down below.
+**Verdict:** the gate passes. Terrain, trees and (since the same evening, when NoorMD rock exports arrived)
+rocks are real clients of the graph. The exceptions are written down below.
 
 ## Deliverables
 
@@ -17,7 +17,7 @@ NoorMD rocks exist in the export layout yet). That and the other exceptions are 
 | Headless operation | ✅ | `noor_cli generate` and `cook`/`build`; the editor runs the same `procgraph::generate` |
 | Terrain as a client | ✅ | Height-field nodes, masks, terrains built on a graph's output (cooked for games); sculpt and paint stay on top (parts 3, ADR-031) |
 | Trees as a client | ✅ | NoorForm oaks imported through Noor Interchange (four levels, manifest, recipe, seed: part 5), drawn with instancing and levels of detail (part 6, ADR-032), placed by the `scatter` node with a hand-made layer (part 7) |
-| Rocks as a client | ❌ | No NoorMD rock export on hand. The pipeline is the same as for trees (`kind: rock`, convex collision noted as missing in the physics). See exception 1 |
+| Rocks as a client | ✅ (after the review, same day) | NoorForm cracked rocks (three levels, three convex collision hulls each), imported like the trees, placed by Hillside's graph where the rock was painted, colliding by their convex pieces placed or scattered. See "After the review" |
 
 ## Gate criteria
 
@@ -61,8 +61,7 @@ background graph run (part 4), smoke checks that counted triangles before cullin
 
 ## Exceptions (accepted, tracked)
 
-1. **No rocks.** The spec names terrain, trees and rocks; NoorMD has rocks (RockExport.cs) but none in
-   the NoorEngine export layout are on hand, and convex collision isn't in the physics yet.
+1. ~~**No rocks.**~~ Closed after the review: see below.
 2. **NoorMD's NoorEngine export mode doesn't exist yet.** The oaks were converted from a NoorForm pack
    by `tools/interchange/noormd_engine_export.py` (outside the engine), following the guide. When the
    mode lands, its own exports replace them, and the shared fixture moves into NoorMD's tests.
@@ -80,12 +79,39 @@ background graph run (part 4), smoke checks that counted triangles before cullin
 9. **Repository size:** NoorMD oaks add about 26 MB (one test fixture, three in the sample: about 6.5 MB
    each after conversion). The guide's suggestions (mesh quantization) would roughly halve the geometry.
 
+## After the review: rocks and grass (2026-11-18, evening)
+
+NoorForm exports arrived for **rocks** (nine cracked rocks, three levels, convex collision pieces) and **grass**
+(short, tall, stylized clumps). What it took:
+
+- **The converter** learned rocks (their collision pieces' flat keys become `extras.noor` blocks, the part is
+  `detail`) and plants (grass packs say `"kind": "tree"`, but their recipe's archetype is `grass`: kind
+  `vegetation.plant`, no trunk capsule), and single exports next to each other in one folder. The oak and
+  rock fixtures stayed byte-identical through the changes.
+- **Convex collision** in the physics (it was "unknown shape"): placed rocks collide by their hulls (which,
+  unlike mesh colliders, may also move), scattered rocks too.
+- **Scatter for grass:** a `draw_distance` (grass is drawn within 45 m), a `shadows` switch (grass casts
+  none), and placements cached between frames.
+- **Two bugs the grass found:** `terrain::Heights::shared` keeps only weak references, so in a game nothing
+  held a scatter's ground between frames and **the terrain was rebuilt every frame** (25 ms with grass;
+  present since part 7's ground snapping, hidden with few instances). The placement cache now holds the
+  ground. And collecting a scatter copied every instance's matrix each frame: 50 ms in Debug for 20,000
+  clumps (the built game's walk test timed out). The groups are now shared, not copied: 1.2 ms in Debug.
+- **Hillside** has 24 rocks (three variants on the painted rock, a few in the meadow) and 20,179 grass
+  clumps (short with tufts of tall, on the meadow around the house and the path). Golden updated.
+
+New tests: rock import and convex collision (placed and scattered), the placement cache and the kept ground,
+`gate.hillside_grass_generate_equals_cook`; the Hillside fingerprint is now `67a35a8fa217d253`.
+
 ## Measurements
-- Tests: **277/277** (Debug, incl. GPU, editor, samples and built games).
+- Tests: **280/280** (Debug, incl. GPU, editor, samples and built games), after rocks and grass.
 - Golden-image scenes: 18 (16 from Milestones 5–6 + Forest, Scattered; Hillside updated with its forest).
 - 2,000-oak forest (RelWithDebInfo, 1280×720, MSAA 4×): **5 → 60 FPS** (CPU about 9 ms, GPU 2.5 ms, 24
   draw calls, 0.43 M triangles), [MEASUREMENTS.md](../rendering/MEASUREMENTS.md).
 - Hillside with its forest (RelWithDebInfo): GPU 5.5 ms, 81 draw calls (60 of them shadows), 0.49 M
   triangles, 60 MB of textures (the sample's PBR sets and the oaks' levels in view).
+- Hillside with rocks and grass (RelWithDebInfo, 1280×720): **60 FPS** (vsync), CPU about 8.5 ms (collecting
+  2.8 ms, building draws about 5 ms for 20,000+ instances), GPU 2.1 ms, 0.73 M triangles, 2,558 objects drawn
+  after culling and the grass's draw distance. In Debug: about 50 ms a frame (draw building dominates).
 - Graphs: the Hillside forest graph (9 nodes) runs in 7 ms (Release, no cache); the test forest's scatter
   of 4 ha in well under a second in Debug.

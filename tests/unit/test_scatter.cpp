@@ -3,11 +3,13 @@
 // "a local override survives regeneration", for instances).
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/interchange.h"
 #include "noor/asset/instance_set.h"
 #include "noor/asset/json.h"
 #include "noor/game/game.h"
 #include "noor/game/scatter.h"
 #include "noor/procgraph/procgraph.h"
+#include "noor/terrain/terrain.h"
 #include "noor/physics/physics.h"
 #include "noor/scene/prefab.h"
 #include "noor/asset/registry.h"
@@ -265,4 +267,99 @@ TEST_CASE("scatter component: scattered trees collide by their trunks in a game"
     world->reset();
     std::error_code ec;
     stdfs::remove_all(dir, ec);
+}
+
+TEST_CASE("rocks: a NoorForm rock imports with three levels and collides by its convex pieces, placed or scattered") {
+    const stdfs::path rock_dir = stdfs::path(NOOR_TEST_DATA_DIR) / "noorform_rock";
+    auto read = asset::read_manifest(rock_dir / "Cracked_rock_01.noor.json");
+    REQUIRE(read);
+    for (const auto& i : read->issues) INFO(i.field, ": ", i.message);
+    CHECK(read->issues.empty());
+    CHECK(read->manifest.kind == "rock");
+    CHECK(read->manifest.collision == "convex");
+    REQUIRE(read->manifest.lods.size() == 3);
+    for (const auto& l : asset::check_levels(*read, rock_dir)) {
+        for (const auto& i : l.issues) INFO(i);
+        CHECK(l.issues.empty());
+        CHECK(l.collision_nodes == (l.level == 0 ? 3 : 0));
+    }
+
+    // A project with the rock placed as a model at (0, 0, 0) and one scattered (hand-placed) at (10, 0, 0).
+    const auto dir = stdfs::temp_directory_path() / ("noor_rocks_" + Guid::generate().to_string());
+    auto project = asset::Project::create(dir, "Rocks");
+    REQUIRE(project);
+    stdfs::create_directories(project->assets_dir() / "Rocks");
+    for (const auto& e : stdfs::directory_iterator(rock_dir)) stdfs::copy_file(e.path(), project->assets_dir() / "Rocks" / e.path().filename());
+    asset::AssetRegistry registry;
+    REQUIRE(registry.scan(*project));
+    const Guid rock = read->manifest.id;
+    REQUIRE(registry.find(rock));
+    auto model = asset::import_gltf(rock_dir / "Cracked_rock_01.glb");
+    REQUIRE(model);
+    scene::Scene s;
+    scene::instantiate_model(s, rock, *model, "Placed rock", {});
+    scene::Entity field;
+    field.id = Guid::generate();
+    field.name = "Rocks";
+    field.components["scatter"] = {{"graph", nullptr}, {"output", "rocks"},
+                                   {"added", Json::array({{{"id", "00000000000000a1"}, {"asset", rock.to_string()}, {"position", {10, 0, 0}}, {"yaw", 0}, {"scale", 1}}})}};
+    s.entities.push_back(field);
+    scene::PrefabLibrary prefabs(*project, registry);
+    game::WorldOptions options;
+    options.audio_device = false;
+    auto world = game::make_world(*project, registry, prefabs, s, options);
+    REQUIRE(world);
+    (*world)->frame(1.0 / 60.0, {});
+    auto* physics = (*world)->system<physics::PhysicsSystem>();
+    REQUIRE(physics != nullptr);
+    // Straight down onto each: the convex pieces are hit at the rock's top (it is 2.34 m tall above its pivot).
+    const auto placed = physics->raycast({0, 20, 0}, {0, -1, 0}, 40);
+    REQUIRE(placed);
+    CHECK(placed->point.y > 1.0f);
+    const auto* hit = s.find(placed->entity);
+    const auto* in_world = (*world)->scene().find(placed->entity);
+    CHECK((hit || in_world));
+    const auto scattered = physics->raycast({10, 20, 0}, {0, -1, 0}, 40);
+    REQUIRE(scattered);
+    CHECK(scattered->entity == field.id);
+    CHECK(scattered->point.y > 1.0f);
+    CHECK_FALSE(physics->raycast({30, 20, 0}, {0, -1, 0}, 40));  // nothing else there (no ground in this scene)
+    world->reset();
+    std::error_code ec;
+    stdfs::remove_all(dir, ec);
+}
+
+TEST_CASE("scatter component: placements are kept between frames, and so is the ground they stand on") {
+    const auto root = stdfs::temp_directory_path() / ("noor_scache_" + Guid::generate().to_string());
+    procgraph::GenerateOptions o;
+    o.out = game::cooked_graph_folder(root, kGraph);
+    o.name = "graph";
+    REQUIRE(procgraph::generate(forest(3), procgraph::Registry::builtin(), o));
+    terrain::Settings ts;  // a plain noise terrain, as a scatter's ground
+    ts.seed = 77;
+    auto heights = terrain::Heights::shared(ts);
+    REQUIRE(heights);
+    const terrain::Heights* raw = heights->get();
+    const Guid entity = Guid::generate();
+    Json comp{{"graph", kGraph.to_string()}, {"output", "trees"}, {"removed", Json::array()}, {"added", Json::array()}};
+    const auto first = game::place_scatter_cached(entity, comp, math::Mat4::identity(), root, *heights, {0, 0, 0});
+    heights->reset();  // nobody else holds the heights now, like a game between frames
+    // The same request (with the ground asked for again, as collect_view does each frame): the same placements,
+    // and the heights weren't rebuilt (the cache kept them alive).
+    auto again_heights = terrain::Heights::shared(ts);
+    REQUIRE(again_heights);
+    CHECK(again_heights->get() == raw);
+    const auto second = game::place_scatter_cached(entity, comp, math::Mat4::identity(), root, *again_heights, {0, 0, 0});
+    CHECK(second == first);
+    // Standing on the ground: y is the terrain's height there.
+    REQUIRE_FALSE(first->groups.empty());
+    const auto& w = first->groups.front().worlds->front();
+    CHECK(w.m[3].y == doctest::Approx(raw->height(w.m[3].x, w.m[3].z)));
+    // A change in the component: placed again.
+    comp["removed"].push_back(asset::instance_id_text(game::scatter_items(comp, root).front().id));
+    const auto third = game::place_scatter_cached(entity, comp, math::Mat4::identity(), root, *again_heights, {0, 0, 0});
+    CHECK(third != first);
+    CHECK(third->count == first->count - 1);
+    std::error_code ec;
+    stdfs::remove_all(root, ec);
 }

@@ -1137,11 +1137,14 @@ void render_thread_main(noor_viewport* vp) {
                     if (lit == lod_cache.end()) lit = lod_cache.emplace(key, noor::game::read_model_lods(sc.asset_path)).first;
                     const auto& lods = lit->second;
                     const bool picked = std::ranges::find(selection, sc.entity) != selection.end();
-                    for (const auto& w : sc.worlds) {
+                    const float limit2 = sc.draw_distance * sc.draw_distance;
+                    for (const auto& w : *sc.worlds) {
+                        const Vec3 d{w.m[3].x - basis.eye.x, w.m[3].y - basis.eye.y, w.m[3].z - basis.eye.z};
+                        const float dist2 = noor::math::dot(d, d);
+                        if (sc.draw_distance > 0.0f && dist2 > limit2) continue;  // grass beyond its draw distance
                         int level = 0;
                         if (lods.switches())
-                            level = noor::game::choose_lod(lods, noor::math::length(w.transform_point({0, 0, 0}) - basis.eye), basis.fov_y,
-                                                           noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}));
+                            level = noor::game::choose_lod(lods, std::sqrt(dist2), basis.fov_y, noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}));
                         const CachedAsset& ca = load_asset(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file.generic_string() : sc.asset_path, sc.asset_version);
                         if (!ca.meshes) continue;
                         for (const auto& [mesh_index, local] : ca.nodes) {
@@ -1153,6 +1156,7 @@ void render_thread_main(noor_viewport* vp) {
                                 piece.first_index = part.first_index;
                                 piece.index_count = part.index_count;
                                 piece.material = part.material;
+                                piece.cast_shadow = sc.cast_shadows;
                                 if (picked) piece.tint = highlight;
                                 frame_draws.push_back(piece);
                             }

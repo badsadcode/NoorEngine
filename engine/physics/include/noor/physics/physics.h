@@ -48,12 +48,15 @@ struct HeightTile {
     std::vector<float> heights;  // samples x samples, row by row (z rows of x samples)
 };
 
-// A static capsule in world space (a scattered tree's trunk, Milestone 7, part 8): upright, `height`
-// from end to end (caps included), centred on `centre`.
-struct StaticCapsule {
+// A static collision shape in world space for a scattered instance (Milestone 7, part 8): a tree's
+// trunk as an upright capsule (`height` from end to end, caps included, centred on `centre`), or a
+// rock's piece as a convex hull of `points`.
+struct StaticShape {
+    enum class Kind : std::uint8_t { Capsule, Convex } kind = Kind::Capsule;
     math::Vec3 centre;
     float radius = 0.3f;
     float height = 2.0f;
+    std::vector<math::Vec3> points;  // Convex: world positions (the hull of them collides)
 };
 
 struct RayHit {
@@ -73,8 +76,8 @@ public:
         std::function<std::optional<Triangles>(const Guid& model)> csg_triangles;
         // Height field tiles of a `terrain` component.
         std::function<std::vector<HeightTile>(const asset::Json& terrain_component)> terrain_tiles;
-        // Trunks of a `scatter` entity's instances (their models' collision capsules), in world space.
-        std::function<std::vector<StaticCapsule>(const scene::Entity& scatter, const runtime::World& world)> scatter_capsules;
+        // Collision of a `scatter` entity's instances (their models' capsule and convex collision nodes), in world space.
+        std::function<std::vector<StaticShape>(const scene::Entity& scatter, const runtime::World& world)> scatter_shapes;
     };
 
     explicit PhysicsSystem(Options options);

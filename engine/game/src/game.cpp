@@ -85,12 +85,12 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
             }
         return tiles;
     };
-    // Scattered trees collide by their trunks (Milestone 7, part 8): each model's collision capsule (a
-    // `capsule` collision node, Noor Interchange 3.5) at every instance, standing on the same ground the
-    // renderer puts them on. Models without a capsule don't collide.
-    physics_options.scatter_capsules = [&project, &registry, cache, live = options.terrain_heights](const scene::Entity& entity,
-                                                                                                  const runtime::World& w) {
-        std::vector<physics::StaticCapsule> out;
+    // Scattered instances collide by their models' collision nodes (Milestone 7, part 8; Noor Interchange
+    // 3.5): a tree's `capsule` trunk, a rock's `convex` pieces, at every instance, standing on the same
+    // ground the renderer puts them on. Models without capsule or convex collision nodes don't collide.
+    physics_options.scatter_shapes = [&project, &registry, cache, live = options.terrain_heights](const scene::Entity& entity,
+                                                                                                const runtime::World& w) {
+        std::vector<physics::StaticShape> out;
         const auto& comp = entity.components["scatter"];
         const auto items = scatter_items(comp, project.root());
         std::shared_ptr<const terrain::Heights> ground;
@@ -109,13 +109,13 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         math::Mat4 world_m = math::Mat4::identity();
         for (std::size_t i = 0; i < w.scene().entities.size(); ++i)
             if (w.scene().entities[i].id == entity.id) world_m = w.scene().world_matrix(i);
-        struct Trunk {
+        struct Shapes {
             bool known = false;
-            std::optional<physics::StaticCapsule> local;  // in the model's space
+            std::vector<physics::StaticShape> local;  // in the model's space
         };
-        std::map<Guid, Trunk> trunks;
+        std::map<Guid, Shapes> by_asset;
         for (const auto& placed : place_scatter(items, world_m, ground.get(), ground_at)) {
-            Trunk& t = trunks[placed.asset];
+            Shapes& t = by_asset[placed.asset];
             if (!t.known) {
                 t.known = true;
                 const auto* rec = registry.find(placed.asset);
@@ -127,16 +127,31 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
                     if (model)
                         for (std::size_t n = 0; n < model->nodes.size(); ++n) {
                             const auto& node = model->nodes[n];
-                            if (!node.is_collision() || node.noor.value("collision", std::string()) != "capsule") continue;
-                            t.local = physics::StaticCapsule{model->world_matrix(n).transform_point({0, 0, 0}), node.noor.value("radius", 0.3f),
-                                                             node.noor.value("height", 2.0f)};
-                            break;
+                            if (!node.is_collision()) continue;
+                            const std::string kind = node.noor.value("collision", std::string());
+                            const math::Mat4 nm = model->world_matrix(n);
+                            if (kind == "capsule") {
+                                t.local.push_back({physics::StaticShape::Kind::Capsule, nm.transform_point({0, 0, 0}), node.noor.value("radius", 0.3f),
+                                                   node.noor.value("height", 2.0f), {}});
+                            } else if (kind == "convex" && node.mesh >= 0 && node.mesh < static_cast<int>(model->meshes.size())) {
+                                physics::StaticShape hull{physics::StaticShape::Kind::Convex, {}, 0, 0, {}};
+                                for (const auto& v : model->meshes[static_cast<std::size_t>(node.mesh)].vertices) hull.points.push_back(nm.transform_point(v.position));
+                                t.local.push_back(std::move(hull));
+                            }
                         }
                 }
             }
-            if (!t.local) continue;
             const float s = math::length(math::Vec3{placed.world.m[0].x, placed.world.m[0].y, placed.world.m[0].z});
-            out.push_back({placed.world.transform_point(t.local->centre), t.local->radius * s, t.local->height * s});
+            for (const auto& local : t.local) {
+                if (local.kind == physics::StaticShape::Kind::Capsule) {
+                    out.push_back({local.kind, placed.world.transform_point(local.centre), local.radius * s, local.height * s, {}});
+                } else {
+                    physics::StaticShape hull{local.kind, {}, 0, 0, {}};
+                    hull.points.reserve(local.points.size());
+                    for (const auto& q : local.points) hull.points.push_back(placed.world.transform_point(q));
+                    out.push_back(std::move(hull));
+                }
+            }
         }
         return out;
     };
@@ -393,7 +408,8 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const auto& comp = e.components["scatter"];
         SceneView::Scatter sv;
         sv.entity = e.id;
-        const auto items = scatter_items(comp, project_root, &sv.warning);
+        sv.draw_distance = std::max(0.0f, number(comp, "draw_distance", 0.0f));
+        sv.cast_shadows = comp.value("shadows", true);
         const math::Mat4 world = world_of(si, 0);
         std::shared_ptr<const terrain::Heights> ground;
         math::Vec3 ground_at{};
@@ -408,14 +424,12 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 ground_at = t.position;
             }
         }
-        std::map<Guid, std::size_t> group_of;
-        for (const auto& placed : place_scatter(items, world, ground.get(), ground_at)) {
-            const auto& path = asset_path ? asset_file(placed.asset) : std::optional<std::filesystem::path>{};
+        const auto placement = place_scatter_cached(e.id, comp, world, project_root, ground, ground_at, &sv.warning);
+        for (const auto& group : placement->groups) {
+            const auto& path = asset_path ? asset_file(group.asset) : std::optional<std::filesystem::path>{};
             if (!path) continue;
-            auto [g, fresh] = group_of.try_emplace(placed.asset, sv.groups.size());
-            if (fresh) sv.groups.push_back({*path, {}});
-            sv.groups[g->second].worlds.push_back(placed.world);
-            ++sv.count;
+            sv.groups.push_back({*path, group.worlds});
+            sv.count += group.worlds->size();
         }
         view.scatters.push_back(std::move(sv));
     }

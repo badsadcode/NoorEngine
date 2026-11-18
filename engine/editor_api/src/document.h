@@ -120,7 +120,9 @@ struct RenderSnapshot {
         Guid entity;
         std::string asset_path;
         std::uint64_t asset_version = 0;
-        std::vector<math::Mat4> worlds;
+        std::shared_ptr<const std::vector<math::Mat4>> worlds;  // shared with the placement cache
+        float draw_distance = 0.0f;  // 0: no limit
+        bool cast_shadows = true;
     };
     std::vector<Scattered> scattered;
     // Every entity of the expanded scene, for picking, highlighting and gizmos.

@@ -12,3 +12,5 @@ tests/data/** -text
 
 # NoorMD exports: manifests hold SHA-256s of their sibling files, so keep them byte for byte.
 samples/Hillside/Assets/Trees/** -text
+samples/Hillside/Assets/Rocks/** -text
+samples/Hillside/Assets/Plants/** -text

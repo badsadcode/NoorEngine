@@ -236,6 +236,13 @@ turned up four things for whoever implements the mode:
    Oaks don't usually have knees (bald cypresses do), so maybe a recipe default to look at, not an
    exporter change.
 
+6. **Grass packs say `"kind": "tree"`.** The short, tall and stylized grass exports are tree exports with a
+   grass archetype in the recipe. In this mode please write `"kind": "vegetation.plant"` (the converter
+   reads the recipe's `archetype` for now), and no trunk capsule: grass shouldn't collide.
+7. **Rocks are close already:** their collision pieces only need the flat `noor_collision` key moved into
+   `extras.noor` (`{"v": 1, "collision": "convex"}`), and the `Rock` part tagged `detail`. A rock converts to
+   0.9 MB (from 4.4 MB) with JPEG textures.
+
 And one confirmation: `COLOR_0` in the oak is a genuine tint (0.66–1.0, a darkening toward the inside
 of the crown), with wind in the UV channels, so this mode can keep it as it is.
 

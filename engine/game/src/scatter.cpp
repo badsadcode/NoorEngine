@@ -95,6 +95,55 @@ std::vector<PlacedInstance> place_scatter(const std::vector<ScatterItem>& items,
     return out;
 }
 
+std::shared_ptr<const ScatterPlacement> place_scatter_cached(const Guid& entity, const Json& component, const math::Mat4& entity_world,
+                                                                      const stdfs::path& project_root, std::shared_ptr<const terrain::Heights> ground,
+                                                                      math::Vec3 ground_at, std::string* warning) {
+    struct Entry {
+        std::string key;
+        std::shared_ptr<const ScatterPlacement> placed;
+        std::string warning;
+        std::shared_ptr<const terrain::Heights> ground;  // kept alive: Heights::shared holds only weak references
+    };
+    static std::mutex mutex;
+    static std::map<Guid, Entry> cache;
+    // What the placement depends on: the component, the entity's matrix, the cooked file, the ground.
+    std::string key = component.dump();
+    key.append(reinterpret_cast<const char*>(&entity_world), sizeof(entity_world));
+    const auto file = scatter_file(component, project_root);
+    std::error_code ec;
+    if (!file.empty()) key += std::format("|{}|{}", stdfs::file_size(file, ec), ec ? 0 : stdfs::last_write_time(file, ec).time_since_epoch().count());
+    key += std::format("|{}|{},{},{}", static_cast<const void*>(ground.get()), ground_at.x, ground_at.y, ground_at.z);
+    {
+        std::scoped_lock lock(mutex);
+        if (const auto it = cache.find(entity); it != cache.end() && it->second.key == key) {
+            if (warning) *warning = it->second.warning;
+            return it->second.placed;
+        }
+    }
+    Entry e;
+    e.key = std::move(key);
+    {
+        auto placement = std::make_shared<ScatterPlacement>();
+        std::map<Guid, std::vector<math::Mat4>> by_asset;
+        std::vector<Guid> order;
+        for (const auto& p : place_scatter(scatter_items(component, project_root, &e.warning), entity_world, ground.get(), ground_at)) {
+            auto [it, fresh] = by_asset.try_emplace(p.asset);
+            if (fresh) order.push_back(p.asset);
+            it->second.push_back(p.world);
+            ++placement->count;
+        }
+        for (const auto& a : order)
+            placement->groups.push_back({a, std::make_shared<const std::vector<math::Mat4>>(std::move(by_asset[a]))});
+        e.placed = std::move(placement);
+    }
+    e.ground = std::move(ground);
+    if (warning) *warning = e.warning;
+    auto placed = e.placed;
+    std::scoped_lock lock(mutex);
+    cache[entity] = std::move(e);
+    return placed;
+}
+
 std::vector<Guid> graphs_used(const scene::Scene& scene) {
     std::vector<Guid> out;
     const auto add = [&](const std::optional<Guid>& g) {

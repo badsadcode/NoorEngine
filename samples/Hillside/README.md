@@ -26,6 +26,10 @@ the yellow walker follows the dirt path north, through the doorway, into the hou
   off the path, out of the house's yard and out of the camera's view of the house. They stand on the
   sculpted ground and their trunks collide. Select `Forest` and use **Plant** / **Remove** to change it by
   hand; change the graph's seed for a different forest (your planted and removed trees stay).
+- **Rocks** (in the same graph's `forest` output): three NoorForm cracked rocks (`Assets/Rocks`) where the rock
+  was painted (the ridge, the knoll, the outcrop) and a few in the meadow; they collide by their convex pieces.
+- **Grass** (`Grass`, a second scatter of the graph's `grass` output): 20,179 clumps of short and tall NoorForm
+  grass (`Assets/Plants`) on the meadow around the house and the path, drawn within 45 m, casting no shadows.
 
 ## How it was made
 
@@ -57,7 +61,8 @@ CC0 1.0 (public domain) from [Poly Haven](https://polyhaven.com), at 1K, unchang
   Wooden Rough Planks (also in PBR-Showroom): colour, OpenGL normal and ARM maps as JPEG.
 - HDRI: Kloppenheim 06 (`.hdr`).
 
-The oaks: NoorMD's NoorForm (Bad Ideas Works, MIT), converted to the NoorEngine export layout by
-`tools/interchange/noormd_engine_export.py` (about 6.8 MB each with their four levels).
+The oaks, rocks and grass: NoorMD's NoorForm (Bad Ideas Works, MIT), converted to the NoorEngine export layout
+by `tools/interchange/noormd_engine_export.py` (an oak about 6.8 MB with its four levels, a rock 0.9 MB, a grass
+clump under 0.1 MB).
 
 The scene, materials, terrain layers, graph and script are MIT like the rest of the repository.

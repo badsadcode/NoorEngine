@@ -1,0 +1,105 @@
+{
+  "noor_interchange": "0.4",
+  "id": "67e27d4e-381a-5705-a838-d5b529967a37",
+  "name": "Cracked_rock_07",
+  "kind": "rock",
+  "generator": {
+    "tool": "NoorForm",
+    "version": "unknown",
+    "determinism": "same_platform"
+  },
+  "recipe": {
+    "file": "Cracked_rock_07.recipe.json",
+    "seed": 47515,
+    "sha256": "13ffb3e1bd11d6c862748b74e83f1571ccd2312f88bd783e093f8e9872543dac"
+  },
+  "space": {
+    "up": "+Y",
+    "forward": "+Z",
+    "handedness": "right",
+    "units": "meters"
+  },
+  "bounds": {
+    "min": [
+      -2.137,
+      -0.442,
+      -1.889
+    ],
+    "max": [
+      2.137,
+      2.504,
+      1.889
+    ]
+  },
+  "files": [
+    {
+      "path": "Cracked_rock_07.glb",
+      "role": "model",
+      "sha256": "a2e54dd575ea8ca0e3334dc300c144f74495ebadb3281e92814f8fc5fd9d6b62"
+    },
+    {
+      "path": "Cracked_rock_07.lod1.glb",
+      "role": "lod",
+      "sha256": "5731926904f1ae4ab2de55e9e970d66ec4dab318b4f9d22a3bb945fc96724cab",
+      "lod": 1
+    },
+    {
+      "path": "Cracked_rock_07.lod2.glb",
+      "role": "lod",
+      "sha256": "40f52c4b1e90a60da071554b3a93979cc6c7f3cf71f70a9b801a3e58c682d649",
+      "lod": 2
+    },
+    {
+      "path": "Cracked_rock_07.recipe.json",
+      "role": "recipe"
+    }
+  ],
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 1479,
+      "max_distance": 51.3
+    },
+    {
+      "level": 1,
+      "triangles": 589,
+      "max_distance": 128.2
+    },
+    {
+      "level": 2,
+      "triangles": 241
+    }
+  ],
+  "collision": "convex",
+  "family": {
+    "name": "Cracked_rock",
+    "variant": "07",
+    "count": 9
+  },
+  "tags": [
+    "cracked",
+    "faceted"
+  ],
+  "license": {
+    "spdx": "MIT",
+    "author": "Bad Ideas Works",
+    "attribution": ""
+  },
+  "validation": {
+    "gltf_validator": "not_run"
+  },
+  "noorform": {
+    "rock_kind": "cracked",
+    "style": "faceted",
+    "pivot": "the middle of where it meets the ground",
+    "collision_pieces": 3,
+    "height": 2.946,
+    "texture": {
+      "size": 1024,
+      "tileMetres": 1.5,
+      "note": "UVs are projected in metres (one tile covers tileMetres), so every rock shares one texel density"
+    },
+    "vertex_colors": "tint (COLOR_0 multiplies the base colour, as glTF says); its alpha is an edge-wear mask",
+    "converted_from": "Cracked_rock.manifest.json + Cracked_rock_07_LOD0.glb, Cracked_rock_07_LOD1.glb, Cracked_rock_07_LOD2.glb (a NoorForm pack from before the NoorEngine export mode; its NoorMD version isn't recorded)"
+  }
+}
