@@ -46,6 +46,12 @@ all. So it was the desktop, not the engine: test windows that don't have focus g
 test now judges what the engine controls (GPU time, CPU time, rebuilds) and prints the wall clock
 without judging it.
 
+**The editor's smoke test needed one fix and then wouldn't sit still.** It counts the GPU timings in the
+Render panel, and there's a new one now (the sky's), so it expected five and found six. After that fix,
+four reruns each failed a *different* check about timing or input (a drag 20% short, a game update
+rate). Those are the checks a busy desktop bothers, and none of them repeated. I haven't had a clean run
+while someone was using the PC; it wants one when it's quiet.
+
 **Not done:** fog and distant hills fading into the sky (part 3), clouds (part 4), the moon, stars and
 exposure that follows the day (part 5).
 
