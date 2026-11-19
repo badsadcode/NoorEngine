@@ -59,6 +59,8 @@ public:
     explicit ParticleSystem(Options options = {});
 
     [[nodiscard]] std::string_view name() const override { return "Particles"; }
+    // Registers "emitter.burst" ({"count": n}): n particles from that entity's emitter at the next fixed step.
+    void attached(runtime::World& world) override;
     void fixed_update(runtime::World& world, double fixed_dt) override;
     void entity_destroyed(runtime::World& world, const scene::Entity& entity) override;
     void shutdown(runtime::World& world) override;
@@ -77,6 +79,7 @@ public:
 
 private:
     [[nodiscard]] math::Vec3 wind(runtime::World& world) const;
+    std::vector<std::pair<Guid, int>> bursts_;  // from scripts, for the next fixed step
 
     Options options_;
     EmitterSet set_;

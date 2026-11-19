@@ -71,6 +71,10 @@ public sealed class SpritePanel : Grid
     private readonly Dictionary<int, CroppedBitmap> _crops = new();
     private string? _previewing;  // the animation playing in the preview
     private int _step;            // its step (index into its frames)
+    private int _direction;       // 8-direction sheets: the view the preview shows (0 faces you)
+    private readonly TextBlock _directionText = new() { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, MinWidth = 120,
+                                                        TextAlignment = TextAlignment.Center };
+    private readonly StackPanel _directionRow = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center };
 
     /// <summary>The engine's last answer (tests read it).</summary>
     public JsonObject? Last { get; private set; }
@@ -97,8 +101,19 @@ public sealed class SpritePanel : Grid
                 new Border { Child = _preview, Background = NoorTheme.Brush(NoorTheme.PanelRaised), CornerRadius = new CornerRadius(6), Padding = new Thickness(8),
                              HorizontalAlignment = HorizontalAlignment.Center },
                 _previewCaption,
+                _directionRow,
             },
         };
+        // 8-direction sheets (8B part 6): turn the preview round.
+        var turnLeft = new Button { Content = "⟲", Classes = { "tool" }, Padding = new Thickness(8, 0) };
+        var turnRight = new Button { Content = "⟳", Classes = { "tool" }, Padding = new Thickness(8, 0) };
+        ToolTip.SetTip(turnLeft, "Turn the preview (the next direction)");
+        ToolTip.SetTip(turnRight, "Turn the preview (the previous direction)");
+        turnLeft.Click += (_, _) => PreviewDirection = (_direction + 1) % Math.Max(1, Directions);
+        turnRight.Click += (_, _) => PreviewDirection = (_direction + Directions - 1) % Math.Max(1, Directions);
+        _directionRow.Children.Add(turnLeft);
+        _directionRow.Children.Add(_directionText);
+        _directionRow.Children.Add(turnRight);
         DockPanel.SetDock(previewBox, Avalonia.Controls.Dock.Bottom);
         left.Children.Add(previewBox);
         left.Children.Add(_view);
@@ -238,6 +253,10 @@ public sealed class SpritePanel : Grid
                                     SelectedIndex = _sheet["filter"]?.GetValue<string>() == "linear" ? 1 : 0 };
         filter.SelectionChanged += (_, _) => { _sheet["filter"] = filter.SelectedIndex == 1 ? "linear" : "nearest"; Save(); };
         _fields.Children.Add(Row("Filtering", filter));
+        var directions = NumberBox(Directions, x => { _sheet["directions"] = Math.Max(1, (int)Math.Round(x)); _direction = 0; Save(); BuildAnimations(); });
+        ToolTip.SetTip(directions, "8-direction characters: the columns hold the views, 0 facing you, then turning to your left " +
+                                   "(2 left, 4 away, 6 right). Animations name their frames in the first column.");
+        _fields.Children.Add(Row("Directions", directions));
 
         _fields.Children.Add(new TextBlock { Text = "Animations", Classes = { "section" }, Margin = new Thickness(0, 10, 0, 0) });
         _fields.Children.Add(new TextBlock { Text = "Frames: a range (8-11, or 3-1 backwards) or a list (0, 1, 1, 2). Frames count from 0, left to right, top to bottom.",
@@ -289,6 +308,14 @@ public sealed class SpritePanel : Grid
             ToolTip.SetTip(fps, "Frames a second");
             var loop = new CheckBox { Content = "Loop", IsChecked = a["loop"]?.GetValue<bool>() ?? true, FontSize = 11 };
             loop.IsCheckedChanged += (_, _) => { a["loop"] = loop.IsChecked == true; Save(); };
+            var turns = new CheckBox { Content = "Turns", IsChecked = a["directional"]?.GetValue<bool>() ?? true, FontSize = 11, IsVisible = Directions > 1 };
+            ToolTip.SetTip(turns, "Shows the view for the camera's direction (off: the same frames from every side, like lying down)");
+            turns.IsCheckedChanged += (_, _) =>
+            {
+                if (turns.IsChecked == true) a.Remove("directional");
+                else a["directional"] = false;
+                Save();
+            };
             var remove = new Button { Content = "✕", Classes = { "tool" }, Padding = new Thickness(6, 0) };
             ToolTip.SetTip(remove, "Remove this animation");
             remove.Click += (_, _) =>
@@ -298,7 +325,7 @@ public sealed class SpritePanel : Grid
                 Save();
                 BuildAnimations();
             };
-            _animations.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { play, nameBox, frames, fps, loop, remove } });
+            _animations.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { play, nameBox, frames, fps, loop, turns, remove } });
         }
     }
 
@@ -313,6 +340,22 @@ public sealed class SpritePanel : Grid
 
     // ---- the animated preview -----------------------------------------------------------------------------------------
 
+    private int Directions => Math.Max(1, (int)Number(_sheet["directions"], 1));
+
+    /// <summary>The view the preview shows on an 8-direction sheet (0 faces you, turning to your left).</summary>
+    public int PreviewDirection
+    {
+        get => _direction;
+        set
+        {
+            _direction = Math.Clamp(value, 0, Directions - 1);
+            _crops.Clear();
+            _view.Show(_bitmap, _view.Frames, AnimationFrames(_previewing));
+            Tick();
+        }
+    }
+
+    // The frames an animation shows in the previewed direction (directional animations move along the columns).
     private List<int> AnimationFrames(string? name)
     {
         var frames = new List<int>();
@@ -324,7 +367,8 @@ public sealed class SpritePanel : Grid
             int from = (int)Number(range["from"], 0), to = (int)Number(range["to"], 0);
             for (var f = from; from <= to ? f <= to : f >= to; f += from <= to ? 1 : -1) frames.Add(f);
         }
-        return frames;
+        var turn = Directions > 1 && a["directional"]?.GetValue<bool>() != false ? Math.Min(_direction, Directions - 1) : 0;
+        return turn == 0 ? frames : frames.Select(f => f + turn).ToList();
     }
 
     private void Tick()
@@ -352,6 +396,8 @@ public sealed class SpritePanel : Grid
         PreviewFrame = frame;
         _view.Current = frame;
         _previewCaption.Text = _previewing == null ? $"frame {frame}" : $"{_previewing} · frame {frame}";
+        _directionRow.IsVisible = Directions > 1;
+        _directionText.Text = $"direction {_direction} · {DirectionName(_direction, Directions)}";
         _step++;
     }
 
@@ -407,6 +453,22 @@ public sealed class SpritePanel : Grid
     }
 
     // ---- small helpers ------------------------------------------------------------------------------------------------
+
+    private static string DirectionName(int d, int count)
+    {
+        if (count != 8 && count != 4) return $"{d * 360 / Math.Max(1, count)}°";
+        var names = new[] { "facing you", "your left, front", "your left", "your left, away", "away", "your right, away", "your right", "your right, front" };
+        return names[count == 4 ? d * 2 : d];
+    }
+
+    /// <summary>For tests: the number of directions (as if typed in the field).</summary>
+    public void SetDirections(int directions)
+    {
+        _sheet["directions"] = directions;
+        _direction = 0;
+        Save();
+        BuildFields();
+    }
 
     private static string Num(JsonNode? n) => Number(n, 0).ToString("0.##", CultureInfo.InvariantCulture);
     // A JsonValue made in C# from an int won't give a double (one parsed from text will), so ask for both.

@@ -46,6 +46,7 @@ params (`JsonObject`); `Param(name, fallback)` reads a number.
 | `OnLateUpdate(float dt)` | Every frame, after the fixed steps |
 | `OnDestroy()` | When the entity is destroyed, or play stops |
 | `OnCollisionEnter/Exit(Entity other)`, `OnTriggerEnter/Exit(Entity other)` | Physics contacts and triggers |
+| `OnAnimationEnd(string animation)` | A non-looping sprite animation this script played has finished |
 
 An exception stops that script for that entity (the Console shows the exception, the hook and the
 line); the game keeps running.
@@ -82,6 +83,8 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies |
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
 | `PlaySound()`, `StopSound()`, `IsPlaying` | The entity's `audio_source` ([components](LUA_API.md#sound-components)) |
+| `PlayAnimation(name, speed = 1)`, `StopAnimation()`, `SetAnimationSpeed(s)`, `Animation` | The entity's `sprite` ([sprites](../fx/SPRITES.md)); a non-looping animation calls `OnAnimationEnd` |
+| `Burst(count)` | The entity's `emitter`: `count` particles at the next fixed step |
 
 ## `Ui` (the HUD)
 

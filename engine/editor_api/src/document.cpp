@@ -1206,6 +1206,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     if (world_) {
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();
+        snap->game_time = world_->time();  // sprites played by scripts (and the clouds) follow the game's clock
     }
     // Effect particles (8B part 4): every emitter, its settings resolved now (an edited .noorfx shows at once).
     const auto asset_path = game::registry_asset_path(project_, registry_);

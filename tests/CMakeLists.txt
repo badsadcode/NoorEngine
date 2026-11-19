@@ -32,6 +32,7 @@ add_executable(noor_unit_tests
     unit/test_weather.cpp
     unit/test_particles.cpp
     unit/test_sprites.cpp
+    unit/test_sprite_animation.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -172,8 +173,8 @@ foreach(name IN ITEMS Particles_Campfire Particles_Campfire_Night Particles_Glas
 endforeach()
 # Sprites (Milestone 8B, part 5): pixel-art billboards in sunlight casting shadows (each walk frame, tinted, flipped, a
 # coin facing the camera, one animating), and in a wall's shadow (in sun, half in shade, in shade). Scenes and sheet from
-# tools/samples/make_test_sprites.py.
-foreach(name IN ITEMS Sprites_Sun Sprites_Shade)
+# tools/samples/make_test_sprites.py. Sprites_Coth (part 6): Coth from The Uncounted in a ring, every direction at once.
+foreach(name IN ITEMS Sprites_Sun Sprites_Shade Sprites_Coth)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -183,6 +184,15 @@ foreach(name IN ITEMS Sprites_Sun Sprites_Shade)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
+# from Lua in the project and in a built game (the same moments), and from C# in the built game.
+if(TARGET noor_scripting_managed)
+    add_test(NAME cli.sprite_scripts_build_identically
+        COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCRIPTS=${CMAKE_CURRENT_SOURCE_DIR}/data/sprite_scripts
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/sprite_scripts_build -P ${CMAKE_CURRENT_SOURCE_DIR}/sprites_build_check.cmake)
+    set_tests_properties(cli.sprite_scripts_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
+endif()
 add_test(NAME render.particles_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/particles_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/particles_cost_check.cmake)

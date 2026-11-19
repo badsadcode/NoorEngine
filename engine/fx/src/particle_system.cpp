@@ -115,6 +115,13 @@ math::Vec3 ParticleSystem::wind(runtime::World& world) const {
     return {0, 0, 0};
 }
 
+void ParticleSystem::attached(runtime::World& world) {
+    world.handle("emitter.burst", [this](runtime::World&, const Guid& entity, const Json& args) {
+        const int count = args.is_object() && args.contains("count") && args["count"].is_number() ? args["count"].get<int>() : 0;
+        if (count > 0) bursts_.emplace_back(entity, std::min(count, 100000));
+    });
+}
+
 void ParticleSystem::fixed_update(runtime::World& world, double fixed_dt) {
     const auto start = std::chrono::steady_clock::now();
     if (timed_frame_ != world.frame_count()) {
@@ -137,6 +144,10 @@ void ParticleSystem::fixed_update(runtime::World& world, double fixed_dt) {
     }
     std::erase_if(resolved_, [&](const auto& kv) { return !seen.contains(kv.first); });
     set_.step(inputs, static_cast<float>(fixed_dt), wind(world));
+    for (const auto& [entity, count] : bursts_)
+        if (Emitter* e = set_.find(entity))
+            if (const auto matrix = runtime::api::world_matrix(world, entity)) e->burst(count, *matrix);
+    bursts_.clear();
     step_ms_ += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
@@ -147,6 +158,7 @@ void ParticleSystem::entity_destroyed(runtime::World&, const scene::Entity& enti
 
 void ParticleSystem::shutdown(runtime::World&) {
     set_.clear();
+    bursts_.clear();
     resolved_.clear();
 }
 

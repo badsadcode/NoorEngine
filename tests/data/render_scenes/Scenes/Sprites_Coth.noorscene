@@ -1,0 +1,419 @@
+{
+  "noor_scene": 2,
+  "id": "5b417e00-0033-4000-8000-000000000000",
+  "name": "Sprites_Coth",
+  "entities": [
+    {
+      "id": "5b417e00-0033-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#8FA070"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000002",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2.4,
+          7.5
+        ],
+        "rotation": [
+          -0.0871557,
+          0.0,
+          0.0,
+          0.9961947
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.393765187,
+          0.196882538,
+          0.0,
+          0.897878747
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000004",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 2,
+          "ground_albedo": 0.3
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000010",
+      "name": "Coth 0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.0,
+          0,
+          -2.6
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000011",
+      "name": "Coth 45",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.838478,
+          0,
+          -1.838478
+        ],
+        "rotation": [
+          0.0,
+          0.382683432,
+          0.0,
+          0.923879533
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000012",
+      "name": "Coth 90",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.6,
+          0,
+          -0.0
+        ],
+        "rotation": [
+          0.0,
+          0.707106781,
+          0.0,
+          0.707106781
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000013",
+      "name": "Coth 135",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.838478,
+          0,
+          1.838478
+        ],
+        "rotation": [
+          0.0,
+          0.923879533,
+          0.0,
+          0.382683432
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000014",
+      "name": "Coth 180",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.0,
+          0,
+          2.6
+        ],
+        "rotation": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000015",
+      "name": "Coth 225",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.838478,
+          0,
+          1.838478
+        ],
+        "rotation": [
+          0.0,
+          0.923879533,
+          0.0,
+          -0.382683432
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000016",
+      "name": "Coth 270",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.6,
+          0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.707106781,
+          0.0,
+          -0.707106781
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000017",
+      "name": "Coth 315",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.838478,
+          0,
+          -1.838478
+        ],
+        "rotation": [
+          0.0,
+          0.382683432,
+          0.0,
+          -0.923879533
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "idle"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0033-4000-8000-000000000020",
+      "name": "Coth lying down",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.6,
+          0,
+          2.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0002-4000-8000-000000000001",
+          "animation": "die",
+          "time_offset": 5
+        }
+      }
+    }
+  ]
+}

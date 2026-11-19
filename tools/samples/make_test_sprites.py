@@ -1,4 +1,4 @@
-"""Test sprite sheet and scenes for sprites (Milestone 8B, part 5).
+"""Test sprite sheets and scenes for sprites (Milestone 8B, parts 5 and 6).
 
 Writes into tests/data/render_scenes:
   Assets/Sprites/walker.png        a 128 x 64 pixel-art sheet: 4 x 2 frames of 32 x 32 (row 0 a figure walking,
@@ -6,6 +6,10 @@ Writes into tests/data/render_scenes:
   Assets/Sprites/walker.noorsprite its grid, pivot (feet), 16 pixels a metre (frames 2 m tall), walk and spin
   Scenes/Sprites_Sun.noorscene     sprites standing in sunlight, casting shadows on the floor
   Scenes/Sprites_Shade.noorscene   a sprite half in a wall's shadow, half in the sun
+  Assets/Sprites/coth.noorsprite   (part 6) Coth, from The Uncounted: an 8-direction sheet, 8 x 6 frames of 128 px.
+                                   coth.png is Tom's art, copied once from The Uncounted
+                                   (assets/sprites/npcs/friend_coth_painted.png) with permission; it isn't made here.
+  Scenes/Sprites_Coth.noorscene    eight Coths in a ring, each facing outwards: every direction at once
 
 Run: python tools/samples/make_test_sprites.py   (needs Pillow)
 """
@@ -19,6 +23,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2] / "tests" / "data" / "render_
 SPRITES = ROOT / "Assets" / "Sprites"
 SHEET_GUID = "5b417e00-0001-4000-8000-000000000001"
 PNG_GUID = "5b417e00-0001-4000-8000-000000000002"
+COTH_SHEET_GUID = "5b417e00-0002-4000-8000-000000000001"
+COTH_PNG_GUID = "5b417e00-0002-4000-8000-000000000002"
 
 OUTLINE = (24, 20, 28, 255)
 SKIN = (240, 196, 150, 255)
@@ -90,6 +96,35 @@ def sprite(**fields):
     return {"sprite": {"sheet": SHEET_GUID, **fields}}
 
 
+def yaw(degrees):
+    """A rotation about +Y (the quaternion [x, y, z, w])."""
+    import math
+    h = math.radians(degrees) / 2
+    return (0.0, round(math.sin(h), 9), 0.0, round(math.cos(h), 9))
+
+
+def coth():
+    """Coth's sheet: The Uncounted's layout (columns: 8 directions, 0 facing the viewer, 2 their left, 4 away, 6 their
+    right; rows: idle, walk x2, windup, attack, then four stagger poses and four lying down)."""
+    png = SPRITES / "coth.png"
+    if not png.exists():
+        print("coth.png isn't there: Coth's sheet and scene skipped")
+        return False
+    meta(png, COTH_PNG_GUID, "texture", {"kind": "color", "max_size": 4096, "mips": True, "normal_convention": "opengl"})
+    sheet = {"noor_sprite": 1, "name": "Coth", "texture": COTH_PNG_GUID, "grid": {"columns": 8, "rows": 6, "margin": 0, "spacing": 0},
+             "directions": 8, "pivot": [0.5, 10.0 / 128.0], "pixels_per_metre": 64, "filter": "linear",
+             "animations": {"idle": {"frames": [0], "fps": 2, "loop": True},
+                            "walk": {"frames": [8, 16], "fps": 6, "loop": True},
+                            "windup": {"frames": [24], "fps": 4, "loop": False},
+                            "attack": {"frames": [32], "fps": 6, "loop": False},
+                            "hurt": {"frames": [40], "fps": 4, "loop": False, "directional": False},
+                            "die": {"frames": [40, 44], "fps": 3, "loop": False, "directional": False}}}
+    f = SPRITES / "coth.noorsprite"
+    f.write_text(json.dumps(sheet, indent=2) + "\n", newline="\n")
+    meta(f, COTH_SHEET_GUID, "sprite", {})
+    return True
+
+
 def sun_rotation(travel):
     """The quaternion turning a light's forward (-Z) to the way its light travels."""
     import math
@@ -128,7 +163,7 @@ def main():
     img.save(png, optimize=False)
     meta(png, PNG_GUID, "texture", {"kind": "color", "max_size": 4096, "mips": True, "normal_convention": "opengl"})
 
-    sheet = {"noor_sprite": 1, "name": "Walker", "texture": PNG_GUID, "grid": {"columns": 4, "rows": 2}, "margin": 0, "spacing": 0,
+    sheet = {"noor_sprite": 1, "name": "Walker", "texture": PNG_GUID, "grid": {"columns": 4, "rows": 2, "margin": 0, "spacing": 0},
              "pivot": [0.5, 1.0 / 32.0], "pixels_per_metre": 16, "filter": "nearest",
              "animations": {"walk": {"frames": {"from": 0, "to": 3}, "fps": 6, "loop": True},
                             "spin": {"frames": {"from": 4, "to": 7}, "fps": 8, "loop": True}}}
@@ -158,6 +193,18 @@ def main():
     shade.append(entity(13, "In shade", (0.9, 0, 0), sprite(frame=1, flip_x=True), scene="32"))
     shade.append(entity(14, "Coin", (-2.4, 2.6, -1.5), sprite(frame=4, billboard="none", cast_shadows=False), scene="32"))
     write_scene("Sprites_Shade", "32", shade)
+
+    # Coth eight times in a ring, each facing outwards (yaw k x 45 degrees, forward -Z): the camera sees every direction.
+    if coth():
+        ring = common("33", (0, 2.4, 7.5), camera_rot)
+        import math
+        for k in range(8):
+            a = math.radians(k * 45)
+            # Facing outwards from the centre: forward (-Z turned by the yaw) points away from it.
+            pos = (round(-2.6 * math.sin(a), 6), 0, round(-2.6 * math.cos(a), 6))
+            ring.append(entity(10 + k, f"Coth {k * 45}", pos, {"sprite": {"sheet": COTH_SHEET_GUID, "animation": "idle"}}, rotation=yaw(k * 45), scene="33"))
+        ring.append(entity(20, "Coth lying down", (3.6, 0, 2.0), {"sprite": {"sheet": COTH_SHEET_GUID, "animation": "die", "time_offset": 5}}, scene="33"))
+        write_scene("Sprites_Coth", "33", ring)
     print("sprite test data written")
 
 

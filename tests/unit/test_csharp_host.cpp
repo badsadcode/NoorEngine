@@ -7,6 +7,7 @@
 #include <ostream>
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,7 @@ struct Fake {
     }
     static int32_t event(std::int64_t, int32_t kind, noor_rt_entity) {
         calls.push_back("event " + std::to_string(kind));
+        if (kind == NOOR_RT_ANIMATION_END) calls.push_back(std::string("animation ") + scripting::rt_api()->event_name());
         return 1;
     }
     static void release(std::int64_t h) {
@@ -94,6 +96,24 @@ TEST_CASE("csharp host: instances are created, hooks run in order, scripts call 
     CHECK(Fake::calls[3] == "hook 2");  // OnFixedUpdate (2 per 1/30 s frame)
     CHECK(Fake::calls[4] == "hook 2");
     CHECK(Fake::calls[5] == "hook 3");  // OnLateUpdate
+}
+
+TEST_CASE("csharp host: sprites through the ABI, and the animation end event carries its name") {
+    Fake::reset();
+    runtime::World w(scene_with("Scripts/Mover.cs", 0.0));
+    const Guid id = w.scene().entities[0].id;
+    w.scene().entities[0].components["sprite"] = {{"sheet", Guid::generate().to_string()}};
+    w.add_system(std::make_unique<CSharpScriptSystem>(&kFakeHost));
+    w.frame(1.0 / 60.0, {});
+    const auto* api = scripting::rt_api();
+    const auto e = scripting::to_rt(id);
+    // Outside a hook the API does nothing (scripts only call it from hooks); post the event the sprite system would.
+    w.post({runtime::Event::Kind::AnimationEnd, id, id, "attack"});
+    w.frame(1.0 / 60.0, {});
+    CHECK(std::ranges::find(Fake::calls, "event 4") != Fake::calls.end());
+    CHECK(std::ranges::find(Fake::calls, "animation attack") != Fake::calls.end());
+    CHECK(api->version == 4u);
+    CHECK(api->sprite(e, NOOR_RT_SPRITE_PLAY, "walk", 1.0f) == 0);  // no world outside a hook: refused, not a crash
 }
 
 TEST_CASE("csharp host: an exception stops that script, missing classes and hosts are reported") {

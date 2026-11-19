@@ -50,6 +50,19 @@ void set_world_pose(World& w, const Guid& e, math::Vec3 position, math::Quat rot
 [[nodiscard]] const asset::Json* component(World& w, const Guid& e, std::string_view type);
 void set_component(World& w, const Guid& e, std::string_view type, asset::Json value);  // null removes
 
+// ---- Sprites (Milestone 8B, part 6) ----
+// Plays an animation from its start at `speed` (the component's "animation", "started" and "speed"); a non-looping
+// one sends on_animation_end(name) when it has finished. False if the entity has no sprite component.
+bool sprite_play(World& w, const Guid& e, std::string_view animation, float speed = 1.0f);
+void sprite_stop(World& w, const Guid& e);                // freezes it on the frame it's showing
+void sprite_set_speed(World& w, const Guid& e, float speed);  // from here on, without jumping (0 freezes it)
+[[nodiscard]] std::optional<std::string> sprite_animation(World& w, const Guid& e);  // what it's playing (or showing)
+
+// ---- Effects (Milestone 8B, part 6) ----
+// `count` particles from the entity's emitter at the next fixed step. False if nothing handles emitters.
+// (An emitter's settings are changed with set_component: its particles carry on.)
+bool emitter_burst(World& w, const Guid& e, int count);
+
 // ---- Input, time ----
 [[nodiscard]] bool input_down(World& w, std::string_view action);
 [[nodiscard]] bool input_pressed(World& w, std::string_view action);

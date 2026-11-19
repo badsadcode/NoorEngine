@@ -10,7 +10,17 @@ World::~World() {
     for (auto& s : systems_) s->shutdown(*this);
 }
 
-void World::add_system(std::unique_ptr<System> system) { systems_.push_back(std::move(system)); }
+void World::add_system(std::unique_ptr<System> system) {
+    systems_.push_back(std::move(system));
+    systems_.back()->attached(*this);
+}
+
+bool World::command(std::string_view name, const Guid& entity, const asset::Json& args) {
+    const auto it = commands_.find(name);
+    if (it == commands_.end()) return false;
+    it->second(*this, entity, args);
+    return true;
+}
 
 void World::reindex() {
     index_.clear();

@@ -228,7 +228,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 3 ✅ | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
 | 4 ✅ | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
 | 5 ✅ | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
-| 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
+| 6 ✅ | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
 | 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
 | 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
 
@@ -291,9 +291,25 @@ way: mirroring by a negative scale turned the card's lit side away (it mirrors t
 and script control (part 6); clicking a sprite selects its whole card, transparent corners too (not covered by a test);
 the editor animates on the viewport's clock, also in Play mode.
 
+## Part 6 result (2026-11-20)
+Done. Directional sprite sheets (`"directions": 8`: views in the columns as in The Uncounted, 0 facing the viewer and
+turning to the viewer's left; animations name the first column's frames; `"directional": false` for poses that don't
+turn), the view picked from the angle between the entity's −Z and the camera. Scripts play, stop and re-speed sprite
+animations and hear when a non-looping one ends (Lua `play_animation`/`on_animation_end`, C# `PlayAnimation`/
+`OnAnimationEnd`; `noor_rt_api` v4), and burst emitters (`burst`); emitter settings change through the component and
+the particles carry on. Coth, from The Uncounted, is the 8-direction test character (Tom's art, published with Tom's
+permission). Proven: unit tests (the directions from all sides; a walk round a circle checked frame by frame,
+every direction in turn, one step at a time; a Lua script plays walk, then attack, gets the end event and falls down;
+speed changes without a jump; stop freezes; a script burst spawns exactly 25 particles; the C# ABI carries the event
+and its name); `cli.sprite_scripts_build_identically` (Coth walks, attacks and falls at 2.1667 s in the project and in
+a built game, from Lua, and from C# in the built game); golden `Sprites_Coth` (eight Coths in a ring, every view);
+the editor smoke test (directions in the sheet editor, the preview turned). Also: the viewport animates on the game's
+clock in Play mode. Not done: events in the middle of an animation (footsteps); mirrored half-sets of views.
+
 ## Open questions
 
-1. **The Uncounted's sprite sheet** (the bearded man: 8 directions × idle / walk / run / attack / hurt, 4 death
+1. ~~**The Uncounted's sprite sheet**~~ **Settled in part 6:** Coth's sheet (`friend_coth_painted.png`) is in the
+   test data, published with Tom's permission. Earlier wording: **The Uncounted's sprite sheet** (the bearded man: 8 directions × idle / walk / run / attack / hurt, 4 death
    poses), offered on 2026-11-17: where's the file, and may it be committed as a test fixture and in the
    sample, or only used locally?
 2. ~~**Pixel art:**~~ **Decided in part 5 (Tom may overrule):** sheets default to nearest filtering (crisp

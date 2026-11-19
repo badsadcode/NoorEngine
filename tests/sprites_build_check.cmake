@@ -1,0 +1,62 @@
+# Sprite animations played by scripts, the same in a built game (Milestone 8B, part 6, ADR-035). A copy of render_scenes
+# gets tests/data/sprite_scripts (Coth walking a circle, attacking, and falling down when the attack has ended: in Lua,
+# and in C#). The Lua scene runs 240 frames in the project and in a game built by noor_cli: Coth must have got to
+# "die" through both end events, at the same moments, in both. The C# scene (C# runs in built games) must get there too.
+#   -DCLI=<noor_cli> -DPLAYER=<noor_player> -DPROJECT=<render_scenes> -DSCRIPTS=<sprite_scripts> -DWORK=<folder>
+file(REMOVE_RECURSE "${WORK}")
+file(MAKE_DIRECTORY "${WORK}")
+file(COPY "${PROJECT}/" DESTINATION "${WORK}/project")
+file(REMOVE_RECURSE "${WORK}/project/.noor")
+file(COPY "${SCRIPTS}/" DESTINATION "${WORK}/project")
+
+function(run_player exe scene report)
+    execute_process(COMMAND "${exe}" ${ARGN} --scene ${scene} --frames 240 --no-audio --no-input --report "${report}.json" --log "${report}.log"
+                    RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+    if(NOT code EQUAL 0 OR NOT EXISTS "${report}.json")
+        message(FATAL_ERROR "${exe} failed on ${scene} (${code}); see ${report}.log")
+    endif()
+endfunction()
+
+# The first sprite's animation and start, how many animations ended, and how many errors were logged.
+function(read_report file prefix)
+    file(READ "${file}" r)
+    string(JSON n LENGTH "${r}" sprites entities)
+    if(n LESS 1)
+        message(FATAL_ERROR "${file}: no sprites")
+    endif()
+    string(JSON anim GET "${r}" sprites entities 0 animation)
+    string(JSON started GET "${r}" sprites entities 0 started)
+    string(JSON ended GET "${r}" sprites ended)
+    string(JSON errors GET "${r}" errors)
+    set(${prefix}_anim "${anim}" PARENT_SCOPE)
+    set(${prefix}_started "${started}" PARENT_SCOPE)
+    set(${prefix}_ended "${ended}" PARENT_SCOPE)
+    set(${prefix}_errors "${errors}" PARENT_SCOPE)
+endfunction()
+
+run_player("${PLAYER}" Scenes/Coth_Walk.noorscene "${WORK}/project" "${WORK}/project")
+execute_process(COMMAND "${CLI}" build "${WORK}/project" "${WORK}/game" RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT code EQUAL 0)
+    message(FATAL_ERROR "noor_cli build failed (${code}): ${out}${err}")
+endif()
+file(GLOB exe "${WORK}/game/*.exe")
+run_player("${exe}" Scenes/Coth_Walk.noorscene "${WORK}/game")
+run_player("${exe}" Scenes/Coth_Walk_CSharp.noorscene "${WORK}/game_csharp")
+
+read_report("${WORK}/project.json" p)
+read_report("${WORK}/game.json" g)
+read_report("${WORK}/game_csharp.json" c)
+message(STATUS "project (Lua):    ${p_anim} since ${p_started}, ${p_ended} animations ended")
+message(STATUS "built game (Lua): ${g_anim} since ${g_started}, ${g_ended} animations ended")
+message(STATUS "built game (C#):  ${c_anim} since ${c_started}, ${c_ended} animations ended")
+if(NOT p_errors EQUAL 0 OR NOT g_errors EQUAL 0 OR NOT c_errors EQUAL 0)
+    message(FATAL_ERROR "errors were logged: see the .log files in ${WORK}")
+endif()
+foreach(run IN ITEMS p g c)
+    if(NOT ${run}_anim STREQUAL "die" OR NOT ${run}_ended EQUAL 2)
+        message(FATAL_ERROR "Coth didn't get through walk, attack and die (${run}: ${${run}_anim}, ${${run}_ended} ended; 2 expected)")
+    endif()
+endforeach()
+if(NOT p_started STREQUAL g_started OR NOT p_started STREQUAL c_started)
+    message(FATAL_ERROR "the falling down started at different moments (project ${p_started}, game ${g_started}, C# ${c_started})")
+endif()

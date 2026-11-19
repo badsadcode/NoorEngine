@@ -12,7 +12,10 @@
 #include "noor/scene/scene.h"
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
+#include <string>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -24,13 +27,14 @@ namespace noor::runtime {
 
 class World;
 
-// Something that happened this frame, for scripts (collisions and triggers from physics, ...).
-// Events are cleared at the end of each frame, after late_update.
+// Something that happened this frame, for scripts (collisions and triggers from physics, a sprite animation that
+// ended, ...). Events are cleared at the end of each frame, after late_update.
 struct Event {
-    enum class Kind : std::uint8_t { CollisionEnter, CollisionExit, TriggerEnter, TriggerExit };
+    enum class Kind : std::uint8_t { CollisionEnter, CollisionExit, TriggerEnter, TriggerExit, AnimationEnd };
     Kind kind;
-    Guid entity;  // the entity the event is for
-    Guid other;   // the other entity involved
+    Guid entity;       // the entity the event is for
+    Guid other;        // the other entity involved (AnimationEnd: the entity itself)
+    std::string name;  // AnimationEnd: the animation
 };
 
 // A HUD element a script draws this frame (noor.ui.* in Lua, Ui.* in C#). Positions and sizes are
@@ -59,6 +63,8 @@ public:
     // Script systems start entities after the engine's own systems (physics bodies, sounds...)
     // have prepared them, so a script's on_start can use them.
     [[nodiscard]] virtual bool starts_late() const { return false; }
+    // Added to a world (World::add_system): a system offering commands to scripts registers them here.
+    virtual void attached(World&) {}
     virtual void update(World&, double /*dt*/) {}
     virtual void fixed_update(World&, double /*fixed_dt*/) {}
     virtual void late_update(World&, double /*dt*/) {}
@@ -127,6 +133,14 @@ public:
     void post(const Event& event) { events_.push_back(event); }
     [[nodiscard]] const std::vector<Event>& events() const noexcept { return events_; }
 
+    // ---- Commands ----
+    // Services systems offer to scripts by name ("emitter.burst", ...), so the script API (which knows the World,
+    // not the systems) can reach them. A system registers its commands when attached; a command for a system that
+    // isn't there does nothing and returns false.
+    using CommandHandler = std::function<void(World&, const Guid& entity, const asset::Json& args)>;
+    void handle(std::string name, CommandHandler handler) { commands_[std::move(name)] = std::move(handler); }
+    bool command(std::string_view name, const Guid& entity, const asset::Json& args);
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -146,6 +160,7 @@ private:
     std::unordered_set<Guid> started_;
     std::vector<Guid> destroy_queue_;
     std::vector<Event> events_;
+    std::map<std::string, CommandHandler, std::less<>> commands_;
     std::optional<bool> mouse_capture_request_;
     std::unordered_map<Guid, math::Mat4> render_poses_;
     std::vector<UiCommand> ui_;

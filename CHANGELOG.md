@@ -4,6 +4,29 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8B, part 6: 8-direction characters and scripts
+**Added**
+- **8-direction sprite sheets:** `"directions"` (the views in the columns, The Uncounted's layout), animations naming
+  the first column, `"directional": false` per animation; the view picked from the camera angle
+  (`game::sprite_direction`, `game::sprite_frame`). [docs](docs/fx/SPRITES.md#8-direction-characters)
+- **Sprite animations from scripts:** Lua `e:play_animation(name, speed)`, `stop_animation`, `set_animation_speed`,
+  `animation`, hook `on_animation_end(name)`; C# `PlayAnimation`, `StopAnimation`, `SetAnimationSpeed`, `Animation`,
+  `OnAnimationEnd`. `game::SpriteAnimationSystem` posts the end events (`runtime::Event::AnimationEnd`, with a name).
+- **Emitter bursts from scripts:** Lua `e:burst(n)`, C# `Burst(n)`, at the next fixed step.
+- **World commands** (`World::handle`, `World::command`, `System::attached`): systems offer services to the script API.
+- `noor_rt_api` v4 (`sprite`, `sprite_animation`, `burst`, `event_name`).
+- NoorEditor: **Directions** and a per-animation **Turns** in the sprite sheet editor; ⟲/⟳ turn the preview.
+- noor_player's report: `sprites` (each sprite's animation and start, and how many animations ended).
+- **Coth**, from The Uncounted, as the 8-direction test character (`tests/data/render_scenes/Assets/Sprites/coth.png`,
+  Tom's art, used with permission).
+
+**Changed:** the editor's viewport animates sprites (and drifts clouds) on the game's clock while playing.
+
+**Fixed:** the sprite docs' example put `margin` and `spacing` outside `grid`, where they aren't read.
+
+**Tests:** unit tests "sprite directions", "sprite scripts", "emitter scripts", "csharp host: sprites through the ABI";
+`cli.sprite_scripts_build_identically`; golden `Sprites_Coth`; the editor smoke test's direction check.
+
 ### 2026-11-19 — Milestone 8B, part 5: sprites
 **Added**
 - **Sprite sheets** (`.noorsprite`, importer `sprite`, `asset/sprite_asset.h`, [docs](docs/fx/SPRITES.md)): a texture cut

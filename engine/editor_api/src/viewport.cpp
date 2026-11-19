@@ -1255,9 +1255,12 @@ void render_thread_main(noor_viewport* vp) {
             frame.camera.fov_y = basis.fov_y;
             frame.camera.near_plane = view_near;
             if (shown) frame.lighting = shown->lighting;
-            // The clouds drift in the editor too (seconds since the viewport opened; games use their own time).
-            frame.lighting.time = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
-            // Sprites (8B part 5): turned to this camera every frame, animated on the viewport's clock; a sprite being
+            // The clouds drift and sprites animate in the editor too: seconds since the viewport opened, or the game's time
+            // while playing (so animations scripts play line up).
+            frame.lighting.time = shown && shown->game_time
+                                      ? static_cast<float>(*shown->game_time)
+                                      : static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
+            // Sprites (8B part 5): turned to this camera every frame, animated on the clock above; a sprite being
             // moved follows the gizmo, a selected one is tinted like the rest.
             sprite_quads.clear();
             if (shown && sprites && !shown->sprites.empty()) {

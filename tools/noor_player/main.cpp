@@ -499,6 +499,19 @@ int run(const Options& o) {
                         report["particles"] = {{"emitters", ps.emitters}, {"alive", ps.particles},
                                                {"fingerprint", std::format("{:016x}", ps.fingerprint)}};
                     }
+                    // Sprites (Milestone 8B, part 6): what each is playing and since when, and how many script-played
+                    // animations have ended (their end events).
+                    {
+                        Json sprites = Json::array();
+                        for (const auto& e : (*world)->scene().entities) {
+                            if (!e.has("sprite") || !e.components.at("sprite").is_object()) continue;
+                            const auto& c = e.components.at("sprite");
+                            sprites.push_back({{"name", e.name}, {"animation", c.value("animation", std::string())},
+                                               {"started", c.contains("started") ? c["started"] : Json(nullptr)}});
+                        }
+                        const auto* anim = (*world)->system<noor::game::SpriteAnimationSystem>();
+                        report["sprites"] = {{"entities", std::move(sprites)}, {"ended", anim ? anim->ended() : 0}};
+                    }
                     report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
                     if (o.trace_environment) report["environment_trace"] = std::move(environment_trace);
                     report["sky_builds"] = {{"tables", (*renderer)->atmosphere_table_builds()}, {"sky", (*renderer)->atmosphere_sky_builds()}};

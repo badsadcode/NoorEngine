@@ -14,7 +14,8 @@
 //
 // Hooks: on_start, on_update(dt), on_fixed_update(dt), on_late_update(dt), on_destroy, and with
 // physics on_collision_enter(other), on_collision_exit(other), on_trigger_enter(other),
-// on_trigger_exit(other) (called before on_late_update in the frame they happen).
+// on_trigger_exit(other), and with a sprite on_animation_end(name) (a non-looping animation the script played has
+// finished) (called before on_late_update in the frame they happen).
 // Sandbox: Luau's safe library set (no file, OS or process access; globals and built-in libraries
 // read-only; each file gets its own globals). A hook that runs longer than the call budget is
 // stopped. A script that errors is reported (file, line, stack) and switched off for that entity;

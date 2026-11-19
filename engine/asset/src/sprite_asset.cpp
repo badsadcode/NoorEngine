@@ -23,14 +23,19 @@ math::Vec2 SpriteSheet::frame_size_m() const noexcept {
     return {static_cast<float>(frame_width) / ppm, static_cast<float>(frame_height) / ppm};
 }
 
-int SpriteSheet::frame_at(std::string_view animation, double seconds) const {
-    const auto it = animations.find(std::string(animation));
-    if (it == animations.end() || it->second.frames.empty()) return 0;
-    const auto& a = it->second;
-    const auto count = static_cast<long long>(a.frames.size());
-    long long k = a.fps > 0.0f ? static_cast<long long>(std::floor(std::max(0.0, seconds) * static_cast<double>(a.fps) + 1e-9)) : 0;
-    k = a.loop ? k % count : std::min(k, count - 1);
-    return a.frames[static_cast<std::size_t>(k)];
+const SpriteAnimation* SpriteSheet::animation(std::string_view wanted) const {
+    const auto it = animations.find(std::string(wanted));
+    return it == animations.end() ? nullptr : &it->second;
+}
+
+int SpriteSheet::frame_at(std::string_view wanted, double seconds, int direction) const {
+    const SpriteAnimation* a = animation(wanted);
+    if (!a || a->frames.empty()) return directions > 1 ? std::clamp(direction, 0, directions - 1) : 0;
+    const auto count = static_cast<long long>(a->frames.size());
+    long long k = a->fps > 0.0f ? static_cast<long long>(std::floor(std::max(0.0, seconds) * static_cast<double>(a->fps) + 1e-9)) : 0;
+    k = a->loop ? k % count : std::min(k, count - 1);
+    const int frame = a->frames[static_cast<std::size_t>(k)];
+    return a->directional && directions > 1 ? frame + std::clamp(direction, 0, directions - 1) : frame;
 }
 
 Result<SpriteSheet> parse_sprite_sheet(const Json& file) {
@@ -54,6 +59,7 @@ Result<SpriteSheet> parse_sprite_sheet(const Json& file) {
         s.pivot = {file["pivot"][0].get<float>(), file["pivot"][1].get<float>()};
     s.pixels_per_metre = std::max(1e-3f, number(file, "pixels_per_metre", s.pixels_per_metre));
     s.nearest = file.value("filter", std::string("nearest")) != "linear";
+    s.directions = std::clamp(integer(file, "directions", 1), 1, 64);
     if (file.contains("animations") && file["animations"].is_object())
         for (const auto& [name, a] : file["animations"].items()) {
             if (!a.is_object()) continue;
@@ -68,6 +74,7 @@ Result<SpriteSheet> parse_sprite_sheet(const Json& file) {
             }
             anim.fps = std::max(0.0f, number(a, "fps", anim.fps));
             if (a.contains("loop") && a["loop"].is_boolean()) anim.loop = a["loop"].get<bool>();
+            if (a.contains("directional") && a["directional"].is_boolean()) anim.directional = a["directional"].get<bool>();
             s.animations.emplace(name, std::move(anim));
         }
     return s;
@@ -102,6 +109,8 @@ Status slice(SpriteSheet& s, int width, int height) {
     }
     if (s.columns <= 0 || s.rows <= 0 || s.frame_width <= 0 || s.frame_height <= 0)
         return fail(ErrorCode::InvalidArgument, std::format("the grid doesn't fit in a {}x{} sheet", width, height));
+    if (s.directions > 1 && s.columns % s.directions != 0)
+        return fail(ErrorCode::InvalidArgument, std::format("{} directions need a multiple of {} columns (the grid has {})", s.directions, s.directions, s.columns));
     s.frames.clear();
     s.frames.reserve(static_cast<std::size_t>(s.columns) * static_cast<std::size_t>(s.rows));
     const double w = width, h = height;
@@ -121,7 +130,10 @@ Status slice(SpriteSheet& s, int width, int height) {
 
 Json sprite_file_json(const SpriteSheet& s) {
     Json animations = Json::object();
-    for (const auto& [name, a] : s.animations) animations[name] = Json{{"frames", a.frames}, {"fps", a.fps}, {"loop", a.loop}};
+    for (const auto& [name, a] : s.animations) {
+        animations[name] = Json{{"frames", a.frames}, {"fps", a.fps}, {"loop", a.loop}};
+        if (!a.directional) animations[name]["directional"] = false;
+    }
     Json grid = Json::object();
     if (s.columns > 0 && s.rows > 0) grid = Json{{"columns", s.columns}, {"rows", s.rows}};
     else grid = Json{{"frame_width", s.frame_width}, {"frame_height", s.frame_height}};
@@ -129,7 +141,7 @@ Json sprite_file_json(const SpriteSheet& s) {
     grid["spacing"] = s.spacing;
     return Json{{"noor_sprite", kSpriteFormat}, {"name", s.name}, {"texture", s.texture ? Json(s.texture->to_string()) : Json(nullptr)},
                 {"grid", grid}, {"pivot", {s.pivot.x, s.pivot.y}}, {"pixels_per_metre", s.pixels_per_metre},
-                {"filter", s.nearest ? "nearest" : "linear"}, {"animations", animations}};
+                {"filter", s.nearest ? "nearest" : "linear"}, {"directions", s.directions}, {"animations", animations}};
 }
 
 } // namespace noor::asset

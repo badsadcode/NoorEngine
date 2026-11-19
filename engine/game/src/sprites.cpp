@@ -139,22 +139,16 @@ render::MaterialHandle SpriteLibrary::material(Sheet& s, int frame, Vec3 tint, b
     return handle;
 }
 
-int SpriteLibrary::frame_of(const SpriteInstance& sprite, double seconds) {
+int SpriteLibrary::frame_of(const SpriteInstance& sprite, Vec3 eye, double seconds) {
     Sheet* s = sheet(sprite.sheet);
     if (!s || s->sheet.frames.empty()) return -1;
-    const Json& c = sprite.component;
-    int frame = static_cast<int>(number(c, "frame", 0.0f));
-    if (c.is_object() && c.contains("animation") && c["animation"].is_string()) {
-        const double t = seconds * static_cast<double>(number(c, "speed", 1.0f)) + static_cast<double>(number(c, "time_offset", 0.0f));
-        frame = s->sheet.frame_at(c["animation"].get<std::string>(), t);
-    }
-    return std::clamp(frame, 0, static_cast<int>(s->sheet.frames.size()) - 1);
+    return sprite_frame(s->sheet, sprite.component, sprite.world, eye, seconds);
 }
 
 void SpriteLibrary::add_draws(std::span<const SpriteInstance> sprites, Vec3 eye, double seconds, std::vector<render::DrawItem>& out) {
     if (!quad_.valid()) return;
     for (const SpriteInstance& sp : sprites) {
-        const int frame = frame_of(sp, seconds);
+        const int frame = frame_of(sp, eye, seconds);
         if (frame < 0) continue;
         Sheet& s = *sheet(sp.sheet);
         const Json& c = sp.component;

@@ -307,6 +307,30 @@ struct LuaScriptSystem::Impl {
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
                  return 1;
              }},
+            // ---- Sprites (needs a sprite component; 8B part 6) ----
+            {"play_animation", [](lua_State* L) {
+                 lua_pushboolean(L, api::sprite_play(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2),
+                                                     static_cast<float>(luaL_optnumber(L, 3, 1.0))));
+                 return 1;
+             }},
+            {"stop_animation", [](lua_State* L) {
+                 api::sprite_stop(world_of(L), check_entity(L, 1));
+                 return 0;
+             }},
+            {"set_animation_speed", [](lua_State* L) {
+                 api::sprite_set_speed(world_of(L), check_entity(L, 1), static_cast<float>(luaL_checknumber(L, 2)));
+                 return 0;
+             }},
+            {"animation", [](lua_State* L) {
+                 if (const auto a = api::sprite_animation(world_of(L), check_entity(L, 1))) lua_pushstring(L, a->c_str());
+                 else lua_pushnil(L);
+                 return 1;
+             }},
+            // ---- Effects (needs an emitter component) ----
+            {"burst", [](lua_State* L) {
+                 lua_pushboolean(L, api::emitter_burst(world_of(L), check_entity(L, 1), static_cast<int>(luaL_checkinteger(L, 2))));
+                 return 1;
+             }},
             {nullptr, nullptr},
         };
         luaL_newmetatable(L, kEntityMeta);
@@ -629,10 +653,15 @@ void LuaScriptSystem::fixed_update(runtime::World& world, double dt) {
 void LuaScriptSystem::late_update(runtime::World& world, double dt) {
     auto& d = *impl_;
     d.world = &world;
-    // Physics events from this frame's fixed steps, then the late update.
+    // This frame's events (physics, sprite animations that ended), then the late update.
     for (const auto& e : world.events()) {
         if (!d.instances.contains(e.entity)) continue;
         using K = runtime::Event::Kind;
+        if (e.kind == K::AnimationEnd) {
+            lua_pushstring(d.L, e.name.c_str());
+            d.call(e.entity, "on_animation_end", 1);
+            continue;
+        }
         const char* hook = e.kind == K::CollisionEnter ? "on_collision_enter"
                          : e.kind == K::CollisionExit  ? "on_collision_exit"
                          : e.kind == K::TriggerEnter   ? "on_trigger_enter"

@@ -35,9 +35,12 @@ struct SpriteFrame {
 };
 
 struct SpriteAnimation {
-    std::vector<int> frames;  // indices into SpriteSheet::frames
+    std::vector<int> frames;  // indices into SpriteSheet::frames (directional sheets: in the direction-0 column)
     float fps = 8.0f;
     bool loop = true;
+    bool directional = true;  // false: the frames are shown as they are whatever the direction (death poses)
+    // How long one pass takes (frames / fps); 0 if it has no frames or no speed.
+    [[nodiscard]] double duration() const noexcept { return fps > 0.0f ? static_cast<double>(frames.size()) / fps : 0.0; }
 };
 
 struct SpriteSheet {
@@ -49,14 +52,20 @@ struct SpriteSheet {
     math::Vec2 pivot{0.5f, 0.0f};
     float pixels_per_metre = 64.0f;
     bool nearest = true;                 // pixel art by default
+    // 8-direction characters (8B part 6): the grid's columns hold `directions` views, one per column (as in The
+    // Uncounted's sheets): 0 faces the viewer, then turning to the viewer's left, so with 8, 2 faces left, 4 away,
+    // 6 right. An animation names its frames in the direction-0 column; direction d shows the frame d columns along.
+    int directions = 1;
     std::map<std::string, SpriteAnimation> animations;
     std::vector<SpriteFrame> frames;     // from slice()
 
     // A frame's size in the world (metres), from its pixels and pixels_per_metre.
     [[nodiscard]] math::Vec2 frame_size_m() const noexcept;
     // Which frame an animation shows `seconds` after it started (looping or holding the last frame); a missing
-    // animation shows frame 0. Exact: frame k from k / fps up to (k + 1) / fps.
-    [[nodiscard]] int frame_at(std::string_view animation, double seconds) const;
+    // animation shows frame 0. Exact: frame k from k / fps up to (k + 1) / fps. `direction` (0..directions-1) moves
+    // directional animations along the columns.
+    [[nodiscard]] int frame_at(std::string_view animation, double seconds, int direction = 0) const;
+    [[nodiscard]] const SpriteAnimation* animation(std::string_view name) const;
 };
 
 // Reads the settings (no slicing yet: that needs the texture's size). Missing fields take the defaults above.

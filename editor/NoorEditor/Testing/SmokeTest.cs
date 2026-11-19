@@ -1038,6 +1038,20 @@ internal static class SmokeTest
         var file = JsonNode.Parse(File.ReadAllText(Path.Combine(doc.ProjectRoot, path!)));
         check(file?["grid"]?["columns"]?.GetValue<int>() == 4 && file?["animations"]?["walk"]?["fps"]?.GetValue<double>() == 8,
               "sprites: the grid and the animation are saved in the .noorsprite");
+        // Directions (8B part 6): with 4 views across its 4 columns, turning the preview one step moves every walk frame
+        // one column along; the sheet slices without complaint, and the file says so.
+        panel.SetDirections(4);
+        panel.PreviewDirection = 1;
+        var turned = new HashSet<int>();
+        for (var t = 0; t < 30 && turned.Count < 4; t++)
+        {
+            await Task.Delay(50);
+            if (panel.PreviewFrame >= 0) turned.Add(panel.PreviewFrame);
+        }
+        check(panel.Last?["error"] == null && turned.SetEquals(new[] { 1, 2, 3, 4 }) &&
+              JsonNode.Parse(File.ReadAllText(Path.Combine(doc.ProjectRoot, path!)))?["directions"]?.GetValue<int>() == 4,
+              $"sprites: a direction picked in the preview moves the walk along the columns ({string.Join(", ", turned.OrderBy(f => f))})");
+        panel.SetDirections(1);
         shot(window, "editor_32_sprite_sheet.png");
         // Place it: a new entity with a sprite playing the walk, drawn in the viewport.
         doc.Select(null);

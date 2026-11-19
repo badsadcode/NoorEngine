@@ -46,6 +46,7 @@ store on `self` belong to that entity. Engine-set fields: `self.entity`, `self.p
 | `on_destroy()` | When the entity is destroyed, or play stops |
 | `on_collision_enter(other)`, `on_collision_exit(other)` | Physics bodies start / stop touching (before `on_late_update`) |
 | `on_trigger_enter(other)`, `on_trigger_exit(other)` | Something enters / leaves a trigger collider |
+| `on_animation_end(name)` | A non-looping sprite animation this entity's script played has finished (before `on_late_update`) |
 
 Errors stop that script for that entity (the Console shows file, line and stack); the game keeps
 running. A hook that runs longer than 0.25 s is stopped (endless loops).
@@ -106,6 +107,9 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground |
 | `e:is_grounded()` | Character controller: standing on walkable ground |
 | `e:play_sound()`, `e:stop_sound()`, `e:is_playing()` | The entity's `audio_source`: (re)start, stop, still playing? |
+| `e:play_animation(name [, speed])` | The entity's `sprite`: plays an animation of its sheet from the start (speed 1 by default); a non-looping one calls `on_animation_end(name)` when done. `false` without a sprite ([sprites](../fx/SPRITES.md)) |
+| `e:stop_animation()`, `e:set_animation_speed(s)`, `e:animation()` | Freeze it on the frame it's showing; play on faster or slower from here (0 freezes); what it's playing |
+| `e:burst(count)` | The entity's `emitter`: `count` particles at the next fixed step. Change its settings with `e:set("emitter", {...})`: its particles carry on |
 
 ## Physics components
 

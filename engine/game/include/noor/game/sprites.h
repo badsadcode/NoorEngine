@@ -16,6 +16,7 @@
 #include "noor/asset/material.h"
 #include "noor/asset/sprite_asset.h"
 #include "noor/game/game.h"
+#include "noor/game/sprite_animation.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
@@ -44,8 +45,8 @@ public:
     std::size_t refresh();
     // Draw items for `sprites`, facing `eye`, animated at `seconds`. Sheets that fail to load are reported once.
     void add_draws(std::span<const SpriteInstance> sprites, math::Vec3 eye, double seconds, std::vector<render::DrawItem>& out);
-    // The frame a sprite shows at `seconds` (its animation, speed and offset; or its "frame"); -1 if its sheet won't load.
-    [[nodiscard]] int frame_of(const SpriteInstance& sprite, double seconds);
+    // The frame a sprite shows to a viewer at `eye` at `seconds` (sprite_frame); -1 if its sheet won't load.
+    [[nodiscard]] int frame_of(const SpriteInstance& sprite, math::Vec3 eye, double seconds);
 
 private:
     struct Sheet {

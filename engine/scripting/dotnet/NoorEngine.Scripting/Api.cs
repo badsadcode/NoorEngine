@@ -29,6 +29,8 @@ public abstract class NoorScript
     public virtual void OnCollisionExit(Entity other) { }
     public virtual void OnTriggerEnter(Entity other) { }
     public virtual void OnTriggerExit(Entity other) { }
+    /// <summary>A non-looping sprite animation this script played (Entity.PlayAnimation) has finished.</summary>
+    public virtual void OnAnimationEnd(string animation) { }
 }
 
 /// <summary>
@@ -124,6 +126,23 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public bool PlaySound() => Engine.A.Sound(Id, 0) != 0;
     public void StopSound() => Engine.A.Sound(Id, 1);
     public bool IsPlaying => Engine.A.Sound(Id, 2) != 0;
+
+    // ---- Sprites (needs a sprite component) ----
+    /// <summary>Plays a sprite animation from its start; a non-looping one calls OnAnimationEnd when it's done.</summary>
+    public bool PlayAnimation(string animation, float speed = 1)
+    {
+        fixed (byte* a = Engine.Utf8(animation)) return Engine.A.Sprite(Id, 0, a, speed) != 0;
+    }
+    /// <summary>Freezes the sprite on the frame it's showing.</summary>
+    public void StopAnimation() => Engine.A.Sprite(Id, 1, null, 0);
+    /// <summary>Plays on faster or slower from here (0 freezes it).</summary>
+    public void SetAnimationSpeed(float speed) => Engine.A.Sprite(Id, 2, null, speed);
+    /// <summary>The animation it's playing (or showing), or null.</summary>
+    public string? Animation => Engine.Str(Engine.A.SpriteAnimation(Id));
+
+    // ---- Effects (needs an emitter component) ----
+    /// <summary>Spawns <paramref name="count"/> particles from the entity's emitter at the next fixed step.</summary>
+    public bool Burst(int count) => Engine.A.Burst(Id, count) != 0;
 
     /// <summary>The entity's id (the same text as in the scene file and the Inspector).</summary>
     public string IdText

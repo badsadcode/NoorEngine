@@ -18,6 +18,7 @@ using asset::Json;
 // The world whose script hook is running (scripts only call back during hooks, on this thread).
 thread_local runtime::World* t_world = nullptr;
 thread_local std::string t_text;
+thread_local std::string t_event_name;  // the event being delivered (AnimationEnd: its animation)
 
 struct WorldScope {
     runtime::World* previous;
@@ -215,6 +216,23 @@ int32_t rt_ui_rect(float x, float y, float w, float h, const char* color, const 
     return 1;
 }
 
+int32_t rt_sprite(noor_rt_entity e, int32_t op, const char* animation, float speed) {
+    if (!t_world) return 0;
+    switch (op) {
+    case NOOR_RT_SPRITE_PLAY: return animation && api::sprite_play(*t_world, from_rt(e), animation, speed) ? 1 : 0;
+    case NOOR_RT_SPRITE_STOP: api::sprite_stop(*t_world, from_rt(e)); return 1;
+    case NOOR_RT_SPRITE_SPEED: api::sprite_set_speed(*t_world, from_rt(e), speed); return 1;
+    default: return 0;
+    }
+}
+const char* rt_sprite_animation(noor_rt_entity e) {
+    if (!t_world) return nullptr;
+    const auto a = api::sprite_animation(*t_world, from_rt(e));
+    return a ? give(*a) : nullptr;
+}
+int32_t rt_burst(noor_rt_entity e, int32_t count) { return t_world && api::emitter_burst(*t_world, from_rt(e), count) ? 1 : 0; }
+const char* rt_event_name() { return t_event_name.c_str(); }
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -225,6 +243,7 @@ const noor_rt_api kApi = {
     rt_raycast, rt_push, rt_character_jump, rt_is_grounded,
     rt_sound, rt_play_one_shot, rt_set_bus_volume,
     rt_ui_text, rt_ui_rect,
+    rt_sprite, rt_sprite_animation, rt_burst, rt_event_name,
 };
 
 } // namespace
@@ -314,9 +333,10 @@ void CSharpScriptSystem::late_update(runtime::World& world, double dt) {
         const auto it = instances_.find(e.entity);
         if (it == instances_.end()) continue;
         WorldScope scope(world);
+        t_event_name = e.name;
         if (host_->event(it->second, static_cast<int32_t>(e.kind), to_rt(e.other)) == 0) {
             const char* why = host_->last_error ? host_->last_error() : nullptr;
-            report(std::format("{} (collision/trigger hook on '{}'); the script is stopped for this entity", why ? why : "exception",
+            report(std::format("{} (event hook on '{}'); the script is stopped for this entity", why ? why : "exception",
                                api::name(world, e.entity).value_or("?")));
             release(e.entity);
         }

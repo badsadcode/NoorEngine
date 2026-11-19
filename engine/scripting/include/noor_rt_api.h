@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 3u /* 2: sound; 3: HUD */
+#define NOOR_RT_API_VERSION 4u /* 2: sound; 3: HUD; 4: sprites, emitter bursts */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -51,8 +51,11 @@ enum { NOOR_RT_SOUND_PLAY = 0, NOOR_RT_SOUND_STOP = 1, NOOR_RT_SOUND_IS_PLAYING 
 enum { NOOR_RT_DOWN = 0, NOOR_RT_PRESSED = 1, NOOR_RT_RELEASED = 2 };
 /* hooks (noor_rt_host.call) */
 enum { NOOR_RT_START = 0, NOOR_RT_UPDATE = 1, NOOR_RT_FIXED_UPDATE = 2, NOOR_RT_LATE_UPDATE = 3, NOOR_RT_DESTROY = 4 };
-/* events (noor_rt_host.event), same order as runtime::Event::Kind */
-enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3 };
+/* events (noor_rt_host.event), same order as runtime::Event::Kind. ANIMATION_END: `other` is the entity itself and
+ * noor_rt_api.event_name() gives the animation. */
+enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3, NOOR_RT_ANIMATION_END = 4 };
+/* sprite(): ops */
+enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2 };
 
 typedef struct noor_rt_api {
     uint32_t version; /* NOOR_RT_API_VERSION */
@@ -95,6 +98,13 @@ typedef struct noor_rt_api {
      * (NULL: white, top_left). 0 if the color or anchor is not understood (nothing is drawn). */
     int32_t (*ui_text)(const char* text, float x, float y, float size, const char* color, const char* anchor);
     int32_t (*ui_rect)(float x, float y, float w, float h, const char* color, const char* anchor);
+
+    /* v4: sprites and effects (Milestone 8B, part 6). sprite(): PLAY `animation` from its start at `speed` (0 if the
+     * entity has no sprite), STOP (freeze on the current frame), SPEED (from here on; 0 freezes). */
+    int32_t (*sprite)(noor_rt_entity e, int32_t op, const char* animation, float speed);
+    const char* (*sprite_animation)(noor_rt_entity e); /* NULL: none */
+    int32_t (*burst)(noor_rt_entity e, int32_t count);   /* particles from its emitter at the next fixed step */
+    const char* (*event_name)(void);                     /* during an ANIMATION_END event: the animation */
 } noor_rt_api;
 
 typedef struct noor_rt_host {

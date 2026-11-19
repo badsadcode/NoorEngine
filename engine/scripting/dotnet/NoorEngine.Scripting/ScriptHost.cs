@@ -196,6 +196,7 @@ public static unsafe class ScriptHost
                 case 1: s.OnCollisionExit(o); break;
                 case 2: s.OnTriggerEnter(o); break;
                 case 3: s.OnTriggerExit(o); break;
+                case 4: s.OnAnimationEnd(Engine.Str(Engine.A.EventName()) ?? ""); break;
             }
             return 1;
         }

@@ -73,6 +73,18 @@ Option 3.
   billboards are turned to the camera every frame (in the viewport too, from the snapshot's `sprites`). Editor API
   v26: `noor_doc_sprite` (list, read with the sliced frames, create from a texture, save, apply). Ranges in
   animations are capped at 65,536 frames (a typo mustn't allocate billions).
+- **Part 6, directions and scripts:** directional sheets put the views in the columns (The Uncounted's layout:
+  0 faces the viewer, turning to the viewer's left), so an animation names direction 0's frames and direction d adds
+  d; `"directional": false` per animation for poses that don't turn. The view is the angle between the entity's −Z
+  and the level direction to the camera, rounded; `game::sprite_direction`/`sprite_frame` are pure functions shared by
+  games, the viewport and tests. Script control lives in the component (`started` in game seconds, `speed`,
+  `paused_at`), not in a hidden runtime state, so drawing, saving and built games all read the same thing;
+  `game::SpriteAnimationSystem` only watches script-played, non-looping animations and posts
+  `runtime::Event::AnimationEnd` (events gained a name) once. Emitter bursts reach NoorFX through a new World command
+  channel (`World::handle`/`command`; systems register in `System::attached`), since the runtime's script API can't
+  depend on NoorFX; they're applied at the next fixed step, like everything else that touches the simulation.
+  `noor_rt_api` v4 (sprite, sprite_animation, burst, event_name). The editor's viewport animates on the game's clock
+  while playing (the snapshot carries it).
 - **Found in part 2:** automatic exposure meters sun, sky and moon only, so glowing particles that suit noon blow out
   at night. Scenes give fires a point light and a night emission; a meter that sees local light is in the ideas inbox.
 - **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget

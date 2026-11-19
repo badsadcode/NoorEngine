@@ -102,6 +102,13 @@ after see-through things, so a drop behind a window isn't tinted by it.
 The editor's preview is its own simulation of the scene, not the game's: in Play mode, the game's particles are the
 ones that count (and replay identically in built games).
 
+## From scripts
+
+`e:burst(count)` (Lua) and `Entity.Burst(count)` (C#) spawn that many particles from the entity's emitter at the next
+fixed step, as deterministic as the rest (Milestone 8B, part 6). An emitter with `"rate": 0` then only makes what
+scripts ask for: a hit, a pickup. Settings are changed with `set("emitter", ...)` / `Entity.Set`: the particles
+already flying carry on, and new ones follow the new settings.
+
 ## Wind
 
 The scene's environment can set a ground wind: `"wind_speed"` in m/s and `"wind_direction"` in degrees, where it

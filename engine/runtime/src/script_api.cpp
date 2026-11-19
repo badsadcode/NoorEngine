@@ -160,6 +160,66 @@ void set_component(World& w, const Guid& e, std::string_view type, asset::Json v
     else x->components[std::string(type)] = std::move(value);
 }
 
+// ---- Sprites ----
+namespace {
+// Seconds into its animation (the same reckoning as game::sprite_time, which draws it).
+double animation_seconds(const asset::Json& c, double now) {
+    if (c.contains("paused_at") && c["paused_at"].is_number()) return c["paused_at"].get<double>();
+    const double speed = c.contains("speed") && c["speed"].is_number() ? c["speed"].get<double>() : 1.0;
+    if (c.contains("started") && c["started"].is_number()) return std::max(0.0, (now - c["started"].get<double>()) * speed);
+    const double offset = c.contains("time_offset") && c["time_offset"].is_number() ? c["time_offset"].get<double>() : 0.0;
+    return now * speed + offset;
+}
+} // namespace
+
+bool sprite_play(World& w, const Guid& e, std::string_view animation, float speed) {
+    const auto* c = component(w, e, "sprite");
+    if (!c || !c->is_object()) return false;
+    asset::Json s = *c;
+    s["animation"] = std::string(animation);
+    s["started"] = w.time();
+    s["speed"] = speed;
+    s.erase("paused_at");
+    set_component(w, e, "sprite", std::move(s));
+    return true;
+}
+
+void sprite_stop(World& w, const Guid& e) {
+    const auto* c = component(w, e, "sprite");
+    if (!c || !c->is_object() || c->contains("paused_at")) return;
+    asset::Json s = *c;
+    s["paused_at"] = animation_seconds(s, w.time());
+    set_component(w, e, "sprite", std::move(s));
+}
+
+void sprite_set_speed(World& w, const Guid& e, float speed) {
+    const auto* c = component(w, e, "sprite");
+    if (!c || !c->is_object()) return;
+    asset::Json s = *c;
+    const double now = w.time();
+    const double at = animation_seconds(s, now);
+    if (speed <= 0.0f) {
+        s["paused_at"] = at;
+    } else {
+        s.erase("paused_at");
+        s["started"] = now - at / static_cast<double>(speed);  // the same moment of the animation, from now at the new speed
+        s.erase("time_offset");
+    }
+    s["speed"] = std::max(0.0f, speed);
+    set_component(w, e, "sprite", std::move(s));
+}
+
+std::optional<std::string> sprite_animation(World& w, const Guid& e) {
+    const auto* c = component(w, e, "sprite");
+    if (!c || !c->is_object() || !c->contains("animation") || !(*c)["animation"].is_string()) return std::nullopt;
+    return (*c)["animation"].get<std::string>();
+}
+
+bool emitter_burst(World& w, const Guid& e, int count) {
+    if (!exists(w, e) || count <= 0) return false;
+    return w.command("emitter.burst", e, asset::Json{{"count", count}});
+}
+
 bool input_down(World& w, std::string_view a) { return w.input().down(a); }
 bool input_pressed(World& w, std::string_view a) { return w.input().pressed(a); }
 bool input_released(World& w, std::string_view a) { return w.input().released(a); }

@@ -147,6 +147,7 @@ struct RenderSnapshot {
     std::vector<Primitive> primitives;
     using Sprite = game::SceneView::Sprite;  // `sprite` components (8B part 5): billboards turned to the viewport's camera
     std::vector<Sprite> sprites;
+    std::optional<double> game_time;  // while playing: the game's time (sprites' animations, clouds); else the viewport's clock
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
