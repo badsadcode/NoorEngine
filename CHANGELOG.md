@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8A, part 7b: clouds with depth
+**Added**
+- **Volumetric cloud layers** (ADR-034): `"cloud_type": "volume"` and `"cloud_thickness"` (also `cloud2_`). The
+  layer's coverage map extruded into a slab (flat bases, rounded tops), carved into lumps by cellular noise, eroded
+  by value noise, lit by a march towards the sun (two-lobe phase, Wrenninge's multiple scattering, the two-stream
+  diffuse term, the sky above). The look was chosen from rendered variants. Flat layers are unchanged.
+- **Reference** in `render/clouds.h` (`cloud_volume_density`, `cloud_volume_march`, tiling `cloud_billow` and
+  `cloud_detail`); **GPU** in `shaders/clouds_volume.hlsl`: `CSNoise` bakes the noises into a 128³ tile once,
+  `CSMarch` marches at half resolution (`vulkan_clouds.cpp`); the sky pass lays the result over the sky (frame set
+  binding 6). FrameUniforms gains `cloud_c` (thickness, volume flag per layer).
+- **Editor**: `cloud_type` is a drop-down (layer, volume) in the Inspector.
+
+**Changed:** the sky pass's cloud loop; the environment build check's cloud layer is now a volume.
+
+**Tests:** `clouds:` unit tests (shape, column density, sides, horizon coverage, light per unit of cloud, thick
+clouds darker, the noises tile), golden `Atmosphere_Volume`, `render.clouds_volume_cost` (1.50 ms measured, budget
+2.5), `cli.environment_builds_identically` with a volume; all older goldens unchanged.
+
 ### 2026-11-19 — Milestone 8A, part 7: weather zones
 **Added**
 - **`weather_zone` components** (`game/weather.h`): a box or sphere on its entity with a `blend` distance, a

@@ -70,6 +70,7 @@ struct FrameUniforms
     float4 cloud_a[2];       // per layer: coverage, density, altitude km, scale km
     float4 cloud_b[2];       // per layer: drift x, z km; [0].z planet radius km, [0].w camera height km
     uint4 cloud_flags;       // seed 0, seed 1, enabled 0, enabled 1
+    float4 cloud_c;          // part 7b: thickness km 0, 1; volume 0, 1 (1 = a volume)
 };
 [[vk::binding(0, 0)]] ConstantBuffer<FrameUniforms> frame;
 [[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2DArray<float> shadow_map;
@@ -99,6 +100,8 @@ float cloud_shadow(float3 world)
         layers[i].offset_km = frame.cloud_b[i].xy;
         layers[i].seed = frame.cloud_flags[i];
         layers[i].enabled = frame.cloud_flags[2 + i] != 0;
+        layers[i].volume = false;  // shadows use the column's optical depth, the same for both styles (ADR-034)
+        layers[i].thickness_km = 1.0;
     }
     return cloud_sun_transmittance(layers, world, frame.to_sun.xyz);
 }

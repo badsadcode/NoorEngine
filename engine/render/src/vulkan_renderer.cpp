@@ -348,6 +348,7 @@ void Renderer::Impl::destroy_swapchain_resources() {
     image_views.clear();
     destroy_depth_buffer();
     destroy_hdr_target();
+    destroy_cloud_volume_targets();
 }
 
 Status Renderer::Impl::rebuild_swapchain() {
@@ -473,6 +474,9 @@ Status Renderer::Impl::rebuild_swapchain() {
     if (auto status = ensure_sky_pipeline(); !status) {
         return status;
     }
+    if (auto status = create_cloud_volume_targets(); !status) {  // half the screen; frame set binding 6
+        return status;
+    }
     if (auto status = ensure_default_environment(); !status) {
         return status;
     }
@@ -568,8 +572,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
 
     const VkImage image = images[image_index];
 
-    // ---- The live sky (compute), when the sun or the atmosphere changed ----
+    // ---- The live sky (compute), when the sun or the atmosphere changed; volume clouds (part 7b) ----
     record_live_sky(frame.cmd);
+    if (auto s = record_cloud_volume(frame.cmd, frame_desc); !s) return std::unexpected(s.error());
     stamp(1, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
 
     // ---- Shadow pass: the sun's cascades ----
@@ -767,6 +772,7 @@ void Renderer::Impl::destroy() {
         destroy_mesh_pipeline();
         destroy_msaa_targets();
         destroy_overlay();
+        destroy_cloud_volume();
         destroy_frame_resources();
         destroy_textures();
         destroy_swapchain_resources();

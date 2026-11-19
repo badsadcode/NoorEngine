@@ -100,6 +100,23 @@ An environment can live in its own file, `Assets/Environments/<name>.noorenv`, a
 preset it came from. The built-in presets themselves never change. An environment can set the exposure
 (`"ev100": "auto"` or a number), which then wins over the camera's: the presets all meter automatically.
 
+### Volumetric clouds (Milestone 8A, part 7b, [ADR-034](../decisions/ADR-034-volumetric-cloud-layers.md))
+
+A cloud layer is flat by default: a thin, cheap layer with a classic look (about 0.04 ms). Add
+`"cloud_type": "volume"` (or `"cloud2_type"` for the second layer) and it becomes clouds with depth:
+
+```json
+"cloud_type": "volume", "cloud_thickness": 1500, "cloud_coverage": 0.45, "cloud_density": 8,
+"cloud_altitude": 1500, "cloud_scale": 2500
+```
+
+The same coverage, seed and wind put the clouds in the same places; the volume gives them flat bases, rounded
+cauliflower tops, sunlit sides and grey bellies, and they stack behind each other towards the horizon.
+`cloud_thickness` (metres) is how tall the slab is; `cloud_density` is still the optical thickness of a full cloud,
+so cloud shadows and automatic exposure stay consistent. Cost: about 1.5 ms a frame at 1280×720 on an RTX 3080. A
+volume is seen from below and from the side (not from above, and you can't fly through it yet), and reflections see
+it as its flat coverage. In the Inspector, `cloud_type` is a drop-down.
+
 ### Weather zones (Milestone 8A, part 7)
 
 A `weather_zone` component makes the environment different somewhere: a fog bank, a hazy valley.

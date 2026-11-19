@@ -108,6 +108,7 @@ Status Renderer::Impl::create_aerial_default() {
 }
 
 void Renderer::Impl::write_cloud_light_descriptor(std::uint32_t frame_slot, VkBuffer buffer) {
+    frame_cloud_light[frame_slot] = buffer;  // the cloud volume's march reads the same light
     VkDescriptorBufferInfo light_info{buffer, 0, VK_WHOLE_SIZE};
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.dstSet = frame_sets[frame_slot];
@@ -131,20 +132,21 @@ void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageVi
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[6] = {
+    const VkDescriptorSetLayoutBinding bindings[7] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
         {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // environment cube
         {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // environment irradiance (SH9)
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // aerial perspective volume
         {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // the clouds' light
+        {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the cloud volume (part 7b)
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 6;
+    layout_info.bindingCount = 7;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
-                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 3},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 4},
                                                 {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 2}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
@@ -285,6 +287,9 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
             clouds.b[i] = {drift.x, drift.y, 0.0f, 0.0f};
             clouds.flags[i] = layer.seed;
             clouds.flags[2 + i] = 1u;
+            // Volumes (part 7b) are drawn by the sky pass only; the live sky's lighting sees their coverage as a layer.
+            (i == 0 ? u.cloud_c.x : u.cloud_c.y) = std::max(0.05f, layer.thickness_km);
+            (i == 0 ? u.cloud_c.z : u.cloud_c.w) = layer.volume ? 1.0f : 0.0f;
         }
         clouds.b[0].z = live_sky.desc.planet_radius_km;
         clouds.b[0].w = std::max(0.0f, (live_sky.desc.altitude_m + eye.y) * 0.001f);

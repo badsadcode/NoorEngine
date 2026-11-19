@@ -131,3 +131,132 @@ TEST_CASE("clouds: thick clouds let less light through, diffused (two-stream, g 
     CHECK(render::cloud_diffuse_transmittance(40.0f) == doctest::Approx(1.0f / 5.5f));   // a storm cloud: under a fifth
     CHECK(render::cloud_diffuse_transmittance(40.0f) < render::cloud_diffuse_transmittance(8.0f));
 }
+
+// ---- Volumetric layers (part 7b, ADR-034) ----
+
+namespace {
+
+render::CloudLayer volume(float coverage, float density = 8.0f, std::uint32_t seed = 7) {
+    render::CloudLayer l = layer(coverage, seed);
+    l.volume = true;
+    l.density = density;
+    l.altitude_km = 1.5f;
+    l.thickness_km = 1.5f;
+    l.scale_km = 2.5f;
+    return l;
+}
+
+constexpr float kPlanet = 6360.0f;
+const Vec3 kSun{0.0f, 1.0f, 0.0f};    // overhead
+const Vec3 kLight{1.0f, 1.0f, 1.0f};  // sunlight at the layer (relative)
+const Vec3 kSky{0.1f, 0.12f, 0.15f};
+
+float luminance(Vec3 v) { return 0.2126f * v.x + 0.7152f * v.y + 0.0722f * v.z; }
+
+} // namespace
+
+TEST_CASE("clouds: a volume has a shape: flat bases, rounded tops, taller where it's cloudier") {
+    CHECK(render::cloud_height_profile(0.0f, 1.0f) == 0.0f);
+    CHECK(render::cloud_height_profile(0.1f, 1.0f) == doctest::Approx(1.0f));   // full just above the base
+    CHECK(render::cloud_height_profile(0.5f, 1.0f) == doctest::Approx(1.0f));
+    CHECK(render::cloud_height_profile(0.9f, 1.0f) < render::cloud_height_profile(0.7f, 1.0f));  // rounding off
+    CHECK(render::cloud_height_profile(0.5f, 0.2f) == 0.0f);                     // a wisp stays low
+    CHECK(render::cloud_height_profile(0.2f, 0.2f) > 0.0f);
+    // The column mean the extinction is scaled by.
+    double sum = 0.0;
+    constexpr int kN = 10000;
+    for (int i = 0; i < kN; ++i) sum += render::cloud_height_profile((i + 0.5f) / kN, 1.0f);
+    CHECK(sum / kN == doctest::Approx(render::kCloudColumnMean).epsilon(0.02));
+    // Outside the slab, nothing; a flat layer has no volume at all.
+    const auto v = volume(0.6f);
+    CHECK(render::cloud_volume_density(v, 0.3f, 1.4f, 0.2f, {}) == 0.0f);
+    CHECK(render::cloud_volume_density(v, 0.3f, 3.1f, 0.2f, {}) == 0.0f);
+    render::CloudLayer flat = v;
+    flat.volume = false;
+    const auto none = render::cloud_volume_march(flat, {0, 0, 0}, kPlanet, {0, 1, 0}, kSun, kLight, kSky, {});
+    CHECK(none.transmittance == 1.0f);
+}
+
+TEST_CASE("clouds: a volume's column keeps the layer's density as its optical thickness, and the march converges") {
+    // Overcast (coverage 1): looking straight up from the ground crosses a full cloud.
+    const auto v = volume(1.0f, 8.0f);
+    const auto fine = render::cloud_volume_march(v, {0.4f, 0.0f, 0.7f}, kPlanet, {0, 1, 0}, kSun, kLight, kSky, {}, 512, 6);
+    const auto coarse = render::cloud_volume_march(v, {0.4f, 0.0f, 0.7f}, kPlanet, {0, 1, 0}, kSun, kLight, kSky, {}, 48, 6);
+    const float tau = -std::log(std::max(1e-9f, fine.transmittance));
+    CHECK(tau > 0.5f * 8.0f);   // erosion takes some away
+    CHECK(tau < 1.05f * 8.0f);  // never more than the layer's density
+    CHECK(-std::log(std::max(1e-9f, coarse.transmittance)) == doctest::Approx(tau).epsilon(0.05));
+    CHECK(luminance(coarse.radiance) == doctest::Approx(luminance(fine.radiance)).epsilon(0.05));
+}
+
+TEST_CASE("clouds: a volume has sides, where a flat layer has none") {
+    // From a mountain at cloud height, looking level: through the slab, into the clouds.
+    const auto v = volume(0.7f);
+    const Vec3 eye{0.0f, v.altitude_km + 0.3f * v.thickness_km, 0.0f};
+    float hits = 0.0f;
+    for (int i = 0; i < 16; ++i) {
+        const float a = static_cast<float>(i) * 0.3927f;
+        hits += 1.0f - render::cloud_volume_march(v, eye, kPlanet, {std::sin(a), 0.0f, -std::cos(a)}, kSun, kLight, kSky, {}).transmittance;
+    }
+    CHECK(hits / 16.0f > 0.5f);
+    // Near the horizon, seen from the ground, clouds stack up behind each other: on average more opaque than a flat
+    // layer's single crossing of the same coverage (a patchy sky, where a flat layer still shows gaps).
+    const auto patchy = volume(0.35f);
+    float vol = 0.0f, flat = 0.0f;
+    const Vec3 ground{0, 0, 0};
+    const float up = std::sin(math::radians(5.0f)), level = std::cos(math::radians(5.0f));
+    for (int i = 0; i < 64; ++i) {
+        const float a = static_cast<float>(i) * 0.0982f;
+        const Vec3 view{std::sin(a) * level, up, -std::cos(a) * level};
+        vol += 1.0f - render::cloud_volume_march(patchy, ground, kPlanet, view, kSun, kLight, kSky, {}).transmittance;
+        const float r = kPlanet, shell = kPlanet + patchy.altitude_km;
+        const float t = -r * view.y + std::sqrt(r * r * (view.y * view.y - 1.0f) + shell * shell);
+        const float cover = render::cloud_cover_at(patchy, view.x * t, view.z * t, {});
+        flat += (1.0f - std::exp(-cover * patchy.density)) * std::exp(-t / 250.0f);
+    }
+    MESSAGE("near the horizon: volume ", vol / 64.0f, ", flat ", flat / 64.0f);
+    CHECK(vol > 1.2f * flat);
+}
+
+TEST_CASE("clouds: sunlit tops are bright, bases and thick clouds dark") {
+    // Inside an overcast volume, looking level: cloud near the top sees more sun than cloud near the base. Judged per
+    // bit of cloud (radiance over opacity): with puffs, a look near the top crosses gaps between domes, so its total
+    // light also depends on how much cloud it meets, which isn't the question.
+    const auto v = volume(1.0f, 12.0f);
+    const auto at = [&](float h) {
+        float lit = 0.0f, seen = 0.0f;
+        for (int i = 0; i < 16; ++i) {  // several directions: one look may miss the cloud entirely
+            const float a = static_cast<float>(i) * 0.3927f;
+            const Vec3 eye{0.0f, v.altitude_km + h * v.thickness_km, 0.0f};
+            const auto c = render::cloud_volume_march(v, eye, kPlanet, {std::sin(a), 0.0f, -std::cos(a)}, kSun, kLight, kSky, {});
+            lit += luminance(c.radiance);
+            seen += 1.0f - c.transmittance;
+        }
+        REQUIRE(seen > 0.5f);
+        return lit / seen;
+    };
+    CHECK(at(0.8f) > 1.5f * at(0.15f));
+    // From the ground under the sun, a thick cloud is darker than a thin one.
+    const auto from_below = [&](float density) {
+        return luminance(render::cloud_volume_march(volume(1.0f, density), {0, 0, 0}, kPlanet, {0, 1, 0}, kSun, kLight, kSky, {}).radiance);
+    };
+    CHECK(from_below(40.0f) < from_below(4.0f));
+    // The same inputs give the same cloud (no hidden state: goldens and built games depend on it).
+    const auto a = render::cloud_volume_march(volume(0.5f), {0.1f, 0.0f, 0.2f}, kPlanet, math::normalize(Vec3{0.3f, 0.5f, -0.8f}), kSun, kLight, kSky, {0.2f, 0.1f}, 48, 6, 0.37f);
+    const auto b = render::cloud_volume_march(volume(0.5f), {0.1f, 0.0f, 0.2f}, kPlanet, math::normalize(Vec3{0.3f, 0.5f, -0.8f}), kSun, kLight, kSky, {0.2f, 0.1f}, 48, 6, 0.37f);
+    CHECK(a.transmittance == b.transmittance);
+    CHECK(a.radiance.x == b.radiance.x);
+}
+
+TEST_CASE("clouds: the volume noises tile, so the GPU can bake them once") {
+    const float p = static_cast<float>(render::kCloudNoisePeriod);
+    for (int i = 0; i < 20; ++i) {
+        const float x = 0.37f * static_cast<float>(i), y = 0.21f * static_cast<float>(i) + 0.1f, z = 1.7f - 0.13f * static_cast<float>(i);
+        CHECK(render::cloud_billow(x + p, y, z) == doctest::Approx(render::cloud_billow(x, y, z)).epsilon(1e-4));
+        CHECK(render::cloud_billow(x, y - p, z + p) == doctest::Approx(render::cloud_billow(x, y, z)).epsilon(1e-4));
+        CHECK(render::cloud_detail(x - p, y, z) == doctest::Approx(render::cloud_detail(x, y, z)).epsilon(1e-4));
+        CHECK(render::cloud_detail(x, y + p, z - p) == doctest::Approx(render::cloud_detail(x, y, z)).epsilon(1e-4));
+    }
+    // Different seeds read different places.
+    CHECK(render::cloud_noise_offset(1).x != render::cloud_noise_offset(2).x);
+}

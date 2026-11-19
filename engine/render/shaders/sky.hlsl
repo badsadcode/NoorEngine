@@ -26,6 +26,7 @@ struct FrameUniforms
     float4 cloud_a[2];       // per layer: coverage, density, altitude km, scale km
     float4 cloud_b[2];       // per layer: drift x, z km; [0].z planet radius km, [0].w camera height km
     uint4 cloud_flags;       // seed 0, seed 1, enabled 0, enabled 1
+    float4 cloud_c;          // part 7b: thickness km 0, 1; volume 0, 1 (1 = a volume)
     float4 sky_sun_direction;  // towards the real sun
     float4 sky_sun_seen;       // its disc's colour x illuminance through the air (exposed)
     float4 sky_sun_outer;      // its colour x illuminance outside the air (exposed): lights the bodies
@@ -39,6 +40,10 @@ struct FrameUniforms
 [[vk::binding(1, 1)]] SamplerState texture_sampler;
 [[vk::binding(3, 0)]] StructuredBuffer<float4> irradiance_sh;  // the fog's ambient light
 [[vk::binding(5, 0)]] StructuredBuffer<float4> cloud_light;    // [2i] sun, [2i + 1] sky at cloud layer i (relative)
+// Part 7b: the volume layers, marched at half resolution by clouds_volume.hlsl (rgb radiance relative to a sun of 1,
+// a what they let through).
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] Texture2D<float4> cloud_volume;
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] SamplerState cloud_volume_sampler;
 
 #include "clouds.hlsli"
 #include "fog.hlsli"
@@ -54,6 +59,8 @@ CloudLayer cloud_layer(uint i)
     l.offset_km = frame.cloud_b[i].xy;
     l.seed = frame.cloud_flags[i];
     l.enabled = frame.cloud_flags[2 + i] != 0;
+    l.thickness_km = i == 0 ? frame.cloud_c.x : frame.cloud_c.y;
+    l.volume = (i == 0 ? frame.cloud_c.z : frame.cloud_c.w) > 0.5;
     return l;
 }
 
@@ -204,11 +211,25 @@ float4 PSMain(VertexOutput input) : SV_Target
     {
         const float3 eye_km = float3(frame.camera_position.x * 0.001, frame.cloud_b[0].w, frame.camera_position.z * 0.001);
         const uint first = frame.cloud_a[1].z > frame.cloud_a[0].z ? 1u : 0u;
+        bool volume_drawn = false;
         [unroll] for (uint k = 0; k < 2; ++k)
         {
             const uint i = k == 0 ? first : 1u - first;
+            const CloudLayer layer = cloud_layer(i);
+            if (layer.volume)
+            {
+                // Part 7b: every volume layer, marched at half resolution (clouds_volume.hlsl), laid over the sky once,
+                // where the first of them comes in this far-to-near order.
+                if (!volume_drawn)
+                {
+                    const float4 v = cloud_volume.SampleLevel(cloud_volume_sampler, input.ndc * 0.5 + 0.5, 0);
+                    color = color * v.a + v.rgb * frame.environment.x;
+                    volume_drawn = true;
+                }
+                continue;
+            }
             float alpha;
-            const float3 c = cloud_layer_shade(cloud_layer(i), eye_km, frame.cloud_b[0].z, world_d, pixel_angle, frame.to_sun.xyz, cloud_light[i * 2].rgb,
+            const float3 c = cloud_layer_shade(layer, eye_km, frame.cloud_b[0].z, world_d, pixel_angle, frame.to_sun.xyz, cloud_light[i * 2].rgb,
                                                cloud_light[i * 2 + 1].rgb, alpha);
             color = color * (1.0 - alpha) + c * frame.environment.x * alpha;  // relative to the sun's illuminance
         }

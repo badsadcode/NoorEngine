@@ -299,6 +299,8 @@ CloudLayer cloud_layer(uint i)
     l.offset_km = clouds.b[i].xy;
     l.seed = clouds.flags[i];
     l.enabled = clouds.flags[2 + i] != 0;
+    l.volume = false;  // the live sky's lighting sees a volume's coverage as a layer (ADR-034)
+    l.thickness_km = 1.0;
     return l;
 }
 

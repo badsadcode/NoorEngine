@@ -57,6 +57,7 @@ export mode).
 | 5 ✅ | **Night and space**: moon (phase, light), stars (a deterministic star field), exposure for night that keeps silhouettes readable; `sky: "space"`: no scattering, a black sky with stars, **celestial bodies** (planets, moons, rings: textured spheres or discs at a direction and size, lit by the sun), several suns allowed | A night golden where the house and trees read against the sky; a space golden (a planet with a lit and a dark side, a second sun); the Alien World preset's look becomes possible (later) |
 | 6 ✅ | **`.noorenv` assets and presets**: environment assets with every setting, scenes referencing them (with overrides), six presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast), the editor's environment gallery (thumbnails, apply, duplicate, edit, reset) and inspector | Applying a preset changes sky, light, fog and exposure together (smoke test); duplicating a preset never changes the installed one; a custom environment saves, reopens and builds into a game identically (tests) |
 | 7 ✅ | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
+| 7b ✅ | **Clouds with depth** (added 2026-11-19, [ADR-034](../decisions/ADR-034-volumetric-cloud-layers.md)): a layer can be a **volume** (`"cloud_type": "volume"`, a thickness): the layer's coverage map extruded into a slab with flat bases and rounded tops, eroded by 3D noise, ray-marched with light marched towards the sun. The flat layers stay exactly as they are, as a style of their own | A cloud seen edge-on has sides (a horizontal ray through the slab hits it; through a flat layer, nothing); thick clouds are dark underneath and sunlit sides bright (CPU reference tests); every existing golden unchanged; a volumetric golden; the cost measured (target: under 1.5 ms at 1280×720); a built game draws it identically |
 | 8 | **Sample + review**: Hillside shown under the six presets (one golden each), a space scene, performance notes (each feature's GPU cost, low and high settings), the 8A review | The 8A gate |
 
 ## Part 1 result (2026-11-18)
@@ -124,6 +125,18 @@ loop's 60 FPS is `render.day_cycle`'s. Fixed on the way: blending rebuilt the CP
 (20 FPS), now answered from a prewarmed grid of atmospheres (`Atmosphere::Bracket`); and a zone fully on replaced the
 whole environment instead of what it mentions. Not done: the editor's viewport blends by the scene camera, not the
 fly camera.
+
+## Part 7b result (2026-11-19)
+Done. A cloud layer can be a volume (`"cloud_type": "volume"`, `"cloud_thickness"` in metres; ADR-034): the layer's
+coverage map extruded into a slab with flat bases and rounded tops, carved into cauliflower lumps by cellular noise,
+eroded by value noise, and lit by a march towards the sun (bright tops and silver linings, grey bellies). The look
+was picked by eye from rendered variants (lighting "B", lumps "P4"). The flat layers are untouched, as a style of
+their own. Proven: the reference's shape and physics tests (sides where a flat layer has none; 79% against 28% of the
+sky covered near the horizon; tops brighter per unit of cloud; thick clouds darker from below; the noises tile);
+golden `Atmosphere_Volume`; a built game draws a volume identically (`cli.environment_builds_identically`); every
+older golden unchanged; validation clean. Cost: **1.50 ms** at 1280×720 on an RTX 3080 (the target was 1.5), after
+baking the noises into a 3D texture and marching at half resolution (from 20.4 ms computed live). Not done: no
+preset uses volumes yet (to be decided from renders); the coverage map is still computed per sample.
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to

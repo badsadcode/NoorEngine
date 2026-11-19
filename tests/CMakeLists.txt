@@ -145,7 +145,7 @@ endif()
 add_executable(noor_image_compare tools/image_compare.cpp)
 target_link_libraries(noor_image_compare PRIVATE stb::image)
 foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small_09 Env_kloppenheim_06 Env_venice_sunset Glass Terrain TerrainPaint
-                     Atmosphere_Noon Atmosphere_Sunset Atmosphere_Clouds Atmosphere_Overcast Space)
+                     Atmosphere_Noon Atmosphere_Sunset Atmosphere_Clouds Atmosphere_Overcast Atmosphere_Volume Space)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -182,6 +182,12 @@ add_test(NAME render.clouds_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/clouds_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/clouds_cost_check.cmake)
 set_tests_properties(render.clouds_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+# Volumetric clouds (part 7b, ADR-034): the same measurement with the first layer a volume (the half-resolution march).
+add_test(NAME render.clouds_volume_cost
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DCLOUDS_SCENE=Atmosphere_Volume -DBUDGET_US=2500
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/clouds_volume_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/clouds_cost_check.cmake)
+set_tests_properties(render.clouds_volume_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
 foreach(name IN ITEMS Atmosphere_Noon Atmosphere_Sunset)
     add_test(NAME render.golden_${name}_cpu_sky
         COMMAND ${CMAKE_COMMAND}

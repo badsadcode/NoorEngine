@@ -16,6 +16,8 @@ struct CloudLayer
     float2 offset_km;   // the wind's drift so far
     uint seed;
     bool enabled;
+    bool volume;         // part 7b: a ray-marched slab instead of a thin layer
+    float thickness_km;
 };
 
 uint cloud_hash(uint x)
@@ -134,6 +136,137 @@ float3 cloud_layer_shade(CloudLayer layer, float3 eye_km, float planet_km, float
     const float through = cloud_diffuse_transmittance(tau);
     const float3 lit = sun * (phase * 0.25 * self + 0.12 * through + 0.01);
     return 0.9 * (lit + ambient * through);
+}
+
+// ---- Volumetric layers (part 7b, ADR-034): ports of clouds.h's volume noises and helpers (the tested reference).
+// The march itself is in clouds_volume.hlsl (a compute pass at half resolution); these noises are what its CSNoise
+// bakes once into a 3D texture.
+
+// The look, in one place (clouds.h has the same numbers; chosen from rendered variants, "B" and "P4"): how hard the
+// 3D noise erodes edges and how fine it is (a fraction of the layer's scale); where the dome starts rounding off (a
+// fraction of the cloud's top); the forward lobe's eccentricity (the silver lining); the weights of direct sun, light
+// diffused through the cloud, and the sky's light at the base (the top gets all of it); how hard round lumps carve
+// the cloud and how big they are.
+static const float kVolumeErosion = 0.45;
+static const float kVolumeDetailScale = 0.3;
+static const float kVolumeDome = 0.55;
+static const float kVolumeSilver = 0.75;
+static const float kVolumeDirect = 0.35;
+static const float kVolumeDiffuse = 0.06;
+static const float kVolumeAmbientBase = 0.3;
+static const float kVolumePuff = 0.85;
+static const float kVolumePuffScale = 0.28;
+
+static const int kCloudNoisePeriod = 4;        // the volume noises tile every this many first-octave cells
+static const float kCloudColumnMean = 0.81;
+static const float kCloudHazeKm = 50.0;
+static const float kCloudMarchKm = 30.0;
+
+float cloud_lattice3(int ix, int iy, int iz, uint seed)
+{
+    const uint h = cloud_hash(cloud_hash(cloud_hash(uint(ix) + seed * 0x9e3779b9u) ^ (uint(iy) * 0x85ebca6bu)) ^ (uint(iz) * 0xc2b2ae35u));
+    return float(h >> 8) * (1.0 / 16777216.0);
+}
+
+float cloud_quintic(float t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+int cloud_wrap(int i, int period)
+{
+    const int m = i % period;
+    return m < 0 ? m + period : m;
+}
+
+float cloud_value_noise3(float x, float y, float z, int period, uint seed)
+{
+    const float fx = floor(x), fy = floor(y), fz = floor(z);
+    const int ix = int(fx), iy = int(fy), iz = int(fz);
+    const float sx = cloud_quintic(x - fx), sy = cloud_quintic(y - fy), sz = cloud_quintic(z - fz);
+    float plane[2];
+    [unroll] for (int k = 0; k < 2; ++k)
+    {
+        const int z0 = cloud_wrap(iz + k, period);
+        const int x0 = cloud_wrap(ix, period), x1 = cloud_wrap(ix + 1, period);
+        const int y0 = cloud_wrap(iy, period), y1 = cloud_wrap(iy + 1, period);
+        const float a = cloud_lattice3(x0, y0, z0, seed), b = cloud_lattice3(x1, y0, z0, seed);
+        const float c = cloud_lattice3(x0, y1, z0, seed), d = cloud_lattice3(x1, y1, z0, seed);
+        const float top = a + (b - a) * sx;
+        plane[k] = top + ((c + (d - c) * sx) - top) * sy;
+    }
+    return plane[0] + (plane[1] - plane[0]) * sz;
+}
+
+float cloud_detail(float x, float y, float z)
+{
+    float sum = 0.0, amplitude = 0.5, total = 0.0;
+    [unroll] for (int o = 0; o < 3; ++o)
+    {
+        sum += amplitude * cloud_value_noise3(x, y, z, kCloudNoisePeriod << o, 7919u + uint(o) * 2029u);
+        total += amplitude;
+        x = 2.0 * x + 11.7;
+        y = 2.0 * y + 7.3;
+        z = 2.0 * z + 3.9;
+        amplitude *= 0.5;
+    }
+    return sum / total;
+}
+
+float cloud_worley3(float x, float y, float z, int period, uint seed)
+{
+    const float fx = floor(x), fy = floor(y), fz = floor(z);
+    const int ix = int(fx), iy = int(fy), iz = int(fz);
+    float best = 9.0;
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx)
+            {
+                const int cx = ix + dx, cy = iy + dy, cz = iz + dz;
+                const int wx = cloud_wrap(cx, period), wy = cloud_wrap(cy, period), wz = cloud_wrap(cz, period);
+                const float px = float(cx) + cloud_lattice3(wx, wy, wz, seed) - x;
+                const float py = float(cy) + cloud_lattice3(wx, wy, wz, seed + 1u) - y;
+                const float pz = float(cz) + cloud_lattice3(wx, wy, wz, seed + 2u) - z;
+                best = min(best, px * px + py * py + pz * pz);
+            }
+    return sqrt(best);
+}
+
+float cloud_billow(float x, float y, float z)
+{
+    const float weights[3] = {0.625, 0.25, 0.125};
+    float sum = 0.0;
+    [unroll] for (int o = 0; o < 3; ++o)
+    {
+        sum += weights[o] * saturate(1.0 - cloud_worley3(x, y, z, kCloudNoisePeriod << o, 4111u + uint(o) * 3301u));
+        x = 2.0 * x + 5.3;
+        y = 2.0 * y + 1.7;
+        z = 2.0 * z + 9.1;
+    }
+    return sum;
+}
+
+float3 cloud_noise_offset(uint seed)
+{
+    const float p = float(kCloudNoisePeriod);
+    return float3(cloud_lattice3(int(seed), 1, 2, 0x51ed27u), cloud_lattice3(int(seed), 3, 4, 0x51ed27u), cloud_lattice3(int(seed), 5, 6, 0x51ed27u)) * p;
+}
+
+float cloud_height_profile(float h, float cover)
+{
+    const float top = 0.3 + 0.7 * saturate(cover);
+    if (h <= 0.0 || h >= top) return 0.0;
+    const float base = smoothstep(0.0, 1.0, saturate(h / 0.08));
+    const float t = saturate((h - kVolumeDome * top) / ((1.0 - kVolumeDome) * top));
+    return base * (1.0 - t * t);
+}
+
+float cloud_volume_extinction(CloudLayer layer, float d)
+{
+    return d * max(0.0, layer.density) / (max(0.05, layer.thickness_km) * kCloudColumnMean);
+}
+
+// A fixed pattern of the pixel alone (Jimenez 2014): where in each step a pixel's samples sit.
+float interleaved_gradient_noise(float2 pixel)
+{
+    return frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
 }
 
 #endif

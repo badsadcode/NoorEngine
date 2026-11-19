@@ -186,6 +186,7 @@ struct FrameUniforms {
     math::Vec4 cloud_a[2];
     math::Vec4 cloud_b[2];
     std::uint32_t cloud_flags[4];
+    math::Vec4 cloud_c;  // part 7b (ADR-034): thickness km of layer 0 and 1, then 1 where that layer is a volume
     // Sky objects (part 5; sky.hlsl): the real sun (direction; seen radiance for its disc; outside radiance for the
     // bodies, both exposed), x space, y star brightness x exposure (0 off), z sidereal hours, w latitude; the air
     // straight up; counts (bodies, star seed); per body 4 float4: (direction, angular radius), (albedo, -),
@@ -394,6 +395,31 @@ struct Renderer::Impl {
         std::uint64_t table_builds = 0, sky_builds = 0;
     } live_sky;
 
+    // Volumetric cloud layers (vulkan_clouds.cpp, part 7b): the noise tile and the half-resolution march.
+    struct CloudVolume {
+        struct Target {
+            VkImage image = VK_NULL_HANDLE;
+            VmaAllocation allocation = VK_NULL_HANDLE;
+            VkImageView view = VK_NULL_HANDLE;
+            bool ready = false;  // cleared and in VK_IMAGE_LAYOUT_GENERAL
+        };
+        std::array<Target, kFramesInFlight> targets{};  // frame set binding 6
+        VkExtent2D size{};                              // half the screen
+        VkImage noise = VK_NULL_HANDLE;
+        VmaAllocation noise_allocation = VK_NULL_HANDLE;
+        VkImageView noise_view = VK_NULL_HANDLE;
+        bool noise_ready = false;
+        VkSampler sampler = VK_NULL_HANDLE, noise_sampler = VK_NULL_HANDLE;
+        VkDescriptorSetLayout march_layout = VK_NULL_HANDLE, noise_layout = VK_NULL_HANDLE;
+        VkPipelineLayout march_pipeline_layout = VK_NULL_HANDLE, noise_pipeline_layout = VK_NULL_HANDLE;
+        VkPipeline march = VK_NULL_HANDLE, bake = VK_NULL_HANDLE;
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        std::array<VkDescriptorSet, kFramesInFlight> march_sets{};
+        VkDescriptorSet noise_set = VK_NULL_HANDLE;
+        bool active = false;  // a volume layer this frame
+    } cloud_volume;
+    std::array<VkBuffer, kFramesInFlight> frame_cloud_light{};  // what frame set binding 5 points at, per slot
+
     // Per-frame lighting uniforms (vulkan_frame.cpp)
     VkDescriptorSetLayout frame_set_layout = VK_NULL_HANDLE;
     VkDescriptorPool frame_pool = VK_NULL_HANDLE;
@@ -530,6 +556,12 @@ struct Renderer::Impl {
     // The sky image, its pyramid, the cube and the irradiance for this frame's copy.
     void record_live_sky_lighting(VkCommandBuffer cmd, LiveSkyPush& push);
     void destroy_live_sky();
+    // vulkan_clouds.cpp
+    Status create_cloud_volume_targets();
+    void destroy_cloud_volume_targets();
+    Status ensure_cloud_volume();
+    Status record_cloud_volume(VkCommandBuffer cmd, const FrameDesc& frame);
+    void destroy_cloud_volume();
     // vulkan_shadows.cpp
     Status ensure_shadows();
     void record_shadows(VkCommandBuffer cmd, const FrameDesc& frame);

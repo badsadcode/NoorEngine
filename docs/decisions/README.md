@@ -32,6 +32,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [031](ADR-031-terrain-heightfields.md) | Terrain: tiled heightfields (257² samples), base + sparse sculpt + weight layers, deterministic generation, Jolt height fields | Accepted (Milestone 6, part 5) |
 | [032](ADR-032-instancing-and-lod.md) | Instanced drawing (the renderer culls and batches draw items itself) and levels of detail per placed model, by distance | Accepted (Milestone 7) |
 | [033](ADR-033-environments-and-atmosphere.md) | Environments and atmosphere: sky modes (atmosphere, hdri, gradient, space), a physically based atmosphere that colours the sun, `.noorenv` assets | Proposed (Milestone 8A; part 1 done on the CPU) |
+| [034](ADR-034-volumetric-cloud-layers.md) | Volumetric cloud layers: a layer's coverage map extruded into a ray-marched slab, per layer beside the flat layers; deterministic, no temporal accumulation in v1 | Accepted (Milestone 8A, part 7b) |
 
 Still open from the register: 007 plugin ABI, 013 world coordinates,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.

@@ -2,6 +2,7 @@
 # render_scenes gets a custom .noorenv (Golden Evening with its own haze and clouds), a scene that points at it by id
 # with one field overridden, then noor_player draws that scene from the project and from a game built by noor_cli; the
 # two pictures and exposures must match.
+# Since part 7b its cloud layer is a volume (the half-resolution march), so a built game must reproduce that too.
 #   -DCLI=<noor_cli> -DPLAYER=<noor_player> -DCOMPARE=<noor_image_compare> -DPROJECT=<render_scenes> -DWORK=<folder>
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
@@ -20,7 +21,7 @@ file(WRITE "${project}/Assets/Environments/Custom Evening.noorenv" [=[{
     "turbidity": 2.5, "ground_albedo": 0.25, "stars": true, "background": true, "ev100": "auto",
     "fog_density": 0.004, "fog_height": 1, "fog_falloff": 0.1, "fog_anisotropy": 0.7, "fog_color": "#FFFFFF",
     "cloud_coverage": 0.4, "cloud_density": 5, "cloud_altitude": 1500, "cloud_scale": 2500,
-    "cloud_wind_speed": 0, "cloud_wind_direction": 0, "cloud_seed": 6
+    "cloud_wind_speed": 0, "cloud_wind_direction": 0, "cloud_seed": 6, "cloud_type": "volume", "cloud_thickness": 1500
   }
 }
 ]=])

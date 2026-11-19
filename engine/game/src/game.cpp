@@ -412,6 +412,10 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 layer.wind_speed = std::clamp(number(en, (prefix + "wind_speed").c_str(), layer.wind_speed), 0.0f, 200.0f);
                 layer.wind_direction = number(en, (prefix + "wind_direction").c_str(), layer.wind_direction);
                 layer.seed = static_cast<std::uint32_t>(std::max(0.0f, number(en, (prefix + "seed").c_str(), static_cast<float>(layer.seed))));
+                // Part 7b (ADR-034): "cloud_type": "volume" makes the layer a slab "cloud_thickness" metres thick.
+                const std::string type_key = prefix + "type";
+                layer.volume = en.contains(type_key) && en[type_key].is_string() && en[type_key].get<std::string>() == "volume";
+                layer.thickness_km = std::clamp(number(en, (prefix + "thickness").c_str(), layer.thickness_km * 1000.0f) * 0.001f, 0.05f, 10.0f);
             }
             if (en.contains("time_of_day") && en["time_of_day"].is_number())
                 time_of_day = TimeOfDay{std::fmod(std::fmod(number(en, "time_of_day", 12.0f), 24.0f) + 24.0f, 24.0f),

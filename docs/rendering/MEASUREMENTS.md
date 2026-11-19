@@ -173,6 +173,22 @@ Environment pass stayed at 0.02 ms, the scene pass within its usual range).
 waited for earlier frames' fragment work, which sits behind the swapchain's acquire: every frame's
 compute waited a vsync for the previous frame (31 ms median). One copy per frame in flight fixed it.
 
+### Volumetric clouds (part 7b)
+render_scenes/Atmosphere_Volume (the clouds scene with its first layer a volume) against Atmosphere_Noon (no clouds),
+1280×720, RTX 3080, fastest frame of 300:
+
+| Version | GPU per frame (fastest) |
+|---|---|
+| Flat layers (part 4) | 0.35 ms (+0.04 over no clouds) |
+| Volume marched in the sky pass, full resolution | 10.8 ms |
+| ... the layer loop not unrolled (the march compiled in once, not twice) | 5.3 ms |
+| ... with the cauliflower lumps (cellular noise computed live) | 20.4 ms |
+| **Noises baked into a 128³ tile once, march at half resolution (compute)** | **1.81 ms (+1.50 over no clouds)** |
+
+The lesson of the second row: a shader that pastes a big loop in twice runs short of registers, and then every
+pixel is slower, even ones that never march. The baked tile costs 4 MB and is built once (a fraction of a
+millisecond). `render.clouds_volume_cost` fails above 2.5 ms.
+
 ### Weather zones (part 7)
 Weather_Walk (render_scenes): a camera walks at 10 m/s into a fog bank (fog, overcast deck), 1280×720, vsync, RTX
 3080, 540 frames, the last 480 timed.

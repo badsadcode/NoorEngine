@@ -651,6 +651,17 @@ public sealed class ComponentsEditor : StackPanel
                 editor = combo;
                 break;
             }
+            case JsonValue v when v.TryGetValue<string>(out var choice) && type is "environment" or "weather_zone" && field is "cloud_type" or "cloud2_type":
+            {
+                // A cloud layer's style (part 7b, ADR-034): a flat layer (the classic look) or a ray-marched volume.
+                string[] options = ["layer", "volume"];
+                var combo = new ComboBox { ItemsSource = options, SelectedItem = options.Contains(choice) ? choice : null, Classes = { "field" },
+                                           HorizontalAlignment = HorizontalAlignment.Stretch };
+                ToolTip.SetTip(combo, "layer: a flat cloud layer (cheap, a classic look). volume: clouds with depth, lit sides and dark bellies (about 1.5 ms)");
+                combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
+                editor = combo;
+                break;
+            }
             case JsonValue v when v.TryGetValue<string>(out var choice) && type == "terrain" && field == "base":
             {
                 // Terrains: what the heights start from (ADR-031).
