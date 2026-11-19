@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 24u
+#define NOOR_EDITOR_API_VERSION 25u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -141,6 +141,21 @@ NOOR_API int32_t noor_doc_set_preview(noor_doc* doc, const char* json);
    NULL on error (noor_last_error). */
 NOOR_API const char* noor_environment_presets(void);
 NOOR_API const char* noor_doc_environment(noor_doc* doc, const char* command);
+/* v25: effect assets (Milestone 8B, part 4). noor_effect_presets: the built-in effect presets,
+   [{"name", "description", "emitter"}] (never written to). noor_doc_effect runs one command:
+     {"op": "list"}                                   -> [{"path", "guid", "name", "preset", "emitter"}]
+     {"op": "read", "asset": "Assets/Effects/x.noorfx"} -> that object
+     {"op": "apply", "preset": "Fire" | "asset": path, "entity"?: id, "position"?: [x, y, z]}: a preset is first copied
+        into Assets/Effects (kept, with its edits, once there); that entity's emitter becomes {"asset": id}, or a new
+        entity named after the effect gets one (one undo step)  -> the asset's object plus "entity"
+     {"op": "duplicate", "asset": path, "name"?}      -> the new asset's object
+     {"op": "reset", "asset": path}                   -> back to the built-in preset it came from
+     {"op": "save", "asset": path, "emitter": {...}, "name"?}  -> its object (the viewports' preview follows at once)
+     {"op": "preview", "solo"?: id | null, "muted"?: [ids], "restart"?: true, "paused"?: bool}
+        -> the preview's state {"solo", "muted", "restart", "paused"}: how viewports preview effects while editing
+   NULL on error (noor_last_error). */
+NOOR_API const char* noor_effect_presets(void);
+NOOR_API const char* noor_doc_effect(noor_doc* doc, const char* command);
 /* v13: a texture's import settings and what they make of it (from the image header):
    {"settings": {"kind", "normal_convention", "mips", "max_size", "compression"},
     "source_width", "source_height", "width", "height", "mips", "format" ("BC7 sRGB", "BC5", "RGBA8"...),

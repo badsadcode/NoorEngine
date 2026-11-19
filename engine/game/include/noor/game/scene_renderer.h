@@ -6,6 +6,7 @@
 #include "noor/game/environment_library.h"
 #include "noor/game/material_library.h"
 #include "noor/game/model_lod.h"
+#include "noor/game/particle_draws.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
@@ -87,8 +88,7 @@ private:
         bool warned = false;
     };
     std::unordered_map<Guid, CookedModel> cooked_;
-    std::vector<std::vector<render::ParticleVertex>> particle_vertices_;  // per draw, this frame
-    std::vector<render::ParticleDraw> particle_draws_;
+    ParticleDrawStorage particle_storage_;  // this frame's particle draws (particle_draws.h)
     struct TerrainMeshes {
         std::string key;  // the settings it was built from
         std::vector<render::MeshHandle> tiles;

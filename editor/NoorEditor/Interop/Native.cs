@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 24;
+    public const uint ExpectedApiVersion = 25;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -81,6 +81,8 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_doc_make_material(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
     [DllImport(Dll)] private static extern IntPtr noor_environment_presets();
     [DllImport(Dll)] private static extern IntPtr noor_doc_environment(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
+    [DllImport(Dll)] private static extern IntPtr noor_effect_presets();
+    [DllImport(Dll)] private static extern IntPtr noor_doc_effect(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_csg(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_sculpt(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     // Procedural graphs (Milestone 7): background runs, previews, node types, checks.
@@ -123,6 +125,9 @@ public static class Native
     // v24: environment assets and the built-in presets (Milestone 8A, part 6).
     public static string? EnvironmentPresets() => Str(noor_environment_presets());
     public static string? Environment(IntPtr doc, string command) => Str(noor_doc_environment(doc, command));
+    // v25: effect assets, the built-in effect presets and the viewport's effect preview (Milestone 8B, part 4).
+    public static string? EffectPresets() => Str(noor_effect_presets());
+    public static string? Effect(IntPtr doc, string command) => Str(noor_doc_effect(doc, command));
     public static string? Texture(IntPtr doc, string texturePath) => Str(noor_doc_texture(doc, texturePath));
     public static string Csg(IntPtr doc) => Str(noor_doc_csg(doc)) ?? "[]";
     public static string? ExportCsg(IntPtr doc, string modelId, string glbPath) => Str(noor_doc_export_csg(doc, modelId, glbPath));

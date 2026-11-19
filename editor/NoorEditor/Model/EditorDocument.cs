@@ -381,6 +381,30 @@ public sealed class EditorDocument : IDisposable
         return (node["path"]!.GetValue<string>(), node["created"]!.GetValue<bool>(), (node["maps"] as JsonArray)?.Count ?? 0);
     }
 
+    /// <summary>The built-in effect presets (Milestone 8B, part 4): [{name, description, emitter}].</summary>
+    public static JsonArray EffectPresets() => Native.EffectPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
+
+    /// <summary>
+    /// One effect command (noor_doc_effect: list, read, apply, duplicate, reset, save, preview). Changes refresh the
+    /// scene and the asset list; a failure is logged and gives null.
+    /// </summary>
+    public JsonNode? Effect(JsonObject command)
+    {
+        var json = Native.Effect(_handle, command.ToJsonString());
+        var op = command["op"]?.GetValue<string>() ?? "";
+        if (json == null)
+        {
+            Interop.EngineLog.Error("Editor", $"Effect {op}: {Native.LastError()}");
+            return null;
+        }
+        if (op is "apply" or "duplicate" or "reset" or "save")
+        {
+            RefreshAssets(rescan: false);
+            Refresh();
+        }
+        return JsonNode.Parse(json);
+    }
+
     /// <summary>The built-in environment presets (Milestone 8A, part 6): [{name, description, environment}].</summary>
     public static JsonArray EnvironmentPresets() => Native.EnvironmentPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
 

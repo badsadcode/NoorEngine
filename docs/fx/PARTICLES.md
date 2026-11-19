@@ -1,9 +1,8 @@
 # Particles (NoorFX)
 
-Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: parts 1-3 of 8.** Effect particles
-are simulated, replay identically everywhere, and are drawn in games; rain, snow and dust come from the environment.
-The Effects panel with a live preview in the editor (part 4; until then the editor doesn't draw effect particles) and
-scripting (part 6) come later.
+Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: parts 1-4 of 8.** Effect particles
+are simulated, replay identically everywhere, drawn in games and previewed in the editor; rain, snow and dust come
+from the environment; the Effects panel edits them. Scripting comes with part 6.
 
 ## Two kinds of particles
 
@@ -86,6 +85,23 @@ fog.
 **Not yet:** drops don't stop at roofs (it rains indoors), snow doesn't settle, and puddles don't form. Rain is drawn
 after see-through things, so a drop behind a window isn't tinted by it.
 
+## The Effects panel (editor)
+
+**Window ▸ Effects** (a tab in the bottom dock), like the Environments gallery:
+
+- **Presets:** Fire, Smoke, Sparks, Dust, Rain splash and Magic, built into the engine and never changed. **Add to
+  scene** copies one into `Assets/Effects/` (once) and puts it on a new entity; **Use on selected** puts the selected
+  effect on the selected entity. Both are one undo step.
+- **The module stack:** the selected project effect's settings, grouped as Spawn, Shape, Life and speed, Forces, Over
+  life (curves for size and alpha, a gradient for colour, with a small plot and swatches) and Render. Every change is
+  saved at once, and the viewport's preview follows it.
+- **The preview:** while you edit, the viewport runs every effect in the scene on its own clock. **Solo** shows only the
+  selected entity's effect, **Mute** hides it, **Restart** starts them all from nothing, **Pause** and **Play** freeze and
+  run them. The dice button rolls a new seed (the same effect, other particles).
+
+The editor's preview is its own simulation of the scene, not the game's: in Play mode, the game's particles are the
+ones that count (and replay identically in built games).
+
 ## Wind
 
 The scene's environment can set a ground wind: `"wind_speed"` in m/s and `"wind_direction"` in degrees, where it
@@ -124,3 +140,7 @@ add 0.58 ms. Rain at full strength (200,000 drops) adds 0.18 ms; snow is too che
 - `cli.weather_walk`: walking into a weather zone that rains starts the rain smoothly (0 to 1, never back, at most
   1.25% of the way a frame), the same in a built game.
 - Goldens `Hillside_Rain` and `Hillside_Snow` (`tools/samples/add_hillside_weather.py`).
+- `noor_editor_api_tests` "effect api": six presets that all run; apply (a copy, on a new or existing entity, one undo
+  step); editing a copy changes what a game simulates and never the preset; reset, duplicate; the preview's controls.
+- The editor smoke test: Add to scene, the viewport previewing it, an edit reaching the preview at once and the file
+  identically, the preset unchanged, Mute, undo.

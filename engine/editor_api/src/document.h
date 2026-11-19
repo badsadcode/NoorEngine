@@ -165,6 +165,19 @@ struct RenderSnapshot {
     std::vector<Terrain> terrains;
     // While playing: what scripts drew on the HUD this frame (noor.ui / Ui).
     std::vector<runtime::UiCommand> ui;
+    // Effect particles (Milestone 8B, part 4): the emitters the viewport previews, settings resolved (asset and
+    // overrides), with the scene's wind; and how the Effects panel wants them previewed.
+    struct Emitter {
+        Guid entity;
+        asset::Json settings;
+        math::Mat4 world;
+    };
+    std::vector<Emitter> emitters;
+    math::Vec3 wind{0, 0, 0};
+    std::optional<Guid> preview_solo;    // only this emitter is shown
+    std::vector<Guid> preview_muted;     // these aren't
+    std::uint64_t preview_restart = 0;   // changed: every preview emitter starts again from nothing
+    bool preview_paused = false;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.
@@ -200,6 +213,9 @@ public:
     // Environment assets (Milestone 8A, part 6): {"op": "list" | "apply" | "duplicate" | "reset" | "read" | "save", ...}
     // (noor_doc_environment in noor_editor_api.h).
     [[nodiscard]] Result<asset::Json> environment(const asset::Json& command);
+    // Effect assets (Milestone 8B, part 4): {"op": "list" | "read" | "save" | "duplicate" | "reset" | "apply" |
+    // "preview", ...} (noor_doc_effect in noor_editor_api.h).
+    [[nodiscard]] Result<asset::Json> effect(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);
@@ -347,6 +363,11 @@ private:
     scene::History history_;
     std::uint64_t revision_ = 0;
     std::unique_ptr<runtime::World> world_;  // play mode (ADR-026/027)
+    // The Effects panel's preview controls (8B part 4), published in every snapshot.
+    std::optional<Guid> preview_solo_;
+    std::vector<Guid> preview_muted_;
+    std::uint64_t preview_restart_ = 0;
+    bool preview_paused_ = false;
     const void* script_host_ = nullptr;      // noor_rt_host*
     mutable std::recursive_mutex play_mutex_;  // world_ (see play())
     bool audio_device_ = true;

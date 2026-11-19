@@ -24,6 +24,7 @@
 #include "noor/game/geometry.h"
 #include "noor/game/hud.h"
 #include "noor/game/model_lod.h"
+#include "noor/game/particle_draws.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
@@ -380,6 +381,14 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::EnvironmentLibrary> environment;
     auto refresh_clock = std::chrono::steady_clock::now();
     const auto started_at = std::chrono::steady_clock::now();  // the clouds' clock
+    // Effect particles while editing (Milestone 8B, part 4): the viewport's own preview of the snapshot's emitters,
+    // stepped at a fixed 60 Hz on the viewport's clock (paused, solo, mute and restart from the Effects panel).
+    noor::fx::EmitterSet preview_emitters;
+    noor::game::ParticleDrawStorage preview_draws;
+    double preview_carry = 0.0;
+    auto preview_clock = std::chrono::steady_clock::now();
+    std::uint64_t preview_restart_seen = 0;
+    std::uint64_t preview_particles = 0;  // for the render stats
     std::uint64_t seen_reload_token = 0;
     auto last_stats_time = std::chrono::steady_clock::now() - 1s;
     std::vector<noor::render::OverlayVertex> overlay;
@@ -1229,6 +1238,55 @@ void render_thread_main(noor_viewport* vp) {
             // The clouds drift in the editor too (seconds since the viewport opened; games use their own time).
             frame.lighting.time = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
             frame.draws = frame_draws;
+            // Effect particles: the preview (8B part 4).
+            {
+                const auto now_clock = std::chrono::steady_clock::now();
+                const double elapsed = std::min(0.1, std::chrono::duration<double>(now_clock - preview_clock).count());
+                preview_clock = now_clock;
+                if (shown && shown->preview_restart != preview_restart_seen) {
+                    preview_restart_seen = shown->preview_restart;
+                    preview_emitters.clear();
+                    preview_carry = 0.0;
+                }
+                std::vector<noor::fx::EmitterSet::Input> inputs;
+                if (shown) {
+                    inputs.reserve(shown->emitters.size());
+                    for (const auto& em : shown->emitters) inputs.push_back({em.entity, &em.settings, em.world});
+                }
+                if (inputs.empty()) {
+                    preview_emitters.clear();
+                } else if (!shown->preview_paused) {
+                    constexpr double kStep = 1.0 / 60.0;
+                    preview_carry += elapsed;
+                    for (int steps = 0; preview_carry >= kStep && steps < 6; ++steps) {
+                        preview_emitters.step(inputs, static_cast<float>(kStep), shown->wind);
+                        preview_carry -= kStep;
+                    }
+                }
+                noor::game::ParticleDrawSources sources;
+                std::unordered_map<Guid, Mat4> where;
+                if (shown)
+                    for (const auto& e : shown->entities) where.emplace(e.id, e.world);
+                sources.world_of = [&where](const Guid& id) -> std::optional<Mat4> {
+                    const auto it = where.find(id);
+                    return it == where.end() ? std::nullopt : std::optional(it->second);
+                };
+                const auto files = shown ? shown->asset_files : nullptr;
+                sources.texture = [&](const Guid& id) -> noor::render::TextureHandle {
+                    if (!files || !textures) return {};
+                    const auto it = files->find(id);
+                    return it == files->end() ? noor::render::TextureHandle{} : textures->get(it->second);
+                };
+                const auto solo = shown ? shown->preview_solo : std::nullopt;
+                const std::vector<Guid> muted = shown ? shown->preview_muted : std::vector<Guid>{};
+                sources.shown = [&](const Guid& id) {
+                    if (solo) return id == *solo;
+                    return std::find(muted.begin(), muted.end(), id) == muted.end();
+                };
+                frame.particles = noor::game::particle_draws(preview_emitters, basis.eye, sources, preview_draws);
+                preview_particles = 0;
+                for (const auto& d : frame.particles) preview_particles += d.particles.size();
+            }
             // The game's HUD while playing. The font atlas is baked the first time a HUD appears.
             overlay.clear();
             if (shown && !shown->ui.empty()) {
@@ -1303,6 +1361,9 @@ void render_thread_main(noor_viewport* vp) {
                                            {"shadow_draw_calls", fs.shadow_draw_calls},
                                            {"shadow_draws_culled", fs.shadow_draws_culled},
                                            {"transparent_draws", fs.transparent_draws},
+                                           {"particle_draws", fs.particle_draws},
+                                           {"particles", preview_particles},
+                                           {"weather_drops", fs.weather_drops},
                                            {"msaa_samples", fs.msaa_samples},
                                            {"texture_bytes", r.texture_memory()},
                                            {"mesh_bytes", r.mesh_memory()},

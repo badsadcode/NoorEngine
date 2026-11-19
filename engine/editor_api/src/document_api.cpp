@@ -2,6 +2,7 @@
 // noor_last_error(), never let a C++ exception cross the DLL boundary.
 
 #include "noor/asset/environment_asset.h"
+#include "noor/fx/presets.h"
 #include "noor_editor_api.h"
 
 #include "api_internal.h"
@@ -205,6 +206,31 @@ NOOR_API const char* noor_environment_presets(void) {
         for (const auto& p : noor::asset::environment_presets())
             list.push_back({{"name", p.name}, {"description", p.description}, {"environment", p.environment}});
         return give(list);
+    });
+}
+
+NOOR_API const char* noor_effect_presets(void) {
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        noor::asset::Json list = noor::asset::Json::array();
+        for (const auto& p : noor::fx::effect_presets()) list.push_back({{"name", p.name}, {"description", p.description}, {"emitter", p.emitter}});
+        return give(list);
+    });
+}
+
+NOOR_API const char* noor_doc_effect(noor_doc* doc, const char* command) {
+    if (!doc || !command) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(command, "effect command");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto r = doc->doc->effect(*json);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
     });
 }
 

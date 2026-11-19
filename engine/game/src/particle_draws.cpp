@@ -1,7 +1,7 @@
-// Effect particles to the renderer (Milestone 8B, part 2, ADR-035): SceneRenderer::particles.
-#include "noor/game/scene_renderer.h"
+// Effect particles to the renderer (Milestone 8B, parts 2 and 4, ADR-035): particle_draws and SceneRenderer::particles.
+#include "noor/game/particle_draws.h"
 
-#include "noor/fx/particle_system.h"
+#include "noor/game/scene_renderer.h"
 #include "noor/runtime/script_api.h"
 #include "noor/runtime/world.h"
 
@@ -24,17 +24,18 @@ float number(const Json& j, const char* key, float fallback) {
 
 } // namespace
 
-std::span<const render::ParticleDraw> SceneRenderer::particles(const fx::ParticleSystem& system, runtime::World& world, math::Vec3 eye) {
-    particle_draws_.clear();
+std::span<const render::ParticleDraw> particle_draws(const fx::EmitterSet& set, math::Vec3 eye, const ParticleDrawSources& sources,
+                                                     ParticleDrawStorage& storage) {
+    storage.draws.clear();
     std::vector<Guid> ids;
-    ids.reserve(system.emitters().size());
-    for (const auto& [id, emitter] : system.emitters())
-        if (!emitter.particles().empty()) ids.push_back(id);
+    ids.reserve(set.emitters().size());
+    for (const auto& [id, emitter] : set.emitters())
+        if (!emitter.particles().empty() && (!sources.shown || sources.shown(id))) ids.push_back(id);
     std::ranges::sort(ids, [](const Guid& a, const Guid& b) { return a.to_string() < b.to_string(); });
-    if (particle_vertices_.size() < ids.size()) particle_vertices_.resize(ids.size());
+    if (storage.vertices.size() < ids.size()) storage.vertices.resize(ids.size());
 
     for (std::size_t n = 0; n < ids.size(); ++n) {
-        const fx::Emitter& emitter = system.emitters().at(ids[n]);
+        const fx::Emitter& emitter = set.emitters().at(ids[n]);
         const fx::EmitterSettings& s = emitter.settings();
         const Json& r = s.render;
         render::ParticleDraw d;
@@ -52,14 +53,14 @@ std::span<const render::ParticleDraw> SceneRenderer::particles(const fx::Particl
             d.frames_x = static_cast<std::uint32_t>(std::clamp(r["frames"][0].get<int>(), 1, 64));
             d.frames_y = static_cast<std::uint32_t>(std::clamp(r["frames"][1].get<int>(), 1, 64));
         }
-        if (const auto id = r.is_object() && r.contains("texture") ? asset::guid_field(r, "texture") : std::nullopt; id && resolve_)
-            if (const auto file = resolve_(*id)) d.texture = textures_.get(*file);
+        if (const auto id = r.is_object() && r.contains("texture") ? asset::guid_field(r, "texture") : std::nullopt; id && sources.texture)
+            d.texture = sources.texture(*id);
         const std::string frame_mode = text(r, "frame", "life");  // "life": the flipbook plays over a particle's life; "random": one frame each
         const std::uint32_t frames = d.frames_x * d.frames_y;
 
         // Local-space particles are drawn where their entity is now.
-        const auto world_matrix = s.local_space ? runtime::api::world_matrix(world, ids[n]) : std::nullopt;
-        auto& out = particle_vertices_[n];
+        const auto world_matrix = s.local_space && sources.world_of ? sources.world_of(ids[n]) : std::nullopt;
+        auto& out = storage.vertices[n];
         out.clear();
         out.reserve(emitter.particles().size());
         math::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
@@ -99,9 +100,20 @@ std::span<const render::ParticleDraw> SceneRenderer::particles(const fx::Particl
         d.center = (lo + hi) * 0.5f;
         d.radius = math::length(hi - lo) * 0.5f + biggest + fastest * d.stretch;  // a stretched quad reaches its motion
         d.particles = out;
-        particle_draws_.push_back(d);
+        storage.draws.push_back(d);
     }
-    return particle_draws_;
+    return storage.draws;
+}
+
+std::span<const render::ParticleDraw> SceneRenderer::particles(const fx::ParticleSystem& system, runtime::World& world, math::Vec3 eye) {
+    ParticleDrawSources sources;
+    sources.world_of = [&world](const Guid& id) { return runtime::api::world_matrix(world, id); };
+    sources.texture = [this](const Guid& id) -> render::TextureHandle {
+        if (!resolve_) return {};
+        const auto file = resolve_(id);
+        return file ? textures_.get(*file) : render::TextureHandle{};
+    };
+    return particle_draws(system.set(), eye, sources, particle_storage_);
 }
 
 } // namespace noor::game

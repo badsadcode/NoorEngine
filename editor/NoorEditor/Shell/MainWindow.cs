@@ -35,6 +35,7 @@ public sealed class MainWindow : Window
     public ContentPanel? ContentBrowser { get; private set; }
     /// <summary>The environment gallery (Milestone 8A, part 6), once shown.</summary>
     public EnvironmentPanel? Environments { get; private set; }
+    public EffectsPanel? Effects { get; private set; }
     public ViewportPanel? ViewportView { get; private set; }
 
     // NoorCode: the scripts open as tabs next to the viewport (they outlive layout rebuilds).
@@ -194,6 +195,11 @@ public sealed class MainWindow : Window
             Id = "Environments", Title = "Environments", CanClose = false,
             CreateView = () => Environments = new EnvironmentPanel(Doc),
         };
+        var effects = new PanelTool
+        {
+            Id = "Effects", Title = "Effects", CanClose = false,
+            CreateView = () => Effects = new EffectsPanel(Doc),
+        };
 
         DockFactory
             .DocumentDock(out var documents, d => d.WithId("Documents").WithIsCollapsable(false))
@@ -221,7 +227,7 @@ public sealed class MainWindow : Window
         foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
-        Fill(bottom, content, console, render, environments);
+        Fill(bottom, content, console, render, environments, effects);
 
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };

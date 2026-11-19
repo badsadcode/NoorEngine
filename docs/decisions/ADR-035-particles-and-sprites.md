@@ -1,6 +1,6 @@
 # ADR-035: Particles and sprites
 
-**Status:** Accepted (Milestone 8B; parts 1-3: effect particles simulated and drawn, weather particles, 2026-11-19)
+**Status:** Accepted (Milestone 8B; parts 1-4: effect particles simulated and drawn, weather particles, the Effects panel, 2026-11-19)
 
 ## Context
 NoorEngine has no particles and no sprites. 8A's weather needs rain and snow; The Uncounted, Chapter Two (the
@@ -56,6 +56,13 @@ Option 3.
   frame set's shadow, sky-light and air bindings became visible to vertex shaders too. Drawn after the see-through
   things. Cost: 200,000 drops 0.18 ms (budget 0.5). The environment's `rain`, `snow` and `dust` blend from 0 like
   fog; `wind_speed` from 0 too (a zone that doesn't mention wind is calm when fully on).
+- **Part 4, authoring:** six built-in effect presets (never written; applied as project copies that remember their
+  preset), editor API v25 (`noor_effect_presets`, `noor_doc_effect`: list, read, apply, duplicate, reset, save,
+  preview), and the Effects panel (gallery and a module stack saved as you edit). The emitter bookkeeping moved into
+  `fx::EmitterSet`, shared by the runtime system and the editor's preview, and the emitter-to-draw conversion into
+  `game::particle_draws`, shared by games and the viewport. The viewport previews the scene's emitters on its own
+  60 Hz clock from the document's snapshot (settings resolved, an edited `.noorfx` re-read at once), with solo, mute,
+  restart and pause: a preview, not the game's simulation.
 - **Found in part 2:** automatic exposure meters sun, sky and moon only, so glowing particles that suit noon blow out
   at night. Scenes give fires a point light and a night emission; a meter that sees local light is in the ideas inbox.
 - **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget

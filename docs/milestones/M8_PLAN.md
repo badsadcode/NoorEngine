@@ -226,7 +226,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 1 ✅ | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
 | 2 ✅ | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
 | 3 ✅ | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
-| 4 | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
+| 4 ✅ | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
 | 5 | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
 | 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
 | 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
@@ -261,6 +261,17 @@ per drop and no simulation; up to 200,000 raindrops, 60,000 snowflakes, 20,000 m
 bank now also rains, and the rain starts smoothly (0 to 1, never back, at most 1.25% a frame) identically in a built
 game; 200,000 drops cost 0.18 ms (budget 0.5); goldens of Hillside in rain and in snow. Not done: drops don't stop at
 roofs, snow doesn't settle; rain is drawn after see-through things (not tinted by a window in front of it).
+
+## Part 4 result (2026-11-19)
+Done. Six built-in effect presets (Fire, Smoke, Sparks, Dust, Rain splash, Magic), never written; editor API v25
+(`noor_effect_presets`, `noor_doc_effect`); the Effects panel (a gallery like the Environments one, and a module stack:
+spawn, shape, life and speed, forces, over life with curve and gradient editors, render; saved as you edit); a live
+preview in the editor's viewport (its own 60 Hz simulation of the scene's emitters, solo, mute, restart, pause, a seed
+to roll). `fx::EmitterSet` and `game::particle_draws` are now shared by games and the editor. Proven: API tests (presets
+run, apply in one undo step, edits reach what a game simulates and never the preset, reset, duplicate, the preview's
+controls); the editor smoke test (the preview shows a placed fire, an edit thins it at once and lands in the file, the
+preset unchanged, Mute, undo). Not done: the spec's effects graph and timeline (later, as planned); the preview is the
+editor's own simulation, not the game's.
 
 ## Open questions
 

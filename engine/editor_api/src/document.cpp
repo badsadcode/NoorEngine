@@ -1,6 +1,9 @@
 #include "document.h"
 
 #include "noor/asset/environment_asset.h"
+#include "noor/fx/fx_asset.h"
+#include "noor/fx/particle_system.h"
+#include "noor/fx/presets.h"
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
 #include "noor/csg/csg.h"
@@ -395,6 +398,157 @@ Result<Json> Document::environment(const Json& command) {
         return d;
     }
     return fail(ErrorCode::InvalidArgument, std::format("environment: unknown op \"{}\"", op));
+}
+
+// ------------------------------------------------------------------ effect assets (8B part 4)
+
+namespace {
+
+std::string effect_file_name(std::string_view name) {
+    std::string out;
+    for (const char c : name) out += (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_') ? c : '_';
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return (out.empty() ? std::string("Effect") : out) + std::string(fx::kFxExtension);
+}
+
+} // namespace
+
+Result<Json> Document::effect(const Json& command) {
+    if (!command.is_object() || !command.contains("op") || !command["op"].is_string())
+        return fail(ErrorCode::InvalidArgument, "effect: the command needs an \"op\"");
+    const std::string op = command["op"];
+    const stdfs::path folder = project_.assets_dir() / "Effects";
+    const auto rescan = [&]() -> Status {
+        if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+        return {};
+    };
+    const auto describe = [&](const stdfs::path& file) -> Result<Json> {
+        auto json = fx::load_fx_file(file);
+        if (!json) return std::unexpected(json.error());
+        const auto rel = project_.relative(file);
+        const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+        return Json{{"path", rel ? *rel : file.generic_string()}, {"guid", rec ? rec->guid.to_string() : std::string()},
+                    {"name", json->value("name", file.stem().string())}, {"preset", json->value("preset", std::string())},
+                    {"emitter", (*json)["emitter"]}};
+    };
+    const auto file_of = [&](const Json& c) -> Result<stdfs::path> {
+        if (!c.contains("asset") || !c["asset"].is_string()) return fail(ErrorCode::InvalidArgument, "effect: \"asset\" (a project path) is needed");
+        auto file = project_.resolve(c["asset"].get<std::string>());
+        if (!file) return std::unexpected(file.error());
+        if (!stdfs::exists(*file)) return fail(ErrorCode::NotFound, std::format("no effect at {}", c["asset"].get<std::string>()));
+        return *file;
+    };
+    const auto write = [&](const stdfs::path& file, const Json& json) -> Status {
+        std::error_code ec;
+        stdfs::create_directories(file.parent_path(), ec);
+        return noor::fs::write_file_atomic(file, asset::to_text(json), false);
+    };
+
+    if (op == "list") {
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        Json list = Json::array();
+        for (const auto& rec : registry_.assets())
+            if (rec.importer == "fx")
+                if (auto d = describe(project_.root() / rec.path)) list.push_back(*d);
+        return list;
+    }
+    if (op == "read") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "save") {  // edit: new settings (and optionally a new name); the preset it came from is kept
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (!command.contains("emitter") || !command["emitter"].is_object())
+            return fail(ErrorCode::InvalidArgument, "effect save: \"emitter\" (an object) is needed");
+        auto old = fx::load_fx_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string name = command.value("name", old->value("name", file->stem().string()));
+        if (auto w = write(*file, fx::fx_file_json(name, command["emitter"], old->value("preset", std::string()))); !w) return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        if (!world_) changed();  // the preview takes the new settings now
+        return describe(*file);
+    }
+    if (op == "duplicate") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = fx::load_fx_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string base = command.value("name", old->value("name", file->stem().string()) + " copy");
+        stdfs::path target = file->parent_path() / effect_file_name(base);
+        for (int n = 2; stdfs::exists(target); ++n) target = file->parent_path() / effect_file_name(std::format("{} {}", base, n));
+        if (auto w = write(target, fx::fx_file_json(target.stem().string(), (*old)["emitter"], old->value("preset", std::string()))); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(target);
+    }
+    if (op == "reset") {  // back to the built-in preset it came from (the presets themselves are never written)
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = fx::load_fx_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const auto* preset = fx::find_effect_preset(old->value("preset", std::string()));
+        if (!preset) return fail(ErrorCode::InvalidArgument, std::format("{} didn't come from a preset: nothing to reset it to", file->filename().string()));
+        if (auto w = write(*file, fx::fx_file_json(old->value("name", preset->name), preset->emitter, preset->name)); !w) return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        if (!world_) changed();
+        return describe(*file);
+    }
+    if (op == "apply") {  // an entity's emitter becomes {"asset": id}, or a new entity gets one: one undo step
+        if (auto s = require_editable(); !s) return std::unexpected(s.error());
+        stdfs::path file;
+        if (command.contains("preset")) {
+            const auto* preset = fx::find_effect_preset(command.value("preset", std::string()));
+            if (!preset) return fail(ErrorCode::NotFound, std::format("no effect preset \"{}\"", command.value("preset", std::string())));
+            file = folder / effect_file_name(preset->name);
+            if (!stdfs::exists(file))  // a project copy, kept (with its edits) once made
+                if (auto w = write(file, fx::fx_file_json(preset->name, preset->emitter, preset->name)); !w) return std::unexpected(w.error());
+        } else {
+            auto f = file_of(command);
+            if (!f) return std::unexpected(f.error());
+            file = *f;
+        }
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        auto d = describe(file);
+        if (!d) return std::unexpected(d.error());
+        const Json component{{"asset", (*d)["guid"]}};
+        Json result = *d;
+        if (command.contains("entity") && command["entity"].is_string()) {
+            const std::string id = command["entity"].get<std::string>();
+            if (auto s = execute({{"op", "set_component"}, {"entity", id}, {"type", "emitter"}, {"value", component}}); !s) return std::unexpected(s.error());
+            result["entity"] = id;
+        } else {
+            const Guid id = Guid::generate();
+            Json create{{"op", "create"}, {"id", id.to_string()}, {"name", (*d)["name"]}, {"components", {{"emitter", component}}}};
+            if (command.contains("position") && command["position"].is_array()) create["transform"] = Json{{"position", command["position"]}};
+            if (auto s = execute(create); !s) return std::unexpected(s.error());
+            result["entity"] = id.to_string();
+        }
+        return result;
+    }
+    if (op == "preview") {  // the Effects panel's controls: solo, mute, restart, pause (published to the viewports)
+        if (command.contains("solo")) {
+            preview_solo_.reset();  // null (or anything not an id): no solo
+            if (command["solo"].is_string())
+                if (const auto id = Guid::parse(command["solo"].get<std::string>())) preview_solo_ = *id;
+        }
+        if (command.contains("muted") && command["muted"].is_array()) {
+            preview_muted_.clear();
+            for (const auto& m : command["muted"])
+                if (m.is_string())
+                    if (const auto id = Guid::parse(m.get<std::string>())) preview_muted_.push_back(*id);
+        }
+        if (command.value("restart", false)) ++preview_restart_;
+        if (command.contains("paused") && command["paused"].is_boolean()) preview_paused_ = command["paused"].get<bool>();
+        if (!world_) changed();
+        Json muted = Json::array();
+        for (const auto& id : preview_muted_) muted.push_back(id.to_string());
+        return Json{{"solo", preview_solo_ ? Json(preview_solo_->to_string()) : Json(nullptr)}, {"muted", muted},
+                    {"restart", preview_restart_}, {"paused", preview_paused_}};
+    }
+    return fail(ErrorCode::InvalidArgument, std::format("effect: unknown op \"{}\"", op));
 }
 
 Result<Json> Document::assets(bool rescan) {
@@ -903,6 +1057,16 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
         snap->camera = view.camera;
         snap->ui = world_->ui_commands();
     }
+    // Effect particles (8B part 4): every emitter, its settings resolved now (an edited .noorfx shows at once).
+    const auto asset_path = game::registry_asset_path(project_, registry_);
+    for (std::size_t i = 0; i < entities.size(); ++i)
+        if (entities[i].has("emitter") && entities[i].components.at("emitter").is_object())
+            snap->emitters.push_back({entities[i].id, fx::resolve_emitter(entities[i].components.at("emitter"), asset_path), worlds[i]});
+    snap->wind = view.lighting.weather.wind;
+    snap->preview_solo = preview_solo_;
+    snap->preview_muted = preview_muted_;
+    snap->preview_restart = preview_restart_;
+    snap->preview_paused = preview_paused_;
     // CSG models: built from their brush children in order (ADR-016), cached per model.
     csg_last_.clear();
     for (std::size_t i = 0; i < entities.size(); ++i) {

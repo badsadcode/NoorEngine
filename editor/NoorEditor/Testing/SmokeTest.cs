@@ -248,6 +248,7 @@ internal static class SmokeTest
         }
         await RenderPanelChecks(window, settings, Check, Shot);
         await EnvironmentGalleryChecks(window, Check, Shot);
+        await EffectsPanelChecks(window, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
@@ -826,6 +827,56 @@ internal static class SmokeTest
 
     // Milestone 8A, part 6: the environment gallery. Applying a preset makes the scene point at a project copy of it, and
     // the scene viewport draws it (the live sky's GPU pass runs); one undo puts the old environment back.
+    // Milestone 8B, part 4: the Effects panel. A preset goes into the scene, the viewport previews it while editing, an
+    // edit in the panel reaches the preview at once and the file identically, the preset itself never changes, mute
+    // hides it, and one undo removes the effect again.
+    private static async Task EffectsPanelChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        if (window.FindDockable("Effects") is not { } dockable)
+        {
+            check(false, "effects: the Effects panel exists");
+            return;
+        }
+        window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<EffectsPanel>().FirstOrDefault();
+        var doc = window.Doc;
+        if (panel == null || !doc.Scene.Open)
+        {
+            check(false, "effects: the panel shows with a scene open");
+            return;
+        }
+        long Particles() => VulkanViewport.Active?.RenderStats() is { } text && JsonNode.Parse(text)?["particles"] is JsonValue v && v.TryGetValue<long>(out var n) ? n : -1;
+        var count = doc.Scene.Entities.Count;
+        panel.Select("Fire", null);
+        var added = panel.AddToScene();
+        var entity = added?["entity"]?.GetValue<string>();
+        var file = Path.Combine(doc.ProjectRoot, "Assets", "Effects", "Fire.noorfx");
+        check(entity != null && doc.Scene.Entities.Count == count + 1 && File.Exists(file) && panel.SelectedAsset == "Assets/Effects/Fire.noorfx",
+              "effects: Add to scene puts a copy of the Fire preset on a new entity and selects the copy for editing");
+        var full = await WaitFor(() => (long?)Particles(), n => n > 30, 6);
+        check(full > 30, $"effects: the viewport previews the fire while editing ({full} particles)");
+        shot(window, "editor_24_effects.png");
+        // A much smaller fire, edited in the panel: the preview thins out, the file says so, the preset doesn't change.
+        check(panel.SetField("rate", JsonValue.Create(8)), "effects: an edit in the panel saves");
+        var thin = await WaitFor(() => (long?)Particles(), n => n is >= 0 and < 15, 6);
+        check(thin is >= 0 and < 15, $"effects: the preview follows the edit at once ({full} particles before, {thin} after)");
+        var saved = JsonNode.Parse(File.ReadAllText(file));
+        check(saved?["emitter"]?["rate"]?.GetValue<double>() == 8 && saved?["preset"]?.GetValue<string>() == "Fire",
+              "effects: the edit is in the file, which still remembers its preset");
+        check(EditorDocument.EffectPresets().OfType<JsonObject>().First(p => p["name"]?.GetValue<string>() == "Fire")["emitter"]?["rate"]?.GetValue<double>() == 90,
+              "effects: the built-in Fire preset is unchanged");
+        // Mute hides it in the preview; mute again shows it.
+        panel.Preview("mute");
+        var hidden = await WaitFor(() => (long?)Particles(), n => n == 0, 4);
+        check(hidden == 0, "effects: Mute hides the selected entity's effect in the preview");
+        panel.Preview("mute");
+        var back = await WaitFor(() => (long?)Particles(), n => n > 0, 4);
+        check(back > 0, "effects: Mute again shows it");
+        doc.Undo();
+        check(doc.Scene.Entities.Count == count, "effects: one undo removes the effect's entity");
+    }
+
     private static async Task EnvironmentGalleryChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
     {
         if (window.FindDockable("Environments") is not { } dockable)

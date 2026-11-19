@@ -5,6 +5,7 @@ noor_add_module(fx
         src/particles.cpp
         src/fx_asset.cpp
         src/particle_system.cpp
+        src/presets.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset

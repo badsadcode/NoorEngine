@@ -4,6 +4,21 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8B, part 4: the Effects panel
+**Added**
+- **Six built-in effect presets** (`fx/presets.h`): Fire, Smoke, Sparks, Dust, Rain splash, Magic; never written.
+- **Editor API v25:** `noor_effect_presets`, `noor_doc_effect` (list, read, apply onto a new or the selected entity,
+  duplicate, reset, save, preview: solo, mute, restart, pause).
+- **NoorEditor: the Effects panel** (bottom dock): a gallery of presets and project effects, and a module stack (spawn,
+  shape, life and speed, forces, over life with curve and gradient editors, render) saved as you edit; a seed to roll.
+- **A live preview in the editor's viewport:** the scene's emitters simulated on the viewport's own clock while editing,
+  drawn like a game draws them; the render stats report `particles`, `particle_draws`, `weather_drops`.
+
+**Changed:** `fx::EmitterSet` (emitters by entity) is shared by the runtime system and the editor's preview;
+`game::particle_draws` (emitters to draws) by games and the viewport. Render snapshots carry the scene's emitters.
+
+**Tests:** `noor_editor_api_tests` "effect api" (4 cases); the editor smoke test's Effects checks.
+
 ### 2026-11-19 — Milestone 8B, part 3: rain, snow and dust
 **Added**
 - **Weather particles** from the environment: `rain`, `snow`, `dust` (0..1), blown by the ground wind. `weather.hlsl`
