@@ -1,0 +1,24 @@
+{
+  "noor_environment": 1,
+  "name": "Moonlit Night",
+  "preset": "Moonlit Night",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 21.5,
+    "latitude": 50,
+    "day_of_year": 230.0,
+    "turbidity": 1.5,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto",
+    "moon": true,
+    "moon_phase": 0.25,
+    "star_brightness": 2,
+    "fog_density": 0.002,
+    "fog_height": 1,
+    "fog_falloff": 0.15,
+    "fog_anisotropy": 0.5,
+    "fog_color": "#FFFFFF"
+  }
+}

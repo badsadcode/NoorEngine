@@ -10,7 +10,7 @@ each ending in its own review, like Milestone 7 ended in one.
 
 | Group | What | Status |
 |---|---|---|
-| **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Next** (parts below) |
+| **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | Planned |
 | **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | Planned |
 | **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | Planned |
@@ -58,7 +58,7 @@ export mode).
 | 6 ✅ | **`.noorenv` assets and presets**: environment assets with every setting, scenes referencing them (with overrides), six presets (Clear Noon, Golden Evening, Overcast, Foggy Dawn, Moonlit Night, Stormy Coast), the editor's environment gallery (thumbnails, apply, duplicate, edit, reset) and inspector | Applying a preset changes sky, light, fog and exposure together (smoke test); duplicating a preset never changes the installed one; a custom environment saves, reopens and builds into a game identically (tests) |
 | 7 ✅ | **Weather zones**: `weather_zone` volumes that blend environments by the camera's position (fog, sky, light, clouds), with a blend distance; script access (set the environment, the time, a zone's weight) | Walking from a clear zone into a foggy one blends smoothly (a built game's camera path, values checked per frame); a scripted time-of-day loop runs at 60 FPS |
 | 7b ✅ | **Clouds with depth** (added 2026-11-19, [ADR-034](../decisions/ADR-034-volumetric-cloud-layers.md)): a layer can be a **volume** (`"cloud_type": "volume"`, a thickness): the layer's coverage map extruded into a slab with flat bases and rounded tops, eroded by 3D noise, ray-marched with light marched towards the sun. The flat layers stay exactly as they are, as a style of their own | A cloud seen edge-on has sides (a horizontal ray through the slab hits it; through a flat layer, nothing); thick clouds are dark underneath and sunlit sides bright (CPU reference tests); every existing golden unchanged; a volumetric golden; the cost measured (target: under 1.5 ms at 1280×720); a built game draws it identically |
-| 8 | **Sample + review**: Hillside shown under the six presets (one golden each), a space scene, performance notes (each feature's GPU cost, low and high settings), the 8A review | The 8A gate |
+| 8 ✅ | **Sample + review**: Hillside shown under the six presets (one golden each), a space scene, performance notes (each feature's GPU cost, low and high settings), the 8A review | The 8A gate |
 
 ## Part 1 result (2026-11-18)
 Done, with one deviation: the atmosphere runs **on the CPU** (`asset::Atmosphere`) as the reference
@@ -138,6 +138,13 @@ older golden unchanged; validation clean. Cost: **1.50 ms** at 1280×720 on an R
 baking the noises into a 3D texture and marching at half resolution (from 20.4 ms computed live). Not done: no
 preset uses volumes yet (to be decided from renders); edges are better but still too even (round two is in the ideas
 inbox); the coverage map is still computed per sample.
+
+## Part 8 result (2026-11-19)
+Done: the 8A gate passes ([review](M8A_REVIEW.md)). Hillside under all nine presets (applied through the editor API by
+`tools/samples/add_hillside_presets.py`) and on an airless world with a ringed planet and two suns, ten goldens;
+each sky's cost measured on the sample (`tools/samples/measure_hillside_skies.py`: a whole frame 1.1-2.0 ms of GPU
+at 1280x720, volumetric clouds +0.7 ms). Exception: the plan's "low and high settings" don't exist yet (no quality
+settings in the engine).
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to

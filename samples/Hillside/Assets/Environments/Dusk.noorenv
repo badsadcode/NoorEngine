@@ -1,0 +1,29 @@
+{
+  "noor_environment": 1,
+  "name": "Dusk",
+  "preset": "Dusk",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 19.8,
+    "latitude": 50,
+    "day_of_year": 220.0,
+    "turbidity": 2.5,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto",
+    "fog_density": 0.0015,
+    "fog_height": 2,
+    "fog_falloff": 0.08,
+    "fog_anisotropy": 0.7,
+    "fog_color": "#FFFFFF",
+    "aerial_scale": 10,
+    "cloud2_coverage": 0.3,
+    "cloud2_density": 1,
+    "cloud2_altitude": 8000,
+    "cloud2_scale": 6000,
+    "cloud2_wind_speed": 20,
+    "cloud2_wind_direction": 80,
+    "cloud2_seed": 9
+  }
+}

@@ -1,0 +1,736 @@
+{
+  "noor_scene": 2,
+  "id": "529dacfc-2bd3-53aa-8cbb-8d9c22aaca0f",
+  "name": "Hillside_FairWeather",
+  "entities": [
+    {
+      "id": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+      "name": "Hillside",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "terrain": {
+          "tiles": [
+            1,
+            1
+          ],
+          "cell_size": 1,
+          "base": "noise",
+          "seed": 2026,
+          "height": 10,
+          "scale": 160,
+          "octaves": 5,
+          "material": "a62e4b5c-0a21-4ac4-bf3a-76e5e0010681",
+          "layers": [
+            {
+              "material": "a62e4b5c-0a21-4ac4-bf3a-76e5e0010681",
+              "tiling": 0.2
+            },
+            {
+              "material": "9de88634-412d-4f05-b3bd-6da5d733c03c",
+              "tiling": 0.125
+            },
+            {
+              "material": "f1f1cfdc-375a-4c2c-8fb4-20228b4f3ccb",
+              "tiling": 0.5
+            }
+          ],
+          "collision": true,
+          "sculpt": "2f89de7d-7923-4430-8dcf-8431088e48c1",
+          "paint": "29fa667a-5a59-40ad-bdc8-8d1554a33c77"
+        }
+      }
+    },
+    {
+      "id": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "name": "House",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          20.0,
+          5.612743377685547,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "csg_model": {},
+        "collider": {
+          "shape": "mesh"
+        }
+      }
+    },
+    {
+      "id": "56c88863-0de9-45c1-9bf0-673288f4546c",
+      "name": "South wall",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          0.0,
+          1.5,
+          -2.8499999046325684
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            8.0,
+            3.0,
+            0.3
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            0.5,
+            0.5
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "74ca7e25-5c37-4606-b8dd-b1fac7672d0c",
+      "name": "North wall",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          0.0,
+          1.5,
+          2.8499999046325684
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            8.0,
+            3.0,
+            0.3
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            0.5,
+            0.5
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "610ab2ef-a3ed-40c8-871e-010bc5cd96d8",
+      "name": "West wall",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          -3.8499999046325684,
+          1.5,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            0.3,
+            3.0,
+            5.4
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            0.5,
+            0.5
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "8088713d-58f2-4d84-9ab2-3b256ad7fcf5",
+      "name": "East wall",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          3.8499999046325684,
+          1.5,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            0.3,
+            3.0,
+            5.4
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            0.5,
+            0.5
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "5a6eb2ec-41af-4378-ab4c-689c49beb9e8",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          0.0,
+          0.05000000074505806,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            7.4,
+            0.1,
+            5.4
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "18dc5f58-fe05-42c2-b1d0-3bc5f8577e46"
+        }
+      }
+    },
+    {
+      "id": "32404b30-ead2-4bd8-b6e3-8bbac68e59ba",
+      "name": "Doorway",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          0.0,
+          1.149999976158142,
+          -2.8499999046325684
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "arch",
+          "operation": "subtract",
+          "size": [
+            1.2,
+            2.3,
+            1.0
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "3cb9f4bb-7485-457f-b251-f45d458d38aa",
+      "name": "Window",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          -3.8499999046325684,
+          1.7000000476837158,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.7071067690849304,
+          0.0,
+          0.7071067690849304
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "subtract",
+          "size": [
+            1.0,
+            1.0,
+            1.2
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "5dcedcbe-7ddb-4e7c-860c-ea2fb21484c6",
+      "name": "Window",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          3.8499999046325684,
+          1.7000000476837158,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.7071067690849304,
+          0.0,
+          0.7071067690849304
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "subtract",
+          "size": [
+            1.0,
+            1.0,
+            1.2
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "62921110-dc7d-4519-8ccc-1c81ffb30c60",
+      "name": "Roof",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          0.0,
+          3.1500000953674316,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            8.6,
+            0.3,
+            6.6
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "18dc5f58-fe05-42c2-b1d0-3bc5f8577e46"
+        }
+      }
+    },
+    {
+      "id": "9254b988-dcef-4fa2-accb-22389ba3ba7f",
+      "name": "Chimney",
+      "layer": "default",
+      "tags": [],
+      "parent": "ecb3324a-91f2-47dc-ae6d-a12c1b304d38",
+      "transform": {
+        "position": [
+          2.4000000953674316,
+          4.0,
+          1.399999976158142
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "brush": {
+          "shape": "box",
+          "operation": "add",
+          "size": [
+            0.8,
+            1.4,
+            0.8
+          ],
+          "sides": 16,
+          "steps": 8,
+          "uv_scale": [
+            1,
+            1
+          ],
+          "material": "95df2ce8-82f0-430c-8664-3f6f3877959e"
+        }
+      }
+    },
+    {
+      "id": "bc993f6a-5c8c-4f84-a227-b5187c021384",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          30.0,
+          0.0
+        ],
+        "rotation": [
+          -0.33000001311302185,
+          0.30000001192092896,
+          0.10999999940395355,
+          0.8899999856948853
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF1DE",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "4a8fd907-4aef-4410-b838-13f369e01a1b",
+      "name": "Environment",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "environment": {
+          "asset": "1ebadbd3-1999-4611-ba10-30d1a2e2360f"
+        }
+      }
+    },
+    {
+      "id": "0238ea58-5c57-4bd6-a59a-6097adda6f2f",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          33.0,
+          10.112743377685547,
+          -24.0
+        ],
+        "rotation": [
+          0.013143181800842285,
+          0.9631380438804626,
+          -0.04787963256239891,
+          0.2643858790397644
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1,
+          "ev100": 14.5
+        }
+      }
+    },
+    {
+      "id": "6dff1743-2b1f-49b4-9706-87096521c5cb",
+      "name": "Walker",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          20.0,
+          4.055789470672607,
+          -40.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "character": {
+          "radius": 0.3,
+          "height": 1.8,
+          "step_height": 0.35,
+          "max_slope": 50
+        },
+        "script": {
+          "file": "Scripts/Walker.luau",
+          "params": {
+            "speed": 3,
+            "x": 0,
+            "z": 1
+          }
+        },
+        "primitive": {
+          "shape": "capsule",
+          "radius": 0.3,
+          "height": 1.8,
+          "color": "#F2C14E"
+        }
+      }
+    },
+    {
+      "id": "39157e1a-fd77-4ace-abf7-bdd3bb217111",
+      "name": "Forest",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "scatter": {
+          "graph": "6ce16dc2-726d-4e70-a560-17127dc3798f",
+          "output": "forest",
+          "ground": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+          "removed": [],
+          "added": []
+        }
+      }
+    },
+    {
+      "id": "9c9f91e3-a4c0-4ad5-8195-982fc6bdc0db",
+      "name": "Grass",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "scatter": {
+          "graph": "6ce16dc2-726d-4e70-a560-17127dc3798f",
+          "output": "grass",
+          "ground": "cfad20ca-cd9c-45e2-859d-d36a4eeaa107",
+          "draw_distance": 45,
+          "shadows": false,
+          "removed": [],
+          "added": []
+        }
+      }
+    }
+  ]
+}

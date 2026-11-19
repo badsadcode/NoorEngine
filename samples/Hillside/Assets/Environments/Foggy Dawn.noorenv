@@ -1,0 +1,22 @@
+{
+  "noor_environment": 1,
+  "name": "Foggy Dawn",
+  "preset": "Foggy Dawn",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 6.4,
+    "latitude": 50,
+    "day_of_year": 260.0,
+    "turbidity": 3.0,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto",
+    "fog_density": 0.02,
+    "fog_height": 4,
+    "fog_falloff": 0.12,
+    "fog_anisotropy": 0.75,
+    "fog_color": "#FFFFFF",
+    "aerial_scale": 10
+  }
+}

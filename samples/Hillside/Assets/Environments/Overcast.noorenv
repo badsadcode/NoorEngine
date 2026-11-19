@@ -1,0 +1,28 @@
+{
+  "noor_environment": 1,
+  "name": "Overcast",
+  "preset": "Overcast",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 13.0,
+    "latitude": 50,
+    "day_of_year": 300.0,
+    "turbidity": 4.0,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto",
+    "cloud_coverage": 1.0,
+    "cloud_density": 14,
+    "cloud_altitude": 1200,
+    "cloud_scale": 2000,
+    "cloud_wind_speed": 6,
+    "cloud_wind_direction": 60,
+    "cloud_seed": 4,
+    "fog_density": 0.002,
+    "fog_height": 0,
+    "fog_falloff": 0.03,
+    "fog_anisotropy": 0.3,
+    "fog_color": "#D8DCE0"
+  }
+}

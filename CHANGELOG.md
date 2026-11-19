@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8A, part 8: the sample and the 8A review
+**Added**
+- **The 8A sample:** `samples/Hillside/Scenes/Presets/`, the valley under all nine environment presets (applied through
+  the editor API by `tools/samples/add_hillside_presets.py`, so the sample's `Assets/Environments` has the nine
+  `.noorenv` copies) and `Hillside_Space` (an airless world: a ringed planet, a moon, two suns). Ten goldens.
+- `tools/samples/measure_hillside_skies.py`: each sky's GPU cost on the sample (1.1-2.0 ms a whole frame at 1280x720;
+  volumetric clouds +0.7 ms).
+- **[The 8A gate review](docs/milestones/M8A_REVIEW.md):** the gate passes; exceptions and open questions listed.
+
+**Changed:** `*.noorscene.bak` (an editor save's backup) is ignored, and the sample's stray `Hillside.noorscene.bak`
+(committed in Milestone 6) is no longer tracked.
+
 ### 2026-11-19 — Milestone 8A, part 7b: clouds with depth
 **Added**
 - **Volumetric cloud layers** (ADR-034): `"cloud_type": "volume"` and `"cloud_thickness"` (also `cloud2_`). The

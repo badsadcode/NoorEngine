@@ -1,0 +1,16 @@
+{
+  "noor_environment": 1,
+  "name": "Clear Noon",
+  "preset": "Clear Noon",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 12.5,
+    "latitude": 50,
+    "day_of_year": 172.0,
+    "turbidity": 1.5,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto"
+  }
+}

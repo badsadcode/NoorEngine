@@ -305,6 +305,19 @@ add_test(NAME render.golden_Hillside_Night
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside_Night PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                      FIXTURES_REQUIRED hillside_cooked)
+# The 8A sample (Milestone 8A, part 8): Hillside under every built-in environment preset (applied through the editor
+# API by tools/samples/add_hillside_presets.py), and on an airless world with a ringed planet and two suns.
+foreach(name IN ITEMS ClearNoon FairWeather GoldenEvening Dusk Overcast FoggyDawn PinkMist MoonlitNight StormyCoast Space)
+    add_test(NAME render.golden_Hillside_${name}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Presets/Hillside_${name}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_${name}.png
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_${name}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_Hillside_${name} PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
+                         FIXTURES_REQUIRED hillside_cooked)
+endforeach()
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).
 add_test(NAME cli.cook_hillside COMMAND $<TARGET_FILE:noor_cli> cook ${PROJECT_SOURCE_DIR}/samples/Hillside)

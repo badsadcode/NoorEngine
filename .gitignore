@@ -24,3 +24,6 @@ obj/
 
 # NoorEngine projects: derived data (texture cache etc.), never the source of truth
 .noor/
+
+# Backups an editor save leaves beside a scene (Milestone 8A review)
+*.noorscene.bak

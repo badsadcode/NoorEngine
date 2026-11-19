@@ -11,7 +11,7 @@ this status table, generated from `docs/` (source in [`website/`](website/)).
 
 ## Honest status
 
-**Milestones 0–7 done** ([M1](docs/milestones/M1_REVIEW.md), [M2](docs/milestones/M2_REVIEW.md), [M3](docs/milestones/M3_REVIEW.md), [M4](docs/milestones/M4_REVIEW.md), [M5](docs/milestones/M5_REVIEW.md), [M6](docs/milestones/M6_REVIEW.md), [M7](docs/milestones/M7_REVIEW.md) reviews, each with its accepted exceptions); Milestone 8 in progress ([plan](docs/milestones/M8_PLAN.md): sky and environments first; parts 1–7b, the atmosphere sky, time of day, fog, aerial perspective, clouds (flat and volumetric), night, space, environment assets and presets, weather zones, done). What exists today:
+**Milestones 0–7 done** ([M1](docs/milestones/M1_REVIEW.md), [M2](docs/milestones/M2_REVIEW.md), [M3](docs/milestones/M3_REVIEW.md), [M4](docs/milestones/M4_REVIEW.md), [M5](docs/milestones/M5_REVIEW.md), [M6](docs/milestones/M6_REVIEW.md), [M7](docs/milestones/M7_REVIEW.md) reviews, each with its accepted exceptions); Milestone 8 in progress ([plan](docs/milestones/M8_PLAN.md)): **8A, sky and environments, done** ([review](docs/milestones/M8A_REVIEW.md): the atmosphere sky, time of day, fog, aerial perspective, clouds (flat and volumetric), night, space, environment assets and presets, weather zones); 8B, particles and sprites, next. What exists today:
 
 | Piece | Status |
 |---|---|

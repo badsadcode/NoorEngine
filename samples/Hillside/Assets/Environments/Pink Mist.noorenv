@@ -1,0 +1,22 @@
+{
+  "noor_environment": 1,
+  "name": "Pink Mist",
+  "preset": "Pink Mist",
+  "environment": {
+    "sky": "atmosphere",
+    "time_of_day": 5.9,
+    "latitude": 50,
+    "day_of_year": 260.0,
+    "turbidity": 3.0,
+    "ground_albedo": 0.25,
+    "stars": true,
+    "background": true,
+    "ev100": "auto",
+    "fog_density": 0.03,
+    "fog_height": 4,
+    "fog_falloff": 0.12,
+    "fog_anisotropy": 0.75,
+    "fog_color": "#FFFFFF",
+    "aerial_scale": 10
+  }
+}

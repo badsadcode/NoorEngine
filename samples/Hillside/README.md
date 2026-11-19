@@ -40,6 +40,10 @@ from scratch, then `tools/samples/add_hillside_forest.py` for the forest (a grap
 saved), then `tools/samples/add_hillside_skies.py` for the same land under the physically based sky (Milestone 8A):
 `Scenes/Hillside_Haze.noorscene` (a late summer afternoon, valley fog, aerial perspective) and
 `Scenes/Hillside_Night.noorscene` (22:00 under a full moon, stars, automatic exposure).
+And `tools/samples/add_hillside_presets.py` (the 8A sample) for `Scenes/Presets/`: the valley under each of the
+nine built-in environment presets, each applied through the editor API like the Environments gallery's Apply (so
+`Assets/Environments` has the nine `.noorenv` copies), and `Hillside_Space`: the same land on an airless world with a
+ringed planet, a small moon and two suns. `tools/samples/measure_hillside_skies.py` prints what each sky costs.
 Doing it by hand in the editor takes the same steps, with a mouse.
 
 The meadow is `Assets/Materials/meadow.noormat`, a material instance of Leafy Grass with a greener
@@ -48,7 +52,8 @@ base colour (Poly Haven's Leafy Grass is autumn-coloured).
 ## Tests
 
 - `render.golden_Hillside`: the camera's view against `tests/golden/Hillside.png` (after `cli.cook_hillside`
-  cooks the forest's graph).
+  cooks the forest's graph). Likewise `render.golden_Hillside_Haze`, `_Night`, and one per scene in
+  `Scenes/Presets` (`render.golden_Hillside_ClearNoon` ... `_Space`).
 - `cli.generate_hillside_forest`: the forest's graph gives the pinned fingerprint (Debug = Release), and
   `gate.hillside_forest_generate_equals_cook`: the same bytes as the editor's cook.
 - `cli.build_hillside` + `player.hillside_walk`: a built game; the walker must end inside the house,
