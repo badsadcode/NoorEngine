@@ -227,7 +227,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 2 ✅ | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
 | 3 ✅ | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
 | 4 ✅ | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
-| 5 | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
+| 5 ✅ | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
 | 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
 | 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
 | 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
@@ -273,12 +273,31 @@ controls); the editor smoke test (the preview shows a placed fire, an edit thins
 preset unchanged, Mute, undo). Not done: the spec's effects graph and timeline (later, as planned); the preview is the
 editor's own simulation, not the game's.
 
+## Part 5 result (2026-11-19)
+Done. `.noorsprite` sheets (importer `sprite`; a grid by columns and rows or by frame size, margin, spacing, pivot,
+pixels per metre, nearest or linear filtering, named animations as ranges or lists, looping or holding) and the
+`sprite` component (sheet, animation, speed, time offset, frame, `upright`/`camera`/`none` billboards, flip, colour,
+shadows). A sprite is an ordinary mesh draw: a shared quad with a cutout material per frame, so it's lit, casts and
+receives shadows and is fogged with nothing new in the frame; materials gained nearest filtering for pixel art.
+`game::SpriteLibrary` is shared by games and the editor's viewport (sprites turn to the editor camera, animate, select,
+frame). Editor API v26 (`noor_doc_sprite`) and a sheet editor tab (the sheet with numbered frames, grid and world
+settings, animations, an animated preview, Place in scene; a texture's Make sprite sheet). Proven: `sprites:` unit
+tests (frames exactly on the grid, margins and spacing, animation timing, the file); `sprite api` tests (create, slice,
+save, apply in one undo step); goldens `Sprites_Sun` (each walk frame, tinted, flipped, a camera-facing coin, an
+animated walker, all casting shadows) and `Sprites_Shade` (in sun, half in a wall's shadow, in shade); the editor smoke
+test (slice 4 x 2 into eight exact frames, the preview steps through the walk, the file holds it, Place in scene, the
+viewport draws it, undo). The test sheet is drawn pixel by pixel by `tools/samples/make_test_sprites.py`. Fixed on the
+way: mirroring by a negative scale turned the card's lit side away (it mirrors the texture now). Not done: 8 directions
+and script control (part 6); clicking a sprite selects its whole card, transparent corners too (not covered by a test);
+the editor animates on the viewport's clock, also in Play mode.
+
 ## Open questions
 
 1. **The Uncounted's sprite sheet** (the bearded man: 8 directions × idle / walk / run / attack / hurt, 4 death
    poses), offered on 2026-11-17: where's the file, and may it be committed as a test fixture and in the
    sample, or only used locally?
-2. **Pixel art:** should sprites default to nearest filtering (crisp pixels, The Uncounted's look) or linear?
+2. ~~**Pixel art:**~~ **Decided in part 5 (Tom may overrule):** sheets default to nearest filtering (crisp
+   pixels, The Uncounted's look); `"filter": "linear"` per sheet for painted sprites.
 3. **Effects authoring:** is a module stack enough for 8B, with the node graph later (recommended), or is the
    graph wanted now?
 

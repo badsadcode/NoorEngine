@@ -47,33 +47,44 @@ Status Renderer::Impl::ensure_texture_table() {
     sampler_info.maxLod = VK_LOD_CLAMP_NONE;
     NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &texture_sampler));
     set_name(VK_OBJECT_TYPE_SAMPLER, texture_sampler, "Texture sampler (trilinear, repeat)");
+    // Pixel art (8B part 5): the nearest texel, no blending (mip levels still picked, so far sprites don't shimmer).
+    VkSamplerCreateInfo nearest_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    nearest_info.magFilter = VK_FILTER_NEAREST;
+    nearest_info.minFilter = VK_FILTER_NEAREST;
+    nearest_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    nearest_info.addressModeU = nearest_info.addressModeV = nearest_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    nearest_info.maxLod = VK_LOD_CLAMP_NONE;
+    NOOR_VK_TRY(vkCreateSampler(device, &nearest_info, nullptr, &nearest_sampler));
+    set_name(VK_OBJECT_TYPE_SAMPLER, nearest_sampler, "Texture sampler (nearest, repeat)");
 
-    const VkDescriptorSetLayoutBinding bindings[3] = {
+    const VkDescriptorSetLayoutBinding bindings[4] = {
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &texture_sampler},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // materials
+        {3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &nearest_sampler},
     };
     // Textures are added and removed while earlier frames may still be in flight: slots that
     // frame doesn't use may change (update-after-bind, unused-while-pending), and empty slots are
     // fine (partially bound).
-    const VkDescriptorBindingFlags binding_flags[3] = {
+    const VkDescriptorBindingFlags binding_flags[4] = {
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
             VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
         0,
         0,
+        0,
     };
     VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-    flags_info.bindingCount = 3;
+    flags_info.bindingCount = 4;
     flags_info.pBindingFlags = binding_flags;
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layout_info.pNext = &flags_info;
     layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-    layout_info.bindingCount = 3;
+    layout_info.bindingCount = 4;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &texture_set_layout));
 
     const VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures},
-                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 1},
+                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 2},
                                            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
@@ -141,7 +152,8 @@ void Renderer::Impl::write_material(std::uint32_t slot, const MaterialDesc& d) {
     const auto tex = [&](TextureHandle t, std::uint32_t fallback) {
         return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
     };
-    const std::uint32_t flags = (d.alpha == AlphaMode::Cutout ? 1u : 0u) | (d.alpha == AlphaMode::Blend ? 2u : 0u) | (d.double_sided ? 4u : 0u);
+    const std::uint32_t flags = (d.alpha == AlphaMode::Cutout ? 1u : 0u) | (d.alpha == AlphaMode::Blend ? 2u : 0u) | (d.double_sided ? 4u : 0u) |
+                                (d.nearest_filter ? 8u : 0u);
     const GpuMaterial m{d.base_color,
                         {d.emissive.x, d.emissive.y, d.emissive.z, d.alpha_cutoff},
                         {d.metallic, d.roughness, d.normal_scale, d.occlusion_strength},
@@ -336,6 +348,8 @@ void Renderer::Impl::destroy_textures() {
     if (texture_pool) vkDestroyDescriptorPool(device, texture_pool, nullptr);
     if (texture_set_layout) vkDestroyDescriptorSetLayout(device, texture_set_layout, nullptr);
     if (texture_sampler) vkDestroySampler(device, texture_sampler, nullptr);
+    if (nearest_sampler) vkDestroySampler(device, nearest_sampler, nullptr);
+    nearest_sampler = VK_NULL_HANDLE;
     texture_pool = VK_NULL_HANDLE;
     texture_set_layout = VK_NULL_HANDLE;
     texture_set = VK_NULL_HANDLE;

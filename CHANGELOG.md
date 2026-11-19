@@ -4,6 +4,23 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8B, part 5: sprites
+**Added**
+- **Sprite sheets** (`.noorsprite`, importer `sprite`, `asset/sprite_asset.h`, [docs](docs/fx/SPRITES.md)): a texture cut
+  into frames by columns and rows or by frame size (margin, spacing), a pivot, pixels per metre, nearest or linear
+  filtering, named animations (ranges or lists, frames a second, looping or holding).
+- **The `sprite` component** (games and the editor's viewport): an animated, lit, shadow-casting cutout card,
+  `upright`/`camera`/`none` billboards, flip, colour, speed and time offset. `game::SpriteLibrary`; `SceneView::sprites`.
+- **Nearest filtering** for materials (`MaterialDesc::nearest_filter`): crisp pixel art.
+- **Editor API v26:** `noor_doc_sprite` (list, read with the sliced frames, create from a texture, save, apply).
+- **NoorEditor: the sprite sheet editor** (a tab): the sheet with numbered frames, grid, world size, pivot, filter,
+  animations, an animated preview, Place in scene; **Make sprite sheet** on a texture's settings; Content Browser opens
+  and adds sheets. Viewport render stats report `sprites`.
+- `tools/samples/make_test_sprites.py`: a pixel-art test sheet (a walker and a coin, drawn pixel by pixel) and scenes.
+
+**Tests:** `sprites:` unit tests (4 cases); `noor_editor_api_tests` "sprite api" (3 cases); goldens `Sprites_Sun`,
+`Sprites_Shade`; the editor smoke test's sprite checks.
+
 ### 2026-11-19 — Milestone 8B, part 4: the Effects panel
 **Added**
 - **Six built-in effect presets** (`fx/presets.h`): Fire, Smoke, Sparks, Dust, Rain splash, Magic; never written.

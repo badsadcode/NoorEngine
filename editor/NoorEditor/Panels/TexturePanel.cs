@@ -80,7 +80,7 @@ public sealed class TexturePanel : Grid
     /// <summary>The last info from the engine (tests read it).</summary>
     public JsonObject? Last { get; private set; }
 
-    public TexturePanel(TextureDocument texture)
+    public TexturePanel(TextureDocument texture, Action<string>? openSprite = null)
     {
         Texture = texture;
         ColumnDefinitions = new ColumnDefinitions("*,4,360");
@@ -111,6 +111,15 @@ public sealed class TexturePanel : Grid
         fields.Children.Add(_mips);
         fields.Children.Add(_info);
         fields.Children.Add(_saving);
+        // Sprites (8B part 5): a sheet for this picture, beside it, opened to set its grid and animations.
+        var makeSprite = new Button { Content = "Make sprite sheet", Classes = { "tool" }, Margin = new Thickness(0, 12, 0, 0) };
+        ToolTip.SetTip(makeSprite, "A .noorsprite beside this texture: cut it into frames and animations for sprites");
+        makeSprite.Click += (_, _) =>
+        {
+            var made = Texture.Doc.Sprite(new JsonObject { ["op"] = "create", ["texture"] = Texture.RelativePath });
+            if (made?["path"]?.GetValue<string>() is { } path) openSprite?.Invoke(path);
+        };
+        fields.Children.Add(makeSprite);
         var scroll = new ScrollViewer { Content = fields, Background = NoorTheme.Brush(NoorTheme.Panel) };
         SetColumn(scroll, 2);
         Children.Add(scroll);

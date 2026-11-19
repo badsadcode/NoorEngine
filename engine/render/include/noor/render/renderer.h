@@ -120,6 +120,8 @@ struct MaterialDesc {
     AlphaMode alpha = AlphaMode::Opaque;
     float alpha_cutoff = 0.5f;
     bool double_sided = false;          // draw back faces too (thin leaves, cloth, planes seen from below)
+    // The base colour (and cutout) sampled without blending between texels: crisp pixel art (sprites, 8B part 5).
+    bool nearest_filter = false;
     math::Vec2 uv_scale{1, 1};
     math::Vec2 uv_offset{0, 0};
     TextureHandle base_color_texture;          // rgb colour, a alpha

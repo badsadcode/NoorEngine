@@ -250,6 +250,7 @@ internal static class SmokeTest
         await EnvironmentGalleryChecks(window, Check, Shot);
         await EffectsPanelChecks(window, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
+        await SpriteChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
         await TerrainChecks(window, Check, Shot);
@@ -990,6 +991,73 @@ internal static class SmokeTest
               "texture settings: back to compressed");
         window.DockFactory.CloseDockable(texture);
         window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        await Task.Delay(300);
+    }
+
+    // Milestone 8B, part 5: a sprite sheet made from a texture, sliced by a grid, an animation previewed, a sprite placed.
+    private static async Task SpriteChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var dir = Path.Combine(doc.ProjectRoot, "Assets", "Sprites");
+        Directory.CreateDirectory(dir);
+        File.Copy(Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Sprites", "walker.png"), Path.Combine(dir, "walker.png"), overwrite: true);
+        doc.RefreshAssets(rescan: true);
+        // The texture panel's "Make sprite sheet" does exactly this create.
+        var made = doc.Sprite(new JsonObject { ["op"] = "create", ["texture"] = "Assets/Sprites/walker.png" });
+        var path = made?["path"]?.GetValue<string>();
+        var sprite = path == null ? null : window.OpenSprite(path);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<SpritePanel>().FirstOrDefault(p => p.Sprite == sprite);
+        check(sprite != null && panel != null && window.FindDock("Documents")?.ActiveDockable == sprite,
+              "sprites: a sheet made from a texture opens in its own tab");
+        if (sprite == null || panel == null)
+        {
+            if (sprite != null) window.DockFactory.CloseDockable(sprite);  // leave the viewport showing for the checks after
+            window.DockFactory.SetActiveDockable(window.ViewportDockable);
+            await Task.Delay(300);
+            return;
+        }
+        // Sliced 4 x 2: eight frames of 32 x 32, exactly on the grid.
+        panel.SetGrid(4, 2);
+        var frames = panel.Last?["frames"] as JsonArray;
+        var exact = frames?.Count == 8 && Enumerable.Range(0, 8).All(i =>
+            frames[i] is JsonArray f && f[0]!.GetValue<int>() == i % 4 * 32 && f[1]!.GetValue<int>() == i / 4 * 32 && f[2]!.GetValue<int>() == 32 && f[3]!.GetValue<int>() == 32);
+        check(exact, $"sprites: slicing 4 x 2 gives eight 32 x 32 frames exactly on the grid ({frames?.Count} frames)");
+        panel.SetPixelsPerMetre(16);
+        check(panel.Last?["frame_size_m"]?[1]?.GetValue<double>() is > 1.99 and < 2.01, "sprites: at 16 pixels a metre a frame is 2 m tall");
+        // An animation over the walk frames: the preview steps through them.
+        panel.AddAnimation("walk", 0, 3, 8);
+        var seen = new HashSet<int>();
+        for (var t = 0; t < 30 && seen.Count < 4; t++)
+        {
+            await Task.Delay(50);
+            if (panel.PreviewFrame >= 0) seen.Add(panel.PreviewFrame);
+        }
+        check(panel.PreviewAnimation == "walk" && seen.SetEquals(new[] { 0, 1, 2, 3 }),
+              $"sprites: the preview plays the walk, frames 0 to 3 ({string.Join(", ", seen.OrderBy(f => f))})");
+        var file = JsonNode.Parse(File.ReadAllText(Path.Combine(doc.ProjectRoot, path!)));
+        check(file?["grid"]?["columns"]?.GetValue<int>() == 4 && file?["animations"]?["walk"]?["fps"]?.GetValue<double>() == 8,
+              "sprites: the grid and the animation are saved in the .noorsprite");
+        shot(window, "editor_32_sprite_sheet.png");
+        // Place it: a new entity with a sprite playing the walk, drawn in the viewport.
+        doc.Select(null);
+        var count = doc.Scene.Entities.Count;
+        var placed = panel.PlaceInScene([14, 0, 14]);  // on open ground, clear of the building
+        var id = placed?["entity"]?.GetValue<string>();
+        var component = doc.Scene.Entities.FirstOrDefault(e => e.Id == id)?.Components["sprite"];
+        check(doc.Scene.Entities.Count == count + 1 && component?["animation"]?.GetValue<string>() == "walk" &&
+              component?["sheet"]?.GetValue<string>() == made?["guid"]?.GetValue<string>(),
+              "sprites: Place in scene makes a sprite entity playing the walk");
+        window.DockFactory.CloseDockable(sprite);
+        window.DockFactory.SetActiveDockable(window.ViewportDockable);
+        long Sprites() => VulkanViewport.Active?.RenderStats() is { } text && JsonNode.Parse(text)?["sprites"] is JsonValue v && v.TryGetValue<long>(out var n) ? n : -1;
+        var drawn = await WaitFor(() => (long?)Sprites(), n => n >= 1, 8);
+        check(drawn >= 1, $"sprites: the viewport draws the placed sprite ({drawn} sprites)");
+        if (id != null) window.ViewportView?.Viewport.Frame(doc.Subtree(id));
+        await Task.Delay(800);
+        shot(window, "editor_33_sprite_in_viewport.png");
+        doc.Undo();
+        check(doc.Scene.Entities.Count == count, "sprites: one undo removes the sprite entity");
         await Task.Delay(300);
     }
 

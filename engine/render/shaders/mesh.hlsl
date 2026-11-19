@@ -23,6 +23,14 @@ struct PushConstants
 // The bindless texture table (ADR-012): every texture, indexed by slot; one shared sampler.
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 [[vk::binding(1, 1)]] SamplerState texture_sampler;
+[[vk::binding(3, 1)]] SamplerState nearest_sampler;  // materials with flag bit 3: pixel art (8B part 5)
+
+// A material's base colour: the nearest texel for pixel art, blended otherwise (uniform per draw: a cheap branch).
+float4 sample_base(uint slot, float2 uv, uint flags)
+{
+    if ((flags & 8u) != 0u) return textures[slot].Sample(nearest_sampler, uv);
+    return textures[slot].Sample(texture_sampler, uv);
+}
 
 // The material table (render::MaterialDesc, vulkan_impl.h GpuMaterial).
 struct GpuMaterial
@@ -195,7 +203,7 @@ Surface sample_surface(uint slot, float2 surface_uv, float3 n, float4 tangent)
 {
     const GpuMaterial mat = materials[slot];
     const float2 uv = surface_uv * mat.uv.xy + mat.uv.zw;
-    const float4 base_sample = textures[mat.tex0.x].Sample(texture_sampler, uv);
+    const float4 base_sample = sample_base(mat.tex0.x, uv, mat.tex1.w);
     Surface s;
     s.alpha = mat.base_color.a * base_sample.a;
     s.base_color = mat.base_color.rgb * base_sample.rgb;
@@ -222,7 +230,7 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     if (!is_splat())
     {
         const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
-        if ((mat.tex1.w & 1u) != 0u && mat.base_color.a * textures[mat.tex0.x].Sample(texture_sampler, uv).a < mat.emissive_cutoff.w) discard;  // cutout
+        if ((mat.tex1.w & 1u) != 0u && mat.base_color.a * sample_base(mat.tex0.x, uv, mat.tex1.w).a < mat.emissive_cutoff.w) discard;  // cutout
     }
     if (!front) n = -n;  // double-sided: the back face's normal points the other way
     const float4 tangent = input.tangent * (front ? 1.0 : -1.0);

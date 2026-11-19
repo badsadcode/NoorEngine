@@ -146,7 +146,7 @@ struct GpuMaterial {
     math::Vec4 params;           // metallic, roughness, normal scale, occlusion strength
     math::Vec4 uv;               // scale xy, offset xy
     std::uint32_t tex0[4];       // base colour, metallic-roughness, roughness, metallic
-    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bit 0 cutout, bit 1 blend, bit 2 double-sided)
+    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bit 0 cutout, bit 1 blend, bit 2 double-sided, bit 3 nearest)
 };
 static_assert(sizeof(GpuMaterial) == 96);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");
@@ -431,6 +431,7 @@ struct Renderer::Impl {
     VkDescriptorPool texture_pool = VK_NULL_HANDLE;
     VkDescriptorSet texture_set = VK_NULL_HANDLE;
     VkSampler texture_sampler = VK_NULL_HANDLE;
+    VkSampler nearest_sampler = VK_NULL_HANDLE;  // pixel art (materials with nearest_filter): binding 3
     std::vector<GpuTexture> textures;  // index = slot
     std::uint64_t texture_bytes = 0;   // user textures only
     float max_anisotropy = 1.0f;

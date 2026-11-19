@@ -31,6 +31,7 @@ add_executable(noor_unit_tests
     unit/test_night.cpp
     unit/test_weather.cpp
     unit/test_particles.cpp
+    unit/test_sprites.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -61,7 +62,7 @@ doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit" FAIL_REGULAR_EXP
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
     # The viewport maths is internal to the DLL, so its source is compiled into the test too.
-    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp
+    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp api/test_sprite_api.cpp
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
     target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph noor::game doctest::doctest)
@@ -165,6 +166,19 @@ foreach(name IN ITEMS Particles_Campfire Particles_Campfire_Night Particles_Glas
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${name}.noorscene
             -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png -DFRAMES=120
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
+# Sprites (Milestone 8B, part 5): pixel-art billboards in sunlight casting shadows (each walk frame, tinted, flipped, a
+# coin facing the camera, one animating), and in a wall's shadow (in sun, half in shade, in shade). Scenes and sheet from
+# tools/samples/make_test_sprites.py.
+foreach(name IN ITEMS Sprites_Sun Sprites_Shade)
+    add_test(NAME render.golden_${name}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${name}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png
             -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)

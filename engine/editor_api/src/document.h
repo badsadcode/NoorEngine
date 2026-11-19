@@ -145,6 +145,8 @@ struct RenderSnapshot {
     std::vector<Marker> markers;
     using Primitive = game::SceneView::Primitive;  // simple shapes from `primitive` components
     std::vector<Primitive> primitives;
+    using Sprite = game::SceneView::Sprite;  // `sprite` components (8B part 5): billboards turned to the viewport's camera
+    std::vector<Sprite> sprites;
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`
     std::optional<GameCamera> camera;
     render::Lighting lighting;  // the scene's sun and exposure (game::SceneView), also while editing
@@ -216,6 +218,8 @@ public:
     // Effect assets (Milestone 8B, part 4): {"op": "list" | "read" | "save" | "duplicate" | "reset" | "apply" |
     // "preview", ...} (noor_doc_effect in noor_editor_api.h).
     [[nodiscard]] Result<asset::Json> effect(const asset::Json& command);
+    // Sprite sheets (8B part 5): list, read (sliced), create from a texture, save, apply (noor_doc_sprite).
+    [[nodiscard]] Result<asset::Json> sprite(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);

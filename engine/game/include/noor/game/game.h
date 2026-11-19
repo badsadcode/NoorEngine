@@ -125,6 +125,14 @@ struct SceneView {
     };
     std::vector<Terrain> terrains;
     std::vector<Primitive> primitives;
+    // Sprites (`sprite` components, Milestone 8B part 5, noor/game/sprites.h): quads cut from a sprite sheet.
+    struct Sprite {
+        Guid entity;
+        std::filesystem::path sheet;  // the .noorsprite file
+        asset::Json component;
+        math::Mat4 world;
+    };
+    std::vector<Sprite> sprites;
     std::optional<Camera> camera;
     // The sun: the first entity with a directional `light` ({"type": "directional", "color":
     // "#FFF4E5", "illuminance": 100000}), shining along the entity's forward (−Z). Until

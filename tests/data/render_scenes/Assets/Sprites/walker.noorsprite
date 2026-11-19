@@ -1,0 +1,35 @@
+{
+  "noor_sprite": 1,
+  "name": "Walker",
+  "texture": "5b417e00-0001-4000-8000-000000000002",
+  "grid": {
+    "columns": 4,
+    "rows": 2
+  },
+  "margin": 0,
+  "spacing": 0,
+  "pivot": [
+    0.5,
+    0.03125
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {
+    "walk": {
+      "frames": {
+        "from": 0,
+        "to": 3
+      },
+      "fps": 6,
+      "loop": true
+    },
+    "spin": {
+      "frames": {
+        "from": 4,
+        "to": 7
+      },
+      "fps": 8,
+      "loop": true
+    }
+  }
+}

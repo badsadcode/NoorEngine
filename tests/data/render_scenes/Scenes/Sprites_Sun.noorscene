@@ -1,0 +1,390 @@
+{
+  "noor_scene": 2,
+  "id": "5b417e00-0031-4000-8000-000000000000",
+  "name": "Sprites_Sun",
+  "entities": [
+    {
+      "id": "5b417e00-0031-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#8FA070"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000002",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2.2,
+          7.5
+        ],
+        "rotation": [
+          -0.0871557,
+          0.0,
+          0.0,
+          0.9961947
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.393765187,
+          0.196882538,
+          0.0,
+          0.897878747
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000004",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 2,
+          "ground_albedo": 0.3
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000010",
+      "name": "Walker 0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000011",
+      "name": "Walker 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.4,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000012",
+      "name": "Walker 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.20000000000000018,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000013",
+      "name": "Walker 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.8000000000000007,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000020",
+      "name": "Tinted",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.2,
+          0,
+          2.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "color": "#FF9090"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000021",
+      "name": "Flipped",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.2,
+          0,
+          2.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "flip_x": true
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000022",
+      "name": "Coin",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.0,
+          1.3,
+          3.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "camera"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0031-4000-8000-000000000023",
+      "name": "Animated",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -2.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "animation": "walk"
+        }
+      }
+    }
+  ]
+}

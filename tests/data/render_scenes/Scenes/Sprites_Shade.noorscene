@@ -1,0 +1,302 @@
+{
+  "noor_scene": 2,
+  "id": "5b417e00-0032-4000-8000-000000000000",
+  "name": "Sprites_Shade",
+  "entities": [
+    {
+      "id": "5b417e00-0032-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#8FA070"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000002",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2.0,
+          7.0
+        ],
+        "rotation": [
+          -0.0871557,
+          0.0,
+          0.0,
+          0.9961947
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.268638794,
+          0.477580078,
+          0.0,
+          0.836510889
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000004",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 2,
+          "ground_albedo": 0.3
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000010",
+      "name": "Wall",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.4,
+          1.5,
+          0.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            5
+          ],
+          "color": "#B0A090"
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000011",
+      "name": "In sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.4,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000012",
+      "name": "Legs in shade",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.2,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000013",
+      "name": "In shade",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.9,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "flip_x": true
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0032-4000-8000-000000000014",
+      "name": "Coin",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.4,
+          2.6,
+          -1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false
+        }
+      }
+    }
+  ]
+}

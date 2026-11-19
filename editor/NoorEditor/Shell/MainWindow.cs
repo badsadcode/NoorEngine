@@ -45,6 +45,8 @@ public sealed class MainWindow : Window
     public IReadOnlyList<MaterialDocument> OpenMaterials => _materials;
     private readonly List<TextureDocument> _textures = new();
     public IReadOnlyList<TextureDocument> OpenTextures => _textures;
+    private readonly List<SpriteDocument> _sprites = new();
+    public IReadOnlyList<SpriteDocument> OpenSprites => _sprites;
     private readonly List<GraphDocument> _graphs = new();
     public IReadOnlyList<GraphDocument> OpenGraphs => _graphs;
 
@@ -123,6 +125,7 @@ public sealed class MainWindow : Window
             if (e.Dockable is ScriptDocument closed) _scripts.Remove(closed);
             if (e.Dockable is MaterialDocument closedMaterial) _materials.Remove(closedMaterial);
             if (e.Dockable is TextureDocument closedTexture) _textures.Remove(closedTexture);
+            if (e.Dockable is SpriteDocument closedSprite) _sprites.Remove(closedSprite);
             if (e.Dockable is GraphDocument closedGraph) _graphs.Remove(closedGraph);
         };
         _fileTimer.Start();
@@ -182,6 +185,7 @@ public sealed class MainWindow : Window
                 ContentBrowser.EditRequested += a =>
                 {
                     if (a.Importer == "texture") OpenTexture(a.Path);
+                    else if (a.Importer == "sprite") OpenSprite(a.Path);
                     else if (a.Importer == "procgraph") OpenGraph(a.Path);
                     else OpenMaterial(a.Path);
                 };
@@ -224,6 +228,7 @@ public sealed class MainWindow : Window
         foreach (var script in _scripts) DockFactory.AddDockable(documents, script);  // a layout rebuild keeps open scripts
         foreach (var material in _materials) DockFactory.AddDockable(documents, material);
         foreach (var texture in _textures) DockFactory.AddDockable(documents, texture);
+        foreach (var sprite in _sprites) DockFactory.AddDockable(documents, sprite);
         foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
@@ -716,6 +721,16 @@ public sealed class MainWindow : Window
             _ = Dialogs.Ask(this, "No scene open", "Create or open a scene first (File ▸ New Scene).", "OK");
             return;
         }
+        if (asset.Importer == "sprite")
+        {
+            // A sprite standing on the ground, showing the sheet's first animation (if it has one).
+            var sheet = Doc.Sprite(new System.Text.Json.Nodes.JsonObject { ["op"] = "read", ["asset"] = asset.Path });
+            var first = (sheet?["sheet"]?["animations"] as System.Text.Json.Nodes.JsonObject)?.Select(kv => kv.Key).FirstOrDefault();
+            var apply = new System.Text.Json.Nodes.JsonObject { ["op"] = "apply", ["asset"] = asset.Path, ["position"] = new System.Text.Json.Nodes.JsonArray(0, 0, 0) };
+            if (first != null) apply["animation"] = first;
+            if (Doc.Sprite(apply)?["entity"]?.GetValue<string>() is { } sid) FrameEntity(sid);
+            return;
+        }
         if (asset.Importer == "material")
         {
             // A ball wearing the material, the classic way to look at one.
@@ -1032,7 +1047,7 @@ public sealed class MainWindow : Window
                 EngineLog.Warn("Textures", $"{relativePath} doesn't exist");
                 return null;
             }
-            texture = new TextureDocument(Doc, relativePath) { CreateView = t => new TexturePanel(t) };
+            texture = new TextureDocument(Doc, relativePath) { CreateView = t => new TexturePanel(t, p => OpenSprite(p)) };
             _textures.Add(texture);
             var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
             if (documents != null) DockFactory.AddDockable(documents, texture);
@@ -1043,6 +1058,30 @@ public sealed class MainWindow : Window
             DockFactory.SetFocusedDockable(owner, texture);
         }
         return texture;
+    }
+
+    /// <summary>A sprite sheet's editor (Milestone 8B, part 5): its grid, animations and an animated preview, in a tab.</summary>
+    public SpriteDocument? OpenSprite(string relativePath)
+    {
+        var sprite = _sprites.FirstOrDefault(s => string.Equals(s.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+        if (sprite == null)
+        {
+            if (!File.Exists(Path.Combine(Doc.ProjectRoot, relativePath)))
+            {
+                EngineLog.Warn("Sprites", $"{relativePath} doesn't exist");
+                return null;
+            }
+            sprite = new SpriteDocument(Doc, relativePath) { CreateView = s => new SpritePanel(s) };
+            _sprites.Add(sprite);
+            var documents = FindDock("Documents") ?? Docks(_rootDock).OfType<IDocumentDock>().FirstOrDefault();
+            if (documents != null) DockFactory.AddDockable(documents, sprite);
+        }
+        if (sprite.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(sprite);
+            DockFactory.SetFocusedDockable(owner, sprite);
+        }
+        return sprite;
     }
 
     /// <summary>Save as instance: <c>name_variant.noormat</c> beside the material, changing nothing yet; opens it.</summary>

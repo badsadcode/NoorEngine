@@ -405,6 +405,27 @@ public sealed class EditorDocument : IDisposable
         return JsonNode.Parse(json);
     }
 
+    /// <summary>
+    /// One sprite sheet command (noor_doc_sprite: list, read, create, save, apply; Milestone 8B, part 5). Changes refresh
+    /// the asset list and the scene; a failure is logged and gives null.
+    /// </summary>
+    public JsonNode? Sprite(JsonObject command)
+    {
+        var json = Native.Sprite(_handle, command.ToJsonString());
+        var op = command["op"]?.GetValue<string>() ?? "";
+        if (json == null)
+        {
+            Interop.EngineLog.Error("Sprites", $"Sprite {op}: {Native.LastError()}");
+            return null;
+        }
+        if (op is "create" or "save" or "apply")
+        {
+            RefreshAssets(rescan: false);
+            Refresh();
+        }
+        return JsonNode.Parse(json);
+    }
+
     /// <summary>The built-in environment presets (Milestone 8A, part 6): [{name, description, environment}].</summary>
     public static JsonArray EnvironmentPresets() => Native.EnvironmentPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
 

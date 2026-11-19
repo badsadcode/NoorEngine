@@ -102,6 +102,7 @@ public sealed record EntityInfo(
         Components.ContainsKey("audio_source") ? "Sound" :
         Components.ContainsKey("mesh") ? "Mesh" :
         Components.ContainsKey("marker") ? "Marker" :
+        Components.ContainsKey("sprite") ? "Sprite" :
         Components.ContainsKey("model") ? "Model" : "Entity";
 }
 
@@ -134,7 +135,7 @@ public sealed record SceneSnapshot(
 
 public sealed record AssetInfo(string Guid, string Path, string Importer, string Name)
 {
-    public string Kind => Importer switch { "gltf" => "Model", "prefab" => "Prefab", "audio" => "Sound", "texture" => "Texture", "material" => "Material", _ => Importer };
+    public string Kind => Importer switch { "gltf" => "Model", "prefab" => "Prefab", "audio" => "Sound", "texture" => "Texture", "material" => "Material", "sprite" => "Sprite sheet", "fx" => "Effect", _ => Importer };
     public string Folder => System.IO.Path.GetDirectoryName(Path)?.Replace('\\', '/') ?? "";
 }
 

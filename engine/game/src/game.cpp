@@ -374,8 +374,9 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool env = !has_environment && e.has("environment") && e.components["environment"].is_object();
         const bool model = e.has("model") && e.components["model"].is_object();
         const bool scatter = e.has("scatter") && e.components["scatter"].is_object();
+        const bool sprite = e.has("sprite") && e.components["sprite"].is_object();
         if (scatter) scatter_entities.push_back(i);
-        if (!camera && !primitive && !mesh && !model && !sun && !local && !extra_sun && !body && !env && !e.has("csg_model") &&
+        if (!camera && !primitive && !sprite && !mesh && !model && !sun && !local && !extra_sun && !body && !env && !e.has("csg_model") &&
             !e.has("terrain"))
             continue;
         if (env) {
@@ -564,6 +565,11 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 prim.world = world * math::scale(size);
             }
             view.primitives.push_back(prim);
+        }
+        if (sprite && asset_path) {
+            const auto& sp = e.components["sprite"];
+            if (const auto id = asset::guid_field(sp, "sheet"))
+                if (auto file = asset_path(*id)) view.sprites.push_back({e.id, std::move(*file), sp, world});
         }
         if (e.has("terrain") && e.components["terrain"].is_object()) {
             const auto& t = e.components["terrain"];

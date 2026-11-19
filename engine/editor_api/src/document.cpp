@@ -6,6 +6,7 @@
 #include "noor/fx/presets.h"
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
+#include "noor/asset/sprite_asset.h"
 #include "noor/csg/csg.h"
 #include "noor/csg/scene_csg.h"
 #include "noor/asset/gltf_export.h"
@@ -551,6 +552,154 @@ Result<Json> Document::effect(const Json& command) {
     return fail(ErrorCode::InvalidArgument, std::format("effect: unknown op \"{}\"", op));
 }
 
+// ------------------------------------------------------------------ sprite sheets (8B part 5)
+
+Result<Json> Document::sprite(const Json& command) {
+    if (!command.is_object() || !command.contains("op") || !command["op"].is_string())
+        return fail(ErrorCode::InvalidArgument, "sprite: the command needs an \"op\"");
+    const std::string op = command["op"];
+    const auto rescan = [&]() -> Status {
+        if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+        return {};
+    };
+    const auto relative = [&](const stdfs::path& file) {
+        const auto rel = project_.relative(file);
+        return rel ? *rel : file.generic_string();
+    };
+    const auto file_of = [&](const Json& c, const char* key) -> Result<stdfs::path> {
+        if (!c.contains(key) || !c[key].is_string()) return fail(ErrorCode::InvalidArgument, std::format("sprite: \"{}\" (a project path) is needed", key));
+        auto file = project_.resolve(c[key].get<std::string>());
+        if (!file) return std::unexpected(file.error());
+        if (!stdfs::exists(*file)) return fail(ErrorCode::NotFound, std::format("nothing at {}", c[key].get<std::string>()));
+        return *file;
+    };
+    // A sheet's settings checked against its texture: the sliced frames, or why it can't be sliced ("error").
+    const auto sliced = [&](const Json& settings, Json& out) -> Status {
+        auto sheet = asset::parse_sprite_sheet(settings);
+        if (!sheet) return std::unexpected(sheet.error());
+        const auto* tex = sheet->texture ? registry_.find(*sheet->texture) : nullptr;
+        if (!tex) {
+            out["error"] = "its texture isn't in the project";
+            return {};
+        }
+        out["texture_path"] = tex->path;
+        auto info = asset::texture_info(project_.root() / tex->path, asset::TextureSettings{});
+        if (!info) {
+            out["error"] = info.error().message;
+            return {};
+        }
+        out["image"] = {{"width", info->source_width}, {"height", info->source_height}};
+        if (auto s = asset::slice(*sheet, static_cast<int>(info->source_width), static_cast<int>(info->source_height)); !s) {
+            out["error"] = s.error().message;
+            return {};
+        }
+        Json frames = Json::array();
+        for (const auto& f : sheet->frames) frames.push_back(Json::array({f.x, f.y, f.width, f.height}));
+        out["frames"] = std::move(frames);
+        out["columns"] = sheet->columns;
+        out["rows"] = sheet->rows;
+        out["frame_size_m"] = Json::array({sheet->frame_size_m().x, sheet->frame_size_m().y});
+        return {};
+    };
+    const auto describe = [&](const stdfs::path& file) -> Result<Json> {
+        auto text = noor::fs::read_file(file, 1 << 20);
+        if (!text) return std::unexpected(text.error());
+        auto json = asset::parse_json(*text, file.generic_string());
+        if (!json) return std::unexpected(json.error());
+        const auto rel = project_.relative(file);
+        const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+        Json out{{"path", relative(file)}, {"guid", rec ? rec->guid.to_string() : std::string()},
+                 {"name", json->value("name", file.stem().string())}, {"sheet", *json}};
+        if (auto s = sliced(*json, out); !s) out["error"] = s.error().message;
+        return out;
+    };
+    const auto write = [&](const stdfs::path& file, const Json& json) -> Status {
+        std::error_code ec;
+        stdfs::create_directories(file.parent_path(), ec);
+        return noor::fs::write_file_atomic(file, asset::to_text(json), false);
+    };
+
+    if (op == "list") {
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        Json list = Json::array();
+        for (const auto& rec : registry_.assets())
+            if (rec.importer == "sprite")
+                if (auto d = describe(project_.root() / rec.path)) list.push_back(*d);
+        return list;
+    }
+    if (op == "read") {
+        auto file = file_of(command, "asset");
+        if (!file) return std::unexpected(file.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "create") {  // a sheet for a texture, beside it: one frame (the whole image) until a grid is set
+        auto texture = file_of(command, "texture");
+        if (!texture) return std::unexpected(texture.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        const auto rel = project_.relative(*texture);
+        const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+        if (!rec || rec->importer != "texture") return fail(ErrorCode::InvalidArgument, std::format("{} isn't a texture", relative(*texture)));
+        const std::string name = command.value("name", texture->stem().string());
+        stdfs::path target = texture->parent_path() / (name + std::string(asset::kSpriteExtension));
+        for (int n = 2; stdfs::exists(target); ++n) target = texture->parent_path() / std::format("{} {}{}", name, n, asset::kSpriteExtension);
+        Json sheet{{"noor_sprite", asset::kSpriteFormat},
+                   {"name", target.stem().string()},
+                   {"texture", rec->guid.to_string()},
+                   {"grid", command.contains("grid") && command["grid"].is_object() ? command["grid"] : Json{{"columns", 1}, {"rows", 1}}},
+                   {"pivot", Json::array({0.5, 0.0})},
+                   {"pixels_per_metre", 64},
+                   {"filter", "nearest"},
+                   {"animations", Json::object()}};
+        if (auto w = write(target, sheet); !w) return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(target);
+    }
+    if (op == "save") {  // new settings: one that doesn't parse isn't written (one that doesn't slice is, with its "error")
+        auto file = file_of(command, "asset");
+        if (!file) return std::unexpected(file.error());
+        if (!command.contains("sheet") || !command["sheet"].is_object()) return fail(ErrorCode::InvalidArgument, "sprite save: \"sheet\" (an object) is needed");
+        Json sheet = command["sheet"];
+        sheet["noor_sprite"] = asset::kSpriteFormat;
+        if (auto parsed = asset::parse_sprite_sheet(sheet); !parsed) return std::unexpected(parsed.error());
+        if (auto w = write(*file, sheet); !w) return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "apply") {  // an entity's sprite shows this sheet (its other fields kept), or a new entity gets one
+        if (auto s = require_editable(); !s) return std::unexpected(s.error());
+        auto file = file_of(command, "asset");
+        if (!file) return std::unexpected(file.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        auto d = describe(*file);
+        if (!d) return std::unexpected(d.error());
+        Json component{{"sheet", (*d)["guid"]}};
+        if (command.contains("animation") && command["animation"].is_string()) component["animation"] = command["animation"];
+        Json result = *d;
+        if (command.contains("entity") && command["entity"].is_string()) {
+            const std::string id = command["entity"].get<std::string>();
+            const auto parsed = Guid::parse(id);  // a Result
+            const scene::Entity* e = parsed && scene_ ? scene_->find(*parsed) : nullptr;
+            if (!e) return fail(ErrorCode::NotFound, std::format("no entity {}", id));
+            if (e->has("sprite") && e->components.at("sprite").is_object()) {
+                Json merged = e->components.at("sprite");
+                merged.update(component);
+                component = std::move(merged);
+            }
+            if (auto s = execute({{"op", "set_component"}, {"entity", id}, {"type", "sprite"}, {"value", component}}); !s) return std::unexpected(s.error());
+            result["entity"] = id;
+        } else {
+            const Guid id = Guid::generate();
+            Json create{{"op", "create"}, {"id", id.to_string()}, {"name", (*d)["name"]}, {"components", {{"sprite", component}}}};
+            if (command.contains("position") && command["position"].is_array()) create["transform"] = Json{{"position", command["position"]}};
+            if (auto s = execute(create); !s) return std::unexpected(s.error());
+            result["entity"] = id.to_string();
+        }
+        return result;
+    }
+    return fail(ErrorCode::InvalidArgument, std::format("sprite: unknown op \"{}\"", op));
+}
+
 Result<Json> Document::assets(bool rescan) {
     if (rescan) {
         auto r = registry_.scan(project_);
@@ -1039,6 +1188,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     // Models, shapes and the game camera: the same view noor_player draws.
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr, project_.root());
     snap->primitives = std::move(view.primitives);
+    snap->sprites = std::move(view.sprites);
     snap->terrains = std::move(view.terrains);
     // Sculpted or painted terrains: the live layers (saved or not).
     for (auto& t : snap->terrains) {

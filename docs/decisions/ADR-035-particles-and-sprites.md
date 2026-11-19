@@ -63,6 +63,16 @@ Option 3.
   `game::particle_draws`, shared by games and the viewport. The viewport previews the scene's emitters on its own
   60 Hz clock from the document's snapshot (settings resolved, an edited `.noorfx` re-read at once), with solo, mute,
   restart and pause: a preview, not the game's simulation.
+- **Part 5, sprites:** a sprite is an ordinary mesh draw, not a particle: one shared quad and a cutout material per
+  frame whose texture transform picks the frame (`uv_scale`/`uv_offset`), so sprites are lit, shadowed, depth-tested
+  and fogged by the existing mesh path with nothing new in the frame. Materials gained `nearest_filter` (a second,
+  immutable sampler at binding 3 of the texture set, chosen by flag bit 8; every golden unchanged). The quad's normal
+  leans 30 degrees up, so a card facing away from the sun still takes the sky's light. Mirroring (`flip_x`) mirrors
+  the texture transform, not the quad: a negative scale turns the quad's front face away and the lighting with it.
+  `game::SpriteLibrary` (sheets, the quad, materials per frame, tint and flip) is shared by games and the viewport;
+  billboards are turned to the camera every frame (in the viewport too, from the snapshot's `sprites`). Editor API
+  v26: `noor_doc_sprite` (list, read with the sliced frames, create from a texture, save, apply). Ranges in
+  animations are capped at 65,536 frames (a typo mustn't allocate billions).
 - **Found in part 2:** automatic exposure meters sun, sky and moon only, so glowing particles that suit noon blow out
   at night. Scenes give fires a point light and a night emission; a meter that sees local light is in the ideas inbox.
 - **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget

@@ -25,6 +25,7 @@
 #include "noor/game/hud.h"
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
+#include "noor/game/sprites.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
@@ -379,6 +380,8 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::TextureLibrary> textures;    // textures and materials, made with the first snapshot
     std::optional<noor::game::MaterialLibrary> materials;
     std::optional<noor::game::EnvironmentLibrary> environment;
+    std::optional<noor::game::SpriteLibrary> sprites;  // sprite sheets (8B part 5); billboards are placed every frame
+    std::vector<std::pair<Guid, Mat4>> sprite_quads;   // last frame's sprites (entity, quad): picking
     auto refresh_clock = std::chrono::steady_clock::now();
     const auto started_at = std::chrono::steady_clock::now();  // the clouds' clock
     // Effect particles while editing (Milestone 8B, part 4): the viewport's own preview of the snapshot's emitters,
@@ -540,6 +543,7 @@ void render_thread_main(noor_viewport* vp) {
             textures.emplace(r, snap->texture_cache);
             materials.emplace(r, *textures, noor::asset::AssetFileResolver{});
             environment.emplace(r, snap->texture_cache);
+            sprites.emplace(r, *textures, noor::asset::AssetFileResolver{});
         }
         if (snap && environment) environment->apply(snap->environment);
         // A new reload token (the material editor saved): pick changed materials up now.
@@ -548,16 +552,19 @@ void render_thread_main(noor_viewport* vp) {
             materials->refresh();
         }
         if (snap && materials && snap != shown) {
-            materials->set_resolver([files = snap->asset_files](const Guid& id) -> std::optional<std::filesystem::path> {
+            const auto resolver = [files = snap->asset_files](const Guid& id) -> std::optional<std::filesystem::path> {
                 if (!files) return std::nullopt;
                 const auto it = files->find(id);
                 return it == files->end() ? std::nullopt : std::optional(it->second);
-            });
+            };
+            materials->set_resolver(resolver);
+            sprites->set_resolver(resolver);
         }
         // Edited material and texture files show up while the editor is open.
         if (materials && std::chrono::steady_clock::now() - refresh_clock > 500ms) {
             refresh_clock = std::chrono::steady_clock::now();
             materials->refresh();
+            if (sprites) sprites->refresh();
         }
         if (snap != shown) {
             // The material preview frames its object when it first appears.
@@ -861,6 +868,11 @@ void render_thread_main(noor_viewport* vp) {
                         any = true;
                     }
                 }
+                for (const auto& [entity, quad] : sprite_quads) {  // sprites: their quads as last drawn
+                    if (!wanted.contains(entity)) continue;
+                    for (const Vec3 corner : {Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 1, 0}}) grow(lo, hi, quad.transform_point(corner));
+                    any = true;
+                }
                 if (!any) {  // no geometry (an empty entity): frame its origin
                     for (const Guid& id : *frame_request) {
                         if (auto it = entity_by_id.find(id); it != entity_by_id.end()) {
@@ -1067,6 +1079,14 @@ void render_thread_main(noor_viewport* vp) {
                 float best = std::numeric_limits<float>::max();
                 std::optional<Guid> hit;
                 std::optional<std::uint32_t> hit_face;  // CSG: the brush face under the pointer
+                for (const auto& [entity, quad] : sprite_quads) {  // sprites: their whole quad
+                    const ed::Ray local_ray = ed::to_object_space(ray, quad);
+                    for (const auto& tri : {std::array<Vec3, 3>{Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{1, 1, 0}}, std::array<Vec3, 3>{Vec3{0, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 1, 0}}})
+                        if (auto t = ed::ray_triangle(local_ray, tri[0], tri[1], tri[2]); t && *t < best) {
+                            best = *t;
+                            hit = entity;
+                        }
+                }
                 for (const auto& d : scene_draws) {
                     const ed::Ray local_ray = ed::to_object_space(ray, d.item.world_from_object);
                     if (!d.mesh) {
@@ -1237,6 +1257,24 @@ void render_thread_main(noor_viewport* vp) {
             if (shown) frame.lighting = shown->lighting;
             // The clouds drift in the editor too (seconds since the viewport opened; games use their own time).
             frame.lighting.time = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
+            // Sprites (8B part 5): turned to this camera every frame, animated on the viewport's clock; a sprite being
+            // moved follows the gizmo, a selected one is tinted like the rest.
+            sprite_quads.clear();
+            if (shown && sprites && !shown->sprites.empty()) {
+                const auto moving = preview && gizmo_entity ? subtree_of(*gizmo_entity) : std::unordered_set<Guid>{};
+                const std::unordered_set<Guid> selected(selection.begin(), selection.end());
+                std::vector<noor::game::SceneView::Sprite> placed(shown->sprites.begin(), shown->sprites.end());
+                for (auto& sp : placed)
+                    if (moving.contains(sp.entity)) sp.world = preview->delta * sp.world;
+                for (const auto& sp : placed) {
+                    const std::size_t before = frame_draws.size();
+                    sprites->add_draws({&sp, 1}, basis.eye, static_cast<double>(frame.lighting.time), frame_draws);
+                    for (std::size_t i = before; i < frame_draws.size(); ++i) {
+                        sprite_quads.emplace_back(sp.entity, frame_draws[i].world_from_object);
+                        if (selected.contains(sp.entity)) frame_draws[i].tint = {highlight.x, highlight.y, highlight.z, 0.45f};
+                    }
+                }
+            }
             frame.draws = frame_draws;
             // Effect particles: the preview (8B part 4).
             {
@@ -1363,6 +1401,7 @@ void render_thread_main(noor_viewport* vp) {
                                            {"transparent_draws", fs.transparent_draws},
                                            {"particle_draws", fs.particle_draws},
                                            {"particles", preview_particles},
+                                           {"sprites", sprite_quads.size()},
                                            {"weather_drops", fs.weather_drops},
                                            {"msaa_samples", fs.msaa_samples},
                                            {"texture_bytes", r.texture_memory()},
@@ -1404,6 +1443,7 @@ void render_thread_main(noor_viewport* vp) {
     if (ghost_subtract.valid()) r.destroy_material(ghost_subtract);
     if (ghost_intersect.valid()) r.destroy_material(ghost_intersect);
     environment.reset();
+    sprites.reset();
     materials.reset();  // GPU materials and textures go before the renderer that owns them
     textures.reset();
     renderer->reset();

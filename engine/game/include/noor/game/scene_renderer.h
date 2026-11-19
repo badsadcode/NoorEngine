@@ -7,6 +7,7 @@
 #include "noor/game/material_library.h"
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
+#include "noor/game/sprites.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
@@ -50,7 +51,10 @@ public:
     [[nodiscard]] static render::MaterialHandle material(const SceneView::Primitive& p, MaterialLibrary& materials);
 
     // Reloads changed materials and textures (call a few times a second).
-    void refresh() { materials_.refresh(); }
+    void refresh() {
+        materials_.refresh();
+        sprites_.refresh();
+    }
 
     // The environment (sky, image-based lighting) it sets each frame.
     [[nodiscard]] EnvironmentLibrary& environment() noexcept { return environment_; }
@@ -77,6 +81,7 @@ private:
     TextureLibrary textures_;
     MaterialLibrary materials_;
     EnvironmentLibrary environment_;
+    SpriteLibrary sprites_;
     // Declared after the libraries: members are built in this order, and materials_ needs `resolve` before it moves here.
     struct CookedModel {
         bool loaded = false;
