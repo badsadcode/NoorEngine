@@ -11,7 +11,7 @@ each ending in its own review, like Milestone 7 ended in one.
 | Group | What | Status |
 |---|---|---|
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
-| **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | Planned |
+| **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Next** ([parts below](#8b-particles-and-sprites), proposed) |
 | **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | Planned |
 | **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | Planned |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
@@ -170,3 +170,78 @@ settings in the engine).
 Volumetric clouds and fog, lightning and storms, rain and snow (need 8B's particles), wet surfaces,
 seasons, the remaining six presets (phase B: Cold Morning, Autumn Afternoon, Rainy Grey, Desert Haze,
 Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
+
+---
+
+# 8B: particles and sprites
+
+**Status:** proposed (2026-11-19), waiting for a go.
+
+## Where 8B starts
+
+- **Nothing moves by itself yet** but rigid bodies and scripts: no particles of any kind, no sprites. The HUD
+  draws textured quads in screen space only.
+- **What the renderer already has:** instanced batches (ADR-032: one draw for many copies, culled on the GPU's
+  behalf by the CPU), a see-through pipeline sorted back to front, flipbook-ready texture arrays in the bindless
+  table, the live sky's light and fog for lighting anything in the air, cloud wind (8A) to blow it about.
+- **Who's waiting:** 8A's weather (rain and snow need particles: "Not in 8A"), and The Uncounted, Chapter Two,
+  whose creatures are 8-direction billboard sprites with idle/walk/run/attack/hurt/death animations, and whose
+  first chapter uses particles everywhere.
+- **The spec (17.4 NoorFX)** asks for much more than one group can honestly deliver: emitters, spawn shapes,
+  curves, collisions, force fields, trails, ribbons, mesh particles, GPU simulation where viable, events,
+  parameter binding, and an editor with a reproducible seed, solo/mute and profiling. 8B takes what the weather
+  and The Uncounted need, built so the rest can follow without a rewrite.
+
+## Decisions (ADR-035, to propose with part 1)
+
+- **Two kinds of particles, because they have different jobs.**
+  - **Effect particles** (fire, smoke, sparks, dust puffs, debris, magic): an `emitter` component, simulated
+    on the CPU at a fixed 60 Hz step from a seed, so the same scene always gives the same particles (goldens,
+    built games, replays). A few thousand per effect is the scale; CPU first, like the atmosphere's
+    reference in 8A, and moved to the GPU only if measuring says so.
+  - **Weather particles** (rain, snow, drifting dust): no simulation at all. Each drop's position is a pure
+    function of its index, the time, the wind and the seed, worked out in the vertex shader inside a box that
+    follows the camera and wraps. Hundreds of thousands cost almost nothing, need no memory per drop, and are
+    deterministic by construction. Driven by the environment (`precipitation`, intensity), so weather zones
+    blend rain in like they blend fog.
+- **Drawn as instanced billboards** through the existing batching: camera-facing quads (or stretched along
+  their velocity for rain and sparks), flipbook frames from a texture, blend modes alpha / additive /
+  premultiplied, lit by the sun and the live sky's ambient and fogged like everything else. Sorted per emitter
+  back to front.
+- **Sprites are a component, sheets are an asset.** A `.noorsprite` file: a texture, a frame grid (slicing),
+  named animations (frames, rate, loop) and an optional 8-direction layout. A `sprite` component draws one as
+  a billboard (upright for characters, fully camera-facing for effects), alpha-cutout so it writes depth and
+  can cast a shadow; nearest or linear filtering (pixel art). The direction row is picked from the angle
+  between the entity's forward and the camera, so a creature walking away shows its back.
+- **Scripts drive both:** `entity:play("walk")`, speed, events when an animation ends; `emitter:burst(n)`,
+  start/stop, parameters (Lua and C#, the same API).
+- **Authoring:** an Effects panel (a stack of modules: spawn, shape, velocity, forces, size/colour over life,
+  render) with live preview in the viewport and presets; a sprite sheet slicer with animation preview.
+  A node graph for effects (the spec's "effects graph") is later: the module stack covers 8B's effects.
+
+## Parts (each ends tested, documented and pushed)
+
+| Part | What | Proves |
+|---|---|---|
+| 1 | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
+| 2 | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
+| 3 | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
+| 4 | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
+| 5 | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
+| 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
+| 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
+| 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
+
+## Open questions
+
+1. **The Uncounted's sprite sheet** (the bearded man: 8 directions × idle / walk / run / attack / hurt, 4 death
+   poses), offered on 2026-11-17: where's the file, and may it be committed as a test fixture and in the
+   sample, or only used locally?
+2. **Pixel art:** should sprites default to nearest filtering (crisp pixels, The Uncounted's look) or linear?
+3. **Effects authoring:** is a module stack enough for 8B, with the node graph later (recommended), or is the
+   graph wanted now?
+
+## Not in 8B (planned later)
+Trails and ribbons, mesh particles, GPU-simulated effect particles (until measuring asks for them), force-field
+volumes, lit/soft particles against scene depth (soft edges where smoke meets the ground), tilemaps and the 2D
+workflow (spec section 22), an effects node graph, and lightning (NoorSky phase B).
