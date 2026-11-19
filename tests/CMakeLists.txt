@@ -31,6 +31,7 @@ add_executable(noor_unit_tests
     unit/test_night.cpp
     unit/test_weather.cpp
     unit/test_particles.cpp
+    unit/test_particle_collisions.cpp
     unit/test_sprites.cpp
     unit/test_sprite_animation.cpp
     unit/test_csg.cpp
@@ -184,6 +185,16 @@ foreach(name IN ITEMS Sprites_Sun Sprites_Shade Sprites_Coth)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Gameplay particles (Milestone 8B, part 7): gravel landing and settling on a terrain (never through it) and drops
+# that die on it and splash (a sub-emitter); five seconds in.
+add_test(NAME render.golden_Particles_Terrain
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Particles_Terrain.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Particles_Terrain.png -DFRAMES=300
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Particles_Terrain
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Particles_Terrain PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 # Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
 # from Lua in the project and in a built game (the same moments), and from C# in the built game.
 if(TARGET noor_scripting_managed)

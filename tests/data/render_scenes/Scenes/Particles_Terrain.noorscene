@@ -1,0 +1,263 @@
+{
+  "noor_scene": 2,
+  "id": "5b417e00-0071-4000-8000-000000000000",
+  "name": "Particles_Terrain",
+  "entities": [
+    {
+      "id": "5b417e00-0071-4000-8000-000000000001",
+      "name": "Hills",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "terrain": {
+          "tiles": [
+            1,
+            1
+          ],
+          "cell_size": 1,
+          "base": "noise",
+          "seed": 11,
+          "height": 30,
+          "scale": 110,
+          "octaves": 5,
+          "material": "7e5d0000-3a70-4000-8000-000000000004",
+          "collision": true
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0071-4000-8000-000000000002",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          -0.3261904081870283,
+          -0.28257102082169233,
+          -0.10284744064531129,
+          0.8962007809365465
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0071-4000-8000-000000000003",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1,
+          36,
+          16
+        ],
+        "rotation": [
+          -0.35836795,
+          0.0,
+          0.0,
+          0.933580426
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0071-4000-8000-000000000901",
+      "name": "Gravel",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          48,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 220,
+          "lifetime": 60,
+          "max_particles": 4000,
+          "speed": [
+            0,
+            1
+          ],
+          "gravity": 1,
+          "seed": 4,
+          "shape": {
+            "type": "box",
+            "size": [
+              8,
+              0,
+              8
+            ]
+          },
+          "size": 0.3,
+          "color": [
+            [
+              0,
+              "#8A7E6E"
+            ],
+            [
+              1,
+              "#6E6458"
+            ]
+          ],
+          "collide": {
+            "bounce": 0.25,
+            "friction": 0.6,
+            "radius": 0.1
+          },
+          "render": {
+            "blend": "alpha"
+          }
+        }
+      }
+    },
+    {
+      "id": "5b417e00-0071-4000-8000-000000000902",
+      "name": "Drops",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          5,
+          48,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 160,
+          "lifetime": 10,
+          "speed": [
+            0,
+            0.5
+          ],
+          "gravity": 1,
+          "seed": 5,
+          "shape": {
+            "type": "box",
+            "size": [
+              6,
+              0,
+              6
+            ]
+          },
+          "size": 0.07,
+          "color": "#CFE4FF",
+          "alpha": 0.9,
+          "collide": {
+            "kill": true
+          },
+          "sub_emitters": [
+            {
+              "on": "hit",
+              "count": 5,
+              "emitter": {
+                "lifetime": 0.35,
+                "speed": [
+                  1.5,
+                  3
+                ],
+                "gravity": 1,
+                "shape": {
+                  "type": "cone",
+                  "angle": 35
+                },
+                "size": 0.08,
+                "color": "#FFFFFF",
+                "alpha": [
+                  [
+                    0,
+                    1
+                  ],
+                  [
+                    1,
+                    0
+                  ]
+                ]
+              }
+            }
+          ],
+          "render": {
+            "blend": "alpha",
+            "facing": "velocity",
+            "stretch": 0.03
+          }
+        }
+      }
+    }
+  ]
+}

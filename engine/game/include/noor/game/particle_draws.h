@@ -18,6 +18,7 @@ namespace noor::game {
 struct ParticleDrawStorage {
     std::vector<std::vector<render::ParticleVertex>> vertices;  // per draw
     std::vector<render::ParticleDraw> draws;
+    std::size_t culled = 0;  // effects left out this frame for being further than their render "max_distance"
 };
 
 struct ParticleDrawSources {

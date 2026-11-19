@@ -867,7 +867,14 @@ internal static class SmokeTest
               "effects: the edit is in the file, which still remembers its preset");
         check(EditorDocument.EffectPresets().OfType<JsonObject>().First(p => p["name"]?.GetValue<string>() == "Fire")["emitter"]?["rate"]?.GetValue<double>() == 90,
               "effects: the built-in Fire preset is unchanged");
-        // Mute hides it in the preview; mute again shows it.
+        // Part 7: a sub-emitter where the flames die (embers): the preview draws it as a second effect, and the file has it.
+        long Draws() => VulkanViewport.Active?.RenderStats() is { } st && JsonNode.Parse(st)?["particle_draws"] is JsonValue dv && dv.TryGetValue<long>(out var dn) ? dn : -1;
+        var embers = JsonNode.Parse("""[{"on": "death", "count": 1, "emitter": {"lifetime": 1, "speed": [0.2, 0.6], "size": 0.03, "color": "#FF8040", "render": {"blend": "additive", "emission": 20000}}}]""");
+        check(panel.SetField("sub_emitters", embers), "effects: a sub-emitter can be added in the panel");
+        var two = await WaitFor(() => (long?)Draws(), n => n >= 2, 6);
+        check(two >= 2 && JsonNode.Parse(File.ReadAllText(file))?["emitter"]?["sub_emitters"]?[0]?["on"]?.GetValue<string>() == "death",
+              $"effects: the preview draws the embers where the flames die, and the file has them ({two} effects drawn)");
+        // Mute hides it in the preview (its sub-emitter too); mute again shows it.
         panel.Preview("mute");
         var hidden = await WaitFor(() => (long?)Particles(), n => n == 0, 4);
         check(hidden == 0, "effects: Mute hides the selected entity's effect in the preview");

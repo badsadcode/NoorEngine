@@ -85,6 +85,18 @@ Option 3.
   depend on NoorFX; they're applied at the next fixed step, like everything else that touches the simulation.
   `noor_rt_api` v4 (sprite, sprite_animation, burst, event_name). The editor's viewport animates on the game's clock
   while playing (the snapshot carries it).
+- **Part 7, gameplay particles:** collisions are part of the fixed step, after moving: a particle below the ground or
+  behind a plane is put back on the surface and its velocity split into the part into the surface (times bounce,
+  reversed) and along it (less friction); a hit faster than `hit_speed` is an event. The ground is a `GroundQuery`
+  the game hands NoorFX each step (fx stays free of the terrain module): `game::ParticleGround` over the scene's
+  terrains, using `terrain::Heights::height`, which splits cells exactly like the mesh and the physics height field,
+  so "on the terrain" means on the drawn surface. Physics bodies aren't collided with (a raycast per particle would
+  blow the CPU budget; later, if a scene needs it). Sub-emitters are child emitters kept in the EmitterSet under ids
+  derived from their entity (`sub_emitter_id`), stepped right after their parent and burst at its events in particle
+  order, so they're as deterministic as the rest and draw like any emitter. The scene budget (100,000) is shared out in
+  the inputs' (scene) order, counting the living, so throttling replays identically. Distance culling
+  (`render.max_distance`) is drawing-only: simulation never depends on the camera. Measured: 50 colliding fountains
+  asking for 150,000 particles hold at 98,750, 1.0 ms of CPU and 0.18 ms of GPU.
 - **Found in part 2:** automatic exposure meters sun, sky and moon only, so glowing particles that suit noon blow out
   at night. Scenes give fires a point light and a night emission; a meter that sees local light is in the ideas inbox.
 - **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget

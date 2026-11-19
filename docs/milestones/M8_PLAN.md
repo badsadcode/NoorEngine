@@ -229,7 +229,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 4 ✅ | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
 | 5 ✅ | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
 | 6 ✅ | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
-| 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
+| 7 ✅ | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
 | 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
 
 ## Part 1 result (2026-11-19)
@@ -305,6 +305,21 @@ and its name); `cli.sprite_scripts_build_identically` (Coth walks, attacks and f
 a built game, from Lua, and from C# in the built game); golden `Sprites_Coth` (eight Coths in a ring, every view);
 the editor smoke test (directions in the sheet editor, the preview turned). Also: the viewport animates on the game's
 clock in Play mode. Not done: events in the middle of an animation (footsteps); mirrored half-sets of views.
+
+## Part 7 result (2026-11-20)
+Done. Collisions (`collide`: the scene's terrains through a ground query on the same surface as the mesh and physics,
+up to 8 planes, bounce, friction, radius, die on hit, a hit speed), sub-emitters (`sub_emitters`: on hit or death,
+count, inherited velocity, inline or an effect asset; children kept and drawn with their entity), and budgets (each
+emitter's cap; the scene's 100,000, shared out in scene order; drawing-only `render.max_distance`). The Effects panel
+gained Collisions and Sub-emitters modules; the editor's preview collides with the snapshot's terrains. Proven: unit
+tests (particles dropped on a floor rest on it, a bounce of 0.5 comes back a quarter as high, a sloped plane is never
+crossed; thousands of drops land on hilly terrain and none end below it, while without `collide` they fall through;
+10 drops landing make exactly 30 splash particles; runs with sub-emitters are identical; 50 emitters asking for
+150,000 hold at a 20,000 budget the same way every run); golden `Particles_Terrain` (gravel settling on hills, drops
+splashing); `render.particles_cost` (50 fountains: 98,750 of a 100,000 budget, 105,000 held back, CPU 1.0 ms, GPU
+0.18 ms); the editor smoke test (a death sub-emitter appears in the preview and is muted with its fire). Not done:
+collisions with physics bodies (boxes, models); sub-emitters of sub-emitters; a per-scene budget setting (the 100,000
+is fixed for now); the editor's preview has no scene budget.
 
 ## Open questions
 

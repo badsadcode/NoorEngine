@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8B, part 7: gameplay particles
+**Added**
+- **Particle collisions** (`collide`): the scene's terrains (`game::ParticleGround`, the drawn surface) and planes;
+  bounce, friction, radius, die on hit, hit speed. [docs](docs/fx/PARTICLES.md#collisions-sub-emitters-and-budgets-part-7)
+- **Sub-emitters** (`sub_emitters`): particles where others hit or die, inline or from an effect asset; drawn, muted
+  and soloed with their entity (`EmitterSet::owner`, `fx::sub_emitter_id`).
+- **Budgets:** the scene's 100,000 effect particles (`ParticleSystem::Options::max_particles`), shared out in scene
+  order; `render.max_distance` (drawing only). The player's report: `particles.hits`, `particles.throttled`.
+- NoorEditor: **Collisions** and **Sub-emitters** modules and "Hide beyond" in the Effects panel; the preview collides
+  with the scene's terrains.
+- Scenes `Particles_Terrain` (a golden) and `Particles_Budget` (50 fountains, measured).
+
+**Tests:** unit tests "particle collisions" (planes, bounce, slopes, terrain), "sub-emitters", "particle budgets";
+golden `Particles_Terrain`; `render.particles_cost` measures the 50-emitter budget; the editor smoke test's sub-emitter
+check.
+
 ### 2026-11-20 — Milestone 8B, part 6: 8-direction characters and scripts
 **Added**
 - **8-direction sprite sheets:** `"directions"` (the views in the columns, The Uncounted's layout), animations naming

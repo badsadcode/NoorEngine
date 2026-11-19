@@ -4,6 +4,8 @@
 #include "noor/game/weather.h"
 #include "noor/fx/particle_system.h"
 #include "noor/game/sprite_animation.h"
+#include "noor/game/particle_ground.h"
+#include "noor/runtime/script_api.h"
 #include "noor/render/exposure.h"
 #include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
@@ -18,6 +20,8 @@
 #include "noor/scripting/lua_scripts.h"
 
 #include <algorithm>
+#include <format>
+#include <tuple>
 #include <map>
 #include <cmath>
 #include <string>
@@ -186,6 +190,41 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         if (!rec) return std::nullopt;
         auto p = project.resolve(rec->path);
         return p ? std::optional(*p) : std::nullopt;
+    };
+    // Colliding particles (part 7) stand on the scene's terrains: the same heights as drawing and physics (live ones
+    // while sculpting in the editor). Rebuilt only when a terrain's component or place changes.
+    struct GroundCache {
+        std::unordered_map<Guid, std::pair<std::string, ParticleGround::Piece>> pieces;
+        ParticleGround ground;
+    };
+    fx_options.ground = [&project, &registry, live = options.terrain_heights, cache = std::make_shared<GroundCache>()](runtime::World& w) {
+        bool changed = false;
+        std::unordered_set<Guid> seen;
+        for (const auto& e : w.scene().entities) {
+            if (!e.has("terrain") || !e.components.at("terrain").is_object()) continue;
+            seen.insert(e.id);
+            const Json& component = e.components.at("terrain");
+            const auto m = runtime::api::world_matrix(w, e.id);
+            const math::Vec3 pos = m ? m->transform_point({0, 0, 0}) : math::Vec3{0, 0, 0};
+            const std::string key = std::format("{} {} {} {}", component.dump(), pos.x, pos.y, pos.z);
+            auto& slot = cache->pieces[e.id];
+            if (slot.first == key && slot.second.heights) continue;
+            const auto settings = terrain_settings(component, file_resolver(registry_asset_path(project, registry)), project.root());
+            Result<std::shared_ptr<const terrain::Heights>> heights = live ? live(component, settings) : nullptr;
+            if (!*heights) heights = terrain::Heights::shared(settings);
+            slot = {key, {pos, heights ? *heights : nullptr}};
+            changed = true;
+        }
+        changed |= std::erase_if(cache->pieces, [&](const auto& kv) { return !seen.contains(kv.first); }) > 0;
+        if (changed) {
+            std::vector<ParticleGround::Piece> list;
+            for (const auto& [id, piece] : cache->pieces) list.push_back(piece.second);
+            std::ranges::sort(list, [](const auto& a2, const auto& b2) {
+                return std::tie(a2.position.x, a2.position.z) < std::tie(b2.position.x, b2.position.z);
+            });
+            cache->ground.set(std::move(list));
+        }
+        return cache->ground.query();
     };
     world->add_system(std::make_unique<fx::ParticleSystem>(std::move(fx_options)));
     // Sprite animations played by scripts: their end events (Milestone 8B, part 6).

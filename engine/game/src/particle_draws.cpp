@@ -27,10 +27,11 @@ float number(const Json& j, const char* key, float fallback) {
 std::span<const render::ParticleDraw> particle_draws(const fx::EmitterSet& set, math::Vec3 eye, const ParticleDrawSources& sources,
                                                      ParticleDrawStorage& storage) {
     storage.draws.clear();
+    storage.culled = 0;
     std::vector<Guid> ids;
     ids.reserve(set.emitters().size());
     for (const auto& [id, emitter] : set.emitters())
-        if (!emitter.particles().empty() && (!sources.shown || sources.shown(id))) ids.push_back(id);
+        if (!emitter.particles().empty() && (!sources.shown || sources.shown(set.owner(id)))) ids.push_back(id);  // sub-emitters follow their entity
     std::ranges::sort(ids, [](const Guid& a, const Guid& b) { return a.to_string() < b.to_string(); });
     if (storage.vertices.size() < ids.size()) storage.vertices.resize(ids.size());
 
@@ -62,6 +63,21 @@ std::span<const render::ParticleDraw> particle_draws(const fx::EmitterSet& set, 
         const auto world_matrix = s.local_space && sources.world_of ? sources.world_of(ids[n]) : std::nullopt;
         auto& out = storage.vertices[n];
         out.clear();
+        // "max_distance" (part 7): an effect whose particles are all further than this from the camera isn't drawn.
+        // Drawing only: the simulation never depends on where the camera is, so replays stay the same.
+        if (const float far = number(r, "max_distance", 0.0f); far > 0.0f) {
+            math::Vec3 blo{1e30f, 1e30f, 1e30f}, bhi{-1e30f, -1e30f, -1e30f};
+            for (const fx::Particle& p : emitter.particles()) {
+                const math::Vec3 q = world_matrix ? world_matrix->transform_point(p.position) : p.position;
+                blo = {std::min(blo.x, q.x), std::min(blo.y, q.y), std::min(blo.z, q.z)};
+                bhi = {std::max(bhi.x, q.x), std::max(bhi.y, q.y), std::max(bhi.z, q.z)};
+            }
+            const math::Vec3 nearest{std::clamp(eye.x, blo.x, bhi.x), std::clamp(eye.y, blo.y, bhi.y), std::clamp(eye.z, blo.z, bhi.z)};
+            if (math::length(nearest - eye) > far) {
+                ++storage.culled;
+                continue;
+            }
+        }
         out.reserve(emitter.particles().size());
         math::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
         float biggest = 0.0f, fastest = 0.0f;

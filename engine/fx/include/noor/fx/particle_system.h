@@ -23,6 +23,8 @@ namespace noor::fx {
 
 // A stable salt from an entity's id (its text: the same on every machine and build), so two identical emitters differ.
 [[nodiscard]] std::uint64_t emitter_salt(const Guid& entity);
+// The id a sub-emitter's particles are kept under: derived from its parent's entity and its index (part 7).
+[[nodiscard]] Guid sub_emitter_id(const Guid& parent, std::size_t index);
 
 class EmitterSet {
 public:
@@ -32,22 +34,32 @@ public:
         math::Mat4 world = math::Mat4::identity();
     };
     // One fixed step: emitters for new inputs are made, changed settings taken, missing entities' emitters dropped.
-    void step(std::span<const Input> inputs, float dt, math::Vec3 wind);
+    // Each emitter's sub-emitters (part 7) step right after it and burst where its particles hit or died. `ground`:
+    // what particles that collide stand on; `budget`: the most particles the whole set may hold (handed out in the
+    // inputs' order, so the same scene throttles the same way every run).
+    void step(std::span<const Input> inputs, float dt, math::Vec3 wind, const GroundQuery* ground = nullptr,
+              std::uint32_t budget = 0xffffffffu);
     void restart(const Guid& entity);  // a fresh emitter (time 0, no particles) on the next step
     void clear();
 
     [[nodiscard]] const std::unordered_map<Guid, Emitter>& emitters() const noexcept { return emitters_; }
     [[nodiscard]] Emitter* find(const Guid& entity);
+    // The entity an emitter belongs to: itself, or for a sub-emitter its parent's entity (solo, mute, selection).
+    [[nodiscard]] Guid owner(const Guid& id) const;
 
     struct Stats {
         std::size_t emitters = 0, particles = 0;
         std::uint64_t fingerprint = 0;  // every emitter's particles, in entity id order: equal runs, equal fingerprints
+        std::uint64_t hits = 0;         // collision events so far (part 7)
+        std::uint64_t throttled = 0;    // particles the budget held back so far
     };
     [[nodiscard]] Stats stats() const;
 
 private:
+    Emitter& ensure(const Guid& id, const asset::Json& settings, bool sub);
     std::unordered_map<Guid, Emitter> emitters_;
-    std::unordered_map<Guid, asset::Json> settings_;  // what each was built from
+    std::unordered_map<Guid, asset::Json> settings_;             // what each was built from
+    std::unordered_map<Guid, std::vector<Guid>> children_;       // an entity's sub-emitters
 };
 
 class ParticleSystem final : public runtime::System {
@@ -55,6 +67,10 @@ public:
     struct Options {
         // An asset id to its file (effect assets, environment assets for the wind); empty: inline settings only.
         std::function<std::optional<std::filesystem::path>(const Guid&)> resolve_asset;
+        // The ground colliding particles stand on, for this step (the game gives the scene's terrains); empty: none.
+        std::function<GroundQuery(runtime::World&)> ground;
+        // The most effect particles the scene may have at once (part 7): spawning stops there until some die.
+        std::uint32_t max_particles = 100000;
     };
     explicit ParticleSystem(Options options = {});
 
@@ -74,6 +90,7 @@ public:
         std::size_t emitters = 0, particles = 0;
         std::uint64_t fingerprint = 0;
         double step_ms = 0;  // the last frame's fixed steps (CPU)
+        std::uint64_t hits = 0, throttled = 0;
     };
     [[nodiscard]] Stats stats() const;
 

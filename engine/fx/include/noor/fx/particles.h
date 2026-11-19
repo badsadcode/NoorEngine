@@ -18,7 +18,17 @@
 //    "wind": 1 (how much of the scene's wind drags them), "space": "world" | "local",
 //    "size": 0.1 or [[0, 0.1], [1, 0.4]] (metres over life), "color": "#FFFFFF" or [[0, "#FFD080"], [1, "#802010"]],
 //    "alpha": 1 or [[0, 1], [1, 0]],
+//    "collide": {"ground": true, "planes": [{"y": 0} or {"point": [x, y, z], "normal": [x, y, z]}], "bounce": 0.3,
+//                "friction": 0.2, "radius": 0, "kill": false, "hit_speed": 0.5} (part 7; world-space emitters),
+//    "sub_emitters": [{"on": "hit" | "death", "emitter": {...} or {"asset": id, ...}, "count": 4,
+//                      "inherit_velocity": 0}] (part 7),
 //    "render": {...} (drawing, part 2: kept as it is)}
+//
+// Collisions (part 7): a particle that ends a step below the ground (the scene's terrains, through a GroundQuery) or
+// behind a plane is put back on the surface; the part of its velocity into the surface comes back times `bounce`, the
+// part along it loses `friction`. A hit faster than `hit_speed` (m/s into the surface) is an event: it can kill the
+// particle ("kill") and feed sub-emitters "on": "hit". Particles that die feed "on": "death" ones. A sub-emitter is an
+// emitter of its own (world space, no rate unless given) that bursts `count` particles where the event happened.
 //
 // Shapes, in the emitter's own axes: a point emits in every direction; a sphere (or its surface) emits outwards;
 // a box emits along +Y; a cone emits along +Y within `angle` degrees, from a disc of `radius` at its base.
@@ -27,6 +37,8 @@
 #include "noor/foundation/math.h"
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -71,6 +83,36 @@ struct Burst {
 
 enum class Shape : std::uint8_t { Point, Sphere, Box, Cone };
 
+// The scene's ground under a point (x, z, world space): its height and its normal there; nullopt where there's none.
+struct GroundHit {
+    float height = 0.0f;
+    math::Vec3 normal{0, 1, 0};
+};
+using GroundQuery = std::function<std::optional<GroundHit>(float x, float z)>;
+
+struct CollisionPlane {
+    math::Vec3 point{0, 0, 0};
+    math::Vec3 normal{0, 1, 0};  // unit; the side particles stay on
+};
+
+struct Collision {
+    bool enabled = false;
+    bool ground = true;             // the scene's ground (terrains)
+    std::vector<CollisionPlane> planes;
+    float bounce = 0.3f;            // how much of the speed into the surface comes back (0: no bounce)
+    float friction = 0.2f;          // how much of the speed along the surface is lost per hit
+    float radius = 0.0f;            // particles stop this far from the surface (m)
+    bool kill = false;              // a hit ends the particle
+    float hit_speed = 0.5f;         // slower contacts (resting, rolling) aren't events
+};
+
+struct SubEmitter {
+    enum class On : std::uint8_t { Hit, Death } on = On::Hit;
+    asset::Json emitter = asset::Json::object();  // its settings (resolved: an asset already merged in)
+    int count = 4;                                 // particles per event
+    float inherit_velocity = 0.0f;                 // how much of the parent particle's velocity they start with
+};
+
 struct EmitterSettings {
     float rate = 10.0f;
     std::vector<Burst> bursts;
@@ -92,6 +134,8 @@ struct EmitterSettings {
     Curve size_over_life;
     Gradient color_over_life;
     Curve alpha_over_life;
+    Collision collision;
+    std::vector<SubEmitter> sub_emitters;  // at most 4
     asset::Json render = asset::Json::object();
 
     // Every field optional (the defaults above); clamped to sane ranges (no negative lifetimes or rates, at most
@@ -113,10 +157,22 @@ public:
     Emitter(EmitterSettings settings, std::uint64_t salt);
 
     // One fixed step of `dt` seconds: ages and moves the particles (gravity, drag towards `wind`, m/s, world space),
-    // removes the dead, then spawns this step's new ones from the emitter at `world` (its entity's world matrix).
-    void step(float dt, const math::Mat4& world, math::Vec3 wind);
-    // Spawns `count` particles now (scripts, part 6), within max_particles.
-    void burst(int count, const math::Mat4& world);
+    // removes the dead, collides (with `ground` if given, and the settings' planes), then spawns this step's new ones
+    // from the emitter at `world` (its entity's world matrix). `budget`, if given, is how many more particles the
+    // scene allows: spawning takes from it and stops at 0.
+    void step(float dt, const math::Mat4& world, math::Vec3 wind, const GroundQuery* ground = nullptr, std::uint32_t* budget = nullptr);
+    // Spawns `count` particles now (scripts, part 6; sub-emitters, part 7), within max_particles and the budget,
+    // each with `extra` added to its velocity.
+    void burst(int count, const math::Mat4& world, math::Vec3 extra = {0, 0, 0}, std::uint32_t* budget = nullptr);
+
+    // What happened to particles in the last step (sub-emitters): hits and deaths, in particle order, world space.
+    struct Event {
+        SubEmitter::On on;
+        math::Vec3 position, velocity;
+    };
+    [[nodiscard]] std::span<const Event> events() const noexcept { return events_; }
+    [[nodiscard]] std::uint64_t hits() const noexcept { return hits_; }            // collision events so far
+    [[nodiscard]] std::uint64_t throttled() const noexcept { return throttled_; }  // held back by the scene's budget
     // New settings (a script or the editor changed the component). Keeps the particles and the random stream.
     void set_settings(EmitterSettings settings) { settings_ = std::move(settings); }
 
@@ -132,7 +188,8 @@ public:
     [[nodiscard]] float alpha_of(const Particle& p) const noexcept;
 
 private:
-    void spawn(int count, const math::Mat4& world);
+    void spawn(int count, const math::Mat4& world, math::Vec3 extra = {0, 0, 0}, std::uint32_t* budget = nullptr);
+    void collide(const math::Mat4& world, const GroundQuery* ground);
     [[nodiscard]] int bursts_due(double from, double to) const noexcept;
 
     EmitterSettings settings_;
@@ -141,6 +198,8 @@ private:
     double time_ = 0.0;
     double spawn_carry_ = 0.0;
     std::uint64_t spawned_ = 0;
+    std::vector<Event> events_;
+    std::uint64_t hits_ = 0, throttled_ = 0;
 };
 
 // A fingerprint of particles (count, positions, velocities, ages, bit for bit): equal fingerprints, equal states.

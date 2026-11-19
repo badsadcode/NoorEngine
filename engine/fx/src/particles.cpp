@@ -174,6 +174,42 @@ EmitterSettings EmitterSettings::parse(const asset::Json& j) {
     s.size_over_life = Curve::parse(j.is_object() && j.contains("size") ? j["size"] : asset::Json(), 0.1f);
     s.color_over_life = Gradient::parse(j.is_object() && j.contains("color") ? j["color"] : asset::Json(), {1, 1, 1});
     s.alpha_over_life = Curve::parse(j.is_object() && j.contains("alpha") ? j["alpha"] : asset::Json(), 1.0f);
+    if (j.is_object() && j.contains("collide") && j["collide"].is_object()) {
+        const auto& c = j["collide"];
+        Collision& col = s.collision;
+        col.enabled = true;
+        if (c.contains("ground") && c["ground"].is_boolean()) col.ground = c["ground"].get<bool>();
+        col.bounce = std::clamp(number(c, "bounce", col.bounce), 0.0f, 1.0f);
+        col.friction = std::clamp(number(c, "friction", col.friction), 0.0f, 1.0f);
+        col.radius = std::max(0.0f, number(c, "radius", col.radius));
+        col.hit_speed = std::max(0.0f, number(c, "hit_speed", col.hit_speed));
+        if (c.contains("kill") && c["kill"].is_boolean()) col.kill = c["kill"].get<bool>();
+        const auto vec3 = [](const asset::Json& a, Vec3 fallback) {
+            if (!a.is_array() || a.size() != 3 || !a[0].is_number() || !a[1].is_number() || !a[2].is_number()) return fallback;
+            return Vec3{a[0].get<float>(), a[1].get<float>(), a[2].get<float>()};
+        };
+        if (c.contains("planes") && c["planes"].is_array())
+            for (const auto& pl : c["planes"]) {
+                if (!pl.is_object() || col.planes.size() >= 8) continue;
+                CollisionPlane plane;
+                if (pl.contains("y") && pl["y"].is_number()) plane.point = {0.0f, pl["y"].get<float>(), 0.0f};
+                plane.point = pl.contains("point") ? vec3(pl["point"], plane.point) : plane.point;
+                const Vec3 n = pl.contains("normal") ? vec3(pl["normal"], plane.normal) : plane.normal;
+                const float len = std::sqrt(math::dot(n, n));
+                plane.normal = len > 1e-6f ? n * (1.0f / len) : Vec3{0, 1, 0};
+                col.planes.push_back(plane);
+            }
+    }
+    if (j.is_object() && j.contains("sub_emitters") && j["sub_emitters"].is_array())
+        for (const auto& sub : j["sub_emitters"]) {
+            if (!sub.is_object() || s.sub_emitters.size() >= 4) continue;
+            SubEmitter e;
+            e.on = sub.value("on", std::string("hit")) == "death" ? SubEmitter::On::Death : SubEmitter::On::Hit;
+            if (sub.contains("emitter") && sub["emitter"].is_object()) e.emitter = sub["emitter"];
+            e.count = std::clamp(static_cast<int>(number(sub, "count", 4.0f)), 0, 1000);
+            e.inherit_velocity = std::clamp(number(sub, "inherit_velocity", 0.0f), -2.0f, 2.0f);
+            s.sub_emitters.push_back(std::move(e));
+        }
     if (j.is_object() && j.contains("render") && j["render"].is_object()) s.render = j["render"];
     return s;
 }
@@ -208,10 +244,16 @@ int Emitter::bursts_due(double from, double to) const noexcept {
     return total;
 }
 
-void Emitter::spawn(int count, const math::Mat4& world) {
+void Emitter::spawn(int count, const math::Mat4& world, Vec3 extra, std::uint32_t* budget) {
     const auto& s = settings_;
     const int room = static_cast<int>(s.max_particles) - static_cast<int>(particles_.size());
     count = std::min(count, std::max(0, room));
+    if (budget) {  // the scene's budget: what's left of it, handed out in the order emitters step
+        const int allowed = static_cast<int>(std::min<std::uint32_t>(*budget, static_cast<std::uint32_t>(std::max(0, count))));
+        throttled_ += static_cast<std::uint64_t>(count - allowed);
+        count = allowed;
+        *budget -= static_cast<std::uint32_t>(count);
+    }
     for (int i = 0; i < count; ++i) {
         Vec3 pos{0, 0, 0}, dir{0, 1, 0};
         switch (s.shape) {
@@ -265,14 +307,63 @@ void Emitter::spawn(int count, const math::Mat4& world) {
             dir = len > 1e-9f ? d * (1.0f / len) : Vec3{0, 1, 0};
         }
         p.position = pos;
-        p.velocity = dir * speed;
+        p.velocity = dir * speed + extra;
         particles_.push_back(p);
         ++spawned_;
     }
 }
 
-void Emitter::step(float dt, const math::Mat4& world, Vec3 wind) {
+void Emitter::collide(const math::Mat4& world, const GroundQuery* ground) {
+    const Collision& c = settings_.collision;
+    const bool local = settings_.local_space;
+    const math::Mat4 inv = local ? math::inverse(world) : math::Mat4::identity();
+    bool any_killed = false;
+    for (Particle& p : particles_) {
+        // Collisions are worked out in world space (a local-space emitter's particles are carried there and back).
+        Vec3 pos = local ? world.transform_point(p.position) : p.position;
+        Vec3 vel = local ? math::transform_vector(world, p.velocity) : p.velocity;
+        bool hit = false;
+        const auto respond = [&](Vec3 n) {
+            const float vn = math::dot(vel, n);
+            if (vn >= 0.0f) return;  // already leaving the surface
+            const Vec3 along = vel - n * vn;
+            vel = along * (1.0f - c.friction) - n * (vn * c.bounce);
+            if (-vn >= c.hit_speed) hit = true;
+        };
+        for (const CollisionPlane& pl : c.planes) {
+            const float d = math::dot(pos - pl.point, pl.normal) - c.radius;
+            if (d < 0.0f) {
+                pos = pos - pl.normal * d;
+                respond(pl.normal);
+            }
+        }
+        if (c.ground && ground && *ground)
+            if (const auto g = (*ground)(pos.x, pos.z); g && pos.y < g->height + c.radius) {
+                pos.y = g->height + c.radius;
+                respond(g->normal);
+            }
+        if (hit) {
+            ++hits_;
+            events_.push_back({SubEmitter::On::Hit, pos, vel});
+            if (c.kill) {
+                p.age = p.lifetime;  // dies now (below)
+                any_killed = true;
+            }
+        }
+        p.position = local ? inv.transform_point(pos) : pos;
+        p.velocity = local ? math::transform_vector(inv, vel) : vel;
+    }
+    if (any_killed) {
+        for (const Particle& p : particles_)
+            if (p.age >= p.lifetime) events_.push_back({SubEmitter::On::Death, local ? world.transform_point(p.position) : p.position,
+                                                        local ? math::transform_vector(world, p.velocity) : p.velocity});
+        std::erase_if(particles_, [](const Particle& p) { return p.age >= p.lifetime; });
+    }
+}
+
+void Emitter::step(float dt, const math::Mat4& world, Vec3 wind, const GroundQuery* ground, std::uint32_t* budget) {
     const auto& s = settings_;
+    events_.clear();
     Vec3 gravity{0.0f, -kGravity * s.gravity, 0.0f};
     Vec3 air = wind * s.wind;
     if (s.local_space) {  // the forces in the emitter's own axes
@@ -282,6 +373,10 @@ void Emitter::step(float dt, const math::Mat4& world, Vec3 wind) {
     }
     // Ageing, and the dead out (in order: the same order every run).
     for (Particle& p : particles_) p.age += dt;
+    for (const Particle& p : particles_)
+        if (p.age >= p.lifetime)
+            events_.push_back({SubEmitter::On::Death, s.local_space ? world.transform_point(p.position) : p.position,
+                               s.local_space ? math::transform_vector(world, p.velocity) : p.velocity});
     std::erase_if(particles_, [](const Particle& p) { return p.age >= p.lifetime; });
     // Gravity, and drag pulling the velocity towards the air's (implicit: stable for any drag and step).
     const float keep = 1.0f / (1.0f + s.drag * dt);
@@ -290,6 +385,7 @@ void Emitter::step(float dt, const math::Mat4& world, Vec3 wind) {
         p.velocity = (p.velocity + push) * keep;
         p.position = p.position + p.velocity * dt;
     }
+    if (s.collision.enabled) collide(world, ground);
     // This step's new particles.
     const double from = time_, to = time_ + static_cast<double>(dt);
     const bool running = s.duration <= 0.0f || s.loop || from < static_cast<double>(s.duration);
@@ -302,12 +398,12 @@ void Emitter::step(float dt, const math::Mat4& world, Vec3 wind) {
             count = static_cast<int>(whole);
         }
         count += bursts_due(from, std::min(to, s.loop || s.duration <= 0.0f ? to : static_cast<double>(s.duration)));
-        spawn(count, world);
+        spawn(count, world, {0, 0, 0}, budget);
     }
     time_ = to;
 }
 
-void Emitter::burst(int count, const math::Mat4& world) { spawn(std::max(0, count), world); }
+void Emitter::burst(int count, const math::Mat4& world, Vec3 extra, std::uint32_t* budget) { spawn(std::max(0, count), world, extra, budget); }
 
 bool Emitter::finished() const noexcept {
     return !settings_.loop && settings_.duration > 0.0f && time_ >= static_cast<double>(settings_.duration) && particles_.empty();

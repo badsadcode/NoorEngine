@@ -26,6 +26,7 @@
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
 #include "noor/game/sprites.h"
+#include "noor/game/particle_ground.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
@@ -388,6 +389,8 @@ void render_thread_main(noor_viewport* vp) {
     // stepped at a fixed 60 Hz on the viewport's clock (paused, solo, mute and restart from the Effects panel).
     noor::fx::EmitterSet preview_emitters;
     noor::game::ParticleDrawStorage preview_draws;
+    noor::game::ParticleGround preview_ground;  // the terrains preview particles collide with (part 7)
+    const ed::RenderSnapshot* preview_ground_snapshot = nullptr;
     double preview_carry = 0.0;
     auto preview_clock = std::chrono::steady_clock::now();
     std::uint64_t preview_restart_seen = 0;
@@ -1299,8 +1302,21 @@ void render_thread_main(noor_viewport* vp) {
                 } else if (!shown->preview_paused) {
                     constexpr double kStep = 1.0 / 60.0;
                     preview_carry += elapsed;
+                    // Colliding particles land on the snapshot's terrains (part 7), live sculpting included.
+                    if (preview_ground_snapshot != shown.get()) {
+                        preview_ground_snapshot = shown.get();
+                        std::vector<noor::game::ParticleGround::Piece> pieces;
+                        for (const auto& t : shown->terrains) {
+                            std::shared_ptr<const noor::terrain::Heights> h = t.heights;
+                            if (!h)
+                                if (auto made = noor::terrain::Heights::shared(t.settings)) h = *made;
+                            if (h) pieces.push_back({t.position, h});
+                        }
+                        preview_ground.set(std::move(pieces));
+                    }
+                    const noor::fx::GroundQuery preview_floor = preview_ground.query();
                     for (int steps = 0; preview_carry >= kStep && steps < 6; ++steps) {
-                        preview_emitters.step(inputs, static_cast<float>(kStep), shown->wind);
+                        preview_emitters.step(inputs, static_cast<float>(kStep), shown->wind, preview_floor ? &preview_floor : nullptr);
                         preview_carry -= kStep;
                     }
                 }

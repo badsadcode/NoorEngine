@@ -497,7 +497,8 @@ int run(const Options& o) {
                     if (const auto* particles = (*world)->system<noor::fx::ParticleSystem>()) {
                         const auto ps = particles->stats();
                         report["particles"] = {{"emitters", ps.emitters}, {"alive", ps.particles},
-                                               {"fingerprint", std::format("{:016x}", ps.fingerprint)}};
+                                               {"fingerprint", std::format("{:016x}", ps.fingerprint)},
+                                               {"hits", ps.hits}, {"throttled", ps.throttled}};  // part 7: collisions, the scene's budget
                     }
                     // Sprites (Milestone 8B, part 6): what each is playing and since when, and how many script-played
                     // animations have ended (their end events).

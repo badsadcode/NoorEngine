@@ -279,10 +279,19 @@ public sealed class EffectsPanel : DockPanel
             Number("gravity", "Gravity (× 9.81)"), Number("drag", "Drag (/s)"), Number("wind", "Wind"), Choice("space", "Space", Spaces, "world"),
         ]);
         Module("Over life", [Curve("size", "Size (m)"), Gradient("color", "Colour"), Curve("alpha", "Alpha")]);
+        // Part 7: collisions (the terrain and planes) and sub-emitters (on hits and deaths).
+        Module("Collisions", [
+            Collide(), BoolOr("collide.ground", "The ground (terrains)", true), NumberOr("collide.bounce", "Bounce (0..1)", 0.3),
+            NumberOr("collide.friction", "Friction (0..1)", 0.2), NumberOr("collide.radius", "Radius (m)", 0),
+            BoolOr("collide.kill", "Die on hit", false), NumberOr("collide.hit_speed", "Hit speed (m/s)", 0.5),
+            Json("collide.planes", "Planes (JSON: {\"y\": 0})"),
+        ]);
+        Module("Sub-emitters", [Json("sub_emitters", "On hit / death (JSON)")]);
         Module("Render", [
             Choice("render.blend", "Blend", Blends, "alpha"), Choice("render.facing", "Facing", Facings, "camera"), Number("render.stretch", "Stretch (s)"),
             Bool("render.lit", "Lit"), Number("render.emission", "Emission (nits)"), Text("render.texture", "Texture (asset id)"),
             Vector("render.frames", "Flipbook (columns, rows)", 2), Choice("render.frame", "Frame", FrameModes, "life"),
+            NumberOr("render.max_distance", "Hide beyond (m, 0 = never)", 0),
         ]);
     }
 
@@ -381,6 +390,26 @@ public sealed class EffectsPanel : DockPanel
     private static double NumberOf(JsonNode? n, double fallback) => n is JsonValue v && v.TryGetValue<double>(out var d) ? d : fallback;
 
     private Control Number(string path, string label) => Row(label, NumberBox(NumberOf(Get(path), 0), x => SetField(path, JsonValue.Create(x))));
+
+    // A number whose default isn't 0: shows the value the engine uses when it's missing.
+    private Control NumberOr(string path, string label, double fallback) =>
+        Row(label, NumberBox(NumberOf(Get(path), fallback), x => SetField(path, JsonValue.Create(x))));
+
+    private Control BoolOr(string path, string label, bool fallback)
+    {
+        var check = new CheckBox { IsChecked = Get(path) is JsonValue v && v.TryGetValue<bool>(out var b) ? b : fallback };
+        check.IsCheckedChanged += (_, _) => SetField(path, JsonValue.Create(check.IsChecked == true));
+        return Row(label, check);
+    }
+
+    // Collisions on or off: the "collide" module is there (with its settings) or not. Setting any of its fields turns it on.
+    private Control Collide()
+    {
+        var check = new CheckBox { IsChecked = Get("collide") is JsonObject };
+        ToolTip.SetTip(check, "Particles stop on the terrain and the planes below, bounce and slide (world-space effects)");
+        check.IsCheckedChanged += (_, _) => SetField("collide", check.IsChecked == true ? (Get("collide") as JsonObject)?.DeepClone() ?? new JsonObject() : null);
+        return Row("Collide", check);
+    }
 
     private Control Bool(string path, string label)
     {
