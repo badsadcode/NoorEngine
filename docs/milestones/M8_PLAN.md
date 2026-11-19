@@ -225,7 +225,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 |---|---|---|
 | 1 ✅ | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
 | 2 ✅ | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
-| 3 | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
+| 3 ✅ | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
 | 4 | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
 | 5 | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
 | 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
@@ -253,6 +253,14 @@ glass panes (the order); a built game still replays the campfire bit for bit; co
 0.58 ms for 10,000 big smoke particles (`render.particles_cost`). Found: automatic exposure doesn't see local light,
 so glowing particles suited to noon blow out at night (ideas inbox). Not done: the editor doesn't draw particles yet
 (part 4's live preview); textured flipbooks are supported but not yet in a golden (no effect textures in the repo).
+
+## Part 3 result (2026-11-19)
+Done. Rain, snow and dust from the environment (`rain`, `snow`, `dust`, 0..1, blown by `wind_speed`/`wind_direction`):
+`weather.hlsl` works every drop out from its number, the time and the wind in a box round the camera, with no data
+per drop and no simulation; up to 200,000 raindrops, 60,000 snowflakes, 20,000 motes. Proven: the 8A walk into a fog
+bank now also rains, and the rain starts smoothly (0 to 1, never back, at most 1.25% a frame) identically in a built
+game; 200,000 drops cost 0.18 ms (budget 0.5); goldens of Hillside in rain and in snow. Not done: drops don't stop at
+roofs, snow doesn't settle; rain is drawn after see-through things (not tinted by a window in front of it).
 
 ## Open questions
 

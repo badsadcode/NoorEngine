@@ -272,6 +272,14 @@ struct Lighting {
     float time = 0.0f;
     // The sun's disc, the moon, planets and stars (part 5). With sun_disc, the disc is drawn at sky.sun_direction.
     SkyObjects sky;
+    // Rain, snow and drifting dust (Milestone 8B, part 3, ADR-035): no simulation, each drop worked out in the vertex
+    // shader from its number, `time` and the wind, in a box that follows the camera. Intensities 0..1 (how many of
+    // the most drops there can be: rain 200,000, snow 60,000, dust 20,000); `wind` in m/s.
+    struct Weather {
+        float rain = 0.0f, snow = 0.0f, dust = 0.0f;
+        math::Vec3 wind{0, 0, 0};
+        std::uint32_t seed = 1;
+    } weather;
     // Sun shadows (cascaded shadow maps): on/off and how far from the camera they reach.
     bool sun_shadows = true;
     float shadow_distance = 80.0f;
@@ -374,6 +382,7 @@ struct FrameStats {
     std::uint32_t transparent_draws = 0;  // see-through (blend) draws, sorted back to front
     std::uint32_t particle_draws = 0;     // emitters drawn (one draw call each), and their particles
     std::uint64_t particles = 0;
+    std::uint64_t weather_drops = 0;      // rain, snow and dust drawn (8B part 3)
     std::uint32_t msaa_samples = 1;       // samples per pixel of the scene this frame
 };
 

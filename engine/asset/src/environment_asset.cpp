@@ -133,7 +133,8 @@ namespace {
 // A setting's neutral value: what an environment without it behaves as.
 const Json* neutral(const std::string& key) {
     static const Json values = Json{{"fog_density", 0.0}, {"cloud_coverage", 0.0}, {"cloud2_coverage", 0.0}, {"turbidity", 1.0},
-                                    {"aerial_scale", 1.0}, {"star_brightness", 1.0}, {"ground_albedo", 0.3}, {"altitude", 0.0}};
+                                    {"aerial_scale", 1.0}, {"star_brightness", 1.0}, {"ground_albedo", 0.3}, {"altitude", 0.0},
+                                    {"rain", 0.0}, {"snow", 0.0}, {"dust", 0.0}, {"wind_speed", 0.0}};  // 8B: no weather, no wind
     const auto it = values.find(key);
     return it == values.end() ? nullptr : &*it;
 }

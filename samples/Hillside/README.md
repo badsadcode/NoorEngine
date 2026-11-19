@@ -44,6 +44,8 @@ And `tools/samples/add_hillside_presets.py` (the 8A sample) for `Scenes/Presets/
 nine built-in environment presets, each applied through the editor API like the Environments gallery's Apply (so
 `Assets/Environments` has the nine `.noorenv` copies), and `Hillside_Space`: the same land on an airless world with a
 ringed planet, a small moon and two suns. `tools/samples/measure_hillside_skies.py` prints what each sky costs.
+`tools/samples/add_hillside_weather.py` (Milestone 8B) adds `Scenes/Weather/`: the valley in rain and in snow,
+the Overcast environment with the weather written beside it as overrides.
 Doing it by hand in the editor takes the same steps, with a mouse.
 
 The meadow is `Assets/Materials/meadow.noormat`, a material instance of Leafy Grass with a greener

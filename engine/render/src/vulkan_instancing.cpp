@@ -106,6 +106,7 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     p.particle_vertices.clear();
     p.particles.clear();
     p.see_through.clear();
+    p.weather.clear();
     stats.instances = 0;
     stats.culled = 0;
     stats.particle_draws = 0;
@@ -240,6 +241,26 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
         stats.particles += b.count;
     }
     stats.transparent_draws = static_cast<std::uint32_t>(p.transparent.size());
+    // Rain, snow and dust (8B part 3): one draw each, as many drops as the intensity asks for (the most: 200,000 rain,
+    // 60,000 snow, 20,000 dust; weather.hlsl's boxes are sized for these).
+    stats.weather_drops = 0;
+    {
+        const auto& w = frame.lighting.weather;
+        const float most[3] = {200000.0f, 60000.0f, 20000.0f};
+        const float amount[3] = {w.rain, w.snow, w.dust};
+        for (std::uint32_t k = 0; k < 3; ++k) {
+            const float drops = std::clamp(amount[k], 0.0f, 1.0f) * most[k];
+            if (drops <= 0.0f) continue;
+            FramePlan::WeatherDraw d;
+            d.count = static_cast<std::uint32_t>(std::ceil(drops));
+            d.push.ids[0] = k;
+            d.push.ids[1] = d.count;
+            d.push.ids[2] = w.seed;
+            d.push.splat_tiling = {frame.lighting.time, drops, w.wind.x, w.wind.z};
+            p.weather.push_back(d);
+            stats.weather_drops += d.count;
+        }
+    }
     for (std::uint32_t c = 0; c < kShadowCascades; ++c) group(shadow[c], p.instances, p.shadows[c]);
 
     // This frame's particles into its slot's particle buffer (grown as needed, like the instances below).

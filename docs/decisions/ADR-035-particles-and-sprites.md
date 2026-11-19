@@ -1,6 +1,6 @@
 # ADR-035: Particles and sprites
 
-**Status:** Accepted (Milestone 8B; parts 1-2, effect particles simulated and drawn, 2026-11-19)
+**Status:** Accepted (Milestone 8B; parts 1-3: effect particles simulated and drawn, weather particles, 2026-11-19)
 
 ## Context
 NoorEngine has no particles and no sprites. 8A's weather needs rain and snow; The Uncounted, Chapter Two (the
@@ -49,6 +49,13 @@ Option 3.
   descriptor sets. The frame's shared shader code (uniforms, shadows, environment light, atmosphere and fog) moved out
   of mesh.hlsl into `frame.hlsli`, unchanged (every golden identical). Cost: a campfire 0.005 ms, 10,000 big smoke
   particles 0.58 ms (RTX 3080, 1280x720).
+- **Part 3, weather:** `weather.hlsl`, no vertex data: drop i is a hash of i and the seed, carried by its fall and
+  the wind over time, wrapped into a box round the camera; it exists while i < intensity x the most drops (rain
+  200,000, snow 60,000, dust 20,000), so intensity changes add drops without moving others and weather zones blend
+  rain smoothly. Everything per drop (place, sun shadow, sky light, air) is worked out in the vertex shader, so the
+  frame set's shadow, sky-light and air bindings became visible to vertex shaders too. Drawn after the see-through
+  things. Cost: 200,000 drops 0.18 ms (budget 0.5). The environment's `rain`, `snow` and `dust` blend from 0 like
+  fog; `wind_speed` from 0 too (a zone that doesn't mention wind is calm when fully on).
 - **Found in part 2:** automatic exposure meters sun, sky and moon only, so glowing particles that suit noon blow out
   at night. Scenes give fires a point light and a night emission; a meter that sees local light is in the ideas inbox.
 - **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget

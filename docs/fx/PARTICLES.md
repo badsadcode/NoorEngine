@@ -1,16 +1,16 @@
 # Particles (NoorFX)
 
-Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: parts 1 and 2 of 8.** Effect
-particles are simulated, replay identically everywhere, and are drawn in games. Rain and snow (part 3), the Effects
-panel with a live preview in the editor (part 4; until then the editor doesn't draw particles) and scripting (part 6)
-come later.
+Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: parts 1-3 of 8.** Effect particles
+are simulated, replay identically everywhere, and are drawn in games; rain, snow and dust come from the environment.
+The Effects panel with a live preview in the editor (part 4; until then the editor doesn't draw effect particles) and
+scripting (part 6) come later.
 
 ## Two kinds of particles
 
 - **Effect particles** (fire, smoke, sparks, dust puffs, debris, magic) come from an `emitter` component. They are
   simulated on the CPU at a fixed 60 steps a second, from a seed, so the same scene always gives the same particles:
   in the editor, in a built game, in Debug and Release, on any machine.
-- **Weather particles** (rain, snow, drifting dust) will come from the environment and cost almost nothing (part 3).
+- **Weather particles** (rain, snow, drifting dust) come from the environment and cost almost nothing (below).
 
 ## The `emitter` component
 
@@ -65,6 +65,27 @@ glowing particles. At night it exposes for moonlight, so a fire bright enough fo
 a point light for its glow, and a lower `emission` for night scenes (the test scene uses 2.5 nits at night and 8,000
 at noon). A meter that sees local light is noted in the ideas inbox.
 
+## Rain, snow and dust
+
+Three numbers on the environment, 0 to 1:
+
+```json
+"rain": 1.0, "snow": 0.0, "dust": 0.0, "wind_speed": 5, "wind_direction": 60
+```
+
+At 1 there are 200,000 raindrops, 60,000 snowflakes or 20,000 motes of dust around the camera. Rain streaks along its
+fall (9 m/s) and the wind, snow drifts down (about 1 m/s) swaying, and dust floats and glints when you look towards
+the sun. They're lit by the sky and the sun (with shadows) and fade into fog like everything else.
+
+**How it's cheap:** nothing is simulated or stored. Each drop's place is worked out in the vertex shader from its
+number, the time and the wind, inside a box that follows the camera and wraps round (a drop falling out of the bottom
+comes back at the top). Drop number *i* exists while *i* is below intensity × the most drops, so more rain adds drops
+without moving the others, which is why weather zones can start the rain smoothly: blend `"rain": 1` into a zone like
+fog.
+
+**Not yet:** drops don't stop at roofs (it rains indoors), snow doesn't settle, and puddles don't form. Rain is drawn
+after see-through things, so a drop behind a window isn't tinted by it.
+
 ## Wind
 
 The scene's environment can set a ground wind: `"wind_speed"` in m/s and `"wind_direction"` in degrees, where it
@@ -86,7 +107,8 @@ An emitter points at it with `{"asset": "<id>"}`. Any field written beside it ov
 
 Simulation: 10,000 particles step in 0.02 ms (Release) and 0.34 ms (Debug). Drawing (RTX 3080, 1280x720, the fastest
 of 300 frames): the campfire test scene (about 100 particles) adds 0.005 ms; 10,000 big overlapping smoke particles
-add 0.58 ms. The player's `--report` shows `particles` (emitters, alive, fingerprint) and
+add 0.58 ms. Rain at full strength (200,000 drops) adds 0.18 ms; snow is too cheap to measure. The player's
+`--report` shows `particles` (emitters, alive, fingerprint) and
 `timing_ms.particles`.
 
 ## Tests
@@ -97,4 +119,8 @@ add 0.58 ms. The player's `--report` shows `particles` (emitters, alive, fingerp
   bit in a built game.
 - Goldens `Particles_Campfire` (noon), `Particles_Campfire_Night` (firelight under the moon), `Particles_Glass` (smoke
   between a pane in front and one behind: the order).
-- `render.particles_cost`: the campfire and 10,000 smoke particles within their GPU and CPU budgets.
+- `render.particles_cost`: the campfire and 10,000 smoke particles within their GPU and CPU budgets, and 200,000
+  raindrops within 0.5 ms.
+- `cli.weather_walk`: walking into a weather zone that rains starts the rain smoothly (0 to 1, never back, at most
+  1.25% of the way a frame), the same in a built game.
+- Goldens `Hillside_Rain` and `Hillside_Snow` (`tools/samples/add_hillside_weather.py`).

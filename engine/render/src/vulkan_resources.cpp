@@ -6,6 +6,8 @@
 #include "noor/shaders/mesh_vs.h"
 #include "noor/shaders/particle_ps.h"
 #include "noor/shaders/particle_vs.h"
+#include "noor/shaders/weather_ps.h"
+#include "noor/shaders/weather_vs.h"
 
 #include <cstring>
 
@@ -213,7 +215,7 @@ void Renderer::Impl::destroy_msaa_targets() {
 
 void Renderer::Impl::destroy_scene_pipelines() {
     if (device == VK_NULL_HANDLE) return;
-    for (VkPipeline* p : {&mesh_pipeline, &double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &sky_pipeline, &particle_pipeline}) {
+    for (VkPipeline* p : {&mesh_pipeline, &double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &sky_pipeline, &particle_pipeline, &weather_pipeline}) {
         if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
         *p = VK_NULL_HANDLE;
     }
@@ -259,6 +261,10 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
             return vk_failure(r, "vkCreateGraphicsPipelines (particles)");
         }
         set_name(VK_OBJECT_TYPE_PIPELINE, particle_pipeline, "Particle pipeline (see-through)");
+        if (VkResult r = create_particle_pipeline(weather_pipeline, true); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (weather)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, weather_pipeline, "Weather pipeline (rain, snow, dust)");
     }
     if (gizmo_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
@@ -391,7 +397,8 @@ VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool displa
 // made from the vertex index. Into the multisampled HDR scene like see-through meshes: depth-tested, not written;
 // premultiplied blending (alpha particles write their alpha, additive ones 0); rgb only, so the image's alpha keeps
 // marking the background for the tonemapper.
-VkResult Renderer::Impl::create_particle_pipeline(VkPipeline& out) {
+// `weather`: weather.hlsl instead (rain, snow, dust: no vertex data, everything from the instance index).
+VkResult Renderer::Impl::create_particle_pipeline(VkPipeline& out, bool weather) {
     const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& module) {
         VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         info.codeSize = size;
@@ -399,8 +406,11 @@ VkResult Renderer::Impl::create_particle_pipeline(VkPipeline& out) {
         return vkCreateShaderModule(device, &info, nullptr, &module);
     };
     VkShaderModule vs = VK_NULL_HANDLE, ps = VK_NULL_HANDLE;
-    if (VkResult r = make_module(k_particle_vs, sizeof(k_particle_vs), vs); r != VK_SUCCESS) return r;
-    if (VkResult r = make_module(k_particle_ps, sizeof(k_particle_ps), ps); r != VK_SUCCESS) {
+    if (VkResult r = weather ? make_module(k_weather_vs, sizeof(k_weather_vs), vs) : make_module(k_particle_vs, sizeof(k_particle_vs), vs);
+        r != VK_SUCCESS)
+        return r;
+    if (VkResult r = weather ? make_module(k_weather_ps, sizeof(k_weather_ps), ps) : make_module(k_particle_ps, sizeof(k_particle_ps), ps);
+        r != VK_SUCCESS) {
         vkDestroyShaderModule(device, vs, nullptr);
         return r;
     }
@@ -414,10 +424,10 @@ VkResult Renderer::Impl::create_particle_pipeline(VkPipeline& out) {
         {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ParticleVertex, velocity)},   // velocity, frame
     };
     VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-    vertex_input.vertexBindingDescriptionCount = 1;
-    vertex_input.pVertexBindingDescriptions = &binding;
-    vertex_input.vertexAttributeDescriptionCount = 3;
-    vertex_input.pVertexAttributeDescriptions = attributes;
+    vertex_input.vertexBindingDescriptionCount = weather ? 0 : 1;
+    vertex_input.pVertexBindingDescriptions = weather ? nullptr : &binding;
+    vertex_input.vertexAttributeDescriptionCount = weather ? 0 : 3;
+    vertex_input.pVertexAttributeDescriptions = weather ? nullptr : attributes;
     VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
@@ -483,7 +493,7 @@ void Renderer::Impl::destroy_mesh_pipeline() {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
         gizmo_pipeline = VK_NULL_HANDLE;
     }
-    for (VkPipeline* p : {&double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &particle_pipeline}) {
+    for (VkPipeline* p : {&double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &particle_pipeline, &weather_pipeline}) {
         if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
         *p = VK_NULL_HANDLE;
     }
@@ -567,7 +577,7 @@ std::uint32_t Renderer::Impl::material_slot(MaterialHandle material) const noexc
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass) {
     (void)frame;  // planned in plan_frame
     const auto& batches = pass == DrawPass::Opaque ? plan.opaque : pass == DrawPass::Transparent ? plan.transparent : plan.gizmos;
-    if (pass == DrawPass::Transparent ? plan.see_through.empty() : batches.empty()) return;  // particles alone still draw
+    if (pass == DrawPass::Transparent ? plan.see_through.empty() && plan.weather.empty() : batches.empty()) return;  // particles alone still draw
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
     vkCmdSetViewport(cmd, 0, 1, &vp);
@@ -593,6 +603,15 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, D
         vkCmdDraw(cmd, 6, p.count, 0, p.first);
         ++stats.draw_calls;
         stats.triangles += 2ull * p.count;
+    }
+    // Rain, snow and dust last, over everything (in front of see-through things too: a drop between the camera and a
+    // window is drawn over it; one behind the window as well, untinted: accepted, ADR-035).
+    for (const auto& w : plan.weather) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, weather_pipeline);
+        vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(w.push), &w.push);
+        vkCmdDraw(cmd, 6, w.count, 0, 0);
+        ++stats.draw_calls;
+        stats.triangles += 2ull * w.count;
     }
     end_label(cmd);
 }

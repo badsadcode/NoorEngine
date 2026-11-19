@@ -448,6 +448,7 @@ struct Renderer::Impl {
     VkPipeline blend_pipeline = VK_NULL_HANDLE;         // see-through: blended, no depth writes
     VkPipeline blend_double_sided_pipeline = VK_NULL_HANDLE;
     VkPipeline particle_pipeline = VK_NULL_HANDLE;      // particles (8B): instanced quads, premultiplied blending
+    VkPipeline weather_pipeline = VK_NULL_HANDLE;       // rain, snow, dust (8B part 3): no vertex data at all
     VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;  // the screen's, for the gizmo pipeline
 
     // Tonemapping: HDR image -> screen (vulkan_frame.cpp)
@@ -507,6 +508,11 @@ struct Renderer::Impl {
         std::vector<ParticleVertex> particle_vertices;
         std::vector<ParticleBatch> particles;
         std::vector<SeeThrough> see_through;
+        struct WeatherDraw {
+            std::uint32_t count = 0;
+            MeshPushConstants push{};  // weather.hlsl: kind, drops, seed; time, drops (fractional), wind x, z
+        };
+        std::vector<WeatherDraw> weather;  // after the see-through things, over everything
     } plan;
     std::array<GpuBuffer, kFramesInFlight> instance_buffers{};
     std::array<std::size_t, kFramesInFlight> instance_capacity{};
@@ -540,7 +546,7 @@ struct Renderer::Impl {
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
     VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true, bool blended = false);
-    VkResult create_particle_pipeline(VkPipeline& out);
+    VkResult create_particle_pipeline(VkPipeline& out, bool weather = false);
     Status create_msaa_targets();
     void destroy_msaa_targets();
     void destroy_scene_pipelines();  // the ones drawn into the (multisampled) scene: rebuilt when samples change

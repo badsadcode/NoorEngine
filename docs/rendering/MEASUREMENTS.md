@@ -214,6 +214,9 @@ render_scenes, 1280x720, RTX 3080, the fastest of 300 frames, against Atmosphere
 
 `render.particles_cost` holds the heavy scene to 1.5 ms of GPU and 1 ms of simulation, the campfire to 0.1 ms.
 
+Weather (part 3), against Atmosphere_Overcast (0.349 ms): Weather_Rain, 200,000 drops, **+0.18 ms** (budget 0.5);
+Weather_Snow, 60,000 flakes, within the noise.
+
 ## Not measured yet
 A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale
 with pixels: about 4× the numbers above at 3840×2160).

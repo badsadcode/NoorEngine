@@ -1,5 +1,6 @@
 # Walking into a weather zone (Milestone 8A, part 7): render_scenes/Weather_Walk's camera walks (Scripts/WalkForward.luau,
 # 10 m/s along -Z) from a clear noon into a fog bank (a weather_zone with fog and an overcast deck, blending over 20 m).
+# Since 8B part 3 the fog bank also rains ("rain": 1): the rain must start as smoothly as the fog.
 # The fog and the exposure are recorded every frame (noor_player --trace-environment), first from the project, then
 # from a game built by noor_cli; noor_trace_check judges the walk (smooth, never backwards, the zone fully on at the
 # end), that the built game blends exactly like the project, and that frames don't stall gathering the scene (p95 under 8 ms, none over 120)
@@ -24,7 +25,7 @@ execute_process(COMMAND "${exe}" ${args} --report "${WORK}/game.json" --log "${W
 if(NOT code EQUAL 0 OR NOT EXISTS "${WORK}/game.json")
     message(FATAL_ERROR "the built game failed (${code}); see ${WORK}/game.log")
 endif()
-execute_process(COMMAND "${CHECK}" "${WORK}/project.json" "${WORK}/game.json" --fog-from 0 --fog-to 0.03 --collect-max-ms 8
+execute_process(COMMAND "${CHECK}" "${WORK}/project.json" "${WORK}/game.json" --fog-from 0 --fog-to 0.03 --collect-max-ms 8 --rain-to 1
                 RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
 message(STATUS "${out}${err}")
 if(NOT code EQUAL 0)

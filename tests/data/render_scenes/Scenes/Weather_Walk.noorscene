@@ -405,7 +405,10 @@
             "cloud_scale": 2000,
             "cloud_wind_speed": 0,
             "cloud_wind_direction": 0,
-            "cloud_seed": 4
+            "cloud_seed": 4,
+            "rain": 1.0,
+            "wind_speed": 3,
+            "wind_direction": 70
           }
         }
       }

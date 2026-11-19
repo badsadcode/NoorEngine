@@ -35,6 +35,8 @@ noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl VSM
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl PSMain ps_6_0 tonemap_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl VSMain vs_6_0 particle_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl PSMain ps_6_0 particle_ps)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl VSMain vs_6_0 weather_vs)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl PSMain ps_6_0 weather_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/clouds_volume.hlsl CSNoise cs_6_0 clouds_volume_noise)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/clouds_volume.hlsl CSMarch cs_6_0 clouds_volume_march)
 foreach(pass IN ITEMS Transmittance Multiple Sky Downsample Cube Irradiance Aerial CloudLight)

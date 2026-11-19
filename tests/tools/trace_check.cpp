@@ -35,12 +35,13 @@ bool load(const char* path, json& out) {
 
 int main(int argc, char** argv) {
     const char* paths[2] = {nullptr, nullptr};
-    double from = 0.0, to = 0.0, collect_max = -1.0;
+    double from = 0.0, to = 0.0, collect_max = -1.0, rain_to = -1.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--fog-from" && i + 1 < argc) from = std::atof(argv[++i]);
         else if (a == "--fog-to" && i + 1 < argc) to = std::atof(argv[++i]);
         else if (a == "--collect-max-ms" && i + 1 < argc) collect_max = std::atof(argv[++i]);
+        else if (a == "--rain-to" && i + 1 < argc) rain_to = std::atof(argv[++i]);
         else if (!paths[0]) paths[0] = argv[i];
         else if (!paths[1]) paths[1] = argv[i];
         else return std::fprintf(stderr, "usage: noor_trace_check <report.json> [<other.json>] --fog-from A --fog-to B\n"), 2;
@@ -85,6 +86,28 @@ int main(int argc, char** argv) {
     if (weight < 0.999) {
         std::printf("FAIL: the zone isn't fully on at the end\n");
         ok = false;
+    }
+    if (rain_to >= 0.0) {  // 8B part 3: the rain starts smoothly too (from none to rain_to, never back, no jumps)
+        double biggest = 0.0, previous = 0.0;
+        std::size_t back = 0;
+        for (std::size_t i = 0; i < trace.size(); ++i) {
+            const double r = trace[i].value("rain", -1.0);
+            if (r < 0.0) {
+                std::printf("FAIL: the trace has no rain\n");
+                ok = false;
+                break;
+            }
+            if (i > 0) {
+                biggest = std::max(biggest, std::abs(r - previous));
+                if (r < previous - 1e-9) ++back;
+            }
+            previous = r;
+        }
+        std::printf("rain: %.3f -> %.3f, biggest step %.4f, went back %zu time(s)\n", trace.front().value("rain", 0.0), previous, biggest, back);
+        if (trace.front().value("rain", 1.0) > 0.01 || previous < rain_to - 0.01 || back > 0 || biggest > rain_to * 0.03 + 1e-9) {
+            std::printf("FAIL: the rain doesn't start smoothly\n");
+            ok = false;
+        }
     }
     if (collect_max >= 0.0) {
         for (const json* r : {&a, paths[1] ? &b : nullptr}) {

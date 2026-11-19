@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8B, part 3: rain, snow and dust
+**Added**
+- **Weather particles** from the environment: `rain`, `snow`, `dust` (0..1), blown by the ground wind. `weather.hlsl`
+  works each drop out from its number, the time and the wind in a box round the camera: no data per drop, no
+  simulation; up to 200,000 raindrops (0.18 ms), 60,000 snowflakes, 20,000 motes. Weather zones blend them like fog.
+- `tools/samples/add_hillside_weather.py`: Hillside in rain and in snow.
+
+**Changed:** the frame set's shadow map, sky irradiance and aerial volume are visible to vertex shaders too (weather
+lights each drop once, per vertex); `rain`, `snow`, `dust` and `wind_speed` blend from 0 in weather zones.
+
+**Tests:** `cli.weather_walk` now checks the rain starts smoothly (trace field `rain`, `noor_trace_check --rain-to`);
+`render.particles_cost` holds 200,000 raindrops to 0.5 ms; goldens `Hillside_Rain`, `Hillside_Snow`.
+
 ### 2026-11-19 — Milestone 8B, part 2: drawing particles
 **Added**
 - **Particles are drawn** (games): `render::ParticleDraw` in `FrameDesc`, `shaders/particle.hlsl` (quads from the vertex

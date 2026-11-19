@@ -364,7 +364,7 @@ int run(const Options& o) {
                         for (const auto& z : view.weather) zones.push_back(z.weight);
                         const auto eye = view.camera ? view.camera->world.transform_point({0, 0, 0}) : noor::math::Vec3{0, 0, 0};
                         environment_trace.push_back({{"frame", (*world)->frame_count()}, {"camera", {eye.x, eye.y, eye.z}},
-                                                     {"fog_density", view.lighting.fog.density}, {"ev100", view.lighting.ev100},
+                                                     {"fog_density", view.lighting.fog.density}, {"ev100", view.lighting.ev100}, {"rain", view.lighting.weather.rain},
                                                      {"zones", std::move(zones)}});
                     }
                     if (!view.camera && !warned_no_camera) {

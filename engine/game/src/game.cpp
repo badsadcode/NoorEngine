@@ -409,6 +409,18 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                 fog.albedo = color_of(tint, fog.albedo);
             }
             view.environment.aerial_scale = std::clamp(number(en, "aerial_scale", 1.0f), 0.0f, 1000.0f);
+            // Rain, snow and dust (Milestone 8B, part 3): intensities 0..1, blown by the ground wind (the same wind
+            // the particle system reads: "wind_speed" m/s, "wind_direction" degrees towards which it blows).
+            {
+                auto& w = view.lighting.weather;
+                w.rain = std::clamp(number(en, "rain", 0.0f), 0.0f, 1.0f);
+                w.snow = std::clamp(number(en, "snow", 0.0f), 0.0f, 1.0f);
+                w.dust = std::clamp(number(en, "dust", 0.0f), 0.0f, 1.0f);
+                const float speed = std::max(0.0f, number(en, "wind_speed", 0.0f));
+                const float a = math::radians(number(en, "wind_direction", 0.0f));
+                w.wind = {std::sin(a) * speed, 0.0f, -std::cos(a) * speed};
+                w.seed = static_cast<std::uint32_t>(std::max(0.0f, number(en, "weather_seed", 1.0f)));
+            }
             // Cloud layers: "cloud_*" (the first) and "cloud2_*" (the second); a layer is on when it has a coverage.
             for (std::size_t layer_index = 0; layer_index < render::kCloudLayers; ++layer_index) {
                 const std::string prefix = layer_index == 0 ? "cloud_" : "cloud2_";
