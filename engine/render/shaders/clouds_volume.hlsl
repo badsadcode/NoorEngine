@@ -70,6 +70,9 @@ CloudLayer cloud_layer(uint i)
     return l;
 }
 
+// clouds.h: low densities fade further, a see-through fringe at every edge.
+float volume_edge(float d) { return kVolumeEdge > 0.0 ? d * saturate(d / kVolumeEdge) : d; }
+
 // clouds.h cloud_volume_density, with the noises read from the baked tile.
 float volume_density(CloudLayer layer, float3 puff_offset, float3 detail_offset, float x_km, float height_km, float z_km, float footprint_km,
                      bool detail)
@@ -83,7 +86,7 @@ float volume_density(CloudLayer layer, float3 puff_offset, float3 detail_offset,
     if (base <= 0.0) return 0.0;
     const float tile = 1.0 / float(kCloudNoisePeriod);
     const float ps = max(0.05, layer.scale_km) * kVolumePuffScale;
-    const float keep_puffs = saturate(1.5 - 2.0 * footprint_km / (0.25 * ps));
+    const float keep_puffs = saturate(1.5 - 2.0 * footprint_km / (kVolumeDetailFade * ps));
     if (kVolumePuff > 0.0 && keep_puffs > 0.0)
     {
         const float3 q = float3((x_km - layer.offset_km.x) / ps, height_km / ps, (z_km - layer.offset_km.y) / ps) + puff_offset;
@@ -92,11 +95,13 @@ float volume_density(CloudLayer layer, float3 puff_offset, float3 detail_offset,
         if (base <= 0.0) return 0.0;
     }
     const float s = max(0.05, layer.scale_km) * kVolumeDetailScale;
-    const float keep = detail ? saturate(1.5 - 2.0 * footprint_km / (0.25 * s)) : 0.0;
-    if (keep <= 0.0) return base;
+    const float keep = detail ? saturate(1.5 - 2.0 * footprint_km / (kVolumeDetailFade * s)) : 0.0;
+    if (keep <= 0.0) return volume_edge(base);
     const float3 q = float3((x_km - layer.offset_km.x) / s, height_km / s, (z_km - layer.offset_km.y) / s) + detail_offset;
-    const float erosion = kVolumeErosion * keep * noise.SampleLevel(noise_sampler, q * tile, 0).g;
-    return saturate((base - erosion) / (1.0 - erosion));
+    const float n = noise.SampleLevel(noise_sampler, q * tile, 0).g;
+    const float billowy = saturate(h * 4.0) * kVolumeWispy + (1.0 - kVolumeWispy);  // 0 at the base: wispy
+    const float erosion = kVolumeErosion * keep * lerp(1.0 - n, n, billowy);
+    return volume_edge(saturate((base - erosion) / (1.0 - erosion)));
 }
 
 // clouds.h cloud_volume_march.

@@ -35,7 +35,14 @@ Option 2, as a choice per layer: `"cloud_type": "layer"` (the default, unchanged
   The shaders (`clouds.hlsli`, `clouds_volume.hlsl`) are a port of it.
 - **The look was chosen, not guessed.** Rendered variants side by side (lighting: five; lumps: five) on the test
   objects at noon and in the evening and on Hillside, and the pick was made by eye: "B" (darker bellies, a brighter silver
-  lining) and "P4" (strong cauliflower lumps). The numbers are named constants in both files.
+  lining) and "P4" (strong cauliflower lumps), then "F3" for the edges (below). The numbers are named constants
+  in both files.
+- **Edges.** The first version's edges were one even soft band. The cause was the anti-sparkle fade: the lumps and
+  the erosion faded out once a pixel covered a quarter of a noise cell, which at normal viewing distances is always,
+  so outlines were just the smooth coverage map. They now fade only when a pixel covers a whole cell
+  (`kVolumeDetailFade`); the erosion is finer (`kVolumeDetailScale` 0.12) and turns wispy (inverted noise) towards
+  the base; low densities fade further (`kVolumeEdge`), a see-through fringe at every edge. Better, not cured: see
+  Unresolved.
 - **Speed: bake and halve.** Computing cellular noise at every sample cost 20 ms a frame. The volume noises tile
   (every 4 first-octave cells), so the GPU bakes them once into a 128³ RGBA8 texture (4 MB; `CSNoise`), and the
   march (`CSMarch`) runs as a compute pass at half resolution into an RGBA16F image (radiance, and what is let
@@ -50,7 +57,7 @@ Option 2, as a choice per layer: `"cloud_type": "layer"` (the default, unchanged
   see the clouds as the flat approximation of the same coverage).
 
 ## Consequences
-- **Cost, measured:** a volume layer adds 1.50 ms to the fastest frame at 1280×720 on an RTX 3080 (1.81 ms against
+- **Cost, measured:** a volume layer adds 1.50 ms (1.51 with the F3 edges) to the fastest frame at 1280×720 on an RTX 3080 (1.81 ms against
   0.31 ms for the same objects without clouds; flat layers add 0.04 ms). The way there: 10.8 ms in the sky pass,
   5.3 ms once the march stopped being compiled in twice, 20.4 ms with the cellular lumps computed live, 1.8 ms
   baked and at half resolution. `render.clouds_volume_cost` fails above 2.5 ms (room for a shared desktop GPU).
@@ -66,6 +73,9 @@ Option 2, as a choice per layer: `"cloud_type": "layer"` (the default, unchanged
 
 ## Unresolved
 - Whether any preset switches to volumetric clouds. Presets change only after looking at renders.
+- **Edges, round two** (the ideas inbox): the carving stretches what's left back to full density, so edges go opaque
+  at once; the tile has no mipmaps, so detail fades all at once rather than octave by octave; the half-resolution
+  upscale softens every edge alike. Reshape the ramp, mip the tile, maybe an edge-aware upscale.
 - The 2D coverage is still computed at every sample (5 octaves): baking it per frame would take the cost under
   1 ms. A layer of each style in the same sky draws the volume where the first volume layer comes in the
   far-to-near order (a flat layer between two volumes isn't interleaved).

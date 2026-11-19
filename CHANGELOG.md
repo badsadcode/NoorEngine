@@ -18,6 +18,11 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 **Changed:** the sky pass's cloud loop; the environment build check's cloud layer is now a volume.
 
+**Fixed (same day): even cloud edges.** The anti-sparkle fade switched the lumps and erosion off at normal viewing
+distances, so every outline was the smooth coverage map. They now fade only when a pixel covers a whole noise cell;
+finer, wispier erosion towards the base; a see-through fringe at low densities ("F3", from rendered variants). Golden
+`Atmosphere_Volume` updated; 1.51 ms. Better, not cured: round two is in the ideas inbox.
+
 **Tests:** `clouds:` unit tests (shape, column density, sides, horizon coverage, light per unit of cloud, thick
 clouds darker, the noises tile), golden `Atmosphere_Volume`, `render.clouds_volume_cost` (1.50 ms measured, budget
 2.5), `cli.environment_builds_identically` with a volume; all older goldens unchanged.

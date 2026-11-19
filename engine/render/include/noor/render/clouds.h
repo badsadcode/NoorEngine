@@ -160,8 +160,8 @@ inline float cloud_smooth01(float t) noexcept {
 // (a fraction of the cloud's top); the forward lobe's eccentricity (the silver lining); the weights of direct sun,
 // light diffused through the cloud, and the sky's light at the base (the top gets all of it). Darker bellies and a
 // brighter lining than the first version: clouds read as solid.
-inline constexpr float kVolumeErosion = 0.45f;
-inline constexpr float kVolumeDetailScale = 0.3f;
+inline constexpr float kVolumeErosion = 0.55f;
+inline constexpr float kVolumeDetailScale = 0.12f;
 inline constexpr float kVolumeDome = 0.55f;
 inline constexpr float kVolumeSilver = 0.75f;
 inline constexpr float kVolumeDirect = 0.35f;
@@ -172,6 +172,14 @@ inline constexpr float kVolumeAmbientBase = 0.3f;
 // rendered variants ("P4, cauliflower", 2026-11-19).
 inline constexpr float kVolumePuff = 0.85f;
 inline constexpr float kVolumePuffScale = 0.28f;
+// Edges (round three, "F3", 2026-11-19; finer erosion above too): how far into the cloud the density keeps fading in (0: off). Low densities are weakened
+// further, so every edge has a thin, see-through fringe whose width follows the noise, instead of the same soft band
+// everywhere. And how much the erosion turns wispy (inverted noise: strands) towards the base, billowy above.
+inline constexpr float kVolumeEdge = 0.35f;
+inline constexpr float kVolumeWispy = 1.0f;
+// Where the lumps and the erosion fade out with distance, as a fraction of their first-octave cell per pixel: they
+// fade only once a pixel covers this much of a cell (so the shapes survive at the distances clouds are seen from).
+inline constexpr float kVolumeDetailFade = 1.0f;
 
 // The volume noises repeat every kCloudNoisePeriod units (a unit is the first octave's cell), so the GPU can bake
 // them once into a 3D texture (shaders/clouds_volume.hlsl, CSNoise) and read them instead of computing them; a
@@ -262,7 +270,7 @@ inline constexpr float kCloudColumnMean = 0.81f;
     if (base <= 0.0f) return 0.0f;
     // Puffs: the gaps between lumps are carved away (in the march towards the sun too, so each lump shades the next).
     const float ps = std::max(0.05f, layer.scale_km) * kVolumePuffScale;
-    const float keep_puffs = std::clamp(1.5f - 2.0f * footprint_km / (0.25f * ps), 0.0f, 1.0f);
+    const float keep_puffs = std::clamp(1.5f - 2.0f * footprint_km / (kVolumeDetailFade * ps), 0.0f, 1.0f);
     if (kVolumePuff > 0.0f && keep_puffs > 0.0f) {
         const math::Vec3 o = cloud_noise_offset(layer.seed);
         const float carve = kVolumePuff * keep_puffs * (1.0f - cloud_billow((x_km - offset.x) / ps + o.x, height_km / ps + o.y, (z_km - offset.y) / ps + o.z));
@@ -271,11 +279,14 @@ inline constexpr float kCloudColumnMean = 0.81f;
     }
     // Erosion: noise eats into the thin parts and leaves the cores, so edges break into puffs.
     const float s = std::max(0.05f, layer.scale_km) * kVolumeDetailScale;
-    const float keep = detail ? std::clamp(1.5f - 2.0f * footprint_km / (0.25f * s), 0.0f, 1.0f) : 0.0f;
-    if (keep <= 0.0f) return base;
+    const float keep = detail ? std::clamp(1.5f - 2.0f * footprint_km / (kVolumeDetailFade * s), 0.0f, 1.0f) : 0.0f;
+    const auto edge = [](float d) { return kVolumeEdge > 0.0f ? d * std::clamp(d / kVolumeEdge, 0.0f, 1.0f) : d; };
+    if (keep <= 0.0f) return edge(base);
     const math::Vec3 o = cloud_noise_offset(layer.seed + 1u);
-    const float erosion = kVolumeErosion * keep * cloud_detail((x_km - offset.x) / s + o.x, height_km / s + o.y, (z_km - offset.y) / s + o.z);
-    return std::clamp((base - erosion) / (1.0f - erosion), 0.0f, 1.0f);
+    const float n = cloud_detail((x_km - offset.x) / s + o.x, height_km / s + o.y, (z_km - offset.y) / s + o.z);
+    const float billowy = std::clamp(h * 4.0f, 0.0f, 1.0f) * kVolumeWispy + (1.0f - kVolumeWispy);  // 0 at the base: wispy
+    const float erosion = kVolumeErosion * keep * ((1.0f - n) + (n - (1.0f - n)) * billowy);
+    return edge(std::clamp((base - erosion) / (1.0f - erosion), 0.0f, 1.0f));
 }
 
 // The extinction (per km) of a volume where its density is `d`.

@@ -55,6 +55,19 @@ light per bit of cloud, which is the actual question.
 **Not done:** no preset uses volumes yet. That's for deciding from pictures. You can't fly through them or see them
 from above (that's phase C), and reflections see their flat coverage.
 
+## Update, later the same evening: the edges
+
+A sharp-eyed look at the first version found every cloud edge was the same soft band, then solid cloud, like a cut
+out of the sky. The culprit was my own anti-sparkle fade. To stop distant clouds from shimmering, the lumps and the
+fine erosion faded out once a pixel covered a quarter of a noise cell. At the distances clouds are seen from, that is
+always true, so the noise that shapes the edges was simply off. Now it fades only when a pixel covers a whole cell,
+the erosion is finer and turns wispy near the base, and thin cloud gets a see-through fringe. Edges are bumpier, and
+the evening horizon shows stacked lumps instead of smooth bands. Still at 1.5 ms.
+
+It's better, not cured: edges are still too even. Real cumulus mix crisp cauliflower with thin, ragged wisps. The
+next fix (density that thins out properly at the edge, and noise that fades octave by octave) is noted for round two.
+Clouds are hard. Everyone who has tried them has a story.
+
 ## Next engineering target
 **Part 8: a sample and the 8A review.** Hillside under every preset, a space scene, the cost of each feature, and an
 honest look back at the sky group.

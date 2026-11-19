@@ -147,8 +147,8 @@ float3 cloud_layer_shade(CloudLayer layer, float3 eye_km, float planet_km, float
 // fraction of the cloud's top); the forward lobe's eccentricity (the silver lining); the weights of direct sun, light
 // diffused through the cloud, and the sky's light at the base (the top gets all of it); how hard round lumps carve
 // the cloud and how big they are.
-static const float kVolumeErosion = 0.45;
-static const float kVolumeDetailScale = 0.3;
+static const float kVolumeErosion = 0.55;
+static const float kVolumeDetailScale = 0.12;
 static const float kVolumeDome = 0.55;
 static const float kVolumeSilver = 0.75;
 static const float kVolumeDirect = 0.35;
@@ -156,6 +156,9 @@ static const float kVolumeDiffuse = 0.06;
 static const float kVolumeAmbientBase = 0.3;
 static const float kVolumePuff = 0.85;
 static const float kVolumePuffScale = 0.28;
+static const float kVolumeEdge = 0.35;   // round three: a see-through fringe at every edge (0: off)
+static const float kVolumeWispy = 1.0;   // and wispy erosion towards the base, billowy above
+static const float kVolumeDetailFade = 1.0;  // lumps and erosion fade once a pixel covers this much of a cell
 
 static const int kCloudNoisePeriod = 4;        // the volume noises tile every this many first-octave cells
 static const float kCloudColumnMean = 0.81;

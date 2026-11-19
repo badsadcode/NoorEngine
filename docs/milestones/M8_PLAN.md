@@ -130,13 +130,14 @@ fly camera.
 Done. A cloud layer can be a volume (`"cloud_type": "volume"`, `"cloud_thickness"` in metres; ADR-034): the layer's
 coverage map extruded into a slab with flat bases and rounded tops, carved into cauliflower lumps by cellular noise,
 eroded by value noise, and lit by a march towards the sun (bright tops and silver linings, grey bellies). The look
-was picked by eye from rendered variants (lighting "B", lumps "P4"). The flat layers are untouched, as a style of
+was picked by eye from rendered variants (lighting "B", lumps "P4", edges "F3"). The flat layers are untouched, as a style of
 their own. Proven: the reference's shape and physics tests (sides where a flat layer has none; 79% against 28% of the
 sky covered near the horizon; tops brighter per unit of cloud; thick clouds darker from below; the noises tile);
 golden `Atmosphere_Volume`; a built game draws a volume identically (`cli.environment_builds_identically`); every
 older golden unchanged; validation clean. Cost: **1.50 ms** at 1280×720 on an RTX 3080 (the target was 1.5), after
 baking the noises into a 3D texture and marching at half resolution (from 20.4 ms computed live). Not done: no
-preset uses volumes yet (to be decided from renders); the coverage map is still computed per sample.
+preset uses volumes yet (to be decided from renders); edges are better but still too even (round two is in the ideas
+inbox); the coverage map is still computed per sample.
 
 ## Highest risks (settle early)
 1. **Matching the references honestly.** A physically based sky is easy to make plausible and hard to

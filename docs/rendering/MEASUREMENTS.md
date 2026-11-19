@@ -184,6 +184,7 @@ render_scenes/Atmosphere_Volume (the clouds scene with its first layer a volume)
 | ... the layer loop not unrolled (the march compiled in once, not twice) | 5.3 ms |
 | ... with the cauliflower lumps (cellular noise computed live) | 20.4 ms |
 | **Noises baked into a 128³ tile once, march at half resolution (compute)** | **1.81 ms (+1.50 over no clouds)** |
+| ... with the F3 edges (detail kept to larger distances, finer erosion) | 1.82 ms (+1.51) |
 
 The lesson of the second row: a shader that pastes a big loop in twice runs short of registers, and then every
 pixel is slower, even ones that never march. The baked tile costs 4 MB and is built once (a fraction of a
