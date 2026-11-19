@@ -24,6 +24,7 @@
 #include "noor/asset/registry.h"
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
+#include "noor/fx/particle_system.h"
 #include "noor/game/game.h"
 #include "noor/game/hud.h"
 #include "noor/game/scene_renderer.h"
@@ -40,6 +41,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <string>
 #include <vector>
@@ -311,7 +313,7 @@ int run(const Options& o) {
                 // Frame timings for --report (Milestone 7, part 6): wall time per frame, and where the CPU
                 // spent it (the game, collecting the view, recording the frame), plus the GPU's own time.
                 struct Timing {
-                    double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1;
+                    double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1, particles = -1;
                 };
                 std::vector<Timing> timings;
                 Json environment_trace = Json::array();
@@ -390,9 +392,10 @@ int run(const Options& o) {
                         double environment_ms = -1;
                         for (const auto& pass : fs.passes)
                             if (std::string_view(pass.name) == "Environment") environment_ms = pass.ms;
+                        const auto* particles = (*world)->system<noor::fx::ParticleSystem>();
                         timings.push_back({(t_end - frame_start) * 1000.0, (t_game_done - t_game) * 1000.0,
                                            (t_view_done - t_game_done) * 1000.0, (t_collected - t_game_done) * 1000.0, fs.cpu_record_ms, fs.gpu_ms,
-                                           environment_ms});
+                                           environment_ms, particles ? particles->stats().step_ms : -1.0});
                         frame_start = t_end;
                     }
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
@@ -482,7 +485,14 @@ int run(const Options& o) {
                                                {"collect", stat(&Timing::collect)},
                                                {"record", stat(&Timing::record)},
                                                {"gpu", stat(&Timing::gpu)},
-                                               {"environment_gpu", stat(&Timing::environment)}};
+                                               {"environment_gpu", stat(&Timing::environment)},
+                                               {"particles", stat(&Timing::particles)}};
+                    }
+                    // Effect particles (Milestone 8B): how many, and a fingerprint of every one (equal runs, equal fingerprints).
+                    if (const auto* particles = (*world)->system<noor::fx::ParticleSystem>()) {
+                        const auto ps = particles->stats();
+                        report["particles"] = {{"emitters", ps.emitters}, {"alive", ps.particles},
+                                               {"fingerprint", std::format("{:016x}", ps.fingerprint)}};
                     }
                     report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
                     if (o.trace_environment) report["environment_trace"] = std::move(environment_trace);

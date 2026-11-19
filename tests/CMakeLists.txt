@@ -30,6 +30,7 @@ add_executable(noor_unit_tests
     unit/test_clouds.cpp
     unit/test_night.cpp
     unit/test_weather.cpp
+    unit/test_particles.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -46,7 +47,7 @@ foreach(source IN LISTS noor_unit_sources)
         message(FATAL_ERROR "${source}: a TEST_CASE name contains ';' (ctest would run nothing for it): use a comma")
     endif()
 endforeach()
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph doctest::doctest stb::image)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph noor::fx doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -168,6 +169,12 @@ add_test(NAME cli.environment_builds_identically
         -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/environment_build
         -P ${CMAKE_CURRENT_SOURCE_DIR}/environment_build_check.cmake)
 set_tests_properties(cli.environment_builds_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 180)
+# Effect particles (Milestone 8B, part 1): a campfire's particles replay bit for bit in a built game.
+add_test(NAME cli.particles_build_identically
+    COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/particles_build
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/particles_build_check.cmake)
+set_tests_properties(cli.particles_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 180)
 # Weather zones (Milestone 8A, part 7): a built game's camera walks into a fog bank; the blend is checked frame by frame.
 add_executable(noor_trace_check tools/trace_check.cpp)
 target_link_libraries(noor_trace_check PRIVATE nlohmann_json::nlohmann_json)

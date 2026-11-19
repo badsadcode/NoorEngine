@@ -2,6 +2,7 @@
 
 #include "noor/asset/environment_asset.h"
 #include "noor/game/weather.h"
+#include "noor/fx/particle_system.h"
 #include "noor/render/exposure.h"
 #include "noor/game/scatter.h"
 #include "noor/game/cooked_csg.h"
@@ -177,6 +178,15 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         return p && stdfs::exists(*p) ? std::optional(*p) : std::nullopt;
     };
     world->add_system(std::make_unique<audio::AudioSystem>(std::move(audio_options)));
+    // Effect particles (Milestone 8B): emitters may point at .noorfx assets, and the wind may come from an environment asset.
+    fx::ParticleSystem::Options fx_options;
+    fx_options.resolve_asset = [&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
+        const auto* rec = registry.find(id);
+        if (!rec) return std::nullopt;
+        auto p = project.resolve(rec->path);
+        return p ? std::optional(*p) : std::nullopt;
+    };
+    world->add_system(std::make_unique<fx::ParticleSystem>(std::move(fx_options)));
     world->add_system(std::make_unique<runtime::BehavioursSystem>());
     return world;
 }

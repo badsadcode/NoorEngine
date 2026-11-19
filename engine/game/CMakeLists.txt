@@ -18,6 +18,7 @@ noor_add_module(game
         noor::runtime
         noor::render
         noor::terrain
+        noor::fx
     PRIVATE_DEPS
         noor::physics
         noor::audio

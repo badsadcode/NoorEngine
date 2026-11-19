@@ -31,6 +31,11 @@ TEST_CASE("weather: environments blend number by number, colour by colour, switc
     CHECK(half["stars"] == false);                             // switches at the halfway point
     CHECK(asset::blend_environments(clear, foggy, 0.49f)["stars"] == true);
     CHECK(half["ev100"] == 12.0);
+    // Wind directions go the short way round too: 350 to 10 degrees passes through north (0), not south.
+    CHECK(asset::blend_environments(Json{{"wind_direction", 350}}, Json{{"wind_direction", 10}}, 0.5f)["wind_direction"].get<double>() ==
+          doctest::Approx(0.0).epsilon(1e-6));
+    CHECK(asset::blend_environments(Json{{"cloud_wind_direction", 340}}, Json{{"cloud_wind_direction", 20}}, 0.25f)["cloud_wind_direction"]
+              .get<double>() == doctest::Approx(350.0));
     // Seeds never blend (a half seed is a different sky).
     CHECK(asset::blend_environments(Json{{"cloud_seed", 2}}, Json{{"cloud_seed", 9}}, 0.4f)["cloud_seed"] == 2);
     // Fully on, a zone that only says fog keeps the scene's sky and time (it once replaced the whole environment).

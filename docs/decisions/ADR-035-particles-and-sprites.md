@@ -1,6 +1,6 @@
 # ADR-035: Particles and sprites
 
-**Status:** Proposed (Milestone 8B, 2026-11-19)
+**Status:** Accepted (Milestone 8B; part 1, effect particles, implemented 2026-11-19)
 
 ## Context
 NoorEngine has no particles and no sprites. 8A's weather needs rain and snow; The Uncounted, Chapter Two (the
@@ -21,7 +21,7 @@ compare built games with projects frame by frame and pixel by pixel; particles m
    effect), and weather particles with no state at all, each worked out from its index and the time in the vertex
    shader.
 
-## Decision (proposed)
+## Decision
 Option 3.
 - **Effect particles:** an `emitter` component (inline settings, or a `.noorfx` asset with overrides, like
   environments) simulated at a fixed 60 Hz step with a seeded random stream per emitter (the procedural graph's
@@ -42,6 +42,11 @@ Option 3.
   emitters (Lua and C#, one API).
 
 ## Consequences
+- **Part 1, measured:** 10,000 effect particles step in 0.022 ms (Release) and 0.34 ms (Debug): the CPU budget
+  (1 ms) has room to spare, so the GPU question can wait. A pinned fingerprint is the same in Debug and Release;
+  a built game replays a campfire bit for bit (`cli.particles_build_identically`). Deterministic maths: own
+  sine/cosine (MSVC may swap the library's for vector versions with other rounding in optimised code), drag by
+  division (no exp), SplitMix64 random streams seeded per emitter from its seed and its entity's id.
 - Determinism everywhere: an effect replays identically from its seed, and so does the weather, so particle
   goldens and built-game comparisons work like the rest.
 - Two code paths to keep: the effect simulation (CPU) and the weather maths (shader). They share the drawing.

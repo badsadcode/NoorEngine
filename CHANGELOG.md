@@ -4,6 +4,23 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8B, part 1: the particle core
+**Added**
+- **`engine/fx` (NoorFX)**, effect particles (ADR-035, [docs](docs/fx/PARTICLES.md)): the `emitter` component; `.noorfx`
+  effect assets (importer `fx`, overrides like environments); rate and bursts, point/sphere/box/cone shapes, lifetimes,
+  speeds, gravity, drag towards the wind, size/colour/alpha over life, world or local space, caps. Simulated on the CPU
+  at a fixed 60 Hz from a seed: deterministic (own sine/cosine, SplitMix64 streams per emitter).
+- **Ground wind** on the environment: `wind_speed` (m/s), `wind_direction` (degrees).
+- noor_player's report: `particles` (emitters, alive, fingerprint) and `timing_ms.particles`.
+- The 8B plan (eight parts) and ADR-035.
+
+**Fixed:** weather zones blended cloud wind directions the long way round (350 to 10 degrees through 180); any
+`*wind_direction` now blends the short way, like `north`.
+
+**Tests:** `particles:` unit tests (maths, shapes, bursts, caps, spaces, the runtime system, a pinned fingerprint equal
+in Debug and Release, 10,000 particles in 0.022 ms a step); `cli.particles_build_identically` (a campfire with a
+`.noorfx` asset replays bit for bit in a built game); weather blending of wind directions. Particles are not drawn yet.
+
 ### 2026-11-19 — Milestone 8A, part 8: the sample and the 8A review
 **Added**
 - **The 8A sample:** `samples/Hillside/Scenes/Presets/`, the valley under all nine environment presets (applied through

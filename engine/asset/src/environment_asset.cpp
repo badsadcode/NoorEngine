@@ -144,6 +144,9 @@ double period(const std::string& key) {
     if (key == "moon_phase") return 1.0;
     if (key == "day_of_year") return 365.0;
     if (key == "north") return 360.0;
+    // Wind directions (degrees): the ground wind (8B) and the cloud layers' (8A; missed until 8B, when a zone could
+    // swing the clouds' wind the long way round).
+    if (key.ends_with("wind_direction")) return 360.0;
     return 0.0;
 }
 

@@ -223,7 +223,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
+| 1 ✅ | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
 | 2 | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
 | 3 | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
 | 4 | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
@@ -231,6 +231,17 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 6 | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
 | 7 | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
 | 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
+
+## Part 1 result (2026-11-19)
+Done. A new module, `engine/fx` (NoorFX): the `emitter` component and `.noorfx` assets (importer `fx`, overrides like
+environments), rate and bursts (intervals, cycles, looping durations), point/sphere/box/cone shapes (volume or
+surface), lifetimes and speeds as ranges, gravity, drag towards the wind (the environment's new `wind_speed` and
+`wind_direction`), size/colour/alpha over life, world or local space, a cap per emitter; a runtime system stepping
+them at the fixed 60 Hz, following component changes. Proven: the maths (`particles:` unit tests: ballistic flight,
+terminal velocity, wind, shapes, bursts, caps); determinism (a pinned fingerprint, the same in Debug and Release;
+`cli.particles_build_identically`: a campfire replays bit for bit in a built game); cost (10,000 particles: 0.022 ms
+a step, budget 1 ms). Fixed on the way: weather zones blended the clouds' wind direction the long way round (since
+8A part 7). Not done: particles aren't drawn yet (part 2); no editor panel (part 4: the component is edited as fields).
 
 ## Open questions
 
