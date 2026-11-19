@@ -224,7 +224,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **Particle core** (ADR-035): the `emitter` component and `.noorfx` asset, spawn rates and bursts, shapes (point, sphere, box, cone), lifetime, velocity, gravity, drag, wind; curves over life (size, colour, alpha); the deterministic fixed-step CPU simulation | The same seed gives the same particles to the bit (Debug = Release, project = built game); rates, lifetimes and forces match their maths (unit tests); 10,000 particles simulate in under 1 ms (measured) |
-| 2 | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
+| 2 ✅ | **Drawing particles:** instanced billboards (facing, velocity-stretched), flipbooks, blend modes, lit and fogged, sorted | Goldens of a campfire (fire, smoke, sparks) at noon and at night; correct order through the see-through pass; GPU cost measured |
 | 3 | **Weather particles:** rain, snow and dust from the environment (`precipitation`), a camera-following wrapped volume worked out in the vertex shader, blown by the clouds' wind, blended by weather zones | Walking into a weather zone starts the rain smoothly (the 8A walk, extended); 200,000 drops under 0.5 ms (measured); a rain golden and a snow golden on Hillside |
 | 4 | **The Effects panel:** module stack, curves, presets (fire, smoke, sparks, dust, rain splash, magic), live preview, seed, solo/mute | Editing a preset changes the preview at once and saves to `.noorfx` identically (smoke test); presets never change when edited copies do |
 | 5 | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
@@ -242,6 +242,17 @@ terminal velocity, wind, shapes, bursts, caps); determinism (a pinned fingerprin
 `cli.particles_build_identically`: a campfire replays bit for bit in a built game); cost (10,000 particles: 0.022 ms
 a step, budget 1 ms). Fixed on the way: weather zones blended the clouds' wind direction the long way round (since
 8A part 7). Not done: particles aren't drawn yet (part 2); no editor panel (part 4: the component is edited as fields).
+
+## Part 2 result (2026-11-19)
+Done. Particles are drawn in games: `particle.hlsl` (quads from the vertex index, facing the camera or stretched along
+their velocity, flipbooks, a soft dot without a texture), one instanced draw per emitter, merged with see-through
+meshes by distance in the see-through pass; alpha, additive and premultiplied blending with one pipeline; lit by the
+sun (its shadows and the clouds') and the sky, fogged, with emission. The shared frame shader code moved to
+`frame.hlsli` (every golden unchanged). Proven: goldens of a campfire at noon and at night and of smoke between two
+glass panes (the order); a built game still replays the campfire bit for bit; cost 0.005 ms for the campfire and
+0.58 ms for 10,000 big smoke particles (`render.particles_cost`). Found: automatic exposure doesn't see local light,
+so glowing particles suited to noon blow out at night (ideas inbox). Not done: the editor doesn't draw particles yet
+(part 4's live preview); textured flipbooks are supported but not yet in a golden (no effect textures in the repo).
 
 ## Open questions
 

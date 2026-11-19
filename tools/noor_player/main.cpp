@@ -379,7 +379,12 @@ int run(const Options& o) {
                     overlay.clear();
                     const auto pixels = (*renderer)->swapchain_size();
                     hud.build((*world)->ui_commands(), static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
-                    auto frame = (*renderer)->render_frame({noor::game::SceneRenderer::camera(view), view.lighting, draws, overlay});
+                    // Effect particles (Milestone 8B), seen from this frame's camera.
+                    const auto frame_camera = noor::game::SceneRenderer::camera(view);
+                    std::span<const noor::render::ParticleDraw> particle_draws;
+                    if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
+                        particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
+                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;
@@ -402,7 +407,7 @@ int run(const Options& o) {
                     if (last_frame) {
                         last_draws = draws;
                         last_overlay = overlay;
-                        last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}};
+                        last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}, particle_draws};
                     }
                 }
                 // The last frame wasn't presented (the swapchain was being rebuilt, the window was busy):

@@ -310,11 +310,46 @@ struct OverlayVertex {
     math::Vec4 color;  // linear RGB, straight alpha
 };
 
+// ---- Particles (Milestone 8B, part 2, ADR-035) ----------------------------------------------
+
+// One particle as the GPU draws it: a quad facing the camera (or stretched along its velocity), in the
+// see-through pass. 48 bytes, read per instance.
+struct ParticleVertex {
+    math::Vec3 position;            // world, metres
+    float size = 0.1f;              // the quad's width, metres
+    math::Vec4 color{1, 1, 1, 1};   // linear rgb, straight alpha
+    math::Vec3 velocity;            // m/s (velocity-facing particles stretch along it)
+    float frame = 0.0f;             // flipbook frame (0 .. frames - 1)
+};
+static_assert(sizeof(ParticleVertex) == 48);
+
+enum class ParticleBlend : std::uint8_t {
+    Alpha,          // smoke, dust: covers what's behind by its alpha (sort the particles back to front)
+    Additive,       // fire, sparks, magic: adds light, never darkens (order doesn't matter)
+    Premultiplied,  // a texture whose colour is already multiplied by its alpha (both at once: glowing smoke)
+};
+enum class ParticleFacing : std::uint8_t { Camera, Velocity };
+
+// One emitter's particles, drawn with one instanced draw call.
+struct ParticleDraw {
+    std::span<const ParticleVertex> particles;  // Alpha: back to front for the camera
+    TextureHandle texture;                       // none: a soft round dot
+    std::uint32_t frames_x = 1, frames_y = 1;    // a flipbook grid in the texture (left to right, top to bottom)
+    ParticleBlend blend = ParticleBlend::Alpha;
+    ParticleFacing facing = ParticleFacing::Camera;
+    bool lit = true;          // lit by the sun (with its shadows and the clouds') and the sky; false: only `emission`
+    float emission = 0.0f;    // light of its own: nits per unit of colour (before exposure); fire about 2,000-20,000
+    float stretch = 0.0f;     // Velocity facing: the quad stretches over this many seconds of motion
+    math::Vec3 center;        // where it is, for ordering among see-through things and culling
+    float radius = 0.0f;      // how far its particles reach from `center`
+};
+
 struct FrameDesc {
     Camera camera;
     Lighting lighting;
     std::span<const DrawItem> draws;
     std::span<const OverlayVertex> overlay;
+    std::span<const ParticleDraw> particles;  // Milestone 8B: drawn in the see-through pass, sorted with see-through meshes
 };
 
 struct FrameStats {
@@ -337,6 +372,8 @@ struct FrameStats {
     std::uint32_t shadow_draw_calls = 0;
     std::uint32_t shadow_draws_culled = 0;
     std::uint32_t transparent_draws = 0;  // see-through (blend) draws, sorted back to front
+    std::uint32_t particle_draws = 0;     // emitters drawn (one draw call each), and their particles
+    std::uint64_t particles = 0;
     std::uint32_t msaa_samples = 1;       // samples per pixel of the scene this frame
 };
 

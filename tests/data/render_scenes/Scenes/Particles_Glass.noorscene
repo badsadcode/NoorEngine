@@ -1,0 +1,265 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-000b-4000-8000-000000000000",
+  "name": "Particles_Glass",
+  "entities": [
+    {
+      "id": "a7e50000-000b-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "material": "7e5d0000-3a70-4000-8000-000000000004"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000b-4000-8000-000000000002",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2.4,
+          6.5
+        ],
+        "rotation": [
+          -0.13917310096006544,
+          0.0,
+          0.0,
+          0.9902680687415704
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000b-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.3261904081870283,
+          -0.28257102082169233,
+          -0.10284744064531129,
+          0.8962007809365465
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000b-4000-8000-000000000006",
+      "name": "Red glass",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          1.3,
+          2.0
+        ],
+        "rotation": [
+          0.0,
+          -0.10452846326765347,
+          0.0,
+          0.9945218953682733
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            2.6,
+            2.6,
+            0.04
+          ],
+          "base_color": [
+            0.9,
+            0.08,
+            0.05,
+            0.35
+          ],
+          "alpha": "blend",
+          "roughness": 0.08,
+          "double_sided": true
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000b-4000-8000-000000000008",
+      "name": "Blue glass",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.6,
+          1.3,
+          -1.6
+        ],
+        "rotation": [
+          0.0,
+          0.10452846326765347,
+          0.0,
+          0.9945218953682733
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            2.6,
+            2.6,
+            0.04
+          ],
+          "base_color": [
+            0.1,
+            0.25,
+            0.95,
+            0.35
+          ],
+          "alpha": "blend",
+          "roughness": 0.08,
+          "double_sided": true
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000b-4000-8000-000000000101",
+      "name": "Smoke column",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.2,
+          0.1,
+          0.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 40,
+          "shape": {
+            "type": "sphere",
+            "radius": 0.2
+          },
+          "lifetime": [
+            2.5,
+            3.5
+          ],
+          "speed": [
+            0.2,
+            0.5
+          ],
+          "gravity": -0.15,
+          "drag": 0.8,
+          "size": [
+            [
+              0,
+              0.5
+            ],
+            [
+              1,
+              1.4
+            ]
+          ],
+          "color": "#F0F0F0",
+          "alpha": [
+            [
+              0,
+              0.0
+            ],
+            [
+              0.1,
+              0.85
+            ],
+            [
+              1,
+              0.0
+            ]
+          ],
+          "seed": 5,
+          "max_particles": 400
+        }
+      }
+    }
+  ]
+}

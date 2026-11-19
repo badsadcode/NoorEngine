@@ -156,6 +156,23 @@ foreach(name IN ITEMS Daylight Sunset Textured Materials Lights Env_studio_small
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60 FIXTURES_SETUP golden_${name})
 endforeach()
+# Particles (Milestone 8B, part 2): a campfire at noon and at night (fire and sparks additive, smoke lit and blended),
+# and smoke between two glass panes (one in front, one behind: the see-through pass's order). Two seconds in, so the
+# effects have built up.
+foreach(name IN ITEMS Particles_Campfire Particles_Campfire_Night Particles_Glass)
+    add_test(NAME render.golden_${name}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${name}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png -DFRAMES=120
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
+add_test(NAME render.particles_cost
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/particles_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/particles_cost_check.cmake)
+set_tests_properties(render.particles_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
 # A moving sun (Milestone 8A, part 2): the time of day dragged from dawn to dusk, the live sky rebuilt
 # on the GPU every frame, 60 FPS held (tests/day_cycle_check.cmake). And the CPU reference path (part 1)
 # must still match the same goldens the GPU path does.

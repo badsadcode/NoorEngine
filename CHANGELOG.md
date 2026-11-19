@@ -4,6 +4,20 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-19 — Milestone 8B, part 2: drawing particles
+**Added**
+- **Particles are drawn** (games): `render::ParticleDraw` in `FrameDesc`, `shaders/particle.hlsl` (quads from the vertex
+  index; camera or velocity facing; flipbooks; a soft dot without a texture), one instanced draw per emitter merged with
+  see-through meshes by distance; alpha, additive and premultiplied blending; lit (sun, its shadows, cloud shadows,
+  sky), fogged, emission. The emitter's `render` settings ([docs](docs/fx/PARTICLES.md)); `SceneRenderer::particles`.
+- Golden test option `FRAMES` (how long a scene runs before its picture).
+
+**Changed:** the frame's shared shader code (uniforms, shadows, environment light, atmosphere, fog) moved from
+`mesh.hlsl` to `frame.hlsli`, unchanged (every golden identical).
+
+**Tests:** goldens `Particles_Campfire`, `Particles_Campfire_Night`, `Particles_Glass`; `render.particles_cost`
+(campfire +0.005 ms, 10,000 smoke particles +0.58 ms).
+
 ### 2026-11-19 — Milestone 8B, part 1: the particle core
 **Added**
 - **`engine/fx` (NoorFX)**, effect particles (ADR-035, [docs](docs/fx/PARTICLES.md)): the `emitter` component; `.noorfx`

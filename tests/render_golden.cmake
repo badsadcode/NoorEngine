@@ -2,13 +2,17 @@
 # noor_player and compares the picture with tests/golden/<NAME>.png using noor_image_compare.
 #   -DPLAYER=<noor_player> -DCOMPARE=<noor_image_compare> -DPROJECT=<folder> -DSCENE=<Scenes/X.noorscene>
 #   -DREFERENCE=<tests/golden/X.png> -DWORK=<folder for the screenshot and the diff> [-DEXTRA=<a player option>]
+#   [-DFRAMES=<frames to run before the picture: 5; more for things that build up, like particles>]
 # With the environment variable NOOR_UPDATE_GOLDEN=1 the screenshot becomes the new reference
 # (look at it first!).
 file(MAKE_DIRECTORY "${WORK}")
+if(NOT DEFINED FRAMES)
+    set(FRAMES 5)
+endif()
 set(shot "${WORK}/screenshot.bmp")
 file(REMOVE "${shot}")
 # With Vulkan validation: a picture can look right while the GPU is being misused.
-execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames 5 --no-audio --no-input --validation ${EXTRA}
+execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames ${FRAMES} --no-audio --no-input --validation ${EXTRA}
                         --screenshot "${shot}" --report "${WORK}/report.json" --log "${WORK}/player.log"
                 RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
 if(NOT code EQUAL 0 OR NOT EXISTS "${shot}")

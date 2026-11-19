@@ -1,0 +1,564 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-000a-4000-8000-000000000000",
+  "name": "Particles_Campfire_Night",
+  "entities": [
+    {
+      "id": "a7e50000-000a-4000-8000-000000000001",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#9A9A9A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000002",
+      "name": "Grey box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.2,
+          0.75,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.21643961393810288,
+          0.0,
+          0.9762960071199334
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1.5,
+            1.5,
+            1.5
+          ],
+          "color": "#808080"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000003",
+      "name": "White ball",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.8,
+          0.3
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.8,
+          "color": "#F2F2F2"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000004",
+      "name": "Red box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.0,
+          0.5,
+          -0.4
+        ],
+        "rotation": [
+          0.0,
+          -0.25881904510252074,
+          0.0,
+          0.9659258262890683
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "color": "#C0302A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000005",
+      "name": "Green box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.2,
+          0.35,
+          1.3
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.7,
+            0.7,
+            0.7
+          ],
+          "color": "#3AA04A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000006",
+      "name": "Blue capsule",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.4,
+          0.9,
+          -2.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "capsule",
+          "radius": 0.35,
+          "height": 1.8,
+          "color": "#3A60C8"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000007",
+      "name": "Black box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.2,
+          0.3,
+          1.8
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "color": "#141414"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000008",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2.4,
+          6.5
+        ],
+        "rotation": [
+          -0.0697564737441253,
+          0.0,
+          0.0,
+          0.9975640502598242
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000009",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          0.469846310393,
+          0.296198132726,
+          0.171010071663,
+          -0.813797681349
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000010",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 1,
+          "ground_albedo": 0.3,
+          "wind_speed": 3,
+          "wind_direction": 60,
+          "time_of_day": 22.5,
+          "day_of_year": 230,
+          "moon": true,
+          "moon_phase": 0.5,
+          "stars": true,
+          "ev100": "auto"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000101",
+      "name": "Fire",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.1,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 90,
+          "shape": {
+            "type": "cone",
+            "angle": 15,
+            "radius": 0.25
+          },
+          "lifetime": [
+            0.4,
+            0.8
+          ],
+          "speed": [
+            0.8,
+            1.6
+          ],
+          "gravity": -0.3,
+          "drag": 1.0,
+          "size": [
+            [
+              0,
+              0.5
+            ],
+            [
+              1,
+              0.12
+            ]
+          ],
+          "color": [
+            [
+              0,
+              "#FFE0A0"
+            ],
+            [
+              0.5,
+              "#FF7020"
+            ],
+            [
+              1,
+              "#801000"
+            ]
+          ],
+          "alpha": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ]
+          ],
+          "seed": 1,
+          "render": {
+            "blend": "additive",
+            "emission": 2.5
+          }
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000102",
+      "name": "Smoke",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.6,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "asset": "c6c19a0a-895f-4874-925a-6940040f701b",
+          "rate": 10
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000103",
+      "name": "Sparks",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.2,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 0,
+          "bursts": [
+            {
+              "time": 0.2,
+              "count": 12,
+              "interval": 0.5,
+              "cycles": 0
+            }
+          ],
+          "shape": {
+            "type": "point"
+          },
+          "lifetime": [
+            0.6,
+            1.2
+          ],
+          "speed": [
+            2,
+            4
+          ],
+          "gravity": 1,
+          "drag": 0.3,
+          "size": 0.03,
+          "color": "#FFC060",
+          "seed": 2,
+          "render": {
+            "blend": "additive",
+            "facing": "velocity",
+            "stretch": 0.04,
+            "emission": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "a7e50000-000a-4000-8000-000000000201",
+      "name": "Firelight",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.6,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FF9A40",
+          "intensity": 12,
+          "range": 8
+        }
+      }
+    }
+  ]
+}

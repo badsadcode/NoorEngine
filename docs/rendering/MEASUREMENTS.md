@@ -204,6 +204,16 @@ one core) on every frame the haze changed. Now atmospheres on a coarse grid are 
 loads and blended (`Atmosphere::Bracket`); `cli.weather_walk` fails if gathering the scene takes over 8 ms at p95, or
 any frame over 120 ms (once, with six tests in parallel, the OS held one frame for 46 ms; a rebuild is 240).
 
+## Particles (Milestone 8B, part 2)
+render_scenes, 1280x720, RTX 3080, the fastest of 300 frames, against Atmosphere_Noon (the same objects, 0.311 ms):
+
+| Scene | Particles | GPU | Simulation (CPU) |
+|---|---|---|---|
+| Particles_Campfire (fire, smoke, sparks) | about 100 | +0.005 ms | 0.011 ms |
+| Particles_Heavy (big smoke particles, overlapping, sorted) | 10,000 | +0.58 ms | 0.03-0.04 ms |
+
+`render.particles_cost` holds the heavy scene to 1.5 ms of GPU and 1 ms of simulation, the campfire to 0.1 ms.
+
 ## Not measured yet
 A scene with hundreds of textured materials, integrated GPUs, and 4K screens (frame images scale
 with pixels: about 4× the numbers above at 3840×2160).

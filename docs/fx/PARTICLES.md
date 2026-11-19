@@ -1,8 +1,9 @@
 # Particles (NoorFX)
 
-Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: part 1 of 8.** Effect particles
-are simulated and replay identically everywhere, but **they aren't drawn yet** (part 2). Rain and snow (part 3),
-the Effects panel (part 4) and scripting (part 6) come later.
+Milestone 8B, [ADR-035](../decisions/ADR-035-particles-and-sprites.md). **Status: parts 1 and 2 of 8.** Effect
+particles are simulated, replay identically everywhere, and are drawn in games. Rain and snow (part 3), the Effects
+panel with a live preview in the editor (part 4; until then the editor doesn't draw particles) and scripting (part 6)
+come later.
 
 ## Two kinds of particles
 
@@ -40,6 +41,30 @@ it (or from its surface). A **box** emits along +Y from inside it (or its faces)
 **Forces:** gravity, and drag towards the air. With drag, particles settle at a terminal velocity (gravity / drag),
 and the wind carries them along. Without drag, the wind does nothing, which suits sparks and debris.
 
+## How they're drawn: `render`
+
+```jsonc
+"render": {
+  "blend": "alpha",          // alpha (smoke, dust) | additive (fire, sparks, magic: adds light) | premultiplied
+  "facing": "camera",        // camera | velocity (stretched along their motion: sparks, rain)
+  "stretch": 0.04,           // velocity facing: the streak covers this many seconds of motion
+  "lit": true,               // lit by the sun (its shadows, the clouds') and the sky; additive defaults to false
+  "emission": 0,             // light of its own, in nits per unit of colour (a campfire's flames: thousands)
+  "texture": "<id>",         // optional; without one, a soft round dot
+  "frames": [4, 4],          // a flipbook grid in the texture
+  "frame": "life"            // life (plays over each particle's life) | random (one frame each)
+}
+```
+
+Each emitter is one instanced draw in the see-through pass, sorted by distance together with see-through meshes, so
+smoke behind a window is tinted by it and smoke in front of it isn't. Alpha particles are sorted back to front within
+their emitter. Particles are fogged and darkened by aerial perspective like everything else.
+
+**Exposure and glowing particles:** the automatic exposure (8A) meters the sun, the sky and the moon, not lamps or
+glowing particles. At night it exposes for moonlight, so a fire bright enough for noon blows out to white. Give a fire
+a point light for its glow, and a lower `emission` for night scenes (the test scene uses 2.5 nits at night and 8,000
+at noon). A meter that sees local light is noted in the ideas inbox.
+
 ## Wind
 
 The scene's environment can set a ground wind: `"wind_speed"` in m/s and `"wind_direction"` in degrees, where it
@@ -59,8 +84,9 @@ An emitter points at it with `{"asset": "<id>"}`. Any field written beside it ov
 
 ## Cost
 
-Simulation: 10,000 particles step in 0.02 ms (Release) and 0.34 ms (Debug). The campfire test scene (85 particles)
-takes about 0.013 ms a frame. The player's `--report` shows `particles` (emitters, alive, fingerprint) and
+Simulation: 10,000 particles step in 0.02 ms (Release) and 0.34 ms (Debug). Drawing (RTX 3080, 1280x720, the fastest
+of 300 frames): the campfire test scene (about 100 particles) adds 0.005 ms; 10,000 big overlapping smoke particles
+add 0.58 ms. The player's `--report` shows `particles` (emitters, alive, fingerprint) and
 `timing_ms.particles`.
 
 ## Tests
@@ -69,3 +95,6 @@ takes about 0.013 ms a frame. The player's `--report` shows `particles` (emitter
   both give.
 - `cli.particles_build_identically`: a campfire (fire, smoke from a `.noorfx`, sparks, a breeze) replays bit for
   bit in a built game.
+- Goldens `Particles_Campfire` (noon), `Particles_Campfire_Night` (firelight under the moon), `Particles_Glass` (smoke
+  between a pane in front and one behind: the order).
+- `render.particles_cost`: the campfire and 10,000 smoke particles within their GPU and CPU budgets.

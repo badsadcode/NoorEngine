@@ -372,7 +372,7 @@
       },
       "components": {
         "emitter": {
-          "rate": 60,
+          "rate": 90,
           "shape": {
             "type": "cone",
             "angle": 15,
@@ -391,11 +391,11 @@
           "size": [
             [
               0,
-              0.25
+              0.5
             ],
             [
               1,
-              0.05
+              0.12
             ]
           ],
           "color": [
@@ -422,7 +422,11 @@
               0
             ]
           ],
-          "seed": 1
+          "seed": 1,
+          "render": {
+            "blend": "additive",
+            "emission": 8000
+          }
         }
       }
     },
@@ -507,7 +511,13 @@
           "drag": 0.3,
           "size": 0.03,
           "color": "#FFC060",
-          "seed": 2
+          "seed": 2,
+          "render": {
+            "blend": "additive",
+            "facing": "velocity",
+            "stretch": 0.04,
+            "emission": 30000
+          }
         }
       }
     }

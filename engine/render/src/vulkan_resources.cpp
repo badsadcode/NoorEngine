@@ -4,6 +4,8 @@
 
 #include "noor/shaders/mesh_ps.h"
 #include "noor/shaders/mesh_vs.h"
+#include "noor/shaders/particle_ps.h"
+#include "noor/shaders/particle_vs.h"
 
 #include <cstring>
 
@@ -211,7 +213,7 @@ void Renderer::Impl::destroy_msaa_targets() {
 
 void Renderer::Impl::destroy_scene_pipelines() {
     if (device == VK_NULL_HANDLE) return;
-    for (VkPipeline* p : {&mesh_pipeline, &double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &sky_pipeline}) {
+    for (VkPipeline* p : {&mesh_pipeline, &double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &sky_pipeline, &particle_pipeline}) {
         if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
         *p = VK_NULL_HANDLE;
     }
@@ -253,6 +255,10 @@ Status Renderer::Impl::ensure_mesh_pipeline(VkFormat color_format) {
             return vk_failure(r, "vkCreateGraphicsPipelines (scene, see-through double-sided)");
         }
         set_name(VK_OBJECT_TYPE_PIPELINE, blend_double_sided_pipeline, "Scene pipeline (see-through, double-sided)");
+        if (VkResult r = create_particle_pipeline(particle_pipeline); r != VK_SUCCESS) {
+            return vk_failure(r, "vkCreateGraphicsPipelines (particles)");
+        }
+        set_name(VK_OBJECT_TYPE_PIPELINE, particle_pipeline, "Particle pipeline (see-through)");
     }
     if (gizmo_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
@@ -381,6 +387,93 @@ VkResult Renderer::Impl::create_mesh_pipeline(VkFormat color_format, bool displa
     return result;
 }
 
+// The particle pipeline (Milestone 8B): particle.hlsl, one ParticleVertex per instance and six vertices (two triangles)
+// made from the vertex index. Into the multisampled HDR scene like see-through meshes: depth-tested, not written;
+// premultiplied blending (alpha particles write their alpha, additive ones 0); rgb only, so the image's alpha keeps
+// marking the background for the tonemapper.
+VkResult Renderer::Impl::create_particle_pipeline(VkPipeline& out) {
+    const auto make_module = [&](const std::uint8_t* code, std::size_t size, VkShaderModule& module) {
+        VkShaderModuleCreateInfo info{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+        info.codeSize = size;
+        info.pCode = reinterpret_cast<const std::uint32_t*>(code);
+        return vkCreateShaderModule(device, &info, nullptr, &module);
+    };
+    VkShaderModule vs = VK_NULL_HANDLE, ps = VK_NULL_HANDLE;
+    if (VkResult r = make_module(k_particle_vs, sizeof(k_particle_vs), vs); r != VK_SUCCESS) return r;
+    if (VkResult r = make_module(k_particle_ps, sizeof(k_particle_ps), ps); r != VK_SUCCESS) {
+        vkDestroyShaderModule(device, vs, nullptr);
+        return r;
+    }
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vs, "VSMain", nullptr};
+    stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, ps, "PSMain", nullptr};
+    const VkVertexInputBindingDescription binding{0, sizeof(ParticleVertex), VK_VERTEX_INPUT_RATE_INSTANCE};
+    const VkVertexInputAttributeDescription attributes[3] = {
+        {0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ParticleVertex, position)},   // position, size
+        {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ParticleVertex, color)},
+        {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ParticleVertex, velocity)},   // velocity, frame
+    };
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    vertex_input.vertexBindingDescriptionCount = 1;
+    vertex_input.pVertexBindingDescriptions = &binding;
+    vertex_input.vertexAttributeDescriptionCount = 3;
+    vertex_input.pVertexAttributeDescriptions = attributes;
+    VkPipelineInputAssemblyStateCreateInfo assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineViewportStateCreateInfo viewport{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+    VkPipelineRasterizationStateCreateInfo raster{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth = 1.0f;
+    VkPipelineMultisampleStateCreateInfo multisample{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = static_cast<VkSampleCountFlagBits>(std::max(1u, scene_samples));
+    VkPipelineDepthStencilStateCreateInfo depth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    depth.depthTestEnable = VK_TRUE;
+    depth.depthWriteEnable = VK_FALSE;
+    depth.depthCompareOp = VK_COMPARE_OP_GREATER;  // reverse-Z
+    VkPipelineColorBlendAttachmentState blend_attachment{};
+    blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+    blend_attachment.blendEnable = VK_TRUE;
+    blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    VkPipelineColorBlendStateCreateInfo blend{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    blend.attachmentCount = 1;
+    blend.pAttachments = &blend_attachment;
+    const VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dynamic.dynamicStateCount = 2;
+    dynamic.pDynamicStates = dynamic_states;
+    const VkFormat color_format = kHdrFormat;
+    VkPipelineRenderingCreateInfo rendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    rendering.colorAttachmentCount = 1;
+    rendering.pColorAttachmentFormats = &color_format;
+    rendering.depthAttachmentFormat = kDepthFormat;
+    VkGraphicsPipelineCreateInfo pipeline_info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    pipeline_info.pNext = &rendering;
+    pipeline_info.stageCount = 2;
+    pipeline_info.pStages = stages;
+    pipeline_info.pVertexInputState = &vertex_input;
+    pipeline_info.pInputAssemblyState = &assembly;
+    pipeline_info.pViewportState = &viewport;
+    pipeline_info.pRasterizationState = &raster;
+    pipeline_info.pMultisampleState = &multisample;
+    pipeline_info.pDepthStencilState = &depth;
+    pipeline_info.pColorBlendState = &blend;
+    pipeline_info.pDynamicState = &dynamic;
+    pipeline_info.layout = pipeline_layout;  // the mesh layout: same sets, same push constant shape
+    const VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &out);
+    vkDestroyShaderModule(device, vs, nullptr);
+    vkDestroyShaderModule(device, ps, nullptr);
+    return result;
+}
+
 void Renderer::Impl::destroy_mesh_pipeline() {
     if (mesh_pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, mesh_pipeline, nullptr);
@@ -390,7 +483,7 @@ void Renderer::Impl::destroy_mesh_pipeline() {
         vkDestroyPipeline(device, gizmo_pipeline, nullptr);
         gizmo_pipeline = VK_NULL_HANDLE;
     }
-    for (VkPipeline* p : {&double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline}) {
+    for (VkPipeline* p : {&double_sided_pipeline, &blend_pipeline, &blend_double_sided_pipeline, &particle_pipeline}) {
         if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
         *p = VK_NULL_HANDLE;
     }
@@ -474,16 +567,34 @@ std::uint32_t Renderer::Impl::material_slot(MaterialHandle material) const noexc
 void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, DrawPass pass) {
     (void)frame;  // planned in plan_frame
     const auto& batches = pass == DrawPass::Opaque ? plan.opaque : pass == DrawPass::Transparent ? plan.transparent : plan.gizmos;
-    if (batches.empty()) return;
+    if (pass == DrawPass::Transparent ? plan.see_through.empty() : batches.empty()) return;  // particles alone still draw
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
     const VkRect2D scissor{{0, 0}, extent};
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 2, sets, 0, nullptr);
-    if (pass == DrawPass::Transparent) begin_label(cmd, "See-through (sorted)", {0.6f, 0.85f, 1.0f, 1.0f});
-    record_batches(cmd, batches, false);
-    if (pass == DrawPass::Transparent) end_label(cmd);
+    if (pass != DrawPass::Transparent) {
+        record_batches(cmd, batches, false);
+        return;
+    }
+    // See-through meshes and particles together, back to front (plan_frame merged them by distance).
+    begin_label(cmd, "See-through (sorted)", {0.6f, 0.85f, 1.0f, 1.0f});
+    const VkDeviceSize zero = 0;
+    for (const SeeThrough& item : plan.see_through) {
+        if (!item.particles) {
+            record_batches(cmd, std::span<const Batch>(&plan.transparent[item.index], 1), false);
+            continue;
+        }
+        const ParticleBatch& p = plan.particles[item.index];
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, particle_pipeline);
+        vkCmdBindVertexBuffers(cmd, 0, 1, &particle_buffers[frame_index].buffer, &zero);
+        vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(p.push), &p.push);
+        vkCmdDraw(cmd, 6, p.count, 0, p.first);
+        ++stats.draw_calls;
+        stats.triangles += 2ull * p.count;
+    }
+    end_label(cmd);
 }
 
 } // namespace noor::render

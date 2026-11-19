@@ -103,8 +103,13 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     p.transparent.clear();
     p.gizmos.clear();
     for (auto& s : p.shadows) s.clear();
+    p.particle_vertices.clear();
+    p.particles.clear();
+    p.see_through.clear();
     stats.instances = 0;
     stats.culled = 0;
+    stats.particle_draws = 0;
+    stats.particles = 0;
 
     const float aspect = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
     const Frustum frustum(frame.camera, aspect);
@@ -193,13 +198,69 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     }
 
     group(opaque, p.instances, p.opaque);
-    std::ranges::stable_sort(transparent, [](const Transparent& a, const Transparent& b) { return a.distance > b.distance; });
-    for (const auto& t : transparent) {
-        std::vector<Candidate> one{t.candidate};
-        group(one, p.instances, p.transparent);
+    // The see-through pass: see-through meshes and particle emitters (Milestone 8B) in one order, back to front by
+    // distance, so smoke behind a window is drawn before the window and smoke in front of it after.
+    struct SeeThroughItem {
+        float distance;
+        bool particles;
+        std::size_t index;  // into `transparent` or frame.particles
+    };
+    std::vector<SeeThroughItem> order;
+    order.reserve(transparent.size() + frame.particles.size());
+    for (std::size_t i = 0; i < transparent.size(); ++i) order.push_back({transparent[i].distance, false, i});
+    for (std::size_t i = 0; i < frame.particles.size(); ++i) {
+        const ParticleDraw& d = frame.particles[i];
+        if (d.particles.empty() || !frustum.visible(d.center, std::max(0.0f, d.radius))) continue;
+        order.push_back({math::length(d.center - eye), true, i});
+    }
+    std::ranges::stable_sort(order, [](const SeeThroughItem& a, const SeeThroughItem& b) { return a.distance > b.distance; });
+    const float exposure = frame.lighting.exposure();
+    for (const auto& item : order) {
+        if (!item.particles) {
+            std::vector<Candidate> one{transparent[item.index].candidate};
+            group(one, p.instances, p.transparent);
+            p.see_through.push_back({false, static_cast<std::uint32_t>(p.transparent.size() - 1)});
+            continue;
+        }
+        const ParticleDraw& d = frame.particles[item.index];
+        ParticleBatch b;
+        b.first = static_cast<std::uint32_t>(p.particle_vertices.size());
+        b.count = static_cast<std::uint32_t>(d.particles.size());
+        p.particle_vertices.insert(p.particle_vertices.end(), d.particles.begin(), d.particles.end());
+        // particle.hlsl's push constants: texture, flipbook grid, flags; emission (exposed), stretch.
+        b.push.ids[0] = d.texture.valid() ? d.texture.id : 0u;
+        b.push.ids[1] = std::max(1u, d.frames_x);
+        b.push.ids[2] = std::max(1u, d.frames_y);
+        b.push.ids[3] = (d.facing == ParticleFacing::Velocity ? 1u : 0u) | (d.lit ? 2u : 0u) | (d.blend == ParticleBlend::Additive ? 4u : 0u) |
+                        (d.blend == ParticleBlend::Premultiplied ? 8u : 0u);
+        b.push.splat_tiling = {std::max(0.0f, d.emission) * exposure, std::max(0.0f, d.stretch), 0.0f, 0.0f};
+        p.particles.push_back(b);
+        p.see_through.push_back({true, static_cast<std::uint32_t>(p.particles.size() - 1)});
+        ++stats.particle_draws;
+        stats.particles += b.count;
     }
     stats.transparent_draws = static_cast<std::uint32_t>(p.transparent.size());
     for (std::uint32_t c = 0; c < kShadowCascades; ++c) group(shadow[c], p.instances, p.shadows[c]);
+
+    // This frame's particles into its slot's particle buffer (grown as needed, like the instances below).
+    if (!p.particle_vertices.empty()) {
+        GpuBuffer& pbuf = particle_buffers[frame_index];
+        std::size_t& pcap = particle_capacity[frame_index];
+        if (p.particle_vertices.size() > pcap) {
+            if (pbuf.buffer != VK_NULL_HANDLE) destroy_buffer(pbuf);
+            pcap = std::max<std::size_t>(p.particle_vertices.size() + p.particle_vertices.size() / 2, 4096);
+            auto created = create_buffer(pcap * sizeof(ParticleVertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, true, false);
+            if (!created) {
+                pcap = 0;
+                p = {};
+                return std::unexpected(created.error());
+            }
+            pbuf = *created;
+            set_name(VK_OBJECT_TYPE_BUFFER, pbuf.buffer, std::format("Particles (frame slot {}, {} particles)", frame_index, pcap));
+        }
+        std::memcpy(pbuf.mapped, p.particle_vertices.data(), p.particle_vertices.size() * sizeof(ParticleVertex));
+        vmaFlushAllocation(allocator, pbuf.allocation, 0, p.particle_vertices.size() * sizeof(ParticleVertex));
+    }
 
     // Into this frame slot's instance buffer (its previous frame finished: its fence was waited).
     if (p.instances.empty()) return {};
@@ -258,6 +319,9 @@ void Renderer::Impl::destroy_instance_buffers() {
     for (auto& b : instance_buffers)
         if (b.buffer != VK_NULL_HANDLE) destroy_buffer(b);
     instance_capacity = {};
+    for (auto& b : particle_buffers)
+        if (b.buffer != VK_NULL_HANDLE) destroy_buffer(b);
+    particle_capacity = {};
 }
 
 } // namespace noor::render

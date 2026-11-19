@@ -447,6 +447,7 @@ struct Renderer::Impl {
     VkPipeline double_sided_pipeline = VK_NULL_HANDLE;  // the scene, without back-face culling
     VkPipeline blend_pipeline = VK_NULL_HANDLE;         // see-through: blended, no depth writes
     VkPipeline blend_double_sided_pipeline = VK_NULL_HANDLE;
+    VkPipeline particle_pipeline = VK_NULL_HANDLE;      // particles (8B): instanced quads, premultiplied blending
     VkFormat pipeline_color_format = VK_FORMAT_UNDEFINED;  // the screen's, for the gizmo pipeline
 
     // Tonemapping: HDR image -> screen (vulkan_frame.cpp)
@@ -489,13 +490,28 @@ struct Renderer::Impl {
 
     // Instanced drawing (vulkan_instancing.cpp, ADR-032): this frame's batches and their instances.
     using Batch = DrawBatch;
+    // Particles (Milestone 8B): one draw per emitter, its particles a range of this frame's particle buffer.
+    struct ParticleBatch {
+        std::uint32_t first = 0, count = 0;
+        MeshPushConstants push{};  // particle.hlsl reads the same 32 bytes as ids + params
+    };
+    // The see-through pass in order, back to front: a see-through mesh batch or an emitter's particles.
+    struct SeeThrough {
+        bool particles = false;
+        std::uint32_t index = 0;  // into transparent or particles
+    };
     struct FramePlan {
         std::vector<GpuInstance> instances;
         std::vector<Batch> opaque, transparent, gizmos;
         std::array<std::vector<Batch>, kShadowCascades> shadows;
+        std::vector<ParticleVertex> particle_vertices;
+        std::vector<ParticleBatch> particles;
+        std::vector<SeeThrough> see_through;
     } plan;
     std::array<GpuBuffer, kFramesInFlight> instance_buffers{};
     std::array<std::size_t, kFramesInFlight> instance_capacity{};
+    std::array<GpuBuffer, kFramesInFlight> particle_buffers{};
+    std::array<std::size_t, kFramesInFlight> particle_capacity{};
     bool capture_requested = false;
     PendingCapture capture;
 
@@ -524,6 +540,7 @@ struct Renderer::Impl {
     void destroy_depth_buffer();
     Status ensure_mesh_pipeline(VkFormat color_format);
     VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true, bool blended = false);
+    VkResult create_particle_pipeline(VkPipeline& out);
     Status create_msaa_targets();
     void destroy_msaa_targets();
     void destroy_scene_pipelines();  // the ones drawn into the (multisampled) scene: rebuilt when samples change

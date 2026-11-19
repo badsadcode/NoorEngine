@@ -5,6 +5,7 @@ noor_add_module(game
         src/geometry.cpp
         src/hud.cpp
         src/scene_renderer.cpp
+        src/particle_draws.cpp
         src/model_lod.cpp
         src/scatter.cpp
         src/texture_library.cpp

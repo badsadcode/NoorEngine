@@ -10,8 +10,16 @@
 #include "noor/render/renderer.h"
 
 #include <map>
+#include <span>
 #include <string>
 #include <unordered_map>
+
+namespace noor::fx {
+class ParticleSystem;
+}
+namespace noor::runtime {
+class World;
+}
 #include <vector>
 
 namespace noor::game {
@@ -27,6 +35,12 @@ public:
 
     // The draw items for `view`. Models that fail to load are reported once and skipped.
     [[nodiscard]] std::vector<render::DrawItem> draws(const SceneView& view);
+
+    // The effect particles of a running world (Milestone 8B, part 2), one draw per emitter: its `render` settings
+    // (blend, facing, lit, emission, stretch, texture and flipbook), particles in world space with their size, colour
+    // and alpha from their life's curves, alpha-blended ones sorted back to front for `eye`. Emitters in entity id
+    // order, so a frame doesn't depend on a hash map's order. The spans stay valid until the next call.
+    [[nodiscard]] std::span<const render::ParticleDraw> particles(const fx::ParticleSystem& system, runtime::World& world, math::Vec3 eye);
 
     // The game camera, or (with none) one that looks at the origin from above and behind.
     [[nodiscard]] static render::Camera camera(const SceneView& view);
@@ -73,6 +87,8 @@ private:
         bool warned = false;
     };
     std::unordered_map<Guid, CookedModel> cooked_;
+    std::vector<std::vector<render::ParticleVertex>> particle_vertices_;  // per draw, this frame
+    std::vector<render::ParticleDraw> particle_draws_;
     struct TerrainMeshes {
         std::string key;  // the settings it was built from
         std::vector<render::MeshHandle> tiles;
