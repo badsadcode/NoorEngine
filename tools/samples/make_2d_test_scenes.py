@@ -13,6 +13,11 @@ Writes into tests/data/render_scenes:
   Scenes/Sprites2D_Bleed.noorscene  part 3: a frame next to a solid red one, magnified: no red at its edges
   Assets/Sprites/glow.png, .noorsprite      a soft round glow (alpha falling off smoothly), drawn here
   Assets/Sprites/bleed.png, .noorsprite     two 8 x 8 frames: a green square with a clear border, then solid red
+  Scenes/Tilemap_Square.noorscene   part 4: a square tilemap (ground, a brick wall, one-way planks, flowers) with a walker
+  Scenes/Tilemap_Iso.noorscene      part 4: an isometric map: grass diamonds and tall stone blocks drawn back to front
+  Scenes/Tilemap_Hex.noorscene      part 4: a hexagonal map of grass, sand and water
+  Scenes/Tilemap_Big.noorscene      part 4: 256 x 256 square tiles, for what a big map costs (64 chunks)
+  Assets/Tiles/*.png, *.noorsprite, *.noortileset   the tiles for those, drawn here pixel by pixel
 """
 import hashlib
 import json
@@ -20,7 +25,9 @@ import math
 import pathlib
 import uuid
 
-from PIL import Image
+import random
+
+from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parents[2] / "tests" / "data" / "render_scenes"
 NS = uuid.UUID("9a02d000-0000-4000-8000-0000000000d2")
@@ -165,9 +172,153 @@ def bleed():
     write_scene("Sprites2D_Bleed", ents)
 
 
+# ---- tilemaps (part 4) ----
+
+def tiles_meta(name, img, columns, rows, pivot, ppm, solid=(), one_way=()):
+    """A tile sheet under Assets/Tiles: the picture, its .noorsprite and a .noortileset."""
+    folder = ROOT / "Assets" / "Tiles"
+    folder.mkdir(parents=True, exist_ok=True)
+    png = folder / f"{name}.png"
+    img.save(png)
+    meta(png, gid("tiles " + name + ".png"), "texture", {"kind": "color", "max_size": 4096, "mips": False, "normal_convention": "opengl"})
+    sheet = {"noor_sprite": 1, "name": name, "texture": gid("tiles " + name + ".png"),
+             "grid": {"columns": columns, "rows": rows, "margin": 0, "spacing": 0}, "pivot": pivot, "pixels_per_metre": ppm,
+             "filter": "nearest", "animations": {}}
+    sp = folder / f"{name}.noorsprite"
+    sp.write_text(json.dumps(sheet, indent=2) + "\n", encoding="utf-8", newline="\n")
+    meta(sp, gid("tiles " + name + ".noorsprite"), "sprite", {})
+    ts = {"noor_tileset": 1, "name": name, "sheet": gid("tiles " + name + ".noorsprite"), "solid": list(solid), "one_way": list(one_way)}
+    tp = folder / f"{name}.noortileset"
+    tp.write_text(json.dumps(ts, indent=2) + "\n", encoding="utf-8", newline="\n")
+    meta(tp, gid("tiles " + name + ".noortileset"), "tileset", {})
+    return gid("tiles " + name + ".noortileset")
+
+
+def square_tiles():
+    # 0 grass on dirt, 1 dirt, 2 brick, 3 dark stone, 4 plank (one-way), 5 flowers, 6 crate, 7 sky-blue glass
+    rnd = random.Random(7)
+    img = Image.new("RGBA", (16 * 8, 16), (0, 0, 0, 0))
+    px = img.load()
+
+    def fill(t, colour, noise=10):
+        for y in range(16):
+            for x in range(16):
+                n = rnd.randint(-noise, noise)
+                px[t * 16 + x, y] = tuple(max(0, min(255, c + n)) for c in colour) + (255,)
+
+    fill(0, (120, 82, 52)); fill(1, (120, 82, 52)); fill(3, (70, 70, 84), 8)
+    for x in range(16):  # grass on tile 0
+        for y in range(4 + (x * 7 % 3)):
+            px[x, y] = (74 + rnd.randint(-10, 10), 168 + rnd.randint(-12, 12), 72, 255)
+    for y in range(16):  # bricks on tile 2
+        for x in range(16):
+            mortar = y % 8 == 7 or (x + (4 if (y // 8) % 2 else 0)) % 8 == 7
+            px[2 * 16 + x, y] = (196, 190, 176, 255) if mortar else (168 + rnd.randint(-12, 12), 64, 52, 255)
+    for y in range(0, 5):  # plank on tile 4: a board along the top
+        for x in range(16):
+            px[4 * 16 + x, y] = (176, 128, 70, 255) if y not in (0, 4) else (110, 72, 36, 255)
+    for x, h, col in [(3, 6, (240, 90, 120)), (8, 9, (250, 210, 80)), (12, 5, (150, 120, 250))]:  # flowers on tile 5
+        for y in range(16 - h, 16):
+            px[5 * 16 + x, y] = (60, 150, 60, 255)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                px[5 * 16 + x + dx, 16 - h + dy] = col + (255,)
+    d = ImageDraw.Draw(img)  # crate on tile 6
+    d.rectangle([6 * 16, 0, 6 * 16 + 15, 15], fill=(150, 100, 54, 255), outline=(90, 56, 26, 255))
+    d.line([6 * 16 + 1, 1, 6 * 16 + 14, 14], fill=(90, 56, 26, 255))
+    d.rectangle([7 * 16, 0, 7 * 16 + 15, 15], fill=(140, 200, 240, 150), outline=(220, 240, 255, 255))  # glass
+    return tiles_meta("square", img, 8, 1, [0.5, 0.5], 16, solid=(0, 1, 2, 3, 6), one_way=(4,))
+
+
+def iso_tiles():
+    # 32 x 32 frames, 16 pixels a metre: a 2 m x 1 m diamond (cell [2, 1]) in the bottom half; pivot at its middle.
+    img = Image.new("RGBA", (32 * 3, 32), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    def diamond(ox, cy, colour, outline):
+        d.polygon([(ox + 0, cy), (ox + 16, cy - 8), (ox + 31, cy), (ox + 16, cy + 8)], fill=colour, outline=outline)
+
+    diamond(0, 24, (96, 172, 84, 255), (70, 130, 60, 255))        # 0 grass
+    diamond(32, 24, (214, 196, 140, 255), (176, 156, 104, 255))   # 1 sand
+    # 2 a stone block one cell tall: the base diamond's side faces, then the top diamond 8 px higher... 16 px higher.
+    d.polygon([(64, 24), (80, 32), (80, 16), (64, 8)], fill=(120, 120, 136, 255))      # left face
+    d.polygon([(80, 32), (95, 24), (95, 8), (80, 16)], fill=(92, 92, 108, 255))        # right face
+    diamond(64, 8, (168, 168, 184, 255), (120, 120, 136, 255))                         # top
+    return tiles_meta("iso", img, 3, 1, [0.5, 0.25], 16)
+
+
+def hex_tiles():
+    # Pointy-top hexagons 16 px wide (1 m at 16 px/m), 18 px tall, in 16 x 18 frames; pivot at the middle.
+    img = Image.new("RGBA", (16 * 3, 18), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for i, (fill, line) in enumerate([((96, 172, 84, 255), (60, 120, 54, 255)), ((214, 196, 140, 255), (170, 150, 100, 255)),
+                                      ((80, 140, 220, 255), (50, 100, 180, 255))]):
+        ox = i * 16
+        d.polygon([(ox + 8, 0), (ox + 15, 4), (ox + 15, 13), (ox + 8, 17), (ox + 0, 13), (ox + 0, 4)], fill=fill, outline=line)
+    return tiles_meta("hex", img, 3, 1, [0.5, 0.5], 16)
+
+
+def tilemap_entity(name, tileset, rows, pos=(0, 0, 0), **extra):
+    c = {"tileset": tileset, "rows": rows}
+    c.update(extra)
+    return entity(name, pos, {"tilemap": c})
+
+
+def tilemaps():
+    sq = square_tiles()
+    rows = [
+        ". . . . . . . . . . . . . . . . . . . .",
+        ". . . . . . . . . . . . . . . . . . . .",
+        ". . . . . . . . . . . . . . . . 2 2 . .",
+        ". . . . . . . 4 4 4 4 . . . . . 2 2 . .",
+        ". . . . . . . . . . . . . . . . 2 2 . .",
+        ". . . . . 5 . . . . . . 6 . 5 . 2 2 . .",
+        "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 3 0 0",
+        "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 3 3 1 1",
+    ]
+    ents = camera_and_sun(9, at=(9.5, 3.5, 20))
+    ents.append(tilemap_entity("Level", sq, rows))
+    ents.append(entity("Walker", (4, 1.5, 0.1), sprite(0)))
+    write_scene("Tilemap_Square", ents)
+
+    iso = iso_tiles()
+    n = 8
+    iso_rows = []
+    for r in range(n):
+        y = n - 1 - r
+        row = []
+        for x in range(n):
+            if (x, y) in [(2, 2), (2, 3), (5, 1), (4, 5), (5, 5), (6, 5)]:
+                row.append("2")
+            elif x == 0 or y == 0:
+                row.append("1")
+            else:
+                row.append("0")
+        iso_rows.append(" ".join(row))
+    ents = camera_and_sun(11, at=(0, 4, 20))
+    ents.append(tilemap_entity("Iso", iso, iso_rows, layout="isometric", cell=[2, 1]))
+    write_scene("Tilemap_Iso", ents)
+
+    hx = hex_tiles()
+    rnd = random.Random(3)
+    hex_rows = []
+    for r in range(9):
+        hex_rows.append(" ".join(str(2 if (r in (3, 4) and 3 < c < 9) else rnd.choice([0, 0, 0, 1])) for c in range(12)))
+    ents = camera_and_sun(9, at=(5.75, 3.0, 20))
+    ents.append(tilemap_entity("Hexes", hx, hex_rows, layout="hexagonal"))
+    write_scene("Tilemap_Hex", ents)
+
+    rnd = random.Random(11)
+    big = [" ".join(str(rnd.choice([0, 1, 2, 3, 5, 6, 7])) if rnd.random() < 0.7 else "." for _ in range(256)) for _ in range(256)]
+    ents = camera_and_sun(270, at=(127.5, 127.5, 20))
+    ents.append(tilemap_entity("Big", sq, big))
+    write_scene("Tilemap_Big", ents)
+
+
 if __name__ == "__main__":
     pile()
     layers()
     ysort()
     bleed()
+    tilemaps()
     print("2D test scenes written to", ROOT / "Scenes")

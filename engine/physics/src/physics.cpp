@@ -177,6 +177,47 @@ struct PhysicsSystem::Impl {
     };
     std::unordered_map<Guid, Body> bodies;
     std::unordered_map<Guid, std::vector<JPH::BodyID>> terrain_bodies;  // static bodies per entity: terrain tiles, scattered trunks
+    struct TileBodies {
+        std::uint64_t key = 0;
+        std::vector<JPH::BodyID> bodies;
+    };
+    std::unordered_map<Guid, TileBodies> tile_bodies;  // tilemaps' merged boxes (2D part 4), rebuilt when the map changes
+    void remove_bodies(std::vector<JPH::BodyID>& ids) {
+        auto& bi = system.GetBodyInterface();
+        for (const auto& id : ids) {
+            one_way_tops.erase(id.GetIndexAndSequenceNumber());
+            bi.RemoveBody(id);
+            bi.DestroyBody(id);
+        }
+        ids.clear();
+    }
+    // A tilemap's boxes, made again (2D part 4).
+    void build_tilemap(runtime::World& world, const scene::Entity& entity) {
+        auto& tb = tile_bodies[entity.id];
+        remove_bodies(tb.bodies);
+        tb.key = options.tilemap_key ? options.tilemap_key(entity.components["tilemap"]) : 0;
+        if (!options.tilemap_shapes) return;
+        const auto shapes = options.tilemap_shapes(entity, world);
+        if (shapes.empty()) return;
+        entity_of.push_back(entity.id);
+        auto& bi = system.GetBodyInterface();
+        for (const auto& st : shapes) {
+            if (st.kind != StaticShape::Kind::Box) continue;
+            const JPH::Vec3 half(std::max(0.005f, st.half.x), std::max(0.005f, st.half.y), std::max(0.005f, st.half.z));
+            auto shape = JPH::BoxShapeSettings(half, std::min(JPH::cDefaultConvexRadius, 0.5f * half.ReduceMin())).Create();
+            if (shape.HasError()) continue;
+            JPH::BodyCreationSettings settings(shape.Get(), to_j(st.centre), to_j(st.rotation), JPH::EMotionType::Static, layers::kStatic);
+            settings.mFriction = 0.5f;
+            settings.mUserData = entity_of.size();
+            const JPH::BodyID id = bi.CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+            if (id.IsInvalid()) {
+                NOOR_LOG_ERROR("Physics", "'{}': too many physics bodies", entity.name);
+                break;
+            }
+            if (st.one_way) one_way_tops[id.GetIndexAndSequenceNumber()] = st.centre.y + st.half.y;
+            tb.bodies.push_back(id);
+        }
+    }
     struct Character {
         JPH::Ref<JPH::CharacterVirtual> controller;
         float step_height = 0.4f;
@@ -634,6 +675,9 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
             d.terrain_bodies[entity.id].push_back(id);
         }
     }
+    // Tilemaps (2D part 4): merged boxes from the host, kept in step with the map (fixed_update).
+    if (const auto tm = entity.components.find("tilemap"); tm != entity.components.end() && tm->is_object() && impl_->options.tilemap_shapes)
+        impl_->build_tilemap(world, entity);
     const auto c = entity.components.find("collider");
     if (c == entity.components.end() || !c->is_object()) return;
     auto& d = *impl_;
@@ -700,6 +744,10 @@ void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entit
     auto& d = *impl_;
     d.characters.erase(entity.id);
     d.poses.erase(entity.id);
+    if (const auto t = d.tile_bodies.find(entity.id); t != d.tile_bodies.end()) {
+        d.remove_bodies(t->second.bodies);
+        d.tile_bodies.erase(t);
+    }
     if (const auto t = d.terrain_bodies.find(entity.id); t != d.terrain_bodies.end()) {
         auto& tbi = d.system.GetBodyInterface();
         for (const auto& id : t->second) {
@@ -729,6 +777,14 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         const auto m = runtime::api::world_matrix(world, entity);
         const auto r = runtime::api::world_rotation(world, entity);
         if (m && r) bi.MoveKinematic(body.id, to_j(m->transform_point({0, 0, 0})), to_j(*r), static_cast<float>(dt));
+    }
+    // Tilemaps changed since the last step (a script broke a block, the editor painted): their boxes again (2D part 4).
+    if (d.options.tilemap_key && !d.tile_bodies.empty()) {
+        for (auto& [entity, tb] : d.tile_bodies) {
+            const scene::Entity* e = world.find(entity);
+            if (!e || !e->has("tilemap")) continue;
+            if (d.options.tilemap_key(e->components.at("tilemap")) != tb.key) d.build_tilemap(world, *e);
+        }
     }
     // Characters move first (Jolt's recommended order), then the rigid bodies.
     const JPH::Vec3 gravity = d.system.GetGravity();

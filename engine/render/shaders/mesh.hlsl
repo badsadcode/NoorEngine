@@ -90,7 +90,10 @@ struct VertexOutput
     [[vk::location(0)]] float3 color : COLOR;
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float3 world_position : POSITION1;
-    [[vk::location(3)]] float2 uv : TEXCOORD0;
+    // Centroid (2D part 4): with MSAA a pixel on a triangle's edge is shaded at its centre, which can lie outside the
+    // triangle; its uv would then run past the triangle's own, into the next frame of an atlas (a tilemap's chunk holds
+    // many). Centroid samples it inside the covered part instead.
+    [[vk::location(3)]] centroid float2 uv : TEXCOORD0;
     [[vk::location(4)]] float4 tangent : TANGENT;
     [[vk::location(5)]] float3 weights : TEXCOORD1;  // splats: layers 1-3
 };

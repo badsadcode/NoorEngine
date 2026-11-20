@@ -49,6 +49,7 @@ add_executable(noor_unit_tests
     unit/test_interchange.cpp
     unit/test_lod.cpp
     unit/test_scatter.cpp
+    unit/test_tilemap.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -206,7 +207,9 @@ set_tests_properties(render.golden_Physics2D_Pile PROPERTIES LABELS "gpu;render"
 # Sprites for 2D (the 2D foundations, part 3, ADR-040; tools/samples/make_2d_test_scenes.py): walkers at one depth
 # drawn by sorting layer against scene order, coins by order, soft-edged glows over them; lit and unlit coins under a
 # dim sun; a top-down crowd sorted by height on screen; a magnified frame beside a solid red one (no red may bleed in).
-foreach(name IN ITEMS Sprites2D_Layers Sprites2D_Unlit Sprites2D_YSort Sprites2D_Bleed)
+# Tilemaps (2D part 4): square (ground, wall, one-way planks, flowers, a walker), isometric (blocks drawn back to
+# front), hexagonal, and 256 x 256 tiles drawn in 64 chunks.
+foreach(name IN ITEMS Sprites2D_Layers Sprites2D_Unlit Sprites2D_YSort Sprites2D_Bleed Tilemap_Square Tilemap_Iso Tilemap_Hex Tilemap_Big)
     add_test(NAME render.golden_${name}
         COMMAND ${CMAKE_COMMAND}
             -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -216,6 +219,10 @@ foreach(name IN ITEMS Sprites2D_Layers Sprites2D_Unlit Sprites2D_YSort Sprites2D
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+add_test(NAME render.tilemap_batches
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/tilemap_batches -P ${CMAKE_CURRENT_SOURCE_DIR}/tilemap_batches_check.cmake)
+set_tests_properties(render.tilemap_batches PROPERTIES LABELS "gpu;render" TIMEOUT 120 RUN_SERIAL TRUE)
 # Gameplay particles (Milestone 8B, part 7): gravel landing and settling on a terrain (never through it) and drops
 # that die on it and splash (a sub-emitter); five seconds in.
 add_test(NAME render.golden_Particles_Terrain

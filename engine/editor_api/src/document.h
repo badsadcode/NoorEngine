@@ -150,6 +150,8 @@ struct RenderSnapshot {
     std::vector<Primitive> primitives;
     using Sprite = game::SceneView::Sprite;  // `sprite` components (8B part 5): billboards turned to the viewport's camera
     std::vector<Sprite> sprites;
+    using Tilemap = game::SceneView::Tilemap;  // `tilemap` components (2D part 4): chunked tile meshes
+    std::vector<Tilemap> tilemaps;
     std::vector<render::WaterDraw> water;  // `water` components (8D): drawn over the copied scene, on the viewport's clock
     std::optional<double> game_time;  // while playing: the game's time (sprites' animations, clouds); else the viewport's clock
     using GameCamera = game::SceneView::Camera;    // while playing: the first entity with a `camera`

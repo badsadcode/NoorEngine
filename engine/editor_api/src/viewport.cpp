@@ -26,6 +26,7 @@
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
 #include "noor/game/sprites.h"
+#include "noor/game/tilemap.h"
 #include "noor/asset/skinning.h"
 #include "noor/asset/model_import.h"
 #include "noor/game/particle_ground.h"
@@ -388,6 +389,7 @@ void render_thread_main(noor_viewport* vp) {
     std::optional<noor::game::MaterialLibrary> materials;
     std::optional<noor::game::EnvironmentLibrary> environment;
     std::optional<noor::game::SpriteLibrary> sprites;  // sprite sheets (8B part 5); billboards are placed every frame
+    std::optional<noor::game::TilemapLibrary> tilemaps;  // tilemaps (2D part 4): chunk meshes, rebuilt when their rows change
     std::vector<std::pair<Guid, Mat4>> sprite_quads;   // last frame's sprites (entity, quad): picking
     auto refresh_clock = std::chrono::steady_clock::now();
     const auto started_at = std::chrono::steady_clock::now();  // the clouds' clock
@@ -561,6 +563,7 @@ void render_thread_main(noor_viewport* vp) {
             materials.emplace(r, *textures, noor::asset::AssetFileResolver{});
             environment.emplace(r, snap->texture_cache);
             sprites.emplace(r, *textures, noor::asset::AssetFileResolver{});
+            tilemaps.emplace(r, *textures, noor::asset::AssetFileResolver{});
         }
         if (snap && environment) environment->apply(snap->environment);
         // A new reload token (the material editor saved): pick changed materials up now.
@@ -576,12 +579,14 @@ void render_thread_main(noor_viewport* vp) {
             };
             materials->set_resolver(resolver);
             sprites->set_resolver(resolver);
+            tilemaps->set_resolver(resolver);
         }
         // Edited material and texture files show up while the editor is open.
         if (materials && std::chrono::steady_clock::now() - refresh_clock > 500ms) {
             refresh_clock = std::chrono::steady_clock::now();
             materials->refresh();
             if (sprites) sprites->refresh();
+            if (tilemaps) tilemaps->refresh();
         }
         if (snap != shown) {
             // The material preview frames its object when it first appears.
@@ -1337,6 +1342,7 @@ void render_thread_main(noor_viewport* vp) {
                     }
                 }
             }
+            if (shown && tilemaps && !shown->tilemaps.empty()) tilemaps->add_draws(shown->tilemaps, frame_draws);
             frame.draws = frame_draws;
             // Effect particles: the preview (8B part 4).
             {

@@ -110,6 +110,7 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:destroy()` | Removes the entity and its children at the end of the frame |
 | `e:velocity()`, `e:set_velocity(v)` | Linear velocity of its physics body (m/s). On a character: with `"motion": "script"` it's the character's own velocity (see below); otherwise `set_velocity` replaces its velocity for the next step (a double jump, a dash, a knockback) |
 | `e:is_on_floor()`, `e:is_on_wall()`, `e:is_on_ceiling()`, `e:floor_normal()` | Character: what it touched in its last step (Godot's names) |
+| `e:tile(x, y)`, `e:set_tile(x, y, tile)` | A `tilemap`'s cell ((0, 0) its bottom-left): the tile there (-1 empty; nil without a tilemap); set one (-1 or nil empties it; true if inside the map). Drawing and collision follow ([Tilemaps](../fx/TILEMAPS.md)) |
 | `e:add_impulse(v)` | Instant push (kg·m/s), e.g. a jump or a hit |
 | `e:add_force(v)` | Push during the next physics step (newtons) |
 | `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |

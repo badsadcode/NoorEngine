@@ -135,6 +135,10 @@ public sealed unsafe class Entity : IEquatable<Entity>
     /// <summary>Character controller: fall through the one-way platform it stands on.</summary>
     public void CharacterDrop() => Engine.A.Push(Id, 4, default);
     public bool IsGrounded => Engine.A.IsGrounded(Id) != 0;
+    /// <summary>Tilemap (2D part 4): the tile at cell (x, y), (0, 0) the bottom-left; -1 empty; null without a tilemap.</summary>
+    public int? Tile(int x, int y) => Engine.A.Tile(Id, x, y) is var t && t >= -1 ? t : null;
+    /// <summary>Tilemap: sets cell (x, y) (-1 empties it); false outside the map. Drawing and collision follow.</summary>
+    public bool SetTile(int x, int y, int tile) => Engine.A.SetTile(Id, x, y, tile) != 0;
     /// <summary>Character (2D part 2b, Godot-style): what it touched in its last step.</summary>
     public unsafe bool IsOnFloor => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 1) != 0;
     public unsafe bool IsOnWall => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 2) != 0;

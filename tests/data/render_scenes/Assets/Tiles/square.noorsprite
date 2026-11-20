@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "square",
+  "texture": "57a22160-8a5d-5adf-998d-a6095b4c0bf3",
+  "grid": {
+    "columns": 8,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.5
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {}
+}

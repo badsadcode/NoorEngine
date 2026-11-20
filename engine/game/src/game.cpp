@@ -1,4 +1,5 @@
 #include "noor/game/game.h"
+#include "noor/game/tilemap.h"
 
 #include "noor/asset/environment_asset.h"
 #include "noor/asset/water_asset.h"
@@ -168,6 +169,38 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
                     out.push_back(std::move(hull));
                 }
             }
+        }
+        return out;
+    };
+    // Tilemaps collide by their solid and one-way tiles, merged into boxes (2D part 4); rebuilt when the rows change.
+    physics_options.tilemap_key = [](const Json& c) -> std::uint64_t {
+        std::uint64_t h = asset::tile_rows_hash(c.contains("rows") ? c["rows"] : Json());
+        for (const char* k : {"tileset", "layout", "cell", "collision"})
+            if (c.contains(k)) h ^= std::hash<std::string>{}(c[k].dump()) + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+        return h;
+    };
+    physics_options.tilemap_shapes = [&project, &registry](const scene::Entity& entity, const runtime::World& w) {
+        std::vector<physics::StaticShape> out;
+        const Json& c = entity.components["tilemap"];
+        const auto id = asset::guid_field(c, "tileset");
+        const auto file = id ? registry_asset_path(project, registry)(*id) : std::nullopt;
+        if (!file) return out;
+        auto tileset = asset::load_tileset_file(*file);
+        if (!tileset) {
+            NOOR_LOG_ERROR("Game", "'{}': {}", entity.name, tileset.error().message);
+            return out;
+        }
+        math::Mat4 world_m = math::Mat4::identity();
+        for (std::size_t i = 0; i < w.scene().entities.size(); ++i)
+            if (w.scene().entities[i].id == entity.id) world_m = w.scene().world_matrix(i);
+        for (const auto& b : tilemap_boxes(*tile_grid(c), *tileset, tilemap_settings(c), world_m)) {
+            physics::StaticShape s;
+            s.kind = physics::StaticShape::Kind::Box;
+            s.centre = b.centre;
+            s.half = b.half;
+            s.rotation = b.rotation;
+            s.one_way = b.one_way;
+            out.push_back(std::move(s));
         }
         return out;
     };
@@ -495,7 +528,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         }
         if (scatter) scatter_entities.push_back(i);
         if (!camera && !primitive && !sprite && !mesh && !model && !sun && !local && !extra_sun && !body && !env && !e.has("csg_model") &&
-            !e.has("terrain"))
+            !e.has("terrain") && !e.has("tilemap"))
             continue;
         if (env) {
             Json en = resolved_environment(e.components["environment"], asset_path);
@@ -693,6 +726,16 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             const auto& sp = e.components["sprite"];
             if (const auto id = asset::guid_field(sp, "sheet"))
                 if (auto file = asset_path(*id)) view.sprites.push_back({e.id, std::move(*file), sp, world});
+        }
+        if (asset_path && e.has("tilemap") && e.components["tilemap"].is_object()) {  // 2D part 4
+            const auto& tm = e.components["tilemap"];
+            if (const auto id = asset::guid_field(tm, "tileset"))
+                if (auto file = asset_path(*id)) {
+                    Json settings = Json::object();
+                    for (auto it = tm.begin(); it != tm.end(); ++it)
+                        if (it.key() != "rows") settings[it.key()] = it.value();
+                    view.tilemaps.push_back({e.id, std::move(*file), std::move(settings), tile_grid(tm), world});
+                }
         }
         if (e.has("terrain") && e.components["terrain"].is_object()) {
             const auto& t = e.components["terrain"];

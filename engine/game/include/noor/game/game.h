@@ -11,6 +11,7 @@
 #include "noor/asset/material.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
+#include "noor/asset/tileset_asset.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/guid.h"
 #include "noor/foundation/math.h"
@@ -140,6 +141,16 @@ struct SceneView {
         math::Mat4 world;
     };
     std::vector<Sprite> sprites;
+    // Tilemaps (`tilemap` components, 2D part 4, noor/game/tilemap.h): its settings (the component without its rows),
+    // its tiles parsed once per change and shared, its tileset's file and where its entity is.
+    struct Tilemap {
+        Guid entity;
+        std::filesystem::path tileset;  // the .noortileset file
+        asset::Json settings;
+        std::shared_ptr<const asset::TileGrid> grid;
+        math::Mat4 world;
+    };
+    std::vector<Tilemap> tilemaps;
     // Water surfaces (`water` components, Milestone 8D, ADR-037): {"shape": "box" (default) | "sea", "preset": "Lake" |
     // "asset": <.noorwater id>, "size": [x, z] (metres, times the entity's scale), and any of the look's fields over them
     // (asset/water_asset.h)}. A box is a level rectangle at the entity's position, turned with it about +Y; a sea is

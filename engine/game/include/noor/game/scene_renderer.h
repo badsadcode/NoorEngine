@@ -8,6 +8,7 @@
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
 #include "noor/game/sprites.h"
+#include "noor/game/tilemap.h"
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
@@ -55,6 +56,7 @@ public:
     void refresh() {
         materials_.refresh();
         sprites_.refresh();
+        tilemaps_.refresh();
     }
 
     // The environment (sky, image-based lighting) it sets each frame.
@@ -86,6 +88,7 @@ private:
     MaterialLibrary materials_;
     EnvironmentLibrary environment_;
     SpriteLibrary sprites_;
+    TilemapLibrary tilemaps_;
     // Declared after the libraries: members are built in this order, and materials_ needs `resolve` before it moves here.
     struct CookedModel {
         bool loaded = false;

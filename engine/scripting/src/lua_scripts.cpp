@@ -339,6 +339,21 @@ struct LuaScriptSystem::Impl {
                  const auto c = p ? p->character_contacts(check_entity(L, 1)) : std::nullopt;
                  return push_vec(L, c && c->floor ? std::optional(c->floor_normal) : std::nullopt);
              }},
+            // Tilemaps (2D part 4): e:tile(x, y) -> the tile number there (-1 empty), nil without a tilemap;
+            // e:set_tile(x, y, tile) (-1 or nil empties it) -> true if it was inside the map.
+            {"tile", [](lua_State* L) {
+                 const auto t = api::tile(world_of(L), check_entity(L, 1), static_cast<int>(luaL_checkinteger(L, 2)),
+                                          static_cast<int>(luaL_checkinteger(L, 3)));
+                 if (t) lua_pushinteger(L, *t);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
+            {"set_tile", [](lua_State* L) {
+                 const auto t = lua_isnoneornil(L, 4) ? -1 : static_cast<std::int32_t>(luaL_checkinteger(L, 4));
+                 lua_pushboolean(L, api::set_tile(world_of(L), check_entity(L, 1), static_cast<int>(luaL_checkinteger(L, 2)),
+                                                  static_cast<int>(luaL_checkinteger(L, 3)), t));
+                 return 1;
+             }},
             {"is_grounded", [](lua_State* L) {
                  auto* p = physics_of(L);
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));

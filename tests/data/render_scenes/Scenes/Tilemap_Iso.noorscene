@@ -1,0 +1,158 @@
+{
+  "noor_scene": 2,
+  "id": "4637515a-0268-5725-93ec-25e74b890119",
+  "name": "Tilemap_Iso",
+  "entities": [
+    {
+      "id": "b5d9c3da-8f38-53d5-a1a1-a832940b1a30",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          4,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 11,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "80b270d1-d60a-568c-ae85-8527a509fead",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 90000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "f619b70c-51e0-5275-b428-beaf30086cc5",
+      "name": "Backdrop",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            80,
+            50,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "974179fa-e353-5656-bac9-312caf44fd06",
+      "name": "Iso",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "tilemap": {
+          "tileset": "94661aae-f129-5921-8aad-f21a4380d39a",
+          "rows": [
+            "1 0 0 0 0 0 0 0",
+            "1 0 0 0 0 0 0 0",
+            "1 0 0 0 2 2 2 0",
+            "1 0 0 0 0 0 0 0",
+            "1 0 2 0 0 0 0 0",
+            "1 0 2 0 0 0 0 0",
+            "1 0 0 0 0 2 0 0",
+            "1 1 1 1 1 1 1 1"
+          ],
+          "layout": "isometric",
+          "cell": [
+            2,
+            1
+          ]
+        }
+      }
+    }
+  ]
+}

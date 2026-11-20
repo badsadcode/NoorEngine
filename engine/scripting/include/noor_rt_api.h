@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 11u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts */
+#define NOOR_RT_API_VERSION 12u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -136,6 +136,11 @@ typedef struct noor_rt_api {
     /* What a character touched in its last step: bit 0 floor, 1 wall, 2 ceiling; the floor's normal. -1: not a
      * character. (Its velocity is the VELOCITY channel, as for bodies.) */
     int32_t (*character_contacts)(noor_rt_entity e, noor_rt_vec3* floor_normal);
+
+    /* v12 (2D part 4): a tilemap's cell (x, y), (0, 0) its bottom-left: the tile there (-1 empty), or -2 if the entity has
+     * no tilemap; and setting one (-1 empties it): 1 if it was inside the map. */
+    int32_t (*tile)(noor_rt_entity e, int32_t x, int32_t y);
+    int32_t (*set_tile)(noor_rt_entity e, int32_t x, int32_t y, int32_t tile);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "iso",
+  "texture": "8835a73c-ea28-5c0d-b6a8-ca9117f1ab28",
+  "grid": {
+    "columns": 3,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.25
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {}
+}

@@ -13,6 +13,7 @@ noor_add_module(game
         src/animation_assets.cpp
         src/sprite_animation.cpp
         src/sprites.cpp
+        src/tilemap.cpp
         src/texture_library.cpp
         src/material_library.cpp
         src/environment_library.cpp

@@ -84,11 +84,15 @@ struct HeightTile {
 // trunk as an upright capsule (`height` from end to end, caps included, centred on `centre`), or a
 // rock's piece as a convex hull of `points`.
 struct StaticShape {
-    enum class Kind : std::uint8_t { Capsule, Convex } kind = Kind::Capsule;
+    enum class Kind : std::uint8_t { Capsule, Convex, Box } kind = Kind::Capsule;
     math::Vec3 centre;
     float radius = 0.3f;
     float height = 2.0f;
     std::vector<math::Vec3> points;  // Convex: world positions (the hull of them collides)
+    // Box (2D part 4: tilemaps): half its size, turned by rotation; one_way: a platform stood on from above only.
+    math::Vec3 half{0.5f, 0.5f, 0.5f};
+    math::Quat rotation{};
+    bool one_way = false;
 };
 
 struct RayHit {
@@ -118,6 +122,10 @@ public:
         std::function<std::vector<HeightTile>(const asset::Json& terrain_component)> terrain_tiles;
         // Collision of a `scatter` entity's instances (their models' capsule and convex collision nodes), in world space.
         std::function<std::vector<StaticShape>(const scene::Entity& scatter, const runtime::World& world)> scatter_shapes;
+        // Collision of a `tilemap` entity (2D part 4): boxes in world space, and a fingerprint of the map (its rows and
+        // settings) that physics checks every fixed step, rebuilding the boxes when it changes (a block broken by a script).
+        std::function<std::vector<StaticShape>(const scene::Entity& tilemap, const runtime::World& world)> tilemap_shapes;
+        std::function<std::uint64_t(const asset::Json& tilemap_component)> tilemap_key;
     };
 
     explicit PhysicsSystem(Options options);

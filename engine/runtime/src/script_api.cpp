@@ -1,5 +1,7 @@
 #include "noor/runtime/script_api.h"
 
+#include "noor/asset/tileset_asset.h"
+
 #include <algorithm>
 #include <unordered_set>
 #include <cmath>
@@ -169,6 +171,22 @@ void set_component(World& w, const Guid& e, std::string_view type, asset::Json v
     if (!x) return;
     if (value.is_null()) x->components.erase(std::string(type));
     else x->components[std::string(type)] = std::move(value);
+}
+
+// ---- Tilemaps (2D part 4) ----
+std::optional<std::int32_t> tile(World& w, const Guid& e, int x, int y) {
+    auto* x_entity = w.find(e);
+    if (!x_entity || !x_entity->has("tilemap") || !x_entity->components["tilemap"].is_object()) return std::nullopt;
+    const auto& c = x_entity->components["tilemap"];
+    return c.contains("rows") ? asset::tile_at(c["rows"], x, y) : -1;
+}
+
+bool set_tile(World& w, const Guid& e, int x, int y, std::int32_t t) {
+    auto* x_entity = w.find(e);
+    if (!x_entity || !x_entity->has("tilemap") || !x_entity->components["tilemap"].is_object()) return false;
+    auto& c = x_entity->components["tilemap"];
+    if (!c.contains("rows")) return false;
+    return asset::set_tile(c["rows"], x, y, t);
 }
 
 // ---- Sprites ----

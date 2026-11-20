@@ -291,6 +291,14 @@ int32_t rt_character_contacts(noor_rt_entity e, noor_rt_vec3* floor_normal) {
     return (c->floor ? 1 : 0) | (c->wall ? 2 : 0) | (c->ceiling ? 4 : 0);
 }
 
+int32_t rt_tile(noor_rt_entity e, int32_t x, int32_t y) {
+    if (!t_world) return -2;
+    return runtime::api::tile(*t_world, from_rt(e), x, y).value_or(-2);
+}
+int32_t rt_set_tile(noor_rt_entity e, int32_t x, int32_t y, int32_t tile) {
+    return t_world && runtime::api::set_tile(*t_world, from_rt(e), x, y, tile) ? 1 : 0;
+}
+
 int32_t rt_water_flow(float x, float z, noor_rt_vec3* flow) {
     if (!t_world) return 0;
     const auto s = t_world->water_at(x, z);
@@ -316,6 +324,7 @@ const noor_rt_api kApi = {
     rt_character_water,
     rt_water_flow,
     rt_shape_cast, rt_overlap, rt_character_contacts,
+    rt_tile, rt_set_tile,
 };
 
 } // namespace

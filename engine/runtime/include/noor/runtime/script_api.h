@@ -52,6 +52,12 @@ void set_world_pose(World& w, const Guid& e, math::Vec3 position, math::Quat rot
 [[nodiscard]] const asset::Json* component(World& w, const Guid& e, std::string_view type);
 void set_component(World& w, const Guid& e, std::string_view type, asset::Json value);  // null removes
 
+// ---- Tilemaps (2D part 4): a `tilemap` component's cells, (0, 0) its bottom-left ----
+// The tile at (x, y): -1 if empty or outside; nullopt if the entity has no tilemap.
+[[nodiscard]] std::optional<std::int32_t> tile(World& w, const Guid& e, int x, int y);
+// Sets (x, y) (-1 empties it); false outside the map or without a tilemap. Drawing and collision follow at once.
+bool set_tile(World& w, const Guid& e, int x, int y, std::int32_t tile);
+
 // ---- Animations: sprites (Milestone 8B, part 6) and skeletal animators (8C, part 2) ----
 // They work on the entity's "animator" component (a model's clips), or else its "sprite" (a sheet's animations); both
 // keep the same fields. An animator running a controller: play goes to a state of its base layer, speed and stop scale

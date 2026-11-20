@@ -13,7 +13,7 @@ namespace noor::game {
 
 SceneRenderer::SceneRenderer(render::Renderer& renderer, std::filesystem::path texture_cache, asset::AssetFileResolver resolve)
     : renderer_(renderer), textures_(renderer, texture_cache), materials_(renderer, textures_, resolve),
-      environment_(renderer, std::move(texture_cache)), sprites_(renderer, textures_, resolve), resolve_(std::move(resolve)) {
+      environment_(renderer, std::move(texture_cache)), sprites_(renderer, textures_, resolve), tilemaps_(renderer, textures_, resolve), resolve_(std::move(resolve)) {
     box_ = upload(make_box({1, 1, 1}, {-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}), "Primitive box");
     sphere_ = upload(make_round(0.5f, 1.0f), "Primitive sphere");
 }
@@ -229,6 +229,7 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
     }
     const math::Vec3 look = math::normalize(math::transform_vector(math::inverse(cam.view), {0, 0, -1}));
     sprites_.add_draws(view.sprites, eye, static_cast<double>(view.lighting.time), out, cam.orthographic() ? &look : nullptr);
+    tilemaps_.add_draws(view.tilemaps, out);
     return out;
 }
 

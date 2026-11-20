@@ -4,6 +4,28 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — 2D foundations, part 4: tilemaps
+**Added**
+- `.noortileset` assets (`asset/tileset_asset.h`: a sprite sheet, solid and one-way tiles; the rows format and its
+  helpers `parse_tile_rows`, `tile_rows_hash`, `tile_at`, `set_tile`).
+- The `tilemap` component (`game/tilemap.h`): square, isometric and hexagonal layouts, rows one text line each; drawn
+  as one mesh per 32 x 32 chunk (`TilemapLibrary`, in games and the editor's viewport); `layer` / `order` / `sort` /
+  `unlit` / `color` as sprites.
+- Collision for square maps: `merge_cells`, `tilemap_boxes`; physics `StaticShape::Kind::Box`, `Options::tilemap_shapes`
+  and `tilemap_key` (rebuilt when the map changes).
+- `e:tile`, `e:set_tile` (Lua); `Tile`, `SetTile` (C#); `runtime::api::tile`, `set_tile`; rt API v12.
+- [docs/fx/TILEMAPS.md](docs/fx/TILEMAPS.md).
+
+**Changed**
+- The mesh shader interpolates texture coordinates at the centroid (MSAA edge pixels sampled inside their triangle):
+  needed for atlases; the Forest golden's leaf edges moved (1.4% of pixels) and its reference was updated.
+
+**Fixed**
+- The scene gather skipped entities whose only drawable component was new to it (tilemaps weren't gathered at all).
+
+**Tests:** `test_tilemap.cpp` (rows, merging, layouts, boxes, a character on tiles and through a broken one); goldens
+`Tilemap_Square`, `_Iso`, `_Hex`, `_Big`; `render.tilemap_batches` (64 chunks, about 0.6 ms of CPU).
+
 ### 2026-11-20 — 2D foundations, part 3: sprites for 2D
 **Added**
 - Sprite fields `layer`, `order`, `sort` (`"y"`), `blend`, `unlit`; sorted sprites go to the see-through pass.

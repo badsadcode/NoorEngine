@@ -1,0 +1,15 @@
+{
+  "noor_tileset": 1,
+  "name": "square",
+  "sheet": "7f95196e-a208-5833-a532-d378f3670ef0",
+  "solid": [
+    0,
+    1,
+    2,
+    3,
+    6
+  ],
+  "one_way": [
+    4
+  ]
+}

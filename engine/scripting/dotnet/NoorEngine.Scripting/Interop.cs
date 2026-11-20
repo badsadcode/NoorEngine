@@ -86,6 +86,9 @@ public unsafe struct RtApi
     public delegate* unmanaged<byte*, RtVec3, RtVec3, RtEntity*, RtHit*, void> ShapeCast;
     public delegate* unmanaged<byte*, RtVec3, RtEntity*, RtEntity*, int, int> Overlap;
     public delegate* unmanaged<RtEntity, RtVec3*, int> CharacterContacts;
+    // v12: tilemaps (2D part 4)
+    public delegate* unmanaged<RtEntity, int, int, int> Tile;
+    public delegate* unmanaged<RtEntity, int, int, int, int> SetTile;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -101,7 +104,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 11;
+    public const uint ExpectedVersion = 12;
     public static RtApi* Api;
 
     public static ref RtApi A

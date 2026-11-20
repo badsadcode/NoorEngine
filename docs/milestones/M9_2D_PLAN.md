@@ -28,7 +28,7 @@ the bit; every existing golden and yardstick unchanged.
 | 2 ✅ | **A 2D character controller**: walking, jumping with variable height, slopes, one-way platforms, ground snapping; coyote time and jump buffering as options; `on_ground` events for scripts | A scripted run over a test course (slope, gap, one-way platform) lands where the maths says; a built game identical |
 | 2b ✅ | **Your own controllers** (added 2026-11-20, Tom: "will the engine let me make my own controllers?"): a character whose velocity the script owns (`"motion": "script"`, Godot's CharacterBody), floor, wall and ceiling contacts, `set_velocity` on walking characters for one step, shape casts and overlaps, for Lua and C#; [Coming from Godot](../scripting/COMING_FROM_GODOT.md) | A script-owned character hangs where it's put, stops under a roof and on a floor with its velocity slid away; a double jump from a script; shape casts and overlaps by hand; a Godot-style platformer written in Lua lands, jumps and stops at a wall |
 | 3 ✅ | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
-| 4 | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
+| 4 ✅ | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
 | 5 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
 | 6 | **Cameras for 2D**: pixel-perfect (whole pixels at a chosen pixels per unit, integer scaling for retro resolutions), following with a dead zone and bounds, parallax layers | A moving pixel-perfect camera never draws a sprite between pixels (readback); parallax layers move by their factor (golden at two moments) |
 | 7 | **Samples, templates and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks. The first **project templates** (spec 24.1): Empty 2D, 2D Platformer, Top-Down 2D, each a small working start made only of public features; the review | The gate |
@@ -95,6 +95,28 @@ Proved by goldens: three walkers at one depth stacked by layer against their sce
 over them; a lit and an unlit coin under a dim sun; a top-down crowd listed top to bottom and drawn bottom-nearest; a
 frame magnified beside a solid red one with no red pixel in the picture. And on Tom's art: the line under the hero's
 feet in the jump frame is gone.
+
+## Part 4 result (2026-11-21)
+Done ([docs](../fx/TILEMAPS.md)). A `.noortileset` (a sprite sheet, its solid and one-way tiles) and a `tilemap`
+component whose `rows` are one text line per row, top first (`.` empty), so a map reads like itself and diffs by row.
+Square, isometric (2:1 diamonds, tall tiles rising above them, drawn back to front) and hexagonal (pointy tops) layouts.
+Drawn as one mesh per 32 × 32 chunk, rebuilt only when the rows (or the tileset) change; parsed grids are shared by
+drawing and collision through a cache keyed by the rows' fingerprint. Square maps collide: solid and one-way tiles
+merged into as few boxes as cover them exactly, rebuilt at the next physics step when the map changes.
+`e:tile` / `e:set_tile` (Lua), `Tile` / `SetTile` (C#, rt API v12).
+
+Proved: the rows format (parse, write back, errors naming row and column, setting one cell rewrites one row); merging
+(a block is one box, an L two, a checkerboard can't merge, every solid cell covered exactly once); where cells sit in
+each layout; a character standing on merged tile boxes at the floor's exact top and on a one-way tile, then falling when
+a script breaks the tile under it (unit); goldens of all three layouts; a 256 × 256 map (about 46,000 tiles) in 67 draw
+calls with about 0.6 ms of CPU a frame (`render.tilemap_batches`).
+
+**Found and fixed on the way:** (1) the scene gather skipped any entity it didn't already know a component of, so the
+first tilemaps simply weren't there; (2) with 4× MSAA, a pixel on a tile's edge is shaded at its centre, which can lie
+outside the tile, so its texture coordinate ran into the next frame of the sheet: faint lines over the isometric map.
+Texture coordinates are now interpolated at the **centroid** (inside the covered part of the pixel), for every mesh.
+That moved leaf edges in the Forest golden (1.4% of its pixels, indistinguishable by eye) and nothing else; its reference
+was updated. **Not yet:** painting (part 5), animated tiles, auto-tiling, collision for isometric and hexagonal maps.
 
 ## Highest risks (settle early)
 
