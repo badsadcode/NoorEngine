@@ -3,7 +3,7 @@
 # 9A started (tests/yardsticks.json, written by tools/samples/measure_yardsticks.py): the CPU per frame (median and
 # 95th percentile of the game, the view and recording), the GPU per frame, memory (working set, private, GPU resident),
 # threads, and how long the first frame took. Each has a limit in the baseline file (the measurement plus a margin for
-# a busy machine); going over any fails.
+# a busy machine); going over any fails. The time to the first frame is measured warm (after a short warm-up launch).
 #   -DPLAYER=<noor_player> -DPROJECT=<folder> -DSCENE=<scene> -DNAME=<baseline entry> -DBASELINE=<yardsticks.json>
 #   -DWORK=<folder> [-DSTALL_MS=<ms>]  (a deliberate stall in every update: proves the check catches one)
 file(REMOVE_RECURSE "${WORK}")
@@ -14,6 +14,11 @@ if(missing)
     message(FATAL_ERROR "no baseline for '${NAME}' in ${BASELINE}")
 endif()
 string(JSON frames GET "${entry}" frames)
+# A short warm-up launch first, so "time to the first frame" is measured warm: right after a C# build or with the disk
+# cache cold, one launch can take seconds longer (measured: 0.7 s warm, 9 s straight after cli.build_sample_fps), which
+# says nothing about the engine.
+execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames 30 --no-audio --no-input
+                        --log "${WORK}/warmup.log" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
 set(extra "")
 if(STALL_MS)
     set(extra --stall-ms ${STALL_MS})

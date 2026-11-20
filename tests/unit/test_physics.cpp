@@ -9,6 +9,8 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
+#include <string>
 
 using namespace noor;
 using asset::Json;
@@ -236,4 +238,135 @@ TEST_CASE("physics + lua: collision hooks fire and scripts can raycast and push"
     const auto* landed = runtime::api::component(world, ball.id, "landed");
     REQUIRE(landed);
     CHECK((*landed)["on"] == "Floor");
+}
+
+// ---- 2D physics (9-2D part 1, ADR-040): Jolt with bodies locked to the XY plane, 2D shapes as slabs -----------------
+
+namespace {
+
+// A tumbling pile of 2D shapes dropped onto a tilted floor and against a wall: rectangles, circles and triangles, some
+// at z = 0.3 (bodies keep whatever depth they start at). `plane` false: the same pile, free in 3D (the control).
+scene::Scene pile_2d(bool plane) {
+    scene::Scene s;
+    auto ground = body("Ground", {0, 0, 0}, {{"shape", "rectangle"}, {"size", {30, 1}}});
+    ground.transform.rotation = math::Quat::from_axis_angle({0, 0, 1}, math::radians(-12.0f));
+    auto wall = body("Wall", {9, 4, 0}, {{"shape", "rectangle"}, {"size", {1, 10}}});
+    s.entities = {ground, wall};
+    Json rb{{"type", "dynamic"}};
+    if (plane) rb["plane"] = "xy";
+    for (int i = 0; i < 18; ++i) {
+        const float x = -6.0f + static_cast<float>(i % 6) * 1.3f, y = 3.0f + static_cast<float>(i / 6) * 1.6f;
+        const float z = (i % 4 == 0) ? 0.3f : 0.0f;
+        Json c;
+        if (i % 3 == 0) c = {{"shape", "rectangle"}, {"size", {0.9, 0.6}}};
+        else if (i % 3 == 1) c = {{"shape", "circle"}, {"radius", 0.4}};
+        else c = {{"shape", "polygon"}, {"points", {{-0.5, -0.3}, {0.5, -0.3}, {0.1, 0.5}}}};
+        auto e = body("Piece " + std::to_string(i), {x, y, z}, c, rb);
+        e.transform.rotation = math::Quat::from_axis_angle({0, 0, 1}, 0.3f * static_cast<float>(i));
+        s.entities.push_back(e);
+    }
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("physics 2D: bodies locked to the plane stay in it to the bit and turn only about Z") {
+    Sim locked(pile_2d(true));
+    locked.run(8.0);
+    int moved_in_plane = 0;
+    for (const auto& e : locked.world.scene().entities) {
+        if (!e.name.starts_with("Piece")) continue;
+        const int i = std::stoi(e.name.substr(6));
+        CHECK(e.transform.position.z == ((i % 4 == 0) ? 0.3f : 0.0f));  // exactly: not a micrometre out of its plane
+        CHECK(std::fabs(e.transform.rotation.x) < 1e-6f);
+        CHECK(std::fabs(e.transform.rotation.y) < 1e-6f);
+        if (e.transform.position.y < 3.0f + static_cast<float>(i / 6) * 1.6f - 0.5f) ++moved_in_plane;  // fell from its start
+    }
+    CHECK(moved_in_plane == 18);  // everything fell and tumbled
+
+    // The control: the same pile free in 3D leaves the plane (so the lock is what keeps it there).
+    Sim free(pile_2d(false));
+    free.run(8.0);
+    float most = 0;
+    for (const auto& e : free.world.scene().entities)
+        if (e.name.starts_with("Piece")) most = std::max(most, std::fabs(e.transform.position.z - ((std::stoi(e.name.substr(6)) % 4 == 0) ? 0.3f : 0.0f)));
+    CHECK(most > 0.01f);
+}
+
+TEST_CASE("physics 2D: the same pile twice lands the same, to the bit") {
+    Sim a(pile_2d(true)), b(pile_2d(true));
+    a.run(6.0);
+    b.run(6.0);
+    const auto& ea = a.world.scene().entities;
+    const auto& eb = b.world.scene().entities;
+    REQUIRE(ea.size() == eb.size());
+    for (std::size_t i = 0; i < ea.size(); ++i) {
+        CHECK(ea[i].transform.position.x == eb[i].transform.position.x);
+        CHECK(ea[i].transform.position.y == eb[i].transform.position.y);
+        CHECK(ea[i].transform.rotation.z == eb[i].transform.rotation.z);
+    }
+}
+
+TEST_CASE("physics 2D: a circle rolls down a slope like a disc: a = 2/3 g sin(angle)") {
+    const float angle = math::radians(20.0f);
+    scene::Scene s;
+    auto slope = body("Slope", {0, 0, 0}, {{"shape", "rectangle"}, {"size", {60, 1}}});
+    slope.transform.rotation = math::Quat::from_axis_angle({0, 0, 1}, -angle);
+    // On the slope's top face (0.5 up from its middle line), 0.5 m radius, near the high end.
+    const math::Vec3 down{std::cos(angle), -std::sin(angle), 0}, up_normal{std::sin(angle), std::cos(angle), 0};
+    const math::Vec3 start = down * -20.0f + up_normal * (0.5f + 0.5f + 0.001f);
+    auto wheel = body("Wheel", start, {{"shape", "circle"}, {"radius", 0.5}},
+                      {{"type", "dynamic"}, {"plane", "xy"}, {"linear_damping", 0}, {"angular_damping", 0}, {"friction", 0.8}});
+    s.entities = {slope, wheel};
+    Sim sim(s);
+    std::vector<float> along;  // distance down the slope, frame by frame
+    for (int f = 0; f < 150; ++f) {
+        sim.world.frame(1.0 / 60.0, {});
+        along.push_back(math::dot(sim.pos(wheel) - start, down));
+    }
+    // From 0.5 s to 2.5 s: speed from the distance covered over a frame, at both ends.
+    const auto speed = [&](int f) { return (along[static_cast<std::size_t>(f)] - along[static_cast<std::size_t>(f - 1)]) * 60.0f; };
+    const float a = (speed(149) - speed(30)) / (119.0f / 60.0f);
+    const float disc = 2.0f / 3.0f * 9.81f * std::sin(angle), sphere = 5.0f / 7.0f * 9.81f * std::sin(angle);
+    MESSAGE("rolling: " << a << " m/s2 (disc " << disc << ", a ball would be " << sphere << ")");
+    CHECK(a == doctest::Approx(disc).epsilon(0.015));
+    // Rolling, not sliding: it turned about Z, by the distance over its radius.
+    CHECK(std::fabs(sim.world.find(wheel.id)->transform.rotation.z) > 0.1f);
+}
+
+TEST_CASE("physics 2D: a polygon lands and rests on a side, locks work in 3D too, bad polygons are refused") {
+    scene::Scene s;
+    s.entities.push_back(body("Ground", {0, -0.5f, 0}, {{"shape", "rectangle"}, {"size", {20, 1}}}));
+    // A right triangle dropped point-down falls over onto one of its sides.
+    auto tri = body("Triangle", {0, 3, 0}, {{"shape", "polygon"}, {"points", {{0, 0}, {1.2, 0}, {0, 0.9}}}}, {{"type", "dynamic"}, {"plane", "xy"}});
+    tri.transform.rotation = math::Quat::from_axis_angle({0, 0, 1}, math::radians(200.0f));
+    // A tall 3D box dropped half onto a step, with its X and Z turning locked: unlocked it would topple off the step's
+    // edge; locked it can only turn about Y, so it stands on the edge, upright.
+    s.entities.push_back(body("Step", {5.3f, 0.25f, 0}, {{"shape", "box"}, {"size", {0.4, 0.5, 0.4}}}));
+    auto post = body("Post", {5, 2.5f, 0}, {{"shape", "box"}, {"size", {0.4, 2, 0.4}}}, {{"type", "dynamic"}, {"lock_rotation", {"x", "z"}}});
+    auto bad = body("Bad", {-5, 2, 0}, {{"shape", "polygon"}, {"points", {{0, 0}, {1, 0}}}}, {{"type", "dynamic"}});
+    s.entities.push_back(tri);
+    s.entities.push_back(post);
+    s.entities.push_back(bad);
+    Sim sim(s);
+    sim.run(6.0);
+    // Resting on a side: its origin is the right-angle corner, so it's on the ground (a leg down) or the hypotenuse's
+    // height above it (1.2 x 0.9 / 1.5 = 0.72 m, the hypotenuse down), give or take Jolt's convex radius.
+    const float cy = sim.pos(tri).y;
+    MESSAGE("triangle rests with its origin at y " << cy);
+    CHECK((std::fabs(cy) < 0.03f || std::fabs(cy - 0.72f) < 0.03f));
+    const auto r = sim.world.find(tri.id)->transform.rotation;
+    CHECK(std::fabs(r.x) < 1e-6f);
+    CHECK(std::fabs(r.y) < 1e-6f);
+    // Landed and still: no change over a further second.
+    const math::Vec3 before = sim.pos(tri);
+    sim.run(1.0);
+    CHECK(math::length(sim.pos(tri) - before) < 1e-3f);
+    // The post stands on the step's edge: the step's 0.5 m plus half its height, and no tilt.
+    CHECK(sim.pos(post).y == doctest::Approx(1.5f).epsilon(0.02));
+    const auto pr = sim.world.find(post.id)->transform.rotation;
+    CHECK(std::fabs(pr.x) < 1e-6f);
+    CHECK(std::fabs(pr.z) < 1e-6f);
+    // Two points aren't a polygon: no body, so it hangs where it was put.
+    CHECK(sim.pos(bad).y == 2.0f);
 }

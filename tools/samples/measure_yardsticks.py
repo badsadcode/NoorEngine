@@ -45,6 +45,9 @@ METRICS = {
 
 def run(project, scene, work):
     report = work / "report.json"
+    # A warm-up launch first, as tests/yardstick_check.cmake does: the first frame is measured warm.
+    subprocess.run([str(PLAYER), str(ROOT / project), "--scene", scene, "--frames", "30", "--no-audio", "--no-input",
+                    "--log", str(work / "warmup.log")], check=False, capture_output=True)
     subprocess.run([str(PLAYER), str(ROOT / project), "--scene", scene, "--frames", str(FRAMES), "--no-audio", "--no-input",
                     "--report", str(report), "--log", str(work / "player.log")], check=True, capture_output=True)
     r = json.loads(report.read_text(encoding="utf-8"))

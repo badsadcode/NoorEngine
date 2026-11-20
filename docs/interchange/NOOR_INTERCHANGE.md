@@ -219,11 +219,15 @@ Field rules (full detail in the schema):
 |---|---|---|
 | BadShip | **NoorShip** | `ship` (spaceships, submarines; interiors later) |
 | BadLevel | **NoorLevel** | `level` (blockouts with markers) |
-| BadBuilding | **NoorArchitect** | `building` (from footprints; interiors later) |
+| BadBuilding | **NoorBuilding** | `building` (from footprints; interiors later) |
 | BadVegetation (planned) | **NoorVegetation** | `vegetation.*` |
 | BadRoads (planned) | **NoorRoads** | `road` |
 | BadBridges (planned) | **NoorBridges** | `bridge` |
 | NoorMD benches | NoorForm, NoorMaterial, NoorMesh, NoorForge… | trees/rocks, materials, models |
+
+**NoorArchitect** is the family name for the world-building generators: NoorBuilding, NoorRoads, NoorBridges,
+NoorVegetation and the ones after them (Tom, 2026-11-20; it used to be BadBuilding's new name). A manifest's
+`generator.tool` names the member that made it, not the family.
 
 *The mapping is a proposal; final names are Tom's call.*
 

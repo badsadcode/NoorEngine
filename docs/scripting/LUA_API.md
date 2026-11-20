@@ -143,6 +143,19 @@ Add them in the Inspector (**Add component ▸ Physics**) or use **Create ▸ Ph
 ```
 The sun shines along its entity's forward; see [docs/rendering/PBR.md](../rendering/PBR.md).
 
+**2D physics** ([ADR-040](../decisions/ADR-040-2d-and-isometric.md)): the 2D world is the XY plane (+Y up). 2D shapes
+are slabs (`depth` thick, 1 m by default) so 2D bodies always meet; a dynamic body with `"plane": "xy"` moves only in X
+and Y and turns only about Z, exactly (it never drifts out of its plane):
+
+```json
+"collider":  { "shape": "rectangle", "size": [2, 1] }        // or circle (radius), polygon (convex "points": [[x, y], ...])
+"rigidbody": { "type": "dynamic", "plane": "xy" }
+"rigidbody": { "type": "dynamic", "lock_rotation": ["x", "z"] }   // any axes, in 3D too ("lock_position" likewise)
+```
+
+A `circle` rolls like a disc (it's given a disc's inertia). `angular_damping` (0.05 by default) slows turning, as
+`linear_damping` slows moving.
+
 A `character` is a capsule controller with its feet at the entity's origin: it slides along
 walls, walks up steps and slopes, stays on the ground going down, and jumps. While playing, the
 viewport looks through the first entity with a `camera`. **Create ▸ Player (first person)** sets

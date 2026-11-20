@@ -43,7 +43,7 @@ someone wants to make Pong in NoorEngine, they should be able to (and 9A part 1 
 | **9A: Big worlds** | Large-world coordinates, world cells loaded and unloaded in the background on a budget, a cached scene gather, references that stay valid across cells, saving and restoring streamed state, the streaming inspector; **all optional**: a plain scene needs no world grid | **Next** ([parts below](#9a-big-worlds)) |
 | **9B: Land and water** | Landforms, world-type recipes, climate and moisture, drainage and watersheds, lakes at their spill level and river networks emitted as 8D water bodies, biome maps, all deterministic from recipe and seed, as nodes in the procedural graph (ADR-014) over the existing terrain and water. No second terrain or water system | Planned |
 | **9C: Roads** | An engine-owned road graph (splines, junctions, intersections) with editor tools, terrain cut and fill in a protected layer, bridges and crossings, roadside exclusion masks, manual edits that survive regeneration; the same spline tool edits rivers. Usable in hand-made scenes as well as generated ones. NoorRoads stays an independent generator for road meshes, junction geometry, profiles, structures and roadside assets | Planned |
-| **9D: Settlements and buildings** | Blocks and parcels, footprints, settlement layouts, placement, calling NoorArchitect headlessly, importing what it returns (Noor Interchange), dependency tracking, manual changes kept. First test: a small mixed village (cottages, detached houses, a few shops, regional variations) | Planned; starts with an **audit** of NoorArchitect and NoorRoads |
+| **9D: Settlements and buildings** | Blocks and parcels, footprints, settlement layouts, placement, calling NoorBuilding headlessly, importing what it returns (Noor Interchange), dependency tracking, manual changes kept. First test: a small mixed village (cottages, detached houses, a few shops, regional variations) | Planned; starts with an **audit** of NoorBuilding and NoorRoads |
 | **9E: Vegetation ecology and simulation** | Suitability (biome, moisture, slope, elevation, light), species, forest layers and populations, urban constraints from 9C/9D's masks, protected manual vegetation; the **simulation interface** with one example: a forest growing, ageing, spreading and recovering over simulated time, deterministic | Planned |
 | **The showcase** | NoorWorldShowcase: a generated, explorable, streamed world: terrain and biomes, forests, a lake and river, roads and bridges, a small village of generated buildings, sky and weather, the generation graphs open, manual edits surviving regeneration, Alden exploring it. The milestone's gate review | Planned |
 | ~~9F: GIS~~ | **Deferred to a later milestone** (Tom and Noor). Milestone 9 must not block it: see [Ready for GIS](#ready-for-gis-later) | Later |
@@ -101,7 +101,7 @@ lives only in editor UI code (ADR-025 already draws that line).
 ### Independent generators: a file contract
 
 NoorEngine owns the canonical editable data: the road graph, parcels and footprints. Independent generators
-(NoorArchitect, NoorRoads, later NoorVegetation and NoorBridges) are processes with a documented, versioned file
+(the NoorArchitect family: NoorBuilding, NoorRoads, later NoorVegetation and NoorBridges; also NoorLevel and NoorFengShui) are processes with a documented, versioned file
 contract: Noor Interchange, or an explicitly versioned extension of it. A generator must:
 
 - accept a recipe, a seed and geometric constraints;
@@ -112,7 +112,7 @@ contract: Noor Interchange, or an explicitly versioned extension of it. A genera
 - depend on nothing inside NoorEngine.
 
 This decides **ADR-007** (plugin ABI): a generator is a process first; in-process plugins later, if ever. Nobody
-assumes NoorArchitect or NoorRoads already meet this. **9D starts with an audit** of both. Any adaptations needed
+assumes NoorBuilding or NoorRoads already meet this. **9D starts with an audit** of both. Any adaptations needed
 are written up separately, for their own repositories.
 
 ### Simulation: an interface plus one example
@@ -278,7 +278,7 @@ on that list need that the engine doesn't have yet?
 | **Big worlds**: coordinates, streaming (the rest of 9A) | Open-world survival, driving, big RPGs |
 | **Vehicles** (spec 19.3, Milestone 10) | Driving games |
 | **Generated worlds**: land and water, roads, settlements, ecology (9B–9E) | Open-world survival, driving, big RPGs |
-| **Generators as tools**: NoorLevel's blockouts, NoorArchitect's buildings, NoorFengShui's furnished rooms | Dungeon crawlers, FPS levels, interiors for any 3D game |
+| **Generators as tools**: NoorLevel's blockouts, NoorBuilding's buildings, NoorFengShui's furnished rooms | Dungeon crawlers, FPS levels, interiors for any 3D game |
 
 So the order:
 
@@ -292,7 +292,7 @@ So the order:
    generated world with nothing that can walk round it, be saved, or show a menu isn't a game either.
 3. **Back to 9A, big worlds** (parts 2–8), then **9B–9E** and the showcase, as planned. Vehicles fit beside 9C (roads
    and cars belong together; the showcase could add a drive); the generator contract (ADR-007, the 9D audit) brings in
-   NoorLevel and NoorFengShui as well as NoorArchitect.
+   NoorLevel and NoorFengShui as well as NoorBuilding.
 
 Everything stays measured by the yardsticks, so going 2D or adding gameplay systems can't quietly slow 3D down, or the
 other way round.

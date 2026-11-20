@@ -107,6 +107,31 @@ float number(const Json& j, const char* key, float fallback) {
     return it != j.end() && it->is_number() ? it->get<float>() : fallback;
 }
 
+// What a dynamic body may do (ADR-040): `"plane": "xy"` moves in X and Y and turns about Z (2D); `lock_position` and
+// `lock_rotation` (lists of "x", "y", "z") take axes away, in 2D or 3D. Everything locked would leave Jolt nothing to
+// move, so at least one translation stays.
+JPH::EAllowedDOFs allowed_dofs(const Json& rb) {
+    using D = JPH::EAllowedDOFs;
+    D allowed = D::All;
+    const auto take = [&](D axis) { allowed = static_cast<D>(static_cast<std::uint8_t>(allowed) & ~static_cast<std::uint8_t>(axis)); };
+    if (rb.value("plane", std::string()) == "xy") allowed = D::Plane2D;
+    const auto locks = [&](const char* key, D x, D y, D z) {
+        const auto it = rb.find(key);
+        if (it == rb.end() || !it->is_array()) return;
+        for (const auto& a : *it) {
+            if (!a.is_string()) continue;
+            const std::string s = a.get<std::string>();
+            if (s == "x") take(x);
+            else if (s == "y") take(y);
+            else if (s == "z") take(z);
+        }
+    };
+    locks("lock_position", D::TranslationX, D::TranslationY, D::TranslationZ);
+    locks("lock_rotation", D::RotationX, D::RotationY, D::RotationZ);
+    if ((static_cast<std::uint8_t>(allowed) & 0b111) == 0) allowed = static_cast<D>(static_cast<std::uint8_t>(allowed) | static_cast<std::uint8_t>(D::TranslationY));
+    return allowed;
+}
+
 math::Vec3 vec3(const Json& j, const char* key, math::Vec3 fallback) {
     const auto it = j.find(key);
     if (it == j.end() || !it->is_array() || it->size() != 3) return fallback;
@@ -373,6 +398,37 @@ struct PhysicsSystem::Impl {
             result = JPH::BoxShapeSettings(half, convex).Create();
         } else if (shape == "sphere") {
             result = JPH::SphereShapeSettings(std::max(0.005f, number(collider, "radius", 0.5f) * s_max)).Create();
+        } else if (shape == "rectangle") {
+            // 2D shapes (ADR-040): slabs in the XY plane, `depth` thick (1 m), so 2D bodies in one plane always meet.
+            math::Vec3 size{1, 1, 0};  // [w, h] (a third number is ignored: the slab's thickness is `depth`)
+            if (const auto sz = collider.find("size"); sz != collider.end() && sz->is_array() && sz->size() >= 2 && (*sz)[0].is_number() && (*sz)[1].is_number())
+                size = {(*sz)[0].get<float>(), (*sz)[1].get<float>(), 0.0f};
+            const float depth = number(collider, "depth", 1.0f);
+            const JPH::Vec3 half(std::max(0.005f, size.x * scale.x * 0.5f), std::max(0.005f, size.y * scale.y * 0.5f),
+                                 std::max(0.005f, depth * scale.z * 0.5f));
+            const float convex = std::min(JPH::cDefaultConvexRadius, 0.5f * half.ReduceMin());
+            result = JPH::BoxShapeSettings(half, convex).Create();
+        } else if (shape == "circle") {
+            // A sphere touches a plane exactly as a disc does, and rolls like one when the body is locked to the plane.
+            result = JPH::SphereShapeSettings(std::max(0.005f, number(collider, "radius", 0.5f) * std::max(scale.x, scale.y))).Create();
+        } else if (shape == "polygon") {
+            // A convex polygon from `points` [[x, y], ...] (local, before scale), extruded `depth` along Z.
+            const auto pts_json = collider.find("points");
+            JPH::Array<JPH::Vec3> pts;
+            const float half_depth = std::max(0.005f, number(collider, "depth", 1.0f) * scale.z * 0.5f);
+            if (pts_json != collider.end() && pts_json->is_array()) {
+                for (const auto& q : *pts_json) {
+                    if (!q.is_array() || q.size() < 2 || !q[0].is_number() || !q[1].is_number()) continue;
+                    const float x = q[0].get<float>() * scale.x, y = q[1].get<float>() * scale.y;
+                    pts.push_back(JPH::Vec3(x, y, -half_depth));
+                    pts.push_back(JPH::Vec3(x, y, half_depth));
+                }
+            }
+            if (pts.size() < 6) {
+                error = "a polygon needs at least three points: \"points\": [[x, y], ...]";
+                return nullptr;
+            }
+            result = JPH::ConvexHullShapeSettings(pts).Create();
         } else if (shape == "capsule") {
             const float radius = std::max(0.005f, number(collider, "radius", 0.3f) * std::max(scale.x, scale.z));
             const float height = number(collider, "height", 1.8f) * scale.y;
@@ -408,7 +464,7 @@ struct PhysicsSystem::Impl {
                 triangles.push_back(JPH::IndexedTriangle(tris->indices[i], tris->indices[i + 1], tris->indices[i + 2], 0));
             result = JPH::MeshShapeSettings(std::move(vertices), std::move(triangles)).Create();
         } else {
-            error = std::format("unknown collider shape \"{}\" (box, sphere, capsule, convex, mesh)", shape);
+            error = std::format("unknown collider shape \"{}\" (box, sphere, capsule, convex, mesh; 2D: rectangle, circle, polygon)", shape);
             return nullptr;
         }
         if (result.HasError()) {
@@ -549,12 +605,23 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
     settings.mFriction = number(rb, "friction", 0.5f);
     settings.mRestitution = number(rb, "restitution", 0.0f);
     settings.mLinearDamping = number(rb, "linear_damping", 0.05f);
+    settings.mAngularDamping = number(rb, "angular_damping", 0.05f);
     settings.mGravityFactor = number(rb, "gravity_scale", 1.0f);
     settings.mIsSensor = c->value("trigger", false);
     if (settings.mIsSensor && type != Impl::Type::Dynamic) settings.mCollideKinematicVsNonDynamic = true;
     if (type == Impl::Type::Dynamic) {
         settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
         settings.mMassPropertiesOverride.mMass = std::max(0.001f, number(rb, "mass", 1.0f));
+        settings.mAllowedDOFs = allowed_dofs(rb);  // 2D (ADR-040): locked to a plane, or any axes locked
+        if (c->value("shape", std::string()) == "circle") {
+            // A circle is a sphere to Jolt, but it should turn like a disc: I = m r^2 / 2 about Z (a sphere's 2/5 would
+            // roll it 7% faster down a slope than a disc rolls). X and Y get a disc's m r^2 / 4.
+            const math::Vec3 s = scale_of(*world_m);
+            const float r = std::max(0.005f, number(*c, "radius", 0.5f) * std::max(s.x, s.y));
+            const float m = settings.mMassPropertiesOverride.mMass;
+            settings.mOverrideMassProperties = JPH::EOverrideMassProperties::MassAndInertiaProvided;
+            settings.mMassPropertiesOverride.mInertia = JPH::Mat44::sScale(JPH::Vec3(m * r * r * 0.25f, m * r * r * 0.25f, m * r * r * 0.5f));
+        }
     }
     d.entity_of.push_back(entity.id);
     settings.mUserData = d.entity_of.size();

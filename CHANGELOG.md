@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — 2D foundations, part 1: 2D physics on Jolt
+**Added**
+- [M9_2D_PLAN.md](docs/milestones/M9_2D_PLAN.md) and [ADR-040](docs/decisions/ADR-040-2d-and-isometric.md): 2D inside
+  the 3D engine (the XY plane, Jolt locked to it, one physics engine).
+- Rigidbody `"plane": "xy"`, `lock_position`, `lock_rotation`, `angular_damping`; colliders `rectangle`, `circle` (disc
+  inertia) and `polygon` (convex, extruded by `depth`).
+- `tools/samples/make_2d_test_scenes.py` and the `Physics2D_Pile` test scene.
+
+**Changed**
+- Names: BadBuilding becomes **NoorBuilding**; **NoorArchitect** is the family name for the world-building generators
+  (Tom). NOOR_INTERCHANGE.md section 7 and the M9 plan follow.
+
+**Tests:** a locked pile stays in its planes to the bit (and its unlocked control doesn't); determinism; a circle rolls
+at the disc formula's rate (2.23677 against 2.23681 m/s²); polygons rest on a side; axis locks in 3D; golden
+`Physics2D_Pile`.
+
 ### 2026-11-20 — The order from here
 **Docs**
 - [M9_PLAN.md](docs/milestones/M9_PLAN.md#the-order-from-here-sage-2026-11-20): Tom's list of game types, what each

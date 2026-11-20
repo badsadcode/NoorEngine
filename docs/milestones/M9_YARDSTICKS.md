@@ -31,7 +31,9 @@ frame together (what the CPU spends, vsync aside); its 95th percentile in bracke
 
 **The limits** (`tests/yardsticks.json`) are each measurement plus a margin for a busy machine: CPU median ×1.3 + 0.2 ms,
 CPU p95 ×1.5 + 0.4 ms, GPU ×1.3 + 0.1 ms, memory ×1.15 + 24 MB, GPU memory ×1.05 + 8 MB, threads +2, first frame ×1.5 +
-0.5 s. The timing tests run alone (`RUN_SERIAL`). **The check is proven to bite**: `yardstick.catches_a_stall` runs the
+0.5 s. The timing tests run alone (`RUN_SERIAL`), and each starts with a short warm-up launch, so
+the first frame is measured **warm**: in the first full run with these tests, NoorFPS-lite took 9 s to its first frame
+straight after the suite's C# build of it (build servers still busy, disk cache cold) and 0.7 s the next time. **The check is proven to bite**: `yardstick.catches_a_stall` runs the
 cube with a deliberate 1 ms stall in every update (`noor_player --stall-ms 1`) and passes only if the check reports it
 over its limit (it measures 1.15 ms against a limit of 0.45 ms).
 

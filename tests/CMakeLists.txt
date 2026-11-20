@@ -193,6 +193,16 @@ foreach(name IN ITEMS Sprites_Sun Sprites_Shade Sprites_Coth)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# 2D physics (the 2D foundations, part 1, ADR-040): rectangles and circles locked to the XY plane tumbling down a
+# tilted floor against a wall, seen by an orthographic camera, four seconds in (tools/samples/make_2d_test_scenes.py).
+add_test(NAME render.golden_Physics2D_Pile
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Physics2D_Pile.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Physics2D_Pile.png -DFRAMES=240
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Physics2D_Pile
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Physics2D_Pile PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 # Gameplay particles (Milestone 8B, part 7): gravel landing and settling on a terrain (never through it) and drops
 # that die on it and splash (a sub-emitter); five seconds in.
 add_test(NAME render.golden_Particles_Terrain
