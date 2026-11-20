@@ -61,6 +61,7 @@ line); the game keeps running.
 | `Noor.Find(name)` | `Entity?` |
 | `Noor.Raycast(origin, direction, maxDistance = 1000, ignore = null)` | `RaycastHit?` (`Entity`, `Point`, `Normal`, `Distance`) |
 | `Water.Height(x, z)` | `float?`: the water surface's height (world y) at world (x, z) now, waves included; null where there's no water (8D) |
+| `Water.Flow(x, z)` | `Vector3?`: the water's own velocity there (m/s: a river's current), null where there's no water (8D, rt API v9) |
 | `Water.Normal(x, z)` | `Vector3?`: its normal there |
 | `Noor.PlaySound(clip, position = null, volume = 1, bus = "sfx")` | A one-shot sound (asset id or `Assets/...` path); 3D with a position. `true` if it started |
 | `Noor.SetVolume(bus, volume)` | Bus volume: `master`, `music`, `sfx`, `ui`, `voice` |

@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 6: rivers
+**Added**
+- **Rivers** (`docs/water/WATER.md`): `"shape": "river"` with `points`, `width`, `speed`; a ribbon along a smooth course,
+  ripples and foam flowing downstream, white water on steep stretches.
+- The current for gameplay: `World::WaterSample::flow`; floating bodies carried, swimmers drifting, waders pushed;
+  `noor.water_flow(x, z)` (Lua), `Water.Flow(x, z)` (C#, rt API v9).
+- Test data: a generated valley heightmap (`Assets/Terrain/river_valley.png`), grass and sand materials.
+
+**Measured:** a floating crate carried at the river's 1.5 m/s within 2%.
+
+**Tests:** unit tests for rivers (2); goldens `Water_River`, `Water_River_Mouth`; C# host v9.
+
 ### 2026-11-20 — Milestone 8D, part 5: water in the game
 **Added**
 - **Floating** (`docs/water/WATER.md`, `physics.h`): dynamic bodies in water float by their density, tip to their

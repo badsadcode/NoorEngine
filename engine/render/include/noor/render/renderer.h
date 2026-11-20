@@ -380,6 +380,21 @@ struct WaterDepthMap {
     std::vector<float> depth;   // nx * nz
 };
 
+// A river's course (8D part 6; game/water.h builds it from the component's points): its centre line sampled about every
+// metre, each sample with its surface's height (centre.y), half its width, how far along the river it is, which way the
+// water runs there (unit, x and z) and how steeply the surface falls (metres per metre). Shared and immutable.
+struct WaterPath {
+    struct Sample {
+        math::Vec3 centre;
+        float half_width = 2.0f;
+        float along = 0.0f;
+        math::Vec2 tangent{1.0f, 0.0f};
+        float slope = 0.0f;
+    };
+    std::vector<Sample> samples;  // at least 2
+    float speed = 1.0f;           // m/s, downstream
+};
+
 // One water surface: a level rectangle (a lake's, a pond's), drawn over a copy of the opaque scene so it knows how deep
 // it is at every pixel. Radiometric settings are physical-ish and art-directed (docs/water/WATER.md).
 struct WaterDraw {
@@ -430,6 +445,8 @@ struct WaterDraw {
     // drops, the ground wind (m/s) roughening its ripples and blurring its reflections.
     float rain = 0.0f;
     float wind_speed = 0.0f;
+    // A river (8D part 6): a ribbon along this course instead of a box or a sea (center/half_size: its bounds).
+    std::shared_ptr<const WaterPath> river;
 };
 
 struct FrameDesc;

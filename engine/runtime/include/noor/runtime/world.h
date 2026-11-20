@@ -149,6 +149,7 @@ public:
         float height = 0.0f;  // world y
         math::Vec3 normal{0, 1, 0};
         Guid entity;          // the water body's entity
+        math::Vec3 flow{0, 0, 0};  // the water's own velocity there (m/s; a river's current, 8D part 6)
     };
     using WaterQuery = std::function<std::optional<WaterSample>(const World&, float x, float z)>;
     void set_water_query(WaterQuery query) { water_query_ = std::move(query); }

@@ -628,7 +628,7 @@ skinning, network replication of animation state.
 | 3 ✅ | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
 | 4 ✅ | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
 | 5 ✅ | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
-| 6 | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
+| 6 ✅ | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
 | 7 | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
 | 8 | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
 
@@ -739,6 +739,19 @@ and swimming height and events, exact splash counts); `player.water_float` (the 
 the built game, 12 splashes each); golden `Water_Float`. Not done: currents, diving, a swim clip (Alden's is part 8),
 bodies splashing by themselves, floating's CPU cost (part 8). Changed from the plan: "wind roughening it" is the drawn
 ripples only (gameplay's waves already grow with the wind since part 2).
+
+## Part 6 result (2026-11-20)
+Done. `"shape": "river"`: points (upstream first, each at the surface's height, optional width), a Catmull-Rom curve
+sampled about every metre (`game::river_path`, at most 512 samples), level across, one `speed`. Gameplay: `river_at`
+(the nearest stretch within the width: height, direction, slope), the World's water query gains `flow`; floating bodies
+are dragged toward the flow (carried), swimmers drift, waders are pushed by part of it; `noor.water_flow` / `Water.Flow`
+(rt API v9). Drawn as a ribbon from the course in an R32 float texture (a column per sample), ripples and foam in the
+river's own coordinates sliding downstream, white-water streaks from 8 cm a metre. Proven: unit tests (the course and
+points on it by hand; a crate carried at 1.5 m/s within 2%, a swimmer drifting); goldens `Water_River` (a generated
+valley with a meander, a steep stretch, a crate and a barrel riding it) and `Water_River_Mouth` (into the lake). Not
+done: one speed across, no view from underneath and no light dimmed under rivers, no waterfalls, no wet bank, no spline
+tool (part 7's panel). "A river following the ground": the points carry the heights (a generator can take them from the
+ground; Thornwake's hydrology does exactly that, in the ideas inbox).
 
 ## Open questions
 

@@ -1,8 +1,9 @@
 // Water in the game (Milestone 8D, part 5, ADR-037): bodies float at the depth their density says, characters wade and
-// swim, particles splash on the surface. The water here is a World water query of our own (a flat surface, or waves
+// swim, particles splash on the surface; part 6: rivers run, and carry what floats on them. The water here is a World water query of our own (a flat surface, or waves
 // made of a sine), so each number can be worked out by hand.
 #include "noor/fx/particle_system.h"
 #include "noor/fx/particles.h"
+#include "noor/game/water.h"
 #include "noor/physics/physics.h"
 #include "noor/runtime/world.h"
 
@@ -200,4 +201,77 @@ TEST_CASE("water particles: drops end on the water and splash, exactly as many a
     for (int i = 0; i < 60; ++i) dry.step({&in, 1}, 1.0f / 60.0f, {0, 0, 0});
     CHECK(dry.find(id)->particles().size() == 10);
     CHECK(dry.stats().splashes == 0);
+}
+
+// ---- Rivers (part 6) --------------------------------------------------------------------------------------------
+
+TEST_CASE("rivers: a course from the component's points, and where a point is on it") {
+    // Straight down +x for 40 m, falling 2 m (0.05 m a metre), 6 m wide, then 2 m wide at the far end.
+    const Json river = Json::parse(R"({"shape": "river", "points": [[0, 2, 0], [20, 1, 0], [40, 0, 0, 2]], "width": 6, "speed": 1.5})");
+    const auto path = game::river_path(river, math::translation({10, 0, 5}));
+    REQUIRE(path);
+    CHECK(path->speed == 1.5f);
+    REQUIRE(path->samples.size() >= 40);
+    CHECK(path->samples.front().centre.x == 10.0f);  // the entity's place counts
+    CHECK(path->samples.back().centre.x == 50.0f);
+    CHECK(path->samples.back().along == doctest::Approx(40.0f).epsilon(1e-4));
+    CHECK(path->samples[10].tangent.x == doctest::Approx(1.0f));
+    CHECK(path->samples[10].slope == doctest::Approx(0.05f).epsilon(1e-3));
+    CHECK(path->samples.front().half_width == 3.0f);
+    CHECK(path->samples.back().half_width == 1.0f);
+    // On it: 10 m along, 2 m to the left (+z is left of +x), the surface 1.5 m up.
+    const auto at = game::river_at(*path, {20.0f, 7.0f});
+    REQUIRE(at);
+    CHECK(at->height == doctest::Approx(1.5f).epsilon(1e-3));
+    CHECK(at->along == doctest::Approx(10.0f).epsilon(1e-3));
+    CHECK(at->across == doctest::Approx(2.0f).epsilon(1e-3));
+    CHECK(at->tangent.x == doctest::Approx(1.0f));
+    CHECK(!game::river_at(*path, {20.0f, 9.0f}));   // 4 m out: past the bank (3 m)
+    CHECK(!game::river_at(*path, {49.0f, 6.5f}));   // near the narrow end, 1.5 m out of 1
+    CHECK(!game::river_at(*path, {70.0f, 5.0f}));   // beyond its end
+    // Fewer than two points: no river.
+    CHECK(!game::river_path(Json::parse(R"({"shape": "river", "points": [[0, 0, 0]]})"), math::Mat4::identity()));
+}
+
+TEST_CASE("rivers: a floating crate is carried downstream at the river's speed, and swimmers drift") {
+    scene::Scene s;
+    s.entities.push_back(box("River bed", {0, -6, 0}, {200, 1, 40}));
+    scene::Entity river;
+    river.id = Guid::generate();
+    river.name = "River";
+    river.components["water"] = Json::parse(R"({"shape": "river", "points": [[-80, 0, 0], [80, 0, 0]], "width": 12, "speed": 1.5})");
+    s.entities.push_back(river);
+    s.entities.push_back(box("Crate", {-60, 0.5f, 0}, {1, 0.4f, 1}, {{"type", "dynamic"}, {"mass", 200.0f}}));
+    const Guid crate = s.entities.back().id;
+    scene::Entity hero;
+    hero.id = Guid::generate();
+    hero.name = "Swimmer";
+    hero.transform.position = {-60, -1.2f, 4};
+    hero.components["character"] = {{"radius", 0.3}, {"height", 1.8}};
+    s.entities.push_back(hero);
+    runtime::World world(std::move(s));
+    world.add_system(std::make_unique<game::WaterSystem>(game::AssetPath{}));
+    auto physics_system = std::make_unique<PhysicsSystem>(PhysicsSystem::Options{});
+    PhysicsSystem* physics = physics_system.get();
+    world.add_system(std::move(physics_system));
+    // Through the World, scripts see the current too.
+    world.frame(1.0 / 60.0, {});
+    const auto here = world.water_at(0.0f, 0.0f);
+    REQUIRE(here);
+    CHECK(here->flow.x == doctest::Approx(1.5f));
+    CHECK(here->flow.z == doctest::Approx(0.0f).scale(1.0));
+    for (int i = 0; i < 600; ++i) world.frame(1.0 / 60.0, {});
+    // Ten seconds on: drifting with the water (the drag has had time to match it), floating, still mid-river.
+    const auto v = *physics->velocity(crate);
+    CHECK(v.x == doctest::Approx(1.5f).epsilon(0.02));
+    CHECK(std::abs(v.z) < 0.02f);
+    const math::Vec3 p = world.find(crate)->transform.position;
+    CHECK(p.x > -60.0f + 1.5f * 8.0f);
+    CHECK(p.y == doctest::Approx(0.0f).scale(1.0).epsilon(0.01));
+    CHECK(std::abs(p.z) < 0.1f);
+    // The swimmer (not steering) drifts at the current's speed too.
+    const float x0 = world.find(hero.id)->transform.position.x;
+    for (int i = 0; i < 60; ++i) world.frame(1.0 / 60.0, {});
+    CHECK(physics->character_water(hero.id)->state == PhysicsSystem::WaterState::Swimming);
+    CHECK(world.find(hero.id)->transform.position.x - x0 == doctest::Approx(1.5f).epsilon(0.03));
 }

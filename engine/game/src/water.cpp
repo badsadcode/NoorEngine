@@ -142,6 +142,7 @@ Waves make_waves(const asset::WaterLook& look, float wind_speed) {
 
 bool WaterBody::covers(math::Vec2 xz) const noexcept {
     if (endless) return true;
+    if (river) return river_at(*river, xz).has_value();
     const float dx = xz.x - center.x, dz = xz.y - center.z;
     const float c = std::cos(yaw), s = std::sin(yaw);
     // The footprint's own axes: x = (cos yaw, -sin yaw), z = (sin yaw, cos yaw) (yaw = atan2(-x.z, x.x)).
@@ -163,9 +164,17 @@ asset::WaterLook water_look(const asset::Json& wc, const AssetPath& asset_path) 
 std::optional<WaterSurface> water_surface(const std::vector<WaterBody>& bodies, math::Vec2 xz, double time) {
     std::optional<WaterSurface> best;
     for (const WaterBody& b : bodies) {
-        if (!b.covers(xz)) continue;
         WaterSurface s;
-        s.height = b.center.y + b.waves.height_at(xz, b.waves.phases(time), &s.normal, b.depth.get());
+        if (b.river) {
+            const auto r = river_at(*b.river, xz);
+            if (!r) continue;
+            s.height = r->height;
+            s.normal = math::normalize(math::Vec3{r->tangent.x * r->slope, 1.0f, r->tangent.y * r->slope});
+            s.flow = {r->tangent.x * b.river->speed, 0.0f, r->tangent.y * b.river->speed};
+        } else {
+            if (!b.covers(xz)) continue;
+            s.height = b.center.y + b.waves.height_at(xz, b.waves.phases(time), &s.normal, b.depth.get());
+        }
         s.entity = b.entity;
         if (!best || s.height > best->height) best = s;
     }
@@ -186,7 +195,7 @@ void WaterSystem::attached(runtime::World& world) {
     world.set_water_query([this](const runtime::World& w, float x, float z) -> std::optional<runtime::World::WaterSample> {
         const auto s = water_surface(bodies_, {x, z}, w.time());
         if (!s) return std::nullopt;
-        return runtime::World::WaterSample{s->height, s->normal, s->entity};
+        return runtime::World::WaterSample{s->height, s->normal, s->entity, s->flow};
     });
     refresh(world);
 }
@@ -206,7 +215,7 @@ void WaterSystem::refresh(runtime::World& world) {
         const auto m = runtime::api::world_matrix(world, e.id);
         WaterBody b = water_body(e.components.at("water"), m ? *m : math::Mat4::identity(), make_waves(water_look(e.components.at("water"), asset_path_), wind));
         b.entity = e.id;
-        b.depth = water_depth_map(b.endless, b.center, b.half_size, b.yaw, ground);
+        if (!b.river) b.depth = water_depth_map(b.endless, b.center, b.half_size, b.yaw, ground);
         bodies_.push_back(std::move(b));
     }
 }
@@ -301,7 +310,7 @@ std::shared_ptr<const render::WaterDepthMap> water_depth_map(bool endless, math:
 }
 
 void set_water_depths(std::span<render::WaterDraw> draws, std::span<const ParticleGround::Piece> ground) {
-    for (auto& d : draws) d.depth_map = water_depth_map(d.endless, d.center, d.half_size, d.yaw, ground);
+    for (auto& d : draws) d.depth_map = d.river ? nullptr : water_depth_map(d.endless, d.center, d.half_size, d.yaw, ground);
 }
 
 WaterBody water_body(const asset::Json& wc, const math::Mat4& world, const Waves& waves) {
@@ -315,7 +324,108 @@ WaterBody water_body(const asset::Json& wc, const math::Mat4& world, const Waves
     b.yaw = std::atan2(-ax.z, ax.x);
     b.endless = wc.contains("shape") && wc["shape"].is_string() && wc["shape"].get<std::string>() == "sea";
     b.waves = waves;
+    if (wc.contains("shape") && wc["shape"].is_string() && wc["shape"].get<std::string>() == "river") {
+        b.river = river_path(wc, world);
+        b.waves.height = 0.0f;  // a river runs; it doesn't swell
+        if (b.river) {
+            // Its bounds (for culling and the renderer's box): level at the mean height.
+            math::Vec3 lo{1e30f, 0, 1e30f}, hi{-1e30f, 0, -1e30f};
+            float y = 0.0f;
+            for (const auto& s : b.river->samples) {
+                lo = {std::min(lo.x, s.centre.x - s.half_width), 0, std::min(lo.z, s.centre.z - s.half_width)};
+                hi = {std::max(hi.x, s.centre.x + s.half_width), 0, std::max(hi.z, s.centre.z + s.half_width)};
+                y += s.centre.y;
+            }
+            b.center = {(lo.x + hi.x) * 0.5f, y / static_cast<float>(b.river->samples.size()), (lo.z + hi.z) * 0.5f};
+            b.half_size = {(hi.x - lo.x) * 0.5f, (hi.z - lo.z) * 0.5f};
+            b.yaw = 0.0f;
+        }
+    }
     return b;
+}
+
+std::shared_ptr<const render::WaterPath> river_path(const asset::Json& wc, const math::Mat4& world) {
+    if (!wc.contains("points") || !wc["points"].is_array()) return nullptr;
+    const float default_width = wc.contains("width") && wc["width"].is_number() ? std::max(0.1f, wc["width"].get<float>()) : 4.0f;
+    struct Point {
+        math::Vec3 p;
+        float width;
+    };
+    std::vector<Point> pts;
+    for (const auto& j : wc["points"]) {
+        if (!j.is_array() || j.size() < 3 || !j[0].is_number() || !j[1].is_number() || !j[2].is_number()) continue;
+        const float w = j.size() > 3 && j[3].is_number() ? std::max(0.1f, j[3].get<float>()) : default_width;
+        pts.push_back({world.transform_point({j[0].get<float>(), j[1].get<float>(), j[2].get<float>()}), w});
+    }
+    if (pts.size() < 2) return nullptr;
+    // A Catmull-Rom curve through the points (the ends repeated), sampled about every metre, at most 512 samples.
+    float length = 0.0f;
+    for (std::size_t i = 1; i < pts.size(); ++i) length += math::length(pts[i].p - pts[i - 1].p);
+    const auto per_span = static_cast<std::size_t>(std::clamp(std::ceil(length / static_cast<float>(pts.size() - 1)), 1.0f,
+                                                              std::max(1.0f, 511.0f / static_cast<float>(pts.size() - 1))));
+    std::vector<Point> curve;
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        const Point& p0 = pts[i == 0 ? 0 : i - 1];
+        const Point& p1 = pts[i];
+        const Point& p2 = pts[i + 1];
+        const Point& p3 = pts[std::min(i + 2, pts.size() - 1)];
+        for (std::size_t k = 0; k < per_span; ++k) {
+            const float t = static_cast<float>(k) / static_cast<float>(per_span), t2 = t * t, t3 = t2 * t;
+            const auto cr = [&](float a, float b, float c, float d) {
+                return 0.5f * ((2.0f * b) + (-a + c) * t + (2.0f * a - 5.0f * b + 4.0f * c - d) * t2 + (-a + 3.0f * b - 3.0f * c + d) * t3);
+            };
+            curve.push_back({{cr(p0.p.x, p1.p.x, p2.p.x, p3.p.x), cr(p0.p.y, p1.p.y, p2.p.y, p3.p.y), cr(p0.p.z, p1.p.z, p2.p.z, p3.p.z)},
+                             p1.width + (p2.width - p1.width) * t});
+        }
+    }
+    curve.push_back(pts.back());
+    auto path = std::make_shared<render::WaterPath>();
+    path->speed = wc.contains("speed") && wc["speed"].is_number() ? std::clamp(wc["speed"].get<float>(), 0.0f, 50.0f) : 1.5f;
+    float along = 0.0f;
+    for (std::size_t i = 0; i < curve.size(); ++i) {
+        render::WaterPath::Sample s;
+        s.centre = curve[i].p;
+        s.half_width = curve[i].width * 0.5f;
+        if (i > 0) along += std::hypot(curve[i].p.x - curve[i - 1].p.x, curve[i].p.z - curve[i - 1].p.z);
+        s.along = along;
+        // Its direction from its neighbours (one-sided at the ends), and the surface's fall per metre.
+        const Point& a = curve[i == 0 ? 0 : i - 1];
+        const Point& b = curve[std::min(i + 1, curve.size() - 1)];
+        const float dx = b.p.x - a.p.x, dz = b.p.z - a.p.z, run = std::hypot(dx, dz);
+        s.tangent = run > 1e-6f ? math::Vec2{dx / run, dz / run} : math::Vec2{1.0f, 0.0f};
+        s.slope = run > 1e-6f ? std::max(0.0f, (a.p.y - b.p.y) / run) : 0.0f;
+        path->samples.push_back(s);
+    }
+    return path;
+}
+
+std::optional<RiverPoint> river_at(const render::WaterPath& path, math::Vec2 xz) noexcept {
+    std::optional<RiverPoint> best;
+    float best_d = 1e30f;
+    const auto& s = path.samples;
+    for (std::size_t i = 0; i + 1 < s.size(); ++i) {
+        const math::Vec2 a{s[i].centre.x, s[i].centre.z}, b{s[i + 1].centre.x, s[i + 1].centre.z};
+        const math::Vec2 ab{b.x - a.x, b.y - a.y};
+        const float len2 = ab.x * ab.x + ab.y * ab.y;
+        float t = len2 > 1e-12f ? ((xz.x - a.x) * ab.x + (xz.y - a.y) * ab.y) / len2 : 0.0f;
+        t = std::clamp(t, 0.0f, 1.0f);
+        const math::Vec2 c{a.x + ab.x * t, a.y + ab.y * t};
+        const float d = std::hypot(xz.x - c.x, xz.y - c.y);
+        const float half = s[i].half_width + (s[i + 1].half_width - s[i].half_width) * t;
+        if (d > half || d >= best_d) continue;
+        best_d = d;
+        RiverPoint r;
+        r.height = s[i].centre.y + (s[i + 1].centre.y - s[i].centre.y) * t;
+        math::Vec2 tan{s[i].tangent.x + (s[i + 1].tangent.x - s[i].tangent.x) * t, s[i].tangent.y + (s[i + 1].tangent.y - s[i].tangent.y) * t};
+        const float tl = std::hypot(tan.x, tan.y);
+        r.tangent = tl > 1e-6f ? math::Vec2{tan.x / tl, tan.y / tl} : s[i].tangent;
+        r.slope = s[i].slope + (s[i + 1].slope - s[i].slope) * t;
+        r.along = s[i].along + (s[i + 1].along - s[i].along) * t;
+        // Left of the flow is +: (x, z) cross the tangent.
+        r.across = ((xz.x - c.x) * -r.tangent.y + (xz.y - c.y) * r.tangent.x) >= 0.0f ? d : -d;
+        best = r;
+    }
+    return best;
 }
 
 render::WaterDraw water_draw(const WaterBody& b, const asset::WaterLook& look) {
@@ -336,6 +446,7 @@ render::WaterDraw water_draw(const WaterBody& b, const asset::WaterLook& look) {
     d.wave_direction = b.waves.direction;
     d.choppiness = b.waves.choppiness;
     d.depth_map = b.depth;
+    d.river = b.river;
     d.foam = look.foam;
     d.foam_depth = look.foam_depth;
     d.crest_foam = look.crest_foam;

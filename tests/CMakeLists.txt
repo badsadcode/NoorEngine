@@ -574,6 +574,18 @@ foreach(scene Water_Underwater Water_DeepSea Water_Waterline)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${scene} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Rivers (Milestone 8D, part 6): a river down a generated valley (Assets/Terrain/river_valley.png: a meandering channel,
+# a steep stretch, a basin), a crate and a barrel carried down it, and where it runs into the lake.
+foreach(scene Water_River Water_River_Mouth)
+    add_test(NAME render.golden_${scene}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${scene}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${scene}.png -DFRAMES=180
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${scene}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${scene} PROPERTIES LABELS "gpu;render" TIMEOUT 90)
+endforeach()
 # A camera walked down through the pond's surface: no pop (tests/water_descent_check.cmake).
 add_test(NAME render.water_descent
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes

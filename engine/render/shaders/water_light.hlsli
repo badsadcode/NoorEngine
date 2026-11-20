@@ -31,6 +31,7 @@ static const float kWaterIor = 1.333;
 // Is (x, z) inside this body's footprint?
 bool water_covers(WaterSettings s, float2 xz)
 {
+    if (s.extent.z == 2.0) return false;  // a river (8D part 6): light under it isn't dimmed (yet)
     if (s.extent.z != 0.0) return true;
     const float2 d = xz - s.body.xz;
     const float c = cos(s.body.w), sn = sin(s.body.w);

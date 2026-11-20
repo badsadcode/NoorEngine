@@ -331,7 +331,7 @@ struct Renderer::Impl {
     // and a texture per depth map (game/water.h builds them), kept while drawn.
     std::array<GpuBuffer, kFramesInFlight> water_buffers{};
     struct WaterMapTexture {
-        std::shared_ptr<const WaterDepthMap> map;  // kept alive: the key is its address
+        std::shared_ptr<const void> map;  // a depth map or a river's course (8D part 6), kept alive: the key is its address
         TextureHandle texture;
         std::uint64_t last_used = 0;
     };

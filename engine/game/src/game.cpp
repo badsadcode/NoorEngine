@@ -930,6 +930,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     const float water_wind = math::length(view.lighting.weather.wind);
     for (auto& [body, look] : pending_water) {
         body.waves = make_waves(look, water_wind);
+        if (body.river) body.waves.height = 0.0f;  // rivers run, they don't swell (8D part 6)
         view.water.push_back(water_draw(body, look));
         view.water.back().rain = view.lighting.weather.rain;  // the weather on the surface (8D part 5): drawing only
         view.water.back().wind_speed = water_wind;

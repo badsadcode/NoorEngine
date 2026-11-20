@@ -86,8 +86,27 @@ struct WaterBody {
     float yaw = 0.0f;
     Waves waves;
     std::shared_ptr<const render::WaterDepthMap> depth;  // over the terrains under it (null: deep everywhere)
+    std::shared_ptr<const render::WaterPath> river;      // a river's course (8D part 6; then no waves, no depth map)
     [[nodiscard]] bool covers(math::Vec2 xz) const noexcept;
 };
+
+// A river (Milestone 8D, part 6): {"shape": "river", "points": [[x, y, z] or [x, y, z, width], ...], "width": 4,
+// "speed": 1.5}. The points (in the entity's space, at least two) are the surface's centre line, each at the water's
+// height there; a smooth curve (Catmull-Rom) through them is sampled about every metre (at most 512 samples). The
+// surface is level across, follows the points' heights along, and the water runs downstream (first point to last) at
+// `speed` m/s everywhere on it: drawn ripples and foam move with it, floating things are carried along, swimmers drift.
+// Where the river meets a lake, end it inside the lake a little under the lake's level (the lake is drawn over it and
+// gameplay reads the highest surface).
+[[nodiscard]] std::shared_ptr<const render::WaterPath> river_path(const asset::Json& component, const math::Mat4& world);
+// Where (x, z) is on a river: its surface height, the way the water runs, and the slope; nullopt off it.
+struct RiverPoint {
+    float height = 0.0f;
+    math::Vec2 tangent{1.0f, 0.0f};
+    float slope = 0.0f;
+    float along = 0.0f;
+    float across = 0.0f;  // metres from the centre line (+: to the left looking downstream)
+};
+[[nodiscard]] std::optional<RiverPoint> river_at(const render::WaterPath& path, math::Vec2 xz) noexcept;
 
 // A body's depth map over the ground's terrains (the highest one at each point, as ParticleGround): a box's samples
 // cover its footprint, a sea's the terrains (beyond them it is deep). At most 256 samples a side, at least 0.25 m
@@ -113,6 +132,7 @@ struct WaterSurface {
     float height = 0.0f;  // world y
     math::Vec3 normal{0, 1, 0};
     Guid entity;
+    math::Vec3 flow{0, 0, 0};  // the water's velocity (a river's current)
 };
 [[nodiscard]] std::optional<WaterSurface> water_surface(const std::vector<WaterBody>& bodies, math::Vec2 xz, double time);
 

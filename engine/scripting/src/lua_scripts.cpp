@@ -468,6 +468,13 @@ struct LuaScriptSystem::Impl {
                  else lua_pushnil(L);
                  return 1;
              }},
+            // noor.water_flow(x, z) -> the water's own velocity there (m/s: a river's current), or nil (8D part 6)
+            {"water_flow", [](lua_State* L) {
+                 const auto s = world_of(L).water_at(static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)));
+                 if (s) lua_pushvector(L, s->flow.x, s->flow.y, s->flow.z);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
             {nullptr, nullptr},
         };
         static const luaL_Reg input_functions[] = {

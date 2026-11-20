@@ -61,6 +61,8 @@ struct WaterGpu {
 static_assert(sizeof(WaterGpu) == 128);
 constexpr std::uint32_t kMaxWaterDraws = 64;
 constexpr std::uint32_t kLightBodies = 8;  // the first draws: light under them is dimmed by the water (mesh.hlsl)
+constexpr std::uint32_t kRiverAcross = 8;  // a river's ribbon: cells across (part 6)
+constexpr std::uint32_t kRiverRows = 8;    // its course texture: x, y, z, half width, along, tangent x, tangent z, slope
 constexpr float kWetBandRadius = 400.0f;  // a sea's wet band: metres round the camera
 
 constexpr std::uint32_t kWaterGrid = 32;       // a calm box's cells per side
@@ -237,6 +239,7 @@ void Renderer::Impl::destroy_water_resources() {
 // Whether the camera may be in this body: inside its footprint and below the highest its waves reach (plus a margin
 // for the near plane). The shaders decide pixel by pixel; this only says whether to look.
 static bool camera_may_be_in(const WaterDraw& w, math::Vec3 eye) {
+    if (w.river) return false;  // rivers aren't seen from inside (yet)
     if (eye.y > w.center.y + 0.97f * std::max(0.0f, w.wave_height) + 0.25f) return false;
     if (w.endless) return true;
     const float dx = eye.x - w.center.x, dz = eye.z - w.center.z;
@@ -294,7 +297,7 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
                                          {reinterpret_cast<const std::uint8_t*>(map->depth.data()), map->depth.size() * sizeof(float)}};
                 const TextureDesc map_desc{TextureFormat::R32Float, std::span(&mip, 1), "Water depth map"};
                 if (auto tex = create_texture(map_desc, kAnySlot)) {
-                    water_maps.push_back({map, *tex, 0});
+                    water_maps.push_back({std::static_pointer_cast<const void>(map), *tex, 0});
                     it = water_maps.end() - 1;
                 } else {
                     NOOR_LOG_WARN("Render", "Water depth map not uploaded: {}", tex.error().describe());
@@ -322,6 +325,37 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
         g.shore[2] = 0.97f * std::max(0.0f, w.wave_height) + g.shore[0] + 0.01f;
         g.shore[3] = std::clamp(w.rain, 0.0f, 1.0f);
         g.map[3] = std::max(0.0f, w.wind_speed);
+        // A river (part 6): its course as an R32 float texture (a column per sample, kRiverRows rows) in place of a depth
+        // map (map_info.w 2), its speed in body.w; extent.z 2 says "a river" (no light dimmed under it, no wet band).
+        bool river_ready = false;
+        if (const auto& path = w.river; path && path->samples.size() >= 2) {
+            auto it = std::ranges::find_if(water_maps, [&](const WaterMapTexture& t) { return t.map.get() == path.get(); });
+            if (it == water_maps.end()) {
+                const auto n = static_cast<std::uint32_t>(path->samples.size());
+                std::vector<float> texels(std::size_t{n} * kRiverRows);
+                for (std::uint32_t k = 0; k < n; ++k) {
+                    const auto& smp = path->samples[k];
+                    const float row[kRiverRows] = {smp.centre.x, smp.centre.y, smp.centre.z, smp.half_width, smp.along, smp.tangent.x, smp.tangent.y, smp.slope};
+                    for (std::uint32_t r = 0; r < kRiverRows; ++r) texels[std::size_t{r} * n + k] = row[r];
+                }
+                const TextureMipData mip{n, kRiverRows, {reinterpret_cast<const std::uint8_t*>(texels.data()), texels.size() * sizeof(float)}};
+                const TextureDesc path_desc{TextureFormat::R32Float, std::span(&mip, 1), "River course"};
+                if (auto tex = create_texture(path_desc, kAnySlot)) {
+                    water_maps.push_back({std::static_pointer_cast<const void>(path), *tex, 0});
+                    it = water_maps.end() - 1;
+                } else {
+                    NOOR_LOG_WARN("Render", "River course not uploaded: {}", tex.error().describe());
+                }
+            }
+            if (it != water_maps.end()) {
+                it->last_used = water_frame;
+                g.map_info[0] = static_cast<std::uint32_t>(path->samples.size());
+                g.map_info[1] = kRiverRows;
+                g.map_info[2] = it->texture.id;
+                g.map_info[3] = 2;
+                river_ready = true;
+            }
+        }
         const UnderwaterLook look = underwater_look(w, static_cast<int>(i) == water_camera_body);
         g.body[0] = w.center.x;
         g.body[1] = w.center.y;
@@ -339,6 +373,10 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
         g.scatter[1] = look.scatter.y;
         g.scatter[2] = look.scatter.z;
         g.scatter[3] = std::max(0.0f, w.wave_height);
+        if (river_ready) {
+            g.body[3] = w.river->speed;
+            g.extent[2] = 2.0f;
+        }
         out[i + 1] = g;
     }
     vmaFlushAllocation(allocator, water_buffers[frame_index].allocation, 0, VK_WHOLE_SIZE);
@@ -514,7 +552,13 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         push.waves[2] = w.wave_direction;
         push.waves[3] = std::clamp(w.choppiness, 0.0f, 0.9f);
         for (int i = 0; i < 4; ++i) push.phases[i] = w.wave_phase[static_cast<std::size_t>(i)];
-        if (w.endless) {
+        if (w.river && w.river->samples.size() >= 2) {
+            // A river (part 6): a ribbon along its course, a row of cells per sample.
+            push.grid[0] = static_cast<std::uint32_t>(w.river->samples.size() - 1);
+            push.grid[1] = kRiverAcross;
+            push.grid[2] = 2;
+            vertices = push.grid[0] * kRiverAcross * 6;
+        } else if (w.endless) {
             // The sea: rings round the camera out to the horizon (the haze hides its edge long before), finer near.
             push.grid[0] = kSeaSegments;
             push.grid[1] = sea_rings();
@@ -554,7 +598,7 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, water_wet_pipeline);
     for (std::size_t i = 0; i < count; ++i) {
         const WaterDraw& w = frame.water[i];
-        if (w.wet <= 0.0f) continue;
+        if (w.wet <= 0.0f || w.river) continue;  // rivers: no wet band (their level isn't one height)
         std::uint32_t vertices = 0;
         WaterPush push = push_of(w, static_cast<std::uint32_t>(i), vertices);
         if (w.endless) push.size[0] = push.size[1] = kWetBandRadius;

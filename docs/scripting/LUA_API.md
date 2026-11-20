@@ -66,6 +66,7 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.input.axis(name)` | `-1..1` for key axes; mouse movement in pixels for `look_x` / `look_y` |
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
 | `noor.water_height(x, z)` | The water surface's height (world y) at world (x, z) now, waves included; `nil` where there's no water (8D) |
+| `noor.water_flow(x, z)` | The water's own velocity there (m/s: a river's current; still water: zero), `nil` where there's no water (8D) |
 | `noor.water_normal(x, z)` | The water surface's normal there (a vector), or `nil` |
 | `noor.play_sound(clip [, position [, volume [, bus]]])` | Plays a sound once: `clip` is an asset id or a path like `"Assets/Audio/step.wav"`; with a `position` (vector) it's 3D, without it plays everywhere. Default bus `sfx`. Returns `true` if it started |
 | `noor.set_volume(bus, volume)` | Bus volume (`master`, `music`, `sfx`, `ui`, `voice`), `0` is silent, `1` normal |

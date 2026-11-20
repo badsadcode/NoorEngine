@@ -269,6 +269,13 @@ public static unsafe class Water
         RtVec3 n;
         return Engine.A.Water(x, z, null, &n) != 0 ? n.ToVector() : null;
     }
+
+    /// <summary>The water's own velocity at world (x, z) now (m/s: a river's current; still water: zero), or null where there's no water.</summary>
+    public static Vector3? Flow(float x, float z)
+    {
+        RtVec3 f;
+        return Engine.A.WaterFlow(x, z, &f) != 0 ? f.ToVector() : null;
+    }
 }
 
 /// <summary>Input actions and axes (the project's Settings/input.json) and mouse capture.</summary>

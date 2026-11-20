@@ -22,7 +22,10 @@
 //     scatters added (sunlit and skylit, dimmer with depth, in shafts under the waves, shadowed by what's in the way).
 //     Each pixel decides for itself whether its near-plane point is under the surface, so a camera half in sees the
 //     waterline cross the screen. Light under the surface reaching objects (dimmed by depth, caustics) is mesh.hlsl's
-//     (water_light.hlsli).
+//     (water_light.hlsli);
+//   - part 6, rivers: a ribbon along the river's course (a float texture: a column per sample of centre, half width, how
+//     far along, direction and slope), level across; its ripples and foam are laid out along the river and slide
+//     downstream at its speed, and foam gathers where the surface falls steeply (rapids: from 8 cm a metre).
 // The atmosphere and fog between the camera and the surface apply to the water's own light (reflected, scattered); what's
 // seen through already had its own (an approximation: the stretch from the surface down counts as air). A sea is the same
 // surface, drawn under the camera out to the horizon. Writes depth and alpha 1.
@@ -60,6 +63,8 @@ struct VertexOutput
     float4 position : SV_Position;
     [[vk::location(0)]] float3 world : POSITION1;
     [[vk::location(1)]] float2 rest : TEXCOORD0;  // the surface point at rest (x, z) that the waves moved here
+    [[vk::location(2)]] float4 flow : TEXCOORD1;  // a river (part 6): metres along it, metres across, slope, 1 (else 0)
+    [[vk::location(3)]] float2 tangent : TEXCOORD2;  // a river: which way the water runs (x, z)
 };
 
 WaterSettings settings() { return water_settings[pc.grid.w]; }
@@ -69,7 +74,7 @@ WaterSettings settings() { return water_settings[pc.grid.w]; }
 float water_depth(float2 p, WaterSettings s, out float2 grad)
 {
     grad = 0.0;
-    if (s.map_info.w == 0u) return kDeep;
+    if (s.map_info.w != 1u) return kDeep;  // no depth map (or a river's course in its place)
     const float2 u = (p - s.map.xy) / s.map.z;
     const float2 last = float2(s.map_info.xy) - 1.0;
     if (u.x < 0.0 || u.y < 0.0 || u.x > last.x || u.y > last.y) return kDeep;
@@ -177,9 +182,38 @@ float wet_factor(float3 p, WaterSettings s)
     return 1.0 - s.foam.w * wet;
 }
 
+// A river's sample i, row r of its course texture (x, y, z, half width, along, tangent x, tangent z, slope).
+float river_value(WaterSettings s, uint i, uint r)
+{
+    return textures[s.map_info.z].Load(int3(int(i), int(r), 0)).r;
+}
+
+VertexOutput river_vertex(uint vertex, WaterSettings s)
+{
+    const uint2 corners[6] = {uint2(0, 0), uint2(1, 0), uint2(1, 1), uint2(0, 0), uint2(1, 1), uint2(0, 1)};
+    const uint across = max(pc.grid.y, 1u);
+    const uint quad = vertex / 6u;
+    const uint2 c = uint2(quad / across, quad % across) + corners[vertex % 6u];  // (sample, step across)
+    const uint i = min(c.x, s.map_info.x - 1u);
+    const float3 centre = float3(river_value(s, i, 0u), river_value(s, i, 1u), river_value(s, i, 2u));
+    const float half_width = river_value(s, i, 3u);
+    const float2 t = float2(river_value(s, i, 5u), river_value(s, i, 6u));
+    const float side = (float(c.y) / float(across) * 2.0 - 1.0) * half_width;
+    const float2 left = float2(-t.y, t.x);
+    const float3 world = centre + float3(left.x, 0.0, left.y) * side;
+    VertexOutput o;
+    o.world = world;
+    o.rest = world.xz;
+    o.flow = float4(river_value(s, i, 4u), side, river_value(s, i, 7u), 1.0);
+    o.tangent = t;
+    o.position = mul(frame.clip_from_world, float4(world, 1.0));
+    return o;
+}
+
 VertexOutput VSMain(uint vertex : SV_VertexID)
 {
     const WaterSettings s = settings();
+    if (pc.grid.z == 2u) return river_vertex(vertex, s);
     const uint2 corners[6] = {uint2(0, 0), uint2(1, 0), uint2(1, 1), uint2(0, 0), uint2(1, 1), uint2(0, 1)};
     float2 rest;
     float cell;
@@ -214,6 +248,8 @@ VertexOutput VSMain(uint vertex : SV_VertexID)
     VertexOutput o;
     o.world = world;
     o.rest = rest;
+    o.flow = 0.0;
+    o.tangent = float2(1.0, 0.0);
     o.position = mul(frame.clip_from_world, float4(world, 1.0));
     return o;
 }
@@ -446,9 +482,15 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float2 fw = fwidth(input.rest);
     const float footprint = max(fw.x, fw.y);
     float lost;
-    // The wind roughens the ripples (8D part 5); rain rings them.
+    // The wind roughens the ripples (8D part 5); rain rings them. On a river (part 6) the ripples are laid out along it
+    // (metres along, metres across) and slide downstream at its speed; their slope is turned back into the world's axes.
     const float wind = s.map.w;
-    const float2 slope = ripple_slope(world.xz, t, footprint, lost) * (1.0 + wind * 0.12) + rain_slope(world.xz, t, s.shore.w, footprint);
+    const bool river = input.flow.w > 0.5;
+    const float2 river_t = river ? normalize(input.tangent) : float2(1.0, 0.0);
+    const float2 ripple_at = river ? float2(input.flow.x - s.body.w * t, input.flow.y) : world.xz;
+    float2 slope = ripple_slope(ripple_at, river ? 0.35 * t : t, footprint, lost) * (1.0 + wind * 0.12);
+    if (river) slope = slope.x * river_t + slope.y * float2(-river_t.y, river_t.x);
+    slope += rain_slope(world.xz, t, s.shore.w, footprint);
     // The waves' normal at this pixel's point, tilted by the ripples.
     float3 wave_n;
     float squeeze;
@@ -493,7 +535,7 @@ float4 PSMain(VertexOutput input) : SV_Target0
     // Through the water: absorbed along the way down (the light) and back up the view ray.
     // The light's way down is mesh.hlsl's for the bodies that light the scene (it dims what's under them by depth, and
     // adds caustics); for any further body, counted here.
-    const bool lit_below = pc.grid.w <= water_settings[0].map_info.x;
+    const bool lit_below = pc.grid.w <= water_settings[0].map_info.x && s.extent.z != 2.0;  // not under rivers
     const float3 transmittance = exp(-pc.absorption.rgb * (view_depth + (lit_below ? 0.0 : vertical)));
     const float sun_light = max(frame.to_sun.y, 0.0);
     const float shadow = sun_shadow(world, float3(0, 1, 0)) * cloud_shadow(world);
@@ -538,7 +580,8 @@ float4 PSMain(VertexOutput input) : SV_Target0
     {
         // Each kind is a strength (0..1) laced by the noise: weak foam shows only where the lace is high, so it breaks
         // up into specks and streaks before it fades, strong foam is solid with holes.
-        const float lace = foam_lace(world.xz, t, footprint);
+        // On a river the lace is stretched along the current (streaks), and it slides with it.
+        const float lace = foam_lace(river ? float2(ripple_at.x * 0.3, ripple_at.y * 1.6) : ripple_at, river ? 0.3 * t : t, footprint);
         const float shallow = saturate(1.0 - vertical0 / s.foam.y);
         const float lift = pc.waves.x > 0.0 ? saturate(0.5 + (world.y - pc.center_yaw.y) / pc.waves.x) : 0.5;
         const float shore = saturate((shallow * (0.6 + 0.6 * lift) + lace - 1.05) * 3.0);
@@ -549,6 +592,9 @@ float4 PSMain(VertexOutput input) : SV_Target0
             const float strength = saturate((fold - squeeze) / (0.35 * pc.waves.w));
             crest = saturate((strength * 1.1 + lace - 1.15) * 3.0);
         }
+        // Rapids (part 6): where a river's surface falls steeply, white water, streaked downstream.
+        if (river)
+            crest = max(crest, saturate((saturate((input.flow.z - 0.08) * 8.0) * 1.2 + lace - 1.05) * 3.0));  // from 8 cm a metre
         const float foam = saturate(max(shore, crest)) * s.foam.x * 0.92;
         const float3 foam_light = 0.85 * (frame.sun_radiance.rgb * saturate(dot(wave_n, l)) * shadow / kPi + environment_irradiance(wave_n) / kPi);
         color = lerp(color, foam_light * air_t + air_in, foam);
@@ -583,6 +629,8 @@ VertexOutput VSWet(uint vertex : SV_VertexID)
     VertexOutput o;
     o.world = float3(xz.x, pc.center_yaw.y + s.shore.z, xz.y);
     o.rest = xz;
+    o.flow = 0.0;
+    o.tangent = float2(1.0, 0.0);
     o.position = mul(frame.clip_from_world, float4(o.world, 1.0));
     return o;
 }
@@ -618,6 +666,8 @@ VertexOutput VSFog(uint vertex : SV_VertexID)
     o.position = float4(p * 2.0 - 1.0, 0.0, 1.0);
     o.world = 0.0;
     o.rest = 0.0;
+    o.flow = 0.0;
+    o.tangent = float2(1.0, 0.0);
     return o;
 }
 

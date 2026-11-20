@@ -2,7 +2,8 @@
 
 Milestone 8D ([plan](../milestones/M8_PLAN.md#8d-water), [ADR-037](../decisions/ADR-037-water.md)). What works so
 far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, **part 4, underwater**,
-and **part 5, water in the game**. Rivers and the Water panel are planned (parts 6 to 8); nothing below claims them.
+**part 5, water in the game**, and **part 6, rivers**. The Water panel and the sample are planned (parts 7 and 8); nothing
+below claims them.
 
 ## The `water` component (part 1)
 
@@ -12,7 +13,7 @@ Water is a component on an entity, like a light or a terrain:
 "water": {"shape": "box", "preset": "Lake", "size": [32, 32], "roughness": 0.1}
 ```
 
-- **`shape`**: `"box"` (the default): a level rectangle `size` metres across ([x, z], times the entity's scale) at the
+- **`shape`**: `"river"` (part 6, below): a ribbon along a list of points. `"box"` (the default): a level rectangle `size` metres across ([x, z], times the entity's scale) at the
   entity's position, turned with the entity about +Y. A lake, a pond, a pool. `"sea"`: level at the entity's height,
   under the camera out to the horizon (20 km; the haze hides the edge). Rivers (splines) come in part 6.
 - **Its look**: a built-in `preset`, or `asset` (a `.noorwater` file's id), with any of the look's fields on the
@@ -224,6 +225,31 @@ What it isn't (yet): no currents (rivers, part 6) and waves don't carry things a
 diving), and there's no swimming animation (the state is there for one); bodies hitting the water don't splash by
 themselves; floating's CPU cost isn't measured yet (part 8's sample).
 
+## Rivers (part 6)
+
+```json
+"water": {"shape": "river", "preset": "Lake", "points": [[0, 12, 0], [8, 11.5, 14, 6], [12, 11, 30]], "width": 8, "speed": 1.5}
+```
+
+- **`points`**: the river's centre line, upstream first, in the entity's space, each at the water's surface height there
+  (`[x, y, z]` or `[x, y, z, width]`); at least two. A smooth curve (Catmull-Rom) runs through them, sampled about every
+  metre (at most 512 samples). **`width`**: metres (per point where given). **`speed`**: m/s downstream.
+- **The surface** is level across and follows the points' heights along; no waves (the look's wave fields are
+  ignored), but ripples, foam, reflections and the rest of the look as for any water.
+- **It runs**: drawn ripples and foam are laid out along the river (metres along, metres across) and slide downstream
+  at `speed`; where the surface falls steeply (from 8 cm a metre) white water gathers in streaks along the current.
+- **Gameplay**: `water_height` follows the river (the nearest stretch of its course within its width); the water's own
+  velocity, `speed` along the course, is `noor.water_flow(x, z)` (Lua) / `Water.Flow(x, z)` (C#, rt API v9) and the
+  World's water query's `flow`. Floating bodies are slowed toward it (so the current carries them at its speed), a
+  swimmer drifts with it, a wader is pushed by part of it.
+- **Into a lake**: end the river inside the lake, a couple of centimetres under the lake's level: the lake is drawn over
+  it and gameplay reads the highest surface. (`tests/data/render_scenes/Scenes/Water_River*.noorscene`: a river down a
+  generated valley into a lake.)
+
+What rivers don't do (yet): one speed everywhere across them (real rivers are slower at the banks); not seen from
+underneath, and light under them isn't dimmed; no waterfalls (a steep stretch is white water, not a fall with spray);
+no wet bank or depth map; no spline tool in the editor (points are numbers in the Inspector; the Water panel is part 7).
+
 ## How it's drawn
 
 When water is in view, the frame's scene pass is split in two:
@@ -252,7 +278,7 @@ The ripples are a few sine waves in world space moving with the game's clock, so
 Ripples smaller than a few pixels fade out, and roughen the reflection instead (otherwise they alias into a grid at a
 distance).
 
-**What it isn't (yet):** rivers (part 6). The absorption counts the stretch from the surface down as
+**What it isn't (yet):** see each part's own list. The absorption counts the stretch from the surface down as
 water and the rest as air, so it's an approximation, as ADR-037 says.
 
 **Measured** (RTX 3080, 1280×720, 4× MSAA, fastest of 3 × 300 frames, `tools/samples/measure_hillside_lake.py`):
@@ -327,6 +353,11 @@ copy** and **See-through** separately (the Render panel and the player's report)
   map asked again).
 - `render.water_readback_shore`: the same readback over a beach (`Water_Shore_Probe`): only pixels at least 0.3 m deep
   count, at least 60 of them shallower than 2.5 m (where the waves are calmed); within 1 cm out to 20 m.
+- Unit tests for rivers (2, `test_water_physics.cpp`): a course from the points (the entity's place, length, direction,
+  slope, widths) and points on it (height, how far along and across, off its banks and ends); a floating crate carried at
+  the river's 1.5 m/s within 2% and a swimmer drifting with it, and the current through the World.
+- Goldens `Water_River` (a river down a generated valley, a crate and a barrel riding it) and `Water_River_Mouth` (where
+  it runs into the lake).
 - Unit tests for the game (4, `test_water_physics.cpp`): planks of 300, 500 and 800 kg/m³ settle where their density says
   (measured: under a micrometre), heavier than water and `"buoyancy": 0` sink; a plank rides waves, identically every
   run; a character slows as it wades (by the formula) and swims with its chest at the surface, the events in order;

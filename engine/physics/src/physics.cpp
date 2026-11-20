@@ -288,7 +288,8 @@ struct PhysicsSystem::Impl {
                 water_sum += s->height;
                 under_cells += under;
                 const math::Vec3 up{0, kWaterDensity * g * cell.volume * under * body.buoyancy, 0};
-                const math::Vec3 vp = v + math::cross(w, p - com);
+                // Slowed towards the water's own velocity: a river's current carries it along (8D part 6).
+                const math::Vec3 vp = v + math::cross(w, p - com) - s->flow;
                 const float mass_share = kWaterDensity * cell.volume * under;
                 const math::Vec3 drag = vp * (-kDrag * body.water_drag * mass_share);
                 bi.AddForce(body.id, to_j(up + drag), to_j(p), JPH::EActivation::DontActivate);
@@ -617,9 +618,11 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         // The water where it stands (8D part 5): how deep at its feet and over its head, and so its state.
         const math::Vec3 feet = from_j(ch.GetPosition());
         CharacterWater water;
+        math::Vec3 current{0, 0, 0};
         if (const auto s = world.water_at(feet.x, feet.z)) {
             water.feet_depth = s->height - feet.y;
             water.head_depth = s->height - (feet.y + c.height);
+            current = s->flow;
         } else {
             water.feet_depth = water.head_depth = -1e3f;
         }
@@ -648,6 +651,9 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         }
         c.jump = 0.0f;
         v += (swimming ? JPH::Vec3::sZero() : gravity * step) + JPH::Vec3(c.wanted.x * speed, 0, c.wanted.z * speed);
+        // A river's current (8D part 6): a swimmer drifts with it, a wader is pushed by part of it (more the deeper).
+        const float drift = swimming ? 1.0f : water.state == WaterState::Wading ? 0.5f * std::clamp(water.feet_depth / c.swim_depth, 0.0f, 1.0f) : 0.0f;
+        v += JPH::Vec3(current.x * drift, 0, current.z * drift);
         ch.SetLinearVelocity(v);
         JPH::CharacterVirtual::ExtendedUpdateSettings settings;
         settings.mWalkStairsStepUp = JPH::Vec3(0, c.step_height, 0);

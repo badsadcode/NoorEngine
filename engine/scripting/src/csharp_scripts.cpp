@@ -263,6 +263,14 @@ int32_t rt_character_water(noor_rt_entity e, float* feet, float* head) {
     return static_cast<int32_t>(w->state);
 }
 
+int32_t rt_water_flow(float x, float z, noor_rt_vec3* flow) {
+    if (!t_world) return 0;
+    const auto s = t_world->water_at(x, z);
+    if (!s) return 0;
+    if (flow) *flow = {s->flow.x, s->flow.y, s->flow.z};
+    return 1;
+}
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -278,6 +286,7 @@ const noor_rt_api kApi = {
     rt_bone,
     rt_water,
     rt_character_water,
+    rt_water_flow,
 };
 
 } // namespace
