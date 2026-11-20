@@ -2,6 +2,7 @@
 // noor_last_error(), never let a C++ exception cross the DLL boundary.
 
 #include "noor/asset/environment_asset.h"
+#include "noor/asset/water_asset.h"
 #include "noor/fx/presets.h"
 #include "noor_editor_api.h"
 
@@ -207,6 +208,10 @@ NOOR_API const char* noor_environment_presets(void) {
             list.push_back({{"name", p.name}, {"description", p.description}, {"environment", p.environment}});
         return give(list);
     });
+}
+
+NOOR_API const char* noor_water_presets(void) {
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* { return give(noor::asset::water_presets()); });
 }
 
 NOOR_API const char* noor_effect_presets(void) {

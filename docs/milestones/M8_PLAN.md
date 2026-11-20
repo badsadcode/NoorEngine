@@ -623,7 +623,7 @@ skinning, network replication of animation state.
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
+| 1 ✅ | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
 | 2 | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
 | 3 | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
 | 4 | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
@@ -647,6 +647,29 @@ skinning, network replication of animation state.
    and precision far from the origin (Baltic Drive's moving origin is the reference if it comes to that).
 5. **The waterline.** A camera half in the water sees two worlds split by a wobbling line; the classic place for
    pops and seams. Part 4 tests a camera walked down through the surface.
+
+## Part 1 result (2026-11-20)
+Done. The `water` component (a box: a level rectangle, sized by `size` and the entity's scale, turned with it; a sea:
+level at the entity's height, under the camera out to 20 km) with its look from a built-in preset or a `.noorwater`
+asset and its own fields over them (`asset/water_asset.h`: absorption per metre or a tint and clarity, scatter,
+refraction, shore fade, roughness, ripples; one preset so far, Lake). When water is in view the scene pass is split:
+opaque and sky, then the colour (resolved) and depth (with MSAA, sample 0 resolved by the pass; without, copied) go to
+two images in set 0 (bindings 7 and 8), then the see-through pass draws the water first (writing depth), then glass and
+particles. Each water pixel reconstructs what's under it: Beer–Lambert absorption over the vertical depth plus the
+view path, refraction by the ripples' slope (not onto things in front of the water), light scattered inside lit by the
+sun (shadowed) and sky, the sky reflected by Schlick Fresnel from the environment cube, a GGX sun glint, aerial
+perspective and fog over the water's own light, a soft shore over `shore_fade` metres of depth. Ripples are six sine
+waves on the game's clock, faded out when smaller than a few pixels (they aliased into a grid) and turned into
+roughness instead. The editor: Create ▸ Water, the preset chosen from the engine's list (`noor_water_presets`, editor
+API v28), the Render panel counts water draws; the GPU timings gain **Scene copy** and **See-through** passes (eight
+in all). Proven: unit tests "water" (6: transmittance and tint-to-absorption against hand-worked values, the Lake preset
+worked through from its sRGB colours, bad values, files, components to draws including a sea); goldens `Water_Pool`,
+`Water_Sea` and `Hillside_Lake` (`tools/samples/add_hillside_lake.py`: a hollow sculpted through the editor API in the
+scene's own sculpt layer, the water's edge checked to be on higher ground); the editor smoke test (Create ▸ Water drawn,
+undone). **Measured** (`tools/samples/measure_hillside_lake.py`, RTX 3080, 1280×720, 4× MSAA): the copy 0.02 ms, the
+lake 0.035 ms, the split pass about 0.03 ms more: about 0.1 ms with water, nothing without. Highest risk 1 settled.
+Not done: the absorption counts the surface-to-camera stretch as air (an approximation, documented); no planar or
+screen-space reflections yet (part 3); the sea is flat (part 2).
 
 ## Open questions
 

@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 27;
+    public const uint ExpectedApiVersion = 28;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -82,6 +82,7 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_environment_presets();
     [DllImport(Dll)] private static extern IntPtr noor_doc_environment(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_effect_presets();
+    [DllImport(Dll)] private static extern IntPtr noor_water_presets();
     [DllImport(Dll)] private static extern IntPtr noor_doc_effect(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_sprite(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_animation(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
@@ -129,6 +130,7 @@ public static class Native
     public static string? Environment(IntPtr doc, string command) => Str(noor_doc_environment(doc, command));
     // v25: effect assets, the built-in effect presets and the viewport's effect preview (Milestone 8B, part 4).
     public static string? EffectPresets() => Str(noor_effect_presets());
+    public static string? WaterPresets() => Str(noor_water_presets());
     public static string? Effect(IntPtr doc, string command) => Str(noor_doc_effect(doc, command));
     // v26: sprite sheets (Milestone 8B, part 5).
     public static string? Sprite(IntPtr doc, string command) => Str(noor_doc_sprite(doc, command));

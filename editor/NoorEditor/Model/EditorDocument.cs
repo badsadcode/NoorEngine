@@ -383,6 +383,7 @@ public sealed class EditorDocument : IDisposable
 
     /// <summary>The built-in effect presets (Milestone 8B, part 4): [{name, description, emitter}].</summary>
     public static JsonArray EffectPresets() => Native.EffectPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
+    public static JsonArray WaterPresets() => Native.WaterPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
 
     /// <summary>
     /// One effect command (noor_doc_effect: list, read, apply, duplicate, reset, save, preview). Changes refresh the

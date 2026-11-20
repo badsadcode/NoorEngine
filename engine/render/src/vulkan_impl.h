@@ -58,7 +58,7 @@ inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::
 inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
 // GPU timestamps per frame: start, after shadows, after the scene, after tonemapping, after the gizmos, end.
-inline constexpr std::uint32_t kTimestampsPerFrame = 7;
+inline constexpr std::uint32_t kTimestampsPerFrame = 9;
 // The aerial perspective volume (Milestone 8A, part 3): 32^3 froxels over the camera's view, slices
 // spaced by the square root of the distance out to this far end (km of air, after the distance scale).
 inline constexpr std::uint32_t kAerialSize = 32;
@@ -314,6 +314,18 @@ struct Renderer::Impl {
     VmaAllocation hdr_allocation = VK_NULL_HANDLE;
     VkImageView hdr_view = VK_NULL_HANDLE;
 
+    // Water (vulkan_water.cpp, 8D): the opaque scene's colour and depth, copied for water to read (set 0, 7 and 8)
+    VkImage scene_color_copy = VK_NULL_HANDLE;
+    VmaAllocation scene_color_copy_allocation = VK_NULL_HANDLE;
+    VkImageView scene_color_copy_view = VK_NULL_HANDLE;
+    VkImage scene_depth_copy = VK_NULL_HANDLE;
+    VmaAllocation scene_depth_copy_allocation = VK_NULL_HANDLE;
+    VkImageView scene_depth_copy_view = VK_NULL_HANDLE;
+    VkSampler scene_copy_sampler = VK_NULL_HANDLE;   // linear (colour)
+    VkSampler scene_depth_sampler = VK_NULL_HANDLE;  // nearest (depth)
+    VkPipelineLayout water_layout = VK_NULL_HANDLE;
+    VkPipeline water_pipeline = VK_NULL_HANDLE;
+
     // Sun shadows (vulkan_shadows.cpp): a 2D array, one layer per cascade
     VkImage shadow_image = VK_NULL_HANDLE;
     VmaAllocation shadow_allocation = VK_NULL_HANDLE;
@@ -558,6 +570,14 @@ struct Renderer::Impl {
     Status ensure_mesh_pipeline(VkFormat color_format);
     VkResult create_mesh_pipeline(VkFormat color_format, bool display, VkPipeline& out, bool cull_back = true, bool blended = false);
     VkResult create_particle_pipeline(VkPipeline& out, bool weather = false);
+    // vulkan_water.cpp (8D)
+    Status create_scene_copies();
+    void destroy_scene_copies();
+    void write_scene_copy_descriptors();
+    void record_scene_copy(VkCommandBuffer cmd, bool msaa);
+    Status ensure_water_pipeline();
+    void destroy_water_pipeline();
+    void record_water(VkCommandBuffer cmd, const FrameDesc& frame);
     Status create_msaa_targets();
     void destroy_msaa_targets();
     void destroy_scene_pipelines();  // the ones drawn into the (multisampled) scene: rebuilt when samples change

@@ -76,7 +76,15 @@ public static class EntityTemplates
         // in over `blend` metres by where the scene's camera is. Pick a project environment in the Inspector, or
         // copy a preset in.
         new(WeatherZoneTemplateName, () => new JsonObject { ["weather_zone"] = WeatherZone() }, new Vec3(0, 0, 0)),
+        // Water (Milestone 8D, part 1, ADR-037): a level rectangle of water (size in metres; the entity's scale and
+        // turn about +Y apply) with a preset's look; any look field added in the Inspector overrides the preset's.
+        // Put it where the ground is lower than it: the water shows where it's deeper than the ground beneath.
+        new(WaterTemplateName, () => new JsonObject { ["water"] = Water() }, new Vec3(0, 0, 0)),
     ];
+
+    public const string WaterTemplateName = "Water";
+
+    public static JsonObject Water() => new() { ["preset"] = "Lake", ["size"] = new JsonArray(20, 20) };
 
     public const string WeatherZoneTemplateName = "Weather zone";
 

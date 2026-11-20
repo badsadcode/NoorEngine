@@ -1,0 +1,56 @@
+#pragma once
+// Water's look (Milestone 8D, part 1, ADR-037): the settings a `water` component draws with, from its `.noorwater` asset
+// (or a built-in preset) with the component's own fields over them, as environments and effects do.
+//
+//   {"noor_water": 1, "name": "Lake", "preset": "Lake",
+//    "water": {"tint": "#3A8C80", "clarity": 3.0, "scatter": "#1F4A48", "refraction": 0.06, "shore_fade": 0.12,
+//              "roughness": 0.06, "ripple": 1.0, "ripple_scale": 1.2}}
+//
+// Colour by depth comes from absorption: light loses a share of each colour per metre. Say it either way:
+//   "absorption": [r, g, b] per metre (linear), or
+//   "tint" (the colour white light has become after "clarity" metres of water) and "clarity" (metres):
+//   absorption = -ln(tint) / clarity, per channel (sRGB tint, linearised first).
+// "scatter": the colour light scattered back from inside the water takes on (an albedo; dark: clear water, light:
+// milky). "refraction": how far what's under is bent (a fraction of the screen, at a metre deep). "shore_fade": metres
+// of depth over which the water fades in at the shore. "roughness": blurs the sky's reflection. "ripple" (0: a mirror)
+// and "ripple_scale" (metres): small ripples. The component adds "size": [x, z] (metres, before the entity's scale).
+
+#include "noor/asset/json.h"
+#include "noor/foundation/error.h"
+#include "noor/foundation/math.h"
+
+#include <filesystem>
+#include <string_view>
+
+namespace noor::asset {
+
+inline constexpr std::string_view kWaterExtension = ".noorwater";
+inline constexpr int kWaterFormat = 1;
+
+struct WaterLook {
+    math::Vec3 absorption{0.45f, 0.09f, 0.06f};  // per metre, linear
+    math::Vec3 scatter{0.02f, 0.05f, 0.06f};     // linear albedo
+    float refraction = 0.04f;
+    float shore_fade = 0.12f;
+    float roughness = 0.06f;
+    float ripple = 1.0f;
+    float ripple_scale = 1.2f;
+
+    // Fields present in `settings` replace these (unknown fields are ignored; bad values keep the default).
+    void apply(const Json& settings);
+};
+
+// The built-in presets: [{"name", "description", "water"}] (never written to). Part 1: "Lake".
+[[nodiscard]] const Json& water_presets();
+[[nodiscard]] const Json* water_preset(std::string_view name);
+
+// A .noorwater file (checked: its format and that "water" is an object).
+[[nodiscard]] Result<Json> load_water_file(const std::filesystem::path& file);
+
+// How much of each colour gets through `metres` of water (exp(-absorption * metres)).
+[[nodiscard]] math::Vec3 water_transmittance(const WaterLook& look, float metres);
+
+// Absorption from a tint and a clarity (see above).
+[[nodiscard]] math::Vec3 absorption_from_tint(math::Vec3 tint_linear, float clarity);
+
+} // namespace noor::asset

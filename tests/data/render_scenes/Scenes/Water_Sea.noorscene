@@ -1,0 +1,532 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-5ea0-4000-8000-000000000000",
+  "name": "Water_Sea",
+  "entities": [
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000001",
+      "name": "Beach",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -1.0,
+          -6.0
+        ],
+        "rotation": [
+          -0.052335956242943835,
+          0,
+          0,
+          0.9986295347545738
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            40,
+            0.4,
+            30
+          ],
+          "color": "#C8B48A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000010",
+      "name": "Post 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          -0.5,
+          -8
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000011",
+      "name": "Post 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          -0.5,
+          -12
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000012",
+      "name": "Post 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          -0.5,
+          -16
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000013",
+      "name": "Post 4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          -0.5,
+          -20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000014",
+      "name": "Post 5",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1,
+          -0.5,
+          -8
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000015",
+      "name": "Post 6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1,
+          -0.5,
+          -12
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000016",
+      "name": "Post 7",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1,
+          -0.5,
+          -16
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000017",
+      "name": "Post 8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1,
+          -0.5,
+          -20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000020",
+      "name": "Pier deck",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2,
+          1.05,
+          -14
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            2.6,
+            0.12,
+            13
+          ],
+          "color": "#8A6A48"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000021",
+      "name": "Rock",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          25,
+          1.5,
+          -120
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            18,
+            9,
+            14
+          ],
+          "color": "#5E5A55"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000030",
+      "name": "Sea",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "water": {
+          "shape": "sea",
+          "preset": "Lake"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ea0-4000-8000-000000000040",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.5,
+          2.6,
+          4.0
+        ],
+        "rotation": [
+          -0.0697565,
+          0,
+          0,
+          0.9975641
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05
+        }
+      }
+    },
+    {
+      "id": "a7e50000-0d00-4000-8000-000000000010",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.3261904081870283,
+          -0.28257102082169233,
+          -0.10284744064531129,
+          0.8962007809365465
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-0d00-4000-8000-000000000099",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "time_of_day": 16.5,
+          "latitude": 50,
+          "day_of_year": 172,
+          "north": 270,
+          "ev100": "auto"
+        }
+      }
+    }
+  ]
+}

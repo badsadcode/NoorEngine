@@ -37,8 +37,9 @@ Option 3.
   applied through Jolt; characters wade and swim.
 
 ## Consequences
-- The frame gains a resolve-and-copy when water is in view (measured in part 1; nothing when it isn't). It also gives
-  later effects (soft particles, decals) the scene's depth.
+- The frame gains a resolve-and-copy when water is in view (nothing when it isn't). Measured in part 1 (2026-11-20,
+  1280×720, 4× MSAA): the copy 0.02 ms, a lake 0.035 ms, the split pass about 0.03 ms more. It also gives later effects
+  (soft particles, decals) the scene's depth.
 - Waves are art-directed, deterministic and cheap; they don't flow round obstacles or pile up. Disclosed in the docs.
 - Screen-space reflections miss what's off screen; the sky stands in for it.
 - Water bodies are data (component and asset), so procedural graphs can place them later (lakes in hollows, rivers

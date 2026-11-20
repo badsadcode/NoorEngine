@@ -1192,6 +1192,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     auto view = game::collect_view(expanded, game::registry_asset_path(project_, registry_), world_ ? &world_->render_poses() : nullptr, project_.root());
     snap->primitives = std::move(view.primitives);
     snap->sprites = std::move(view.sprites);
+    snap->water = std::move(view.water);
     snap->terrains = std::move(view.terrains);
     // Sculpted or painted terrains: the live layers (saved or not).
     for (auto& t : snap->terrains) {

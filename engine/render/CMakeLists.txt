@@ -3,6 +3,7 @@ noor_add_module(render
         src/vulkan_impl.h
         src/vulkan_renderer.cpp
         src/vulkan_resources.cpp
+        src/vulkan_water.cpp
         src/vulkan_capture.cpp
         src/ibl.cpp
         src/shadows.cpp
@@ -35,6 +36,8 @@ noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl VSM
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/tonemap.hlsl PSMain ps_6_0 tonemap_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl VSMain vs_6_0 particle_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl PSMain ps_6_0 particle_ps)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl VSMain vs_6_0 water_vs)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl PSMain ps_6_0 water_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl VSMain vs_6_0 weather_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl PSMain ps_6_0 weather_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/clouds_volume.hlsl CSNoise cs_6_0 clouds_volume_noise)

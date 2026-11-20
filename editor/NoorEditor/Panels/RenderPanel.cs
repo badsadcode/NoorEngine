@@ -103,6 +103,7 @@ public sealed class RenderPanel : DockPanel
             ("Draw calls", $"{N("draw_calls")}"),
             ("  shadows", $"{N("shadow_draw_calls")} ({N("shadow_draws_culled")} skipped: outside their cascade)"),
             ("  see-through", $"{N("transparent_draws")}"),
+            ("  water", $"{N("water_draws")}"),
             ("Triangles", N("triangles").ToString("N0", CultureInfo.InvariantCulture)),
             ("Textures", Bytes(N("texture_bytes"))),
             ("Meshes", Bytes(N("mesh_bytes"))),

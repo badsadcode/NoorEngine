@@ -135,7 +135,7 @@ Status Renderer::Impl::create_depth_buffer() {
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;  // copied for water (8D)
     image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VmaAllocationCreateInfo alloc_info{};
@@ -181,7 +181,7 @@ Status Renderer::Impl::create_msaa_targets() {
         image_info.arrayLayers = 1;
         image_info.samples = static_cast<VkSampleCountFlagBits>(scene_samples);
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        image_info.usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;  // never read after the pass
+        image_info.usage = usage;  // not transient: water (8D) splits the scene pass and loads them again
         VmaAllocationCreateInfo alloc_info{};
         alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
         alloc_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -498,6 +498,7 @@ void Renderer::Impl::destroy_mesh_pipeline() {
         if (*p != VK_NULL_HANDLE) vkDestroyPipeline(device, *p, nullptr);
         *p = VK_NULL_HANDLE;
     }
+    destroy_water_pipeline();
     if (pipeline_layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
         pipeline_layout = VK_NULL_HANDLE;

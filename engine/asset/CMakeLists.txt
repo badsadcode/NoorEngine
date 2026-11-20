@@ -24,6 +24,7 @@ noor_add_module(asset
         src/retarget.cpp
         src/skinning.cpp
         src/sprite_asset.cpp
+        src/water_asset.cpp
     PUBLIC_DEPS
         noor::foundation
         nlohmann_json::nlohmann_json

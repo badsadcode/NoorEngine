@@ -310,12 +310,14 @@ int run(const Options& o) {
                 bool warned_no_camera = false;
                 std::optional<noor::render::CapturedFrame> last_capture;
                 noor::render::FrameDesc last_frame_desc;  // the final frame, redrawn if its picture was missed
+                std::vector<noor::render::WaterDraw> last_water;
                 std::vector<noor::render::DrawItem> last_draws;
                 std::vector<noor::render::OverlayVertex> last_overlay;
                 // Frame timings for --report (Milestone 7, part 6): wall time per frame, and where the CPU
                 // spent it (the game, collecting the view, recording the frame), plus the GPU's own time.
                 struct Timing {
                     double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1, particles = -1;
+                    double scene = -1, scene_copy = -1, see_through = -1;  // GPU passes (8D: what water costs)
                 };
                 std::vector<Timing> timings;
                 Json environment_trace = Json::array();
@@ -386,7 +388,8 @@ int run(const Options& o) {
                     std::span<const noor::render::ParticleDraw> particle_draws;
                     if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
                         particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
-                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws});
+                    for (auto& w : view.water) w.time = (*world)->time();  // ripples on the game's clock
+                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;
@@ -403,13 +406,20 @@ int run(const Options& o) {
                         timings.push_back({(t_end - frame_start) * 1000.0, (t_game_done - t_game) * 1000.0,
                                            (t_view_done - t_game_done) * 1000.0, (t_collected - t_game_done) * 1000.0, fs.cpu_record_ms, fs.gpu_ms,
                                            environment_ms, particles ? particles->stats().step_ms : -1.0});
+                        for (const auto& pass : fs.passes) {
+                            const std::string_view name = pass.name;
+                            if (name == "Scene") timings.back().scene = pass.ms;
+                            else if (name == "Scene copy") timings.back().scene_copy = pass.ms;
+                            else if (name == "See-through") timings.back().see_through = pass.ms;
+                        }
                         frame_start = t_end;
                     }
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
                     if (last_frame) {
                         last_draws = draws;
                         last_overlay = overlay;
-                        last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}, particle_draws};
+                        last_water = view.water;
+                        last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}, particle_draws, last_water};
                     }
                 }
                 // The last frame wasn't presented (the swapchain was being rebuilt, the window was busy):
@@ -493,6 +503,9 @@ int run(const Options& o) {
                                                {"record", stat(&Timing::record)},
                                                {"gpu", stat(&Timing::gpu)},
                                                {"environment_gpu", stat(&Timing::environment)},
+                                               {"scene_gpu", stat(&Timing::scene)},
+                                               {"scene_copy_gpu", stat(&Timing::scene_copy)},
+                                               {"see_through_gpu", stat(&Timing::see_through)},
                                                {"particles", stat(&Timing::particles)}};
                     }
                     // Effect particles (Milestone 8B): how many, and a fingerprint of every one (equal runs, equal fingerprints).

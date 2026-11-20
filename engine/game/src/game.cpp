@@ -1,6 +1,7 @@
 #include "noor/game/game.h"
 
 #include "noor/asset/environment_asset.h"
+#include "noor/asset/water_asset.h"
 #include "noor/game/weather.h"
 #include "noor/fx/particle_system.h"
 #include "noor/game/animator.h"
@@ -476,6 +477,35 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         const bool model = e.has("model") && e.components["model"].is_object();
         const bool scatter = e.has("scatter") && e.components["scatter"].is_object();
         const bool sprite = e.has("sprite") && e.components["sprite"].is_object();
+        if (e.has("water") && e.components["water"].is_object()) {
+            // Water (8D part 1): its look (preset, asset, then its own fields), its footprint from size and scale.
+            const Json& wc = e.components["water"];
+            asset::WaterLook look;
+            if (wc.contains("preset") && wc["preset"].is_string())
+                if (const Json* preset = asset::water_preset(wc["preset"].get<std::string>())) look.apply((*preset)["water"]);
+            if (const auto id = asset::guid_field(wc, "asset"); id && asset_path)
+                if (const auto file = asset_path(*id))
+                    if (auto loaded = asset::load_water_file(*file)) look.apply((*loaded)["water"]);
+            look.apply(wc);
+            const math::Mat4 w = world_of(i, 0);
+            const math::Vec3 ax = math::transform_vector(w, {1, 0, 0}), az = math::transform_vector(w, {0, 0, 1});
+            math::Vec2 size{10.0f, 10.0f};
+            if (wc.contains("size") && wc["size"].is_array() && wc["size"].size() == 2 && wc["size"][0].is_number() && wc["size"][1].is_number())
+                size = {std::max(0.01f, wc["size"][0].get<float>()), std::max(0.01f, wc["size"][1].get<float>())};
+            render::WaterDraw d;
+            d.center = w.transform_point({0, 0, 0});
+            d.half_size = {size.x * 0.5f * math::length(ax), size.y * 0.5f * math::length(az)};
+            d.yaw = std::atan2(-ax.z, ax.x);
+            d.absorption = look.absorption;
+            d.scatter = look.scatter;
+            d.refraction = look.refraction;
+            d.shore_fade = look.shore_fade;
+            d.roughness = look.roughness;
+            d.ripple = look.ripple;
+            d.ripple_scale = look.ripple_scale;
+            d.endless = wc.contains("shape") && wc["shape"].is_string() && wc["shape"].get<std::string>() == "sea";
+            view.water.push_back(d);
+        }
         if (scatter) scatter_entities.push_back(i);
         if (!camera && !primitive && !sprite && !mesh && !model && !sun && !local && !extra_sun && !body && !env && !e.has("csg_model") &&
             !e.has("terrain"))

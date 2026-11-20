@@ -40,6 +40,7 @@ add_executable(noor_unit_tests
     unit/test_root_motion.cpp
     unit/test_retarget.cpp
     unit/test_fbx.cpp
+    unit/test_water.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -512,6 +513,34 @@ add_test(NAME render.golden_Hillside_Alden
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Alden
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside_Alden PROPERTIES LABELS "gpu;render;sample" TIMEOUT 240 RESOURCE_LOCK "hillside_cache;gpu_timing"
+                     FIXTURES_REQUIRED hillside_cooked)
+# Water (Milestone 8D, part 1, ADR-037): a tiled pool with a ramp floor (a ball half in it, a block on the deep end), and
+# the 8D lake on Hillside (tools/samples/add_hillside_lake.py: a hollow sculpted in its own layer, the "Lake" preset).
+add_test(NAME render.golden_Water_Pool
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Water_Pool.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Water_Pool.png -DFRAMES=30
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Water_Pool
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Water_Pool PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# An endless sea (part 1's flat surface to the horizon, fogged with distance) by a beach, a pier and a rock.
+add_test(NAME render.golden_Water_Sea
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Water_Sea.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Water_Sea.png -DFRAMES=30
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Water_Sea
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Water_Sea PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+add_test(NAME render.golden_Hillside_Lake
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Lake.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Lake.png -DFRAMES=30
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Lake
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Lake PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                      FIXTURES_REQUIRED hillside_cooked)
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).

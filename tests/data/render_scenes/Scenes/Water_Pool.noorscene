@@ -1,0 +1,391 @@
+{
+ "noor_scene": 2,
+ "id": "a7e50000-0d00-4000-8000-000000000000",
+ "name": "Water_Pool",
+ "entities": [
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000001",
+   "name": "Ground left",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     -6.5,
+     -1.1,
+     0
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      7,
+      2.2,
+      24
+     ],
+     "material": "7e5d0000-3a70-4000-8000-000000000004"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000002",
+   "name": "Ground right",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     6.5,
+     -1.1,
+     0
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      7,
+      2.2,
+      24
+     ],
+     "material": "7e5d0000-3a70-4000-8000-000000000004"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000003",
+   "name": "Ground front",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     -1.1,
+     7
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      6,
+      2.2,
+      10
+     ],
+     "material": "7e5d0000-3a70-4000-8000-000000000004"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000004",
+   "name": "Ground back",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     -1.1,
+     -7
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      6,
+      2.2,
+      10
+     ],
+     "material": "7e5d0000-3a70-4000-8000-000000000004"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000005",
+   "name": "Pool floor",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     -1.125,
+     0
+    ],
+    "rotation": [
+     -0.21491039902792622,
+     0.0,
+     0.0,
+     0.976633769838857
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      6,
+      0.1,
+      4.407096549884062
+     ],
+     "material": "7e5d0000-3a70-4000-8000-000000000004"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000006",
+   "name": "Ball",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     1.2,
+     -0.05,
+     0.6
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "sphere",
+     "size": [
+      0.8,
+      0.8,
+      0.8
+     ],
+     "color": "#C8322A"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000007",
+   "name": "Block",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     -0.9,
+     -1.45,
+     -1.1
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "primitive": {
+     "shape": "box",
+     "size": [
+      0.6,
+      0.6,
+      0.6
+     ],
+     "color": "#E8C040"
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000008",
+   "name": "Water",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     -0.05,
+     0
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "water": {
+     "preset": "Lake",
+     "size": [
+      6,
+      4
+     ]
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000009",
+   "name": "Camera",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     4.6,
+     5.6
+    ],
+    "rotation": [
+     -0.3255681544571567,
+     0,
+     0,
+     0.9455185755993168
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "camera": {
+     "fov": 55,
+     "near": 0.05
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000010",
+   "name": "Sun",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     5,
+     0
+    ],
+    "rotation": [
+     -0.3261904081870283,
+     -0.28257102082169233,
+     -0.10284744064531129,
+     0.8962007809365465
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "light": {
+     "type": "directional",
+     "color": "#FFF5E6",
+     "illuminance": 100000
+    }
+   }
+  },
+  {
+   "id": "a7e50000-0d00-4000-8000-000000000099",
+   "name": "Sky",
+   "layer": "default",
+   "tags": [],
+   "parent": null,
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ],
+    "scale": [
+     1,
+     1,
+     1
+    ]
+   },
+   "components": {
+    "environment": {
+     "sky": "atmosphere",
+     "time_of_day": 16.5,
+     "latitude": 50,
+     "day_of_year": 172,
+     "north": 270,
+     "ev100": "auto"
+    }
+   }
+  }
+ ]
+}

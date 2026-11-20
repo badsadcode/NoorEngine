@@ -651,6 +651,19 @@ public sealed class ComponentsEditor : StackPanel
                 editor = combo;
                 break;
             }
+            case JsonValue v when v.TryGetValue<string>(out var choice) && type == "water" && field == "preset":
+            {
+                // Water's look (8D): one of the built-in presets (the engine's list), with any fields added beside it on top.
+                var waterPresets = EditorDocument.WaterPresets().OfType<JsonObject>().ToList();
+                var options = waterPresets.Select(p => p["name"]?.GetValue<string>() ?? "").Where(n => n.Length > 0).ToList();
+                var combo = new ComboBox { ItemsSource = options, SelectedItem = options.Contains(choice) ? choice : null, Classes = { "field" },
+                                           HorizontalAlignment = HorizontalAlignment.Stretch };
+                if (waterPresets.FirstOrDefault(p => p["name"]?.GetValue<string>() == choice)?["description"]?.GetValue<string>() is { } description)
+                    ToolTip.SetTip(combo, description);
+                combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string pick && pick != choice) SetField(type, field, JsonValue.Create(pick)); };
+                editor = combo;
+                break;
+            }
             case JsonValue v when v.TryGetValue<string>(out var choice) && type is "environment" or "weather_zone" && field is "cloud_type" or "cloud2_type":
             {
                 // A cloud layer's style (part 7b, ADR-034): a flat layer (the classic look) or a ray-marched volume.

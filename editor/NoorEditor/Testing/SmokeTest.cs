@@ -933,6 +933,22 @@ internal static class SmokeTest
               "weather zones: Create ▸ Weather zone makes a fog bank with a blend distance");
         doc.Undo();
         check(doc.Scene.Entities.Count == count, "weather zones: one undo removes the zone");
+
+        // Milestone 8D, part 1: Create ▸ Water makes a lake the viewport draws (the water pass counts it); one undo removes it.
+        check(EditorDocument.WaterPresets().OfType<JsonObject>().Any(p => p["name"]?.GetValue<string>() == "Lake"), "water: the engine lists its presets (Lake)");
+        var waterId = window.CreateEntity(EntityTemplates.All.First(t => t.Name == EntityTemplates.WaterTemplateName));
+        check(doc.Scene.Entities.FirstOrDefault(e => e.Id == waterId)?.Components["water"]?["preset"]?.GetValue<string>() == "Lake",
+              "water: Create ▸ Water makes a water surface with the Lake preset");
+        long waterDraws = 0;
+        for (var i = 0; i < 25 && waterDraws < 1; ++i)
+        {
+            await Task.Delay(200);
+            var stats = VulkanViewport.Active?.RenderStats() is { } text ? JsonNode.Parse(text) : null;
+            waterDraws = stats?["water_draws"]?.GetValue<long>() ?? 0;
+        }
+        check(waterDraws >= 1, $"water: the viewport draws it ({waterDraws} water surface(s))");
+        doc.Undo();
+        check(doc.Scene.Entities.Count == count, "water: one undo removes it");
     }
 
     // Milestone 5, part 7: the Render panel's numbers, and anti-aliasing switched from Preferences.
@@ -948,12 +964,12 @@ internal static class SmokeTest
         var panel = window.GetVisualDescendants().OfType<RenderPanel>().FirstOrDefault();
         // GPU pass timings arrive a frame or two after the frame (timestamp queries): wait for them
         // rather than reading once (a single read flaked on 2026-11-18).
-        await WaitFor(() => { panel?.Refresh(); return (int?)((panel?.Last?["passes"] as JsonArray)?.Count ?? 0); }, n => n == 6, 5);
+        await WaitFor(() => { panel?.Refresh(); return (int?)((panel?.Last?["passes"] as JsonArray)?.Count ?? 0); }, n => n == 8, 5);
         var last = panel?.Last;
         long N(string key) => last?[key]?.GetValue<long>() ?? -1;
         check(panel != null && N("draw_calls") > 0 && N("triangles") > 0 && N("render_target_bytes") > 0 &&
-              (last?["passes"] as JsonArray)?.Count == 6,  // Environment, Shadows, Scene, Tonemap, Gizmos, HUD
-              $"render panel: shows the scene viewport's draws ({N("draw_calls")}), triangles, memory and 6 pass timings");
+              (last?["passes"] as JsonArray)?.Count == 8,  // Environment, Shadows, Scene, Scene copy, See-through, Tonemap, Gizmos, HUD
+              $"render panel: shows the scene viewport's draws ({N("draw_calls")}), triangles, memory and 8 pass timings");
         check(N("msaa_samples") == 4, $"anti-aliasing: 4x MSAA by default ({N("msaa_samples")})");
         await Task.Delay(300);  // drawn on screen before the picture
         shot(window, "editor_22_render_panel.png");

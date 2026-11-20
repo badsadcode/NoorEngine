@@ -366,12 +366,33 @@ struct ParticleDraw {
     float radius = 0.0f;      // how far its particles reach from `center`
 };
 
+// ---- Water (Milestone 8D, part 1, ADR-037) ----------------------------------------------------
+
+// One water surface: a level rectangle (a lake's, a pond's), drawn over a copy of the opaque scene so it knows how deep
+// it is at every pixel. Radiometric settings are physical-ish and art-directed (docs/water/WATER.md).
+struct WaterDraw {
+    math::Vec3 center;                              // the surface's middle, world (its y is the water level)
+    math::Vec2 half_size{5.0f, 5.0f};               // metres along its own x and z
+    float yaw = 0.0f;                               // turned about +Y (radians)
+    math::Vec3 absorption{0.45f, 0.09f, 0.06f};     // per metre, linear rgb: red goes first, then green
+    math::Vec3 scatter{0.02f, 0.05f, 0.06f};        // light scattered back from inside the water (an albedo)
+    float refraction = 0.04f;                       // how far what's under is bent (screen fraction, at 1 m deep)
+    float shore_fade = 0.12f;                       // metres of depth over which the water fades in at the shore
+    float roughness = 0.06f;                        // blurs the sky's reflection and spreads the sun's glint
+    float ripple = 1.0f;                            // small ripples' strength (0: a mirror)
+    float ripple_scale = 1.2f;                      // metres per ripple
+    double time = 0.0;                              // seconds (the ripples move with it)
+    bool endless = false;                           // a sea: under the camera out to the horizon (center's y only;
+                                                    // half_size and yaw are ignored)
+};
+
 struct FrameDesc {
     Camera camera;
     Lighting lighting;
     std::span<const DrawItem> draws;
     std::span<const OverlayVertex> overlay;
     std::span<const ParticleDraw> particles;  // Milestone 8B: drawn in the see-through pass, sorted with see-through meshes
+    std::span<const WaterDraw> water;         // Milestone 8D: drawn first in the see-through pass, over the copied scene
 };
 
 struct FrameStats {
@@ -397,6 +418,7 @@ struct FrameStats {
     std::uint32_t particle_draws = 0;     // emitters drawn (one draw call each), and their particles
     std::uint64_t particles = 0;
     std::uint64_t weather_drops = 0;      // rain, snow and dust drawn (8B part 3)
+    std::uint32_t water_draws = 0;        // water surfaces drawn (8D); with any, the scene was copied for them
     std::uint32_t msaa_samples = 1;       // samples per pixel of the scene this frame
 };
 

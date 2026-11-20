@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 27u
+#define NOOR_EDITOR_API_VERSION 28u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -167,6 +167,9 @@ NOOR_API const char* noor_doc_effect(noor_doc* doc, const char* command);
         sheet (its other sprite fields kept), or a new entity gets one (one undo step) -> the sheet's object plus "entity"
    NULL on error (noor_last_error). */
 NOOR_API const char* noor_doc_sprite(noor_doc* doc, const char* command);
+/* v28: water (Milestone 8D, part 1, ADR-037): the built-in water presets, [{"name", "description", "water"}] (never
+   written to), for the Inspector's choice of a `water` component's "preset". */
+NOOR_API const char* noor_water_presets(void);
 /* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
      {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
         "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),

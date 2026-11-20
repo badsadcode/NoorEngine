@@ -137,6 +137,11 @@ struct SceneView {
         math::Mat4 world;
     };
     std::vector<Sprite> sprites;
+    // Water surfaces (`water` components, Milestone 8D, ADR-037): {"shape": "box" (default) | "sea", "preset": "Lake" |
+    // "asset": <.noorwater id>, "size": [x, z] (metres, times the entity's scale), and any of the look's fields over them
+    // (asset/water_asset.h)}. A box is a level rectangle at the entity's position, turned with it about +Y; a sea is
+    // level at the entity's height, under the camera out to the horizon. `time` is left at 0 (the caller's clock).
+    std::vector<render::WaterDraw> water;
     std::optional<Camera> camera;
     // The sun: the first entity with a directional `light` ({"type": "directional", "color":
     // "#FFF4E5", "illuminance": 100000}), shining along the entity's forward (−Z). Until

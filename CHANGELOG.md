@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 1: the water surface
+**Added**
+- **Water** (ADR-037, `docs/water/WATER.md`): the `water` component, a box (a level rectangle) or a sea (under the
+  camera to the horizon); its look from a preset or a `.noorwater` asset with the component's fields over them
+  (`asset/water_asset.h`; preset "Lake"). Light absorbed by the water's thickness per colour (Beer–Lambert), what's under
+  bent by ripples, light scattered inside, the sky and the sun's glint reflected by Fresnel, fog over it, a soft shore.
+- The scene's colour and depth are copied once a frame when water is in view (set 0, bindings 7 and 8); the scene pass
+  is split around the copy only then.
+- GPU pass timings: **Scene copy** and **See-through** are their own passes (eight in all); the player's report has
+  their per-frame statistics (`scene_gpu`, `scene_copy_gpu`, `see_through_gpu`).
+- Editor: Create ▸ Water; the Inspector chooses a water preset; the Render panel counts water surfaces. Editor API v28:
+  `noor_water_presets`.
+- The Hillside lake, `samples/Hillside/Scenes/Hillside_Lake.noorscene` (`tools/samples/add_hillside_lake.py`: a hollow
+  sculpted in the scene's own sculpt layer, `Assets/Terrain/Hillside_Lake.noorsculpt`); `tools/samples/measure_hillside_lake.py`.
+
+**Measured:** the copy 0.02 ms, a lake 0.035 ms, about 0.1 ms in all (1280×720, 4× MSAA).
+
+**Tests:** unit tests "water" (6); goldens `Water_Pool`, `Water_Sea`, `Hillside_Lake`; the editor smoke test creates
+water and sees it drawn.
+
 ### 2026-11-20 — Milestone 8C, part 8: the sample and the 8C review
 **Added**
 - **Alden Wayfarer** as a character (`tools/samples/make_alden.py`: the concept sheet's look, on Ward's skeleton; his

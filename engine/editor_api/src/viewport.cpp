@@ -403,6 +403,7 @@ void render_thread_main(noor_viewport* vp) {
     std::uint64_t seen_reload_token = 0;
     auto last_stats_time = std::chrono::steady_clock::now() - 1s;
     std::vector<noor::render::OverlayVertex> overlay;
+    std::vector<noor::render::WaterDraw> water_draws;  // this frame's water surfaces (8D), on the viewport's clock
 
     // Per snapshot: what to draw, and for each draw the entity it belongs to.
     struct SceneDraw {
@@ -1300,6 +1301,14 @@ void render_thread_main(noor_viewport* vp) {
             frame.lighting.time = shown && shown->game_time
                                       ? static_cast<float>(*shown->game_time)
                                       : static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
+            // Water (8D): its ripples on the same clock.
+            water_draws.clear();
+            if (shown)
+                for (auto w : shown->water) {
+                    w.time = frame.lighting.time;
+                    water_draws.push_back(w);
+                }
+            frame.water = water_draws;
             // Sprites (8B part 5): turned to this camera every frame, animated on the clock above; a sprite being
             // moved follows the gizmo, a selected one is tinted like the rest.
             sprite_quads.clear();
@@ -1483,6 +1492,7 @@ void render_thread_main(noor_viewport* vp) {
                                            {"shadow_draw_calls", fs.shadow_draw_calls},
                                            {"shadow_draws_culled", fs.shadow_draws_culled},
                                            {"transparent_draws", fs.transparent_draws},
+                                           {"water_draws", fs.water_draws},
                                            {"particle_draws", fs.particle_draws},
                                            {"particles", preview_particles},
                                            {"sprites", sprite_quads.size()},

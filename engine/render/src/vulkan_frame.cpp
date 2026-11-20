@@ -25,7 +25,7 @@ Status Renderer::Impl::create_hdr_target() {
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
     image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;  // copied for water (8D)
     VmaAllocationCreateInfo alloc_info{};
     alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
     alloc_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
@@ -39,10 +39,11 @@ Status Renderer::Impl::create_hdr_target() {
     set_name(VK_OBJECT_TYPE_IMAGE, hdr_image, "HDR scene (RGBA16F, exposed, before tonemapping)");
     set_name(VK_OBJECT_TYPE_IMAGE_VIEW, hdr_view, "HDR scene view");
     if (tonemap.set != VK_NULL_HANDLE) write_tonemap_descriptor();
-    return {};
+    return create_scene_copies();  // the same size: for water (8D)
 }
 
 void Renderer::Impl::destroy_hdr_target() {
+    destroy_scene_copies();
     if (hdr_view != VK_NULL_HANDLE) vkDestroyImageView(device, hdr_view, nullptr);
     if (hdr_image != VK_NULL_HANDLE) vmaDestroyImage(allocator, hdr_image, hdr_allocation);
     hdr_view = VK_NULL_HANDLE;
@@ -132,7 +133,7 @@ void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageVi
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[7] = {
+    const VkDescriptorSetLayoutBinding bindings[9] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         // Shadows, the sky's light and the air are read per vertex too (rain and snow light each drop once, 8B part 3).
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
@@ -141,13 +142,15 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // aerial perspective volume
         {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},          // the clouds' light
         {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the cloud volume (part 7b)
+        {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the opaque scene's colour (8D)
+        {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the opaque scene's depth (8D)
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 7;
+    layout_info.bindingCount = 9;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
-                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 4},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 6},
                                                 {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 2}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
@@ -197,6 +200,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         write.pBufferInfo = &buffer_info;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
+    write_scene_copy_descriptors();  // if the copies were made first
     return {};
 }
 
@@ -485,6 +489,12 @@ void Renderer::Impl::destroy_frame_resources() {
     for (auto& ubo : frame_ubos)
         if (ubo.buffer != VK_NULL_HANDLE) destroy_buffer(ubo);
     if (frame_pool) vkDestroyDescriptorPool(device, frame_pool, nullptr);
+    destroy_water_pipeline();
+    if (water_layout) vkDestroyPipelineLayout(device, water_layout, nullptr);
+    water_layout = VK_NULL_HANDLE;
+    if (scene_copy_sampler) vkDestroySampler(device, scene_copy_sampler, nullptr);
+    if (scene_depth_sampler) vkDestroySampler(device, scene_depth_sampler, nullptr);
+    scene_copy_sampler = scene_depth_sampler = VK_NULL_HANDLE;
     if (frame_set_layout) vkDestroyDescriptorSetLayout(device, frame_set_layout, nullptr);
     frame_pool = VK_NULL_HANDLE;
     frame_set_layout = VK_NULL_HANDLE;

@@ -535,7 +535,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
                 return b >= a ? static_cast<double>(b - a) * timestamp_period_ns / 1.0e6 : 0.0;
             };
             stats.gpu_ms = ms(ticks[0], ticks[kTimestampsPerFrame - 1]);
-            static constexpr const char* kPassNames[] = {"Environment", "Shadows", "Scene", "Tonemap", "Gizmos", "HUD"};
+            // "Scene": opaque and sky; "Scene copy": its colour and depth copied for water (8D; 0 without water); "See-through":
+            // water and the see-through draws.
+            static constexpr const char* kPassNames[] = {"Environment", "Shadows", "Scene", "Scene copy", "See-through", "Tonemap", "Gizmos", "HUD"};
             stats.passes.resize(kTimestampsPerFrame - 1);
             for (std::uint32_t i = 0; i + 1 < kTimestampsPerFrame; ++i) stats.passes[i] = {kPassNames[i], ms(ticks[i], ticks[i + 1])};
         }
@@ -571,6 +573,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     stats.shadow_draw_calls = 0;
     stats.shadow_draws_culled = 0;
     stats.transparent_draws = 0;
+    stats.water_draws = 0;
     stats.msaa_samples = scene_samples;
     update_frame_uniforms(frame_desc);
     if (auto planned = plan_frame(frame_desc); !planned) return std::unexpected(planned.error());
@@ -648,15 +651,66 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &hdr_color;
     rendering.pDepthAttachment = &depth;
+    // Water (8D): the pass is split so the water can read the opaque scene (its colour copied, its depth resolved or
+    // copied); without water, one pass as before.
+    bool water = !frame_desc.water.empty() && scene_color_copy != VK_NULL_HANDLE;
+    if (water) {
+        if (auto s = ensure_water_pipeline(); !s) {
+            NOOR_LOG_ERROR("Render", "Water skipped: {}", s.error().describe());
+            water = false;
+        }
+    }
     begin_label(frame.cmd, "Scene (lit, HDR)", {0.13f, 0.83f, 0.93f, 1.0f});  // cyan
-    vkCmdBeginRendering(frame.cmd, &rendering);
-    record_draws(frame.cmd, frame_desc, DrawPass::Opaque);
-    record_sky(frame.cmd, lighting);  // after the opaque scene: only where nothing was drawn
-    record_draws(frame.cmd, frame_desc, DrawPass::Transparent);  // see-through, over everything
-    vkCmdEndRendering(frame.cmd);
+    if (water) {
+        if (msaa) {
+            hdr_color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;  // loaded again by the see-through pass
+            depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depth.resolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;  // one sample's depth is enough to measure water by
+            depth.resolveImageView = scene_depth_copy_view;
+            depth.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            image_barrier(frame.cmd, scene_depth_copy, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                          VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                          VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                          VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+        } else {
+            depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        }
+        vkCmdBeginRendering(frame.cmd, &rendering);
+        record_draws(frame.cmd, frame_desc, DrawPass::Opaque);
+        record_sky(frame.cmd, lighting);
+        vkCmdEndRendering(frame.cmd);
+        stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+        record_scene_copy(frame.cmd, msaa);
+        stamp(4, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
+        // The see-through pass: the same attachments, kept.
+        hdr_color.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        depth.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        depth.resolveMode = VK_RESOLVE_MODE_NONE;
+        depth.resolveImageView = VK_NULL_HANDLE;
+        if (msaa) {
+            hdr_color.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        }
+        vkCmdBeginRendering(frame.cmd, &rendering);
+        record_water(frame.cmd, frame_desc);
+        record_draws(frame.cmd, frame_desc, DrawPass::Transparent);
+        vkCmdEndRendering(frame.cmd);
+    } else {
+        vkCmdBeginRendering(frame.cmd, &rendering);
+        record_draws(frame.cmd, frame_desc, DrawPass::Opaque);
+        record_sky(frame.cmd, lighting);  // after the opaque scene: only where nothing was drawn
+        stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+        stamp(4, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);  // no copy
+        record_draws(frame.cmd, frame_desc, DrawPass::Transparent);  // see-through, over everything
+        vkCmdEndRendering(frame.cmd);
+    }
     if (msaa) depth.imageView = depth_view;  // the screen pass's gizmos use the plain depth buffer
+    depth.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth.resolveMode = VK_RESOLVE_MODE_NONE;
+    depth.resolveImageView = VK_NULL_HANDLE;
     end_label(frame.cmd);
-    stamp(3, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    stamp(5, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     // ---- Screen pass: tonemap, then gizmos and the HUD in display colours ----
     image_barrier(frame.cmd, hdr_image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -685,9 +739,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
-    stamp(4, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    stamp(6, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
-    stamp(5, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    stamp(7, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
     }
