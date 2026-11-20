@@ -6,8 +6,11 @@ struct PushConstants
 {
     uint4 ids;  // x: material slot, y: cascade
     float4 splat_tiling;  // (the scene pass's; unused here)
+    uint4 skin;           // skinned (8C): as mesh.hlsl
 };
 [[vk::push_constant]] PushConstants pc;
+
+#include "skinning.hlsli"
 
 struct FrameUniforms
 {
@@ -51,8 +54,15 @@ struct VertexOutput
     [[vk::location(0)]] float2 uv : TEXCOORD0;
 };
 
-VertexOutput VSMain(VertexInput input)
+VertexOutput VSMain(VertexInput input, uint vertex_id : SV_VertexID)
 {
+    if (skinned(pc.skin))  // skinned casters cast their posed shadow (8C)
+    {
+        const float3x4 s = skin_matrix(pc.skin, vertex_id);
+        input.world_row0 = s[0];
+        input.world_row1 = s[1];
+        input.world_row2 = s[2];
+    }
     const float4 p = float4(input.position, 1.0);
     const float3 world = float3(dot(input.world_row0, p), dot(input.world_row1, p), dot(input.world_row2, p));
     VertexOutput output;

@@ -258,6 +258,19 @@ Guid instantiate_model(Scene& scene, const Guid& asset, const asset::ImportedMod
         ids[i] = e.id;
         scene.entities.push_back(std::move(e));
     }
+    // Skinned meshes (8C, ADR-036): their entity names the skin and, in the skin's order, the entities of its joints
+    // (every node is an entity, joints too), so posing those entities poses the mesh.
+    const std::size_t first = scene.entities.size() - model.nodes.size();
+    for (std::size_t i = 0; i < model.nodes.size(); ++i) {
+        const auto& node = model.nodes[i];
+        if (node.skin < 0 || node.skin >= static_cast<int>(model.skins.size())) continue;
+        auto& mesh = scene.entities[first + i].components["mesh"];
+        if (!mesh.is_object()) continue;
+        asset::Json joints = asset::Json::array();
+        for (const int j : model.skins[static_cast<std::size_t>(node.skin)].joints) joints.push_back(ids[static_cast<std::size_t>(j)].to_string());
+        mesh["skin"] = node.skin;
+        mesh["joints"] = std::move(joints);
+    }
     return root_id;
 }
 

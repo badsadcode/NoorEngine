@@ -1,6 +1,6 @@
 # ADR-036: Skeletal animation
 
-**Status:** Proposed (Milestone 8C plan, 2026-11-20)
+**Status:** Accepted, with one change from the proposal (Milestone 8C, part 1, 2026-11-20): **bones are entities** (below)
 
 ## Context
 
@@ -26,12 +26,23 @@ main asset path.
 5. **Retargeting** by copying local rotations (breaks with different rest poses) or relative to each rig's rest pose
    through a shared humanoid map (Unity's "humanoid", Unreal's IK retargeter in spirit).
 
-## Decision (proposed)
+## Decision
 
-- **Options 2 and 4.** Bones live in a runtime pose per character; props attach through sockets (an entity that
-  follows a named bone); scripts can read bone transforms. Clips are sampled and blended on the CPU from game time,
-  deterministically; the vertex shader skins with linear blend skinning (4 influences) from a per-frame storage
-  buffer of joint palettes, with a palette offset per draw so instancing keeps working; shadows use the same path.
+- **Bones are entities (option 1, changed in part 1), sampling on the CPU and skinning on the GPU (option 4).** The
+  proposal chose a hidden runtime pose (option 2). Part 1 found that placing a model has always made an entity for
+  every glTF node, joints included, and that rigid characters (the CC0 robot) are pieces parented to those joint
+  entities. Keeping that: a skinned mesh's entity lists its skin's joints by entity id, and the joints' world
+  matrices make its palette. Sockets come for free (parent a prop to a hand's entity), scripts read and move bones
+  as entities, the Inspector shows them, and rigid characters animate the same way. The cost the proposal feared is
+  measured instead: 100 characters of 17 joints (1,900 entities) take about 1.2 ms of CPU to gather a frame, 0.2-0.4
+  ms of GPU to draw. Part 2 writes clips into joint transforms and measures again; a hidden pose stays the fallback
+  for crowds if that's too slow.
+- **Skinning in the vertex shader** with linear blend skinning (4 influences). No new pipelines or descriptors: each
+  skinned mesh's skin data (24 bytes a vertex: four 16-bit joints, four float weights) and each draw's palette (3×4
+  rows per joint, in a per-frame buffer) are read through buffer device addresses passed in push constants (Vulkan
+  1.2 core; required, with 64-bit shader integers). A skinned draw's object matrix is identity, its bounds come from
+  its posed joints, and it's its own batch; shadows use the same path. The CPU reference (`asset/skinning.h`) is the
+  same sum, used by tests and by the editor's picking and framing.
 - **An `animator` component** plays a clip or runs a controller asset (`.nooranim`): parameters, states (a clip or a
   1D/2D blend space), transitions (conditions, cross-fade time), layers with bone masks, additive layers. Scripts
   set parameters, play and cross-fade, and hear `on_animation_event(name)` and the end of clips (8B's pattern).
@@ -45,16 +56,19 @@ main asset path.
 
 ## Consequences
 
-- Characters become a renderer feature (a skinned pipeline variant, palettes per frame) and a runtime system
-  (sampling, blending, root motion, events), sharing the scene, scripts and tests the rest of the engine has.
-- Bones aren't editable as entities: the Animation panel must show the skeleton, and sockets cover attachments.
-- Crowds cost CPU sampling per character; a crowd benchmark in the sample says where the limit is, and GPU sampling
-  stays a later option.
+- Characters become a renderer feature (palettes per frame, read by address) and a runtime system (sampling,
+  blending, root motion, events), sharing the scene, scripts and tests the rest of the engine has.
+- Bones are ordinary entities: saved with the scene in their rest pose, selectable, scriptable. Animation writes
+  their transforms at runtime (not into the saved scene).
+- Crowds cost CPU per bone (gathering the scene) and per character (sampling); the crowd benchmark in part 8 says
+  where the limit is. GPU sampling and a hidden pose stay later options.
+- The device must support buffer device addresses and 64-bit shader integers (every desktop GPU we target does); one
+  that doesn't is refused at start with that reason.
 - Retargeting quality depends on correct rest poses and maps; the presets and warnings must say plainly when a rig
   doesn't match.
 
 ## Unresolved
 
-- Test characters that may be published (Mixamo's can't): Tom's Blender characters, CC0 sets, Khronos samples.
+- ~~Test characters~~: settled (CC0 RobotExpressive and SimpleSkin; our own generated Ward).
 - Whether FBX support happens in 8C (part 7's research decides).
 - IK, look-at, foot placement and ragdolls (spec 18.2) are after 8C.

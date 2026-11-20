@@ -15,6 +15,7 @@ noor_add_module(asset
         src/environment.cpp
         src/atmosphere.cpp
         src/environment_asset.cpp
+        src/skinning.cpp
         src/sprite_asset.cpp
     PUBLIC_DEPS
         noor::foundation

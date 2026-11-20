@@ -2,6 +2,7 @@
 #include "noor/game/cooked_csg.h"
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/skinning.h"
 #include "noor/foundation/log.h"
 
 #include <algorithm>
@@ -48,13 +49,16 @@ const SceneRenderer::Model* SceneRenderer::model(const std::filesystem::path& fi
         std::optional<Model> loaded;
         if (auto model = asset::import_gltf(file)) {
             loaded.emplace();
+            static_assert(sizeof(render::SkinVertex) == sizeof(asset::SkinWeights), "the same skin layout, uploaded as is");
             for (const auto& mesh : model->meshes) {
                 auto h = renderer_.create_mesh({{reinterpret_cast<const render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
-                                                mesh.indices, mesh.name});
+                                                mesh.indices, mesh.name,
+                                                {reinterpret_cast<const render::SkinVertex*>(mesh.skin.data()), mesh.skin.size()}});
                 loaded->meshes.push_back(h ? *h : render::MeshHandle{});
                 loaded->submeshes.push_back(mesh.submeshes);
             }
             loaded->materials = materials_.model(file, *model);
+            loaded->skins = model->skins;
             for (std::size_t n = 0; n < model->nodes.size(); ++n)
                 if (model->nodes[n].mesh >= 0 && !model->nodes[n].is_collision()) loaded->nodes.emplace_back(model->nodes[n].mesh, model->world_matrix(n));
         } else {
@@ -65,13 +69,15 @@ const SceneRenderer::Model* SceneRenderer::model(const std::filesystem::path& fi
     return it->second ? &*it->second : nullptr;
 }
 
-void SceneRenderer::add_mesh(std::vector<render::DrawItem>& out, const Model& m, int mesh_index, const math::Mat4& world) const {
+void SceneRenderer::add_mesh(std::vector<render::DrawItem>& out, const Model& m, int mesh_index, const math::Mat4& world,
+                             std::span<const math::Mat4> skin_palette) const {
     if (mesh_index < 0 || mesh_index >= static_cast<int>(m.meshes.size())) return;
     const auto index = static_cast<std::size_t>(mesh_index);
     const auto h = m.meshes[index];
     if (!h.valid()) return;
     for (const auto& sm : m.submeshes[index]) {  // one draw per material
         render::DrawItem item{h, world};
+        item.skin_palette = skin_palette;
         item.first_index = sm.first_index;
         item.index_count = sm.index_count;
         if (sm.material >= 0 && sm.material < static_cast<int>(m.materials.size())) item.material = m.materials[static_cast<std::size_t>(sm.material)];
@@ -108,9 +114,15 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         lowered.emplace(md.entity, level);
         for (const auto& [mesh_index, local] : lm->nodes) add_mesh(out, *lm, mesh_index, w * local);
     }
+    palettes_.clear();
     for (const auto& m : view.meshes) {
         if (!m.model_root.is_nil() && lowered.contains(m.model_root)) continue;
-        if (const Model* md = model(m.asset_path)) add_mesh(out, *md, m.mesh_index, m.world);
+        const Model* md = model(m.asset_path);
+        if (!md) continue;
+        std::span<const math::Mat4> palette;
+        if (m.skin >= 0 && m.skin < static_cast<int>(md->skins.size()) && !m.joints.empty())  // skinned (8C)
+            palette = palettes_.emplace_back(asset::skin_palette(md->skins[static_cast<std::size_t>(m.skin)], m.joints));
+        add_mesh(out, *md, m.mesh_index, m.world, palette);
     }
     // Scattered instances (Milestone 7, part 7): whole models from their files, a level per instance.
     for (const auto& sv : view.scatters) {

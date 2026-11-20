@@ -26,6 +26,7 @@
 #include "noor/game/model_lod.h"
 #include "noor/game/particle_draws.h"
 #include "noor/game/sprites.h"
+#include "noor/asset/skinning.h"
 #include "noor/game/particle_ground.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
@@ -47,6 +48,7 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -256,6 +258,7 @@ struct LoadedMesh {
     };
     std::vector<Part> parts;
     std::vector<std::uint32_t> triangle_face;  // CSG brush groups: the logical face of each triangle in `indices`
+    std::vector<noor::asset::SkinWeights> skin;  // skinned meshes (8C): per vertex, for posing `positions` (picking, framing)
 };
 
 void set_state(noor_viewport* vp, noor_viewport_state state) {
@@ -337,6 +340,7 @@ void render_thread_main(noor_viewport* vp) {
         std::uint64_t version = 0;
         std::optional<std::vector<LoadedMesh>> meshes;  // nullopt: failed to load
         std::vector<std::pair<int, Mat4>> nodes;        // drawn nodes (mesh, world in the file): levels of detail
+        std::vector<noor::asset::ImportedSkin> skins;   // skinned meshes' skeletons (8C)
     };
     std::unordered_map<std::string, CachedAsset> assets;
     // Levels of detail (Milestone 7, part 6): per model file and version, and this snapshot's placed models.
@@ -408,6 +412,10 @@ void render_thread_main(noor_viewport* vp) {
         Guid model_root;                   // models: the placed model (a lower level of detail replaces it)
     };
     std::vector<SceneDraw> scene_draws;
+    // Skinned meshes in this snapshot (8C): their palettes (the draws point at them) and their posed vertices, in the
+    // world, for picking and framing. Rebuilt with each snapshot.
+    std::deque<std::vector<Mat4>> snapshot_palettes;
+    std::deque<LoadedMesh> posed_meshes;
     std::unordered_map<Guid, const ed::RenderSnapshot::Entity*> entity_by_id;
     std::unordered_map<Guid, std::vector<Guid>> children;
     Vec3 scene_lo{-10, 0, -10}, scene_hi{10, 10, 10};
@@ -471,13 +479,15 @@ void render_thread_main(noor_viewport* vp) {
             for (const auto& old : *cached.meshes)
                 if (old.handle.valid()) r.destroy_mesh(old.handle);
         }
-        cached = {true, version, std::nullopt, {}};
+        cached = {true, version, std::nullopt, {}, {}};
         if (auto model = noor::asset::import_gltf(path)) {
             std::vector<LoadedMesh> loaded;
             for (const auto& mesh : model->meshes) {
                 auto h = r.create_mesh({{reinterpret_cast<const noor::render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},
-                                        mesh.indices, mesh.name});
+                                        mesh.indices, mesh.name,
+                                        {reinterpret_cast<const noor::render::SkinVertex*>(mesh.skin.data()), mesh.skin.size()}});
                 LoadedMesh lm{h ? *h : noor::render::MeshHandle{}, {1e30f, 1e30f, 1e30f}, {-1e30f, -1e30f, -1e30f}, {}, {}};
+                lm.skin = mesh.skin;
                 lm.positions.reserve(mesh.vertices.size());
                 for (const auto& v : mesh.vertices) {
                     lm.positions.push_back(v.position);
@@ -494,6 +504,7 @@ void render_thread_main(noor_viewport* vp) {
                                                     ? model_materials[static_cast<std::size_t>(sm.material)]
                                                     : noor::render::MaterialHandle{}});
             cached.meshes = std::move(loaded);
+            cached.skins = model->skins;
             for (std::size_t n = 0; n < model->nodes.size(); ++n)
                 if (model->nodes[n].mesh >= 0 && !model->nodes[n].is_collision()) cached.nodes.emplace_back(model->nodes[n].mesh, model->world_matrix(n));
             if (reload) NOOR_LOG_INFO("Viewport", "Reloaded {}", std::filesystem::path(path).filename().string());
@@ -574,6 +585,8 @@ void render_thread_main(noor_viewport* vp) {
             if (!shown && snap && !snap->show_grid && !frame_request) frame_request.emplace();
             shown = snap;
             scene_draws.clear();
+            snapshot_palettes.clear();
+            posed_meshes.clear();
             entity_by_id.clear();
             children.clear();
             flags_dirty = true;
@@ -589,6 +602,29 @@ void render_thread_main(noor_viewport* vp) {
                     if (!cached.meshes || m.mesh_index < 0 || m.mesh_index >= static_cast<int>(cached.meshes->size())) continue;
                     const LoadedMesh& lm = (*cached.meshes)[static_cast<std::size_t>(m.mesh_index)];
                     if (!lm.handle.valid()) continue;
+                    if (m.skin >= 0 && m.skin < static_cast<int>(cached.skins.size()) && !m.joints.empty() && lm.skin.size() == lm.positions.size()) {
+                        // Skinned (8C): posed by its joints. Its picking and framing copy is posed on the CPU (the same
+                        // sum as the shader), already in the world.
+                        const auto& palette = snapshot_palettes.emplace_back(noor::asset::skin_palette(cached.skins[static_cast<std::size_t>(m.skin)], m.joints));
+                        LoadedMesh& posed = posed_meshes.emplace_back();
+                        posed.handle = lm.handle;
+                        posed.indices = lm.indices;
+                        posed.parts = lm.parts;
+                        posed.lo = {1e30f, 1e30f, 1e30f};
+                        posed.hi = {-1e30f, -1e30f, -1e30f};
+                        posed.positions.reserve(lm.positions.size());
+                        for (std::size_t v = 0; v < lm.positions.size(); ++v) {
+                            posed.positions.push_back(noor::asset::skin_point(lm.skin[v], palette, lm.positions[v]));
+                            grow(posed.lo, posed.hi, posed.positions.back());
+                        }
+                        SceneDraw sd{{lm.handle, Mat4::identity()}, m.entity, &posed, false, m.model_root};
+                        sd.item.skin_palette = palette;
+                        scene_draws.push_back(sd);
+                        grow(lo, hi, posed.lo);
+                        grow(lo, hi, posed.hi);
+                        any = true;
+                        continue;
+                    }
                     scene_draws.push_back({{lm.handle, m.world}, m.entity, &lm, false, m.model_root});
                     for (int c = 0; c < 8; ++c) {
                         grow(lo, hi, m.world.transform_point({c & 1 ? lm.hi.x : lm.lo.x, c & 2 ? lm.hi.y : lm.lo.y, c & 4 ? lm.hi.z : lm.lo.z}));

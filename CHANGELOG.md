@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 1: skinned meshes
+**Added**
+- **Skins from glTF** (`asset::ImportedSkin`, `SkinWeights`, `ImportedNode::skin`): joints, inverse bind matrices, the
+  strongest four influences renormalised, warnings in plain words; `asset/skinning.h`, the CPU reference.
+- **Skinned drawing:** linear blend skinning in the vertex shader (`skinning.hlsli`), shadows too; `MeshData::skin`,
+  `DrawItem::skin_palette`; skin data and per-frame palettes read through buffer device addresses (now required, with
+  64-bit shader integers).
+- Placing a model records each skinned mesh's joints (`"mesh": {"skin", "joints"}`); `SceneView::Mesh` carries their
+  world matrices; games and the editor's viewport draw them posed (picking and framing by the posed shape).
+- Test characters: CC0 RobotExpressive and SimpleSkin (`tests/data/animation`), and our own **Ward**
+  (`tools/samples/make_test_characters.py`); `tools/samples/add_skinning_scene.py`.
+- [Animation docs](docs/animation/ANIMATION.md).
+
+**Changed:** ADR-036 accepted with bones as entities (as every glTF node already was); push constants grew to 48 bytes.
+
+**Tests:** unit tests "skinning" (5 cases); golden `Skinning`; `render.skinning_cost`; the editor smoke test's
+skinning check.
+
 ### 2026-11-20 — Milestone 8B, part 8: the sample and the 8B review
 **Added**
 - **The 8B sample:** `samples/Hillside/Scenes/Hillside_Storm.noorscene` (`tools/samples/add_hillside_storm.py`,

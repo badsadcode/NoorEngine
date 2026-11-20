@@ -711,7 +711,23 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                     if (it == root_asset.end()) it = root_asset.emplace(r, asset::guid_field(entities[r].components["model"], "asset")).first;
                     same = it->second == guid;
                 }
-                view.meshes.push_back({*path, m.value("mesh_index", -1), world, e.id, same ? entities[static_cast<std::size_t>(root)].id : Guid{}});
+                SceneView::Mesh out{*path, m.value("mesh_index", -1), world, e.id, same ? entities[static_cast<std::size_t>(root)].id : Guid{}};
+                // Skinned (8C): its joints' entities, posed wherever they are now (render poses included).
+                if (m.contains("joints") && m["joints"].is_array() && m.contains("skin") && m["skin"].is_number_integer()) {
+                    out.skin = m["skin"].get<int>();
+                    out.joints.reserve(m["joints"].size());
+                    for (const auto& j : m["joints"]) {
+                        const auto id = Guid::parse(j.is_string() ? j.get<std::string>() : std::string());
+                        const auto it = id ? index.find(*id) : index.end();
+                        if (it == index.end()) {  // a joint was deleted: drawn as it was bound
+                            out.joints.clear();
+                            out.skin = -1;
+                            break;
+                        }
+                        out.joints.push_back(world_of(it->second, 0));
+                    }
+                }
+                view.meshes.push_back(std::move(out));
             }
         }
     }

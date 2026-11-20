@@ -23,6 +23,8 @@ namespace {
 // What makes draws batchable: the same pipeline, mesh range, material and splat settings.
 struct BatchKey {
     std::uintptr_t pipeline = 0;
+    std::uint64_t skin = 0;          // skinned (8C): the mesh's skin data, and
+    std::uint32_t palette = 0;       // its palette's first row + 1 (each skinned draw is its own batch)
     std::uint32_t mesh = 0, first = 0, count = 0;
     std::uint32_t ids[4]{};
     std::uint32_t tiling[4]{};  // the splat tiling's bits
@@ -86,6 +88,8 @@ void group(std::vector<Candidate>& candidates, std::vector<GpuInstance>& instanc
         std::memcpy(b.ids, k.ids, sizeof(b.ids));
         b.splat_tiling = {std::bit_cast<float>(k.tiling[0]), std::bit_cast<float>(k.tiling[1]), std::bit_cast<float>(k.tiling[2]),
                           std::bit_cast<float>(k.tiling[3])};
+        b.skin_address = k.skin;
+        b.palette_joint = k.palette > 0 ? k.palette - 1 : 0;
         b.instance_offset = static_cast<std::uint32_t>(instances.size());
         while (j < candidates.size() && candidates[j].key == k) instances.push_back(candidates[j++].instance);
         b.instance_count = static_cast<std::uint32_t>(j - i);
@@ -107,6 +111,7 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     p.particles.clear();
     p.see_through.clear();
     p.weather.clear();
+    p.palette_rows.clear();
     stats.instances = 0;
     stats.culled = 0;
     stats.particle_draws = 0;
@@ -134,7 +139,31 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
         const std::uint32_t count = item.index_count == 0 ? mesh.index_count - first : std::min(item.index_count, mesh.index_count - first);
         if (count == 0) continue;
         const std::uint32_t material = material_slot(item);
-        const GpuInstance inst = instance_of(item);
+        // Skinned (8C): the joints place it in the world, so its own matrix is identity; its palette goes into this
+        // frame's palette buffer, and its bounds come from where its joints took its bind-pose sphere.
+        const bool skinned = mesh.skin_address != 0 && !item.skin_palette.empty();
+        std::uint32_t palette = 0;
+        math::Vec3 skinned_centre{0, 0, 0};
+        float skinned_radius = 0.0f;
+        if (skinned) {
+            palette = static_cast<std::uint32_t>(p.palette_rows.size() / 3) + 1;
+            math::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+            float scale = 0.0f;
+            for (const math::Mat4& m : item.skin_palette) {
+                p.palette_rows.push_back({m.m[0].x, m.m[1].x, m.m[2].x, m.m[3].x});
+                p.palette_rows.push_back({m.m[0].y, m.m[1].y, m.m[2].y, m.m[3].y});
+                p.palette_rows.push_back({m.m[0].z, m.m[1].z, m.m[2].z, m.m[3].z});
+                const math::Vec3 c = m.transform_point(mesh.center);
+                lo = {std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+                hi = {std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+                scale = std::max(scale, max_axis_scale(m));
+            }
+            skinned_centre = (lo + hi) * 0.5f;
+            skinned_radius = math::length(hi - lo) * 0.5f + mesh.radius * scale;
+        }
+        DrawItem placed = item;
+        if (skinned) placed.world_from_object = math::Mat4::identity();
+        const GpuInstance inst = instance_of(placed);
 
         if (item.overlay) {  // gizmos: in order, one each, never culled (they're small and few)
             Batch b;
@@ -151,8 +180,8 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
             continue;
         }
 
-        const float radius = mesh.radius * max_axis_scale(item.world_from_object);
-        const math::Vec3 centre = item.world_from_object.transform_point(mesh.center);
+        const float radius = skinned ? skinned_radius : mesh.radius * max_axis_scale(item.world_from_object);
+        const math::Vec3 centre = skinned ? skinned_centre : item.world_from_object.transform_point(mesh.center);
         const bool blend = materials[material].alpha == AlphaMode::Blend;
         const bool two_sided = materials[material].double_sided;
         if (frustum.visible(centre, radius)) {
@@ -163,6 +192,8 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
             key.mesh = item.mesh.id;
             key.first = first;
             key.count = count;
+            key.skin = skinned ? mesh.skin_address : 0;
+            key.palette = palette;
             key.ids[0] = material;
             key.ids[1] = item.splat ? 0x80000000u | material_slot(item.splat_layers[0]) : 0u;
             key.ids[2] = item.splat ? material_slot(item.splat_layers[1]) : 0u;
@@ -186,6 +217,8 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
             key.mesh = item.mesh.id;
             key.first = first;
             key.count = count;
+            key.skin = skinned ? mesh.skin_address : 0;
+            key.palette = palette;
             key.ids[0] = material;
             for (std::uint32_t c = 0; c < kShadowCascades; ++c) {
                 if (!sphere_touches_cascade(cascades[c], centre, radius)) {
@@ -283,6 +316,29 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
         vmaFlushAllocation(allocator, pbuf.allocation, 0, p.particle_vertices.size() * sizeof(ParticleVertex));
     }
 
+    // Skinned draws' palettes into this slot's palette buffer (grown as needed), read by address.
+    if (!p.palette_rows.empty()) {
+        GpuBuffer& buf = palette_buffers[frame_index];
+        std::size_t& cap = palette_capacity[frame_index];
+        if (p.palette_rows.size() > cap) {
+            if (buf.buffer != VK_NULL_HANDLE) destroy_buffer(buf);
+            cap = std::max<std::size_t>(p.palette_rows.size() + p.palette_rows.size() / 2, 3 * 1024);
+            auto created = create_buffer(cap * sizeof(math::Vec4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, true, false);
+            if (!created) {
+                cap = 0;
+                p = {};
+                return std::unexpected(created.error());
+            }
+            buf = *created;
+            set_name(VK_OBJECT_TYPE_BUFFER, buf.buffer, std::format("Joint palettes (frame slot {}, {} joints)", frame_index, cap / 3));
+            VkBufferDeviceAddressInfo address{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+            address.buffer = buf.buffer;
+            palette_address[frame_index] = vkGetBufferDeviceAddress(device, &address);
+        }
+        std::memcpy(buf.mapped, p.palette_rows.data(), p.palette_rows.size() * sizeof(math::Vec4));
+        vmaFlushAllocation(allocator, buf.allocation, 0, p.palette_rows.size() * sizeof(math::Vec4));
+    }
+
     // Into this frame slot's instance buffer (its previous frame finished: its fence was waited).
     if (p.instances.empty()) return {};
     GpuBuffer& buffer = instance_buffers[frame_index];
@@ -325,6 +381,14 @@ void Renderer::Impl::record_batches(VkCommandBuffer cmd, std::span<const Batch> 
         MeshPushConstants push{};
         std::memcpy(push.ids, b.ids, sizeof(push.ids));
         push.splat_tiling = b.splat_tiling;
+        if (b.skin_address != 0) {  // skinned (8C): where its skin data and its palette are
+            // Its first joint: three rows (48 bytes) a joint.
+            const VkDeviceAddress palette = palette_address[frame_index] + static_cast<VkDeviceAddress>(b.palette_joint) * 3 * sizeof(math::Vec4);
+            push.skin[0] = static_cast<std::uint32_t>(b.skin_address);
+            push.skin[1] = static_cast<std::uint32_t>(b.skin_address >> 32);
+            push.skin[2] = static_cast<std::uint32_t>(palette);
+            push.skin[3] = static_cast<std::uint32_t>(palette >> 32);
+        }
         vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
         vkCmdDrawIndexed(cmd, b.count, b.instance_count, b.first, 0, b.instance_offset);
         ++stats.draw_calls;
@@ -343,6 +407,10 @@ void Renderer::Impl::destroy_instance_buffers() {
     for (auto& b : particle_buffers)
         if (b.buffer != VK_NULL_HANDLE) destroy_buffer(b);
     particle_capacity = {};
+    for (auto& b : palette_buffers)
+        if (b.buffer != VK_NULL_HANDLE) destroy_buffer(b);
+    palette_capacity = {};
+    palette_address = {};
 }
 
 } // namespace noor::render

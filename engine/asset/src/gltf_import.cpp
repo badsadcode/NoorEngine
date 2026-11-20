@@ -120,8 +120,13 @@ void compute_tangents(std::vector<MeshVertex>& vertices, const std::vector<std::
     }
 }
 
+// What skin reading had to fix in a mesh, reported once per mesh in plain words.
+struct SkinStats {
+    std::size_t over_four_sets = 0, dropped = 0, renormalised = 0, weightless = 0;
+};
+
 bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vector<std::string>& warnings,
-                      const cgltf_material* data_materials) {
+                      const cgltf_material* data_materials, SkinStats& skin_stats) {
     if (prim.type != cgltf_primitive_type_triangles) {
         warnings.push_back(std::format("mesh '{}': skipped a non-triangle primitive", out.name));
         return false;
@@ -191,11 +196,59 @@ bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vecto
         out.vertices.push_back(vert);
     }
 
+    // Skins (8C): JOINTS_0/WEIGHTS_0, and _1 when a vertex has more than four influences: the four strongest are kept.
+    const cgltf_accessor* joints[2] = {nullptr, nullptr};
+    const cgltf_accessor* weights[2] = {nullptr, nullptr};
+    for (cgltf_size i = 0; i < prim.attributes_count; ++i) {
+        const auto& a = prim.attributes[i];
+        if (a.index > 1) continue;
+        if (a.type == cgltf_attribute_type_joints && a.data && a.data->count == count) joints[a.index] = a.data;
+        if (a.type == cgltf_attribute_type_weights && a.data && a.data->count == count) weights[a.index] = a.data;
+    }
+    const bool skinned = joints[0] && weights[0];
+    if (skinned || !out.skin.empty()) {
+        if (!skinned) warnings.push_back(std::format("mesh '{}': some primitives have no skin weights; they follow the first joint", out.name));
+        if (joints[1] && weights[1]) ++skin_stats.over_four_sets;
+        out.skin.resize(first);  // earlier unskinned primitives of this mesh: the first joint
+        for (cgltf_size v = 0; v < count; ++v) {
+            std::array<std::pair<float, std::uint32_t>, 8> all{};
+            int n = 0;
+            for (int set = 0; set < 2 && skinned; ++set) {
+                if (!joints[set] || !weights[set]) continue;
+                cgltf_uint j[4] = {0, 0, 0, 0};
+                float w[4] = {0, 0, 0, 0};
+                cgltf_accessor_read_uint(joints[set], v, j, 4);
+                cgltf_accessor_read_float(weights[set], v, w, 4);
+                for (int k = 0; k < 4; ++k) all[static_cast<std::size_t>(n++)] = {std::max(0.0f, w[k]), j[k]};
+            }
+            std::stable_sort(all.begin(), all.begin() + n, [](const auto& a, const auto& b) { return a.first > b.first; });
+            SkinWeights sw;
+            float sum = 0.0f;
+            for (int k = 0; k < 4 && k < n; ++k) sum += all[static_cast<std::size_t>(k)].first;
+            for (int k = n > 4 ? 4 : n; k < n; ++k)
+                if (all[static_cast<std::size_t>(k)].first > 0.0f) ++skin_stats.dropped;
+            if (n == 0 || sum <= 1e-8f) {
+                if (skinned) ++skin_stats.weightless;
+                sw.weights = {1, 0, 0, 0};
+            } else {
+                if (std::abs(sum - 1.0f) > 1e-3f) ++skin_stats.renormalised;
+                float* wv = &sw.weights.x;
+                for (int k = 0; k < 4; ++k) {
+                    const bool used = k < n;
+                    sw.joints[static_cast<std::size_t>(k)] = used ? static_cast<std::uint16_t>(std::min<std::uint32_t>(all[static_cast<std::size_t>(k)].second, 0xffffu)) : 0;
+                    wv[k] = used ? all[static_cast<std::size_t>(k)].first / sum : 0.0f;
+                }
+            }
+            out.skin.push_back(sw);
+        }
+    }
+
     const std::size_t index_start = out.indices.size();
     if (prim.indices) {
         if (prim.indices->count % 3 != 0) {
             warnings.push_back(std::format("mesh '{}': index count not a multiple of 3; primitive skipped", out.name));
             out.vertices.resize(first);
+            if (!out.skin.empty()) out.skin.resize(first);
             return false;
         }
         out.indices.reserve(index_start + prim.indices->count);
@@ -204,6 +257,7 @@ bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vecto
             if (idx >= count) {
                 warnings.push_back(std::format("mesh '{}': index {} out of range; primitive skipped", out.name, idx));
                 out.vertices.resize(first);
+                if (!out.skin.empty()) out.skin.resize(first);
                 out.indices.resize(index_start);
                 return false;
             }
@@ -335,9 +389,17 @@ Result<ImportedModel> import_gltf(const stdfs::path& path, std::uint64_t max_fil
     for (cgltf_size m = 0; m < data->meshes_count; ++m) {
         ImportedMesh mesh;
         mesh.name = data->meshes[m].name ? data->meshes[m].name : std::format("mesh_{}", m);
+        SkinStats stats;
         for (cgltf_size p = 0; p < data->meshes[m].primitives_count; ++p) {
-            append_primitive(data->meshes[m].primitives[p], mesh, model.warnings, data->materials);
+            append_primitive(data->meshes[m].primitives[p], mesh, model.warnings, data->materials, stats);
         }
+        if (stats.over_four_sets > 0)
+            model.warnings.push_back(std::format("mesh '{}': vertices with more than 4 joints: the strongest 4 are kept ({} lesser influences dropped)",
+                                                 mesh.name, stats.dropped));
+        if (stats.renormalised > 0)
+            model.warnings.push_back(std::format("mesh '{}': {} vertices' skin weights didn't add up to 1; they were scaled so they do", mesh.name, stats.renormalised));
+        if (stats.weightless > 0)
+            model.warnings.push_back(std::format("mesh '{}': {} vertices have no skin weight; they follow the first joint", mesh.name, stats.weightless));
         model.meshes.push_back(std::move(mesh));
     }
 
@@ -350,6 +412,8 @@ Result<ImportedModel> import_gltf(const stdfs::path& path, std::uint64_t max_fil
         int parent;
     };
     std::vector<Pending> stack;
+    std::vector<int> ours(data->nodes_count, -1);  // glTF node index -> index in model.nodes (skins name glTF's)
+    std::vector<const cgltf_node*> skinned_nodes;
     for (cgltf_size i = scene->nodes_count; i-- > 0;) stack.push_back({scene->nodes[i], -1});
     std::size_t guard = 0;
     while (!stack.empty()) {
@@ -372,8 +436,63 @@ Result<ImportedModel> import_gltf(const stdfs::path& path, std::uint64_t max_fil
         node.noor = parse_noor_extras(n->extras, model.warnings, node.name);
 
         const int index = static_cast<int>(model.nodes.size());
+        ours[cgltf_node_index(data.get(), n)] = index;
+        if (n->skin && n->mesh) skinned_nodes.push_back(n);
         model.nodes.push_back(std::move(node));
         for (cgltf_size c = n->children_count; c-- > 0;) stack.push_back({n->children[c], index});
+    }
+
+    // Skins (8C): joints mapped to our nodes; a skin whose joints aren't all in the scene, or that has more than the
+    // renderer's 256 joints, isn't used (its meshes are drawn as they were bound, rigid).
+    std::vector<int> skin_index(data->skins_count, -2);  // -2: not looked at yet, -1: unusable
+    const auto use_skin = [&](const cgltf_skin* s) -> int {
+        const auto i = cgltf_skin_index(data.get(), s);
+        if (skin_index[i] != -2) return skin_index[i];
+        ImportedSkin out;
+        out.name = s->name ? s->name : std::format("skin_{}", i);
+        bool ok = s->joints_count > 0;
+        if (s->joints_count > kMaxSkinJoints) {
+            model.warnings.push_back(std::format("skin '{}' has {} joints, more than the {} a skin can have: drawn unskinned", out.name, s->joints_count, kMaxSkinJoints));
+            ok = false;
+        }
+        for (cgltf_size j = 0; ok && j < s->joints_count; ++j) {
+            const int node = ours[cgltf_node_index(data.get(), s->joints[j])];
+            if (node < 0) {
+                model.warnings.push_back(std::format("skin '{}': joint '{}' isn't in the scene: drawn unskinned", out.name,
+                                                     s->joints[j]->name ? s->joints[j]->name : "?"));
+                ok = false;
+                break;
+            }
+            out.joints.push_back(node);
+            math::Mat4 ibm = math::Mat4::identity();
+            if (s->inverse_bind_matrices) {
+                float m[16];
+                cgltf_accessor_read_float(s->inverse_bind_matrices, j, m, 16);
+                for (int c = 0; c < 4; ++c) ibm.m[c] = {m[c * 4 + 0], m[c * 4 + 1], m[c * 4 + 2], m[c * 4 + 3]};  // column-major, as ours
+            }
+            out.inverse_bind.push_back(ibm);
+        }
+        if (!ok) return skin_index[i] = -1;
+        skin_index[i] = static_cast<int>(model.skins.size());
+        model.skins.push_back(std::move(out));
+        return skin_index[i];
+    };
+    for (const cgltf_node* n : skinned_nodes) {
+        const int skin = use_skin(n->skin);
+        const int node = ours[cgltf_node_index(data.get(), n)];
+        if (skin < 0 || node < 0) continue;
+        auto& mesh = model.meshes[static_cast<std::size_t>(model.nodes[static_cast<std::size_t>(node)].mesh)];
+        if (mesh.skin.empty()) continue;  // no weights: a rigid mesh after all
+        const auto joints = model.skins[static_cast<std::size_t>(skin)].joints.size();
+        std::size_t bad = 0;
+        for (auto& sw : mesh.skin)
+            for (auto& j : sw.joints)
+                if (j >= joints) {
+                    j = 0;
+                    ++bad;
+                }
+        if (bad > 0) model.warnings.push_back(std::format("mesh '{}': {} skin influences name joints the skin doesn't have; they follow the first", mesh.name, bad));
+        model.nodes[static_cast<std::size_t>(node)].skin = skin;
     }
 
     for (const auto& w : model.warnings) NOOR_LOG_WARN("Import", "{}: {}", path.filename().generic_string(), w);

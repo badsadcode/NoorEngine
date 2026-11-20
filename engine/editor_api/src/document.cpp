@@ -1230,7 +1230,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     for (auto& m : view.meshes) {
         std::string key = m.asset_path.generic_string();
         const auto version = asset_versions_.contains(key) ? asset_versions_.at(key) : 0;
-        snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version, m.model_root});
+        snap->meshes.push_back({std::move(key), m.mesh_index, m.world, m.entity, version, m.model_root, m.skin, std::move(m.joints)});
     }
     for (auto& md : view.models) {
         std::string key = md.asset_path.generic_string();

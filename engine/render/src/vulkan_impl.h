@@ -99,6 +99,8 @@ struct GpuTexture {
 struct GpuMesh {
     GpuBuffer vertices;
     GpuBuffer indices;
+    GpuBuffer skin;                    // skinned meshes (8C): SkinVertex per vertex, read by device address
+    VkDeviceAddress skin_address = 0;  // 0: rigid
     std::uint32_t index_count = 0;
     std::uint64_t bytes = 0;
     math::Vec3 center;    // bounding sphere in object space (shadow culling, transparent sorting)
@@ -126,8 +128,10 @@ struct MeshPushConstants {
     // z, w: layers 2 and 3. Shadow pass: y = cascade.
     std::uint32_t ids[4];
     math::Vec4 splat_tiling;    // UV multiplier per splat layer
+    // Skinned draws (8C, skinning.hlsli): the mesh's skin data address (lo, hi) and its palette's (lo, hi); 0: rigid.
+    std::uint32_t skin[4]{};
 };
-static_assert(sizeof(MeshPushConstants) == 32);
+static_assert(sizeof(MeshPushConstants) == 48);
 
 // One GPU draw of `instance_count` instances of a mesh range (vulkan_instancing.cpp).
 struct DrawBatch {
@@ -137,6 +141,8 @@ struct DrawBatch {
     std::uint32_t ids[4]{};
     math::Vec4 splat_tiling{1, 1, 1, 1};
     std::uint32_t instance_offset = 0, instance_count = 0;
+    VkDeviceAddress skin_address = 0;  // skinned (8C): the mesh's skin data
+    std::uint32_t palette_joint = 0;   // and its palette's first joint in this frame's palette buffer (three rows each)
 };
 
 // mesh.hlsl's GpuMaterial (std430), one per material slot.
@@ -514,7 +520,11 @@ struct Renderer::Impl {
             MeshPushConstants push{};  // weather.hlsl: kind, drops, seed; time, drops (fractional), wind x, z
         };
         std::vector<WeatherDraw> weather;  // after the see-through things, over everything
+        std::vector<math::Vec4> palette_rows;  // skinned draws' joints (8C): three rows each, world x inverse bind
     } plan;
+    std::array<GpuBuffer, kFramesInFlight> palette_buffers{};
+    std::array<std::size_t, kFramesInFlight> palette_capacity{};  // in rows
+    std::array<VkDeviceAddress, kFramesInFlight> palette_address{};
     std::array<GpuBuffer, kFramesInFlight> instance_buffers{};
     std::array<std::size_t, kFramesInFlight> instance_capacity{};
     std::array<GpuBuffer, kFramesInFlight> particle_buffers{};

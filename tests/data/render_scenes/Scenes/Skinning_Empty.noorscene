@@ -1,0 +1,139 @@
+{
+  "noor_scene": 2,
+  "id": "2e7688ec-c4d6-42af-91f2-d27934a4c561",
+  "name": "Skinning_Empty",
+  "entities": [
+    {
+      "id": "c5af9d13-9900-4a9c-a144-366ebea6d042",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#8FA070"
+        }
+      }
+    },
+    {
+      "id": "ff81bbed-1370-462f-9293-52c380e67d0e",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          5.0,
+          0.0
+        ],
+        "rotation": [
+          -0.3937651813030243,
+          0.19688253104686737,
+          0.0,
+          0.8978787660598755
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "b8179222-fb50-40b8-b12b-3b89f085e518",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 2,
+          "ground_albedo": 0.3
+        }
+      }
+    },
+    {
+      "id": "f5936539-6325-4bcf-91f8-c0b189dd2b7c",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          7.0,
+          16.0
+        ],
+        "rotation": [
+          -0.2164396047592163,
+          0.0,
+          0.0,
+          0.9762960076332092
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    }
+  ]
+}

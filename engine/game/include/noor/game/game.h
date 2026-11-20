@@ -55,6 +55,10 @@ struct SceneView {
         math::Mat4 world;
         Guid entity;
         Guid model_root;  // the placed model it belongs to (an ancestor with a `model` component of the same asset); nil if none
+        // Skinned (8C): the skin (index into the file's skins) and its joints' world matrices, in the skin's order.
+        // Empty joints: drawn rigid, at `world`.
+        int skin = -1;
+        std::vector<math::Mat4> joints;
     };
     // Placed models (entities with a `model` component): levels of detail switch them as a whole
     // (noor/game/model_lod.h).

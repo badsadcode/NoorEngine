@@ -17,8 +17,11 @@ struct PushConstants
 {
     uint4 ids;          // x: material slot (splat layer 0); y: 0x80000000 | layer 1 for a splat; z, w: layers 2, 3
     float4 splat_tiling;  // UV multiplier per splat layer
+    uint4 skin;           // skinned (8C): skin data address, palette address (skinning.hlsli); 0: rigid
 };
 [[vk::push_constant]] PushConstants pc;
+
+#include "skinning.hlsli"
 
 // The bindless texture table (ADR-012): every texture, indexed by slot; one shared sampler.
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
@@ -81,13 +84,21 @@ float3 to_world_vector(VertexInput input, float3 v)
     return float3(dot(input.world_row0.xyz, v), dot(input.world_row1.xyz, v), dot(input.world_row2.xyz, v));
 }
 
-VertexOutput VSMain(VertexInput input)
+VertexOutput VSMain(VertexInput input, uint vertex_id : SV_VertexID)
 {
+    if (skinned(pc.skin))  // skinned (8C): the joints' blend is its world matrix (the instance's is identity)
+    {
+        const float3x4 s = skin_matrix(pc.skin, vertex_id);
+        input.world_row0 = s[0];
+        input.world_row1 = s[1];
+        input.world_row2 = s[2];
+    }
     VertexOutput output;
     const float4 p = float4(input.position, 1.0);
     output.world_position = float3(dot(input.world_row0, p), dot(input.world_row1, p), dot(input.world_row2, p));
     output.position = mul(frame.clip_from_world, float4(output.world_position, 1.0));
     output.normal = to_world_vector(input, input.normal);  // rotation/uniform scale; non-uniform scale later
+    if (skinned(pc.skin)) output.normal = normalize(output.normal);  // a blend of rotations isn't one: back to unit length
     output.tangent = float4(to_world_vector(input, input.tangent.xyz), input.tangent.w);
     output.color = lerp(is_splat() ? float3(1.0, 1.0, 1.0) : input.color, input.tint.rgb, input.tint.a);
     output.weights = is_splat() ? input.color : float3(0.0, 0.0, 0.0);

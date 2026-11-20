@@ -210,6 +210,11 @@ Status Renderer::Impl::pick_gpu() {
             reject("descriptor indexing (bindless textures) not supported");
             continue;
         }
+        // Skinned meshes (8C) read their skin data and joints by device address (64-bit, in the vertex shader).
+        if (!f12.bufferDeviceAddress || !f2.features.shaderInt64) {
+            reject("buffer device addresses or 64-bit shader integers not supported (skinned meshes)");
+            continue;
+        }
 
         // One queue family that can do graphics and present (true on all desktop GPUs we target).
         std::uint32_t family_count = 0;
@@ -274,8 +279,10 @@ Status Renderer::Impl::create_device() {
     f12.descriptorBindingPartiallyBound = VK_TRUE;
     f12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
     f12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
+    f12.bufferDeviceAddress = VK_TRUE;  // skinned meshes (8C): skin data and joints read by address
     VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     f2.pNext = &f12;
+    f2.features.shaderInt64 = VK_TRUE;  // those addresses in the shader
     f2.features.samplerAnisotropy = max_anisotropy > 1.0f ? VK_TRUE : VK_FALSE;
     f2.features.textureCompressionBC = bc_supported ? VK_TRUE : VK_FALSE;  // BC7/BC5 textures (ADR-029)
 

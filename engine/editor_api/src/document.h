@@ -106,6 +106,8 @@ struct RenderSnapshot {
         Guid entity;             // expanded entity id
         std::uint64_t asset_version = 0;  // bumps when the file changes on disk: reload it
         Guid model_root;         // the placed model it belongs to (levels of detail switch it as a whole), nil if none
+        int skin = -1;                   // skinned (8C): the skin, and its joints' world matrices (game::SceneView::Mesh)
+        std::vector<math::Mat4> joints;
     };
     // Placed models (Milestone 7, part 6): levels of detail are chosen per model and frame.
     struct Model {

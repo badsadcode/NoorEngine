@@ -34,7 +34,7 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [033](ADR-033-environments-and-atmosphere.md) | Environments and atmosphere: sky modes (atmosphere, hdri, gradient, space), a physically based atmosphere that colours the sun, `.noorenv` assets | Proposed (Milestone 8A; part 1 done on the CPU) |
 | [034](ADR-034-volumetric-cloud-layers.md) | Volumetric cloud layers: a layer's coverage map extruded into a ray-marched slab, per layer beside the flat layers; deterministic, no temporal accumulation in v1 | Accepted (Milestone 8A, part 7b) |
 | [035](ADR-035-particles-and-sprites.md) | Particles and sprites: effect particles simulated on the CPU from a seed, weather particles worked out in the vertex shader, sprites as an asset and a billboard component | Accepted (Milestone 8B, done) |
-| [036](ADR-036-skeletal-animation.md) | Skeletal animation: bones in a runtime pose (sockets for props), clips sampled and blended on the CPU from game time, linear blend skinning on the GPU, an `animator` component and `.nooranim` controllers, root motion, retargeting through a humanoid bone map with Rigify/Mixamo/Unreal/metarig presets | Proposed (Milestone 8C plan) |
+| [036](ADR-036-skeletal-animation.md) | Skeletal animation: bones are entities (sockets for free), clips sampled and blended on the CPU from game time, linear blend skinning on the GPU (skin data and palettes read by buffer address), an `animator` component and `.nooranim` controllers, root motion, retargeting through a humanoid bone map with Rigify/Mixamo/Unreal/metarig presets | Accepted (Milestone 8C; part 1 done) |
 
 Still open from the register: 007 plugin ABI, 013 world coordinates,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.

@@ -11,6 +11,7 @@
 #include "noor/game/texture_library.h"
 #include "noor/render/renderer.h"
 
+#include <deque>
 #include <map>
 #include <span>
 #include <string>
@@ -70,13 +71,16 @@ private:
     struct Model {
         std::vector<render::MeshHandle> meshes;
         std::vector<std::vector<asset::Submesh>> submeshes;  // per mesh
+        std::vector<asset::ImportedSkin> skins;               // skinned meshes' skeletons (8C)
         std::vector<render::MaterialHandle> materials;
         std::vector<std::pair<int, math::Mat4>> nodes;  // drawn nodes (mesh, world in the file): for a level of detail
     };
     std::unordered_map<std::string, std::optional<Model>> models_;  // nullopt: failed
     std::unordered_map<std::string, ModelLods> lods_;               // by model file
     const Model* model(const std::filesystem::path& file);
-    void add_mesh(std::vector<render::DrawItem>& out, const Model& model, int mesh_index, const math::Mat4& world) const;
+    void add_mesh(std::vector<render::DrawItem>& out, const Model& model, int mesh_index, const math::Mat4& world,
+                  std::span<const math::Mat4> skin_palette = {}) const;
+    std::deque<std::vector<math::Mat4>> palettes_;  // this frame's skinned draws' palettes (the draws point at them)
     const ModelLods& lods_for(const std::filesystem::path& file);
     TextureLibrary textures_;
     MaterialLibrary materials_;

@@ -1080,6 +1080,36 @@ internal static class SmokeTest
         doc.Undo();
         check(doc.Scene.Entities.Count == count, "sprites: one undo removes the sprite entity");
         await Task.Delay(300);
+        await SkinningChecks(window, check, shot);
+    }
+
+    // Milestone 8C, part 1: a skinned character placed in the editor is drawn posed by its joints (Vulkan validation on:
+    // the skin data and joints are read by device address), and framing finds its posed shape.
+    private static async Task SkinningChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var dir = Path.Combine(doc.ProjectRoot, "Assets", "Characters");
+        Directory.CreateDirectory(dir);
+        File.Copy(Path.Combine(Program.Options.TestData!, "animation", "Ward", "Ward_Posed.glb"), Path.Combine(dir, "Ward_Posed.glb"), overwrite: true);
+        doc.RefreshAssets(rescan: true);
+        var ward = doc.Assets.FirstOrDefault(a => a.Path.EndsWith("Ward_Posed.glb", StringComparison.Ordinal));
+        check(ward != null, "skinning: the skinned character imports");
+        if (ward == null) return;
+        long Triangles() => VulkanViewport.Active?.RenderStats() is { } text && JsonNode.Parse(text)?["triangles"] is JsonValue v && v.TryGetValue<long>(out var n) ? n : -1;
+        var count = doc.Scene.Entities.Count;
+        var before = await WaitFor(() => (long?)Triangles(), n => n > 0, 4) ?? 0;
+        // Where the sprite check left the camera looking (it framed a sprite at 14, 0, 14).
+        check(doc.AddAsset(ward, new Vec3(14.8, 0, 14)), "skinning: the character is placed (add_asset)");
+        var root = doc.Scene.Entities.LastOrDefault(e => e.Name.StartsWith("Ward_Posed", StringComparison.Ordinal) && e.Components["model"] != null);
+        check(doc.Scene.Entities.Count == count + 19, $"skinning: a root, the mesh and 17 joints became entities ({doc.Scene.Entities.Count - count})");
+        var seen = await WaitFor(() => (long?)Triangles(), n => n >= before + 2856, 6);
+        check(seen >= before + 2856, $"skinning: the viewport draws the posed character ({before} triangles before, {seen} after; Ward has 2856)");
+        if (root != null) window.ViewportView?.Viewport.Frame(doc.Subtree(root.Id));
+        await Task.Delay(800);
+        shot(window, "editor_34_skinned_character.png");
+        doc.Undo();
+        check(doc.Scene.Entities.Count == count, "skinning: one undo removes the character");
+        await Task.Delay(300);
     }
 
     // Milestone 6, part 2: CSG brushes in the editor (create, cut, reorder, edit, undo, save/reopen).

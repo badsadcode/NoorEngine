@@ -398,7 +398,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
+| 1 ✅ | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
 | 2 | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
 | 3 | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
 | 4 | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
@@ -425,6 +425,21 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
    transfer must work relative to each rig's rest pose, and the tests must measure bone directions, not eyeball.
 5. **Determinism with blending.** Quaternion blending must be bit-stable (fixed order, no library slerp that an
    optimiser may vectorise differently), as 8B's own sine and cosine were.
+
+## Part 1 result (2026-11-20)
+Done. Skins from glTF (joints mapped to the scene's nodes, inverse bind matrices, up to 8 influences read and the
+strongest 4 kept and renormalised, plain-words warnings), skinned meshes drawn by linear blend skinning in the vertex
+shader (skin data and per-frame palettes read through buffer device addresses: no new pipelines), shadows included,
+in games and the editor's viewport (posed picking and framing on the CPU). **Changed from ADR-036's proposal: bones
+are entities**, as every glTF node already was when placing a model; a skinned mesh's entity lists its joints, so
+posing those entities poses it, and rigid characters (the robot) work the same way. Proven: unit tests (SimpleSkin's
+weights and inverse binds; its top joint bent 90 degrees moves vertices to the hand-worked places; the robot's skinned
+hands follow their joints in its odd rest pose; Ward bound and posed, by size); golden `Skinning` (Ward in his bind
+pose, Ward posed with a bent knee and elbow, the robot); `render.skinning_cost` (100 characters 0.2-0.4 ms of GPU,
+gathering 1.2 ms of CPU); the editor smoke test (a posed Ward placed, 19 entities, drawn, with Vulkan validation on).
+Test characters: CC0 RobotExpressive and SimpleSkin, our generated Ward (`make_test_characters.py`). Found on the way:
+a palette offset counted in joints where rows were meant (the first character drew right by luck). Not done: the
+gizmo doesn't bend a skinned mesh mid-drag; levels of detail don't switch skinned models; morph targets.
 
 ## Open questions
 

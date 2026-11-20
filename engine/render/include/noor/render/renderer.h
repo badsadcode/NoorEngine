@@ -58,10 +58,19 @@ struct Vertex {
     math::Vec4 tangent{1, 0, 0, 1};  // xyz along +u, w = handedness of the bitangent (glTF)
 };
 
+// How a vertex of a skinned mesh follows its skeleton (Milestone 8C, ADR-036): four joints of the draw's palette and
+// their weights (adding up to 1). The same layout as asset::SkinWeights.
+struct SkinVertex {
+    std::array<std::uint16_t, 4> joints{};
+    math::Vec4 weights{1, 0, 0, 0};
+};
+static_assert(sizeof(SkinVertex) == 24);
+
 struct MeshData {
     std::span<const Vertex> vertices;
     std::span<const std::uint32_t> indices;  // triangle list, counter-clockwise front faces
     std::string_view debug_name;             // shown in RenderDoc/Nsight; optional
+    std::span<const SkinVertex> skin{};      // one per vertex for a skinned mesh (8C); empty: rigid
 };
 
 // Opaque handle to a mesh living in GPU memory. 0 is never a valid handle.
@@ -301,6 +310,9 @@ struct DrawItem {
     bool overlay = false;
     bool cast_shadow = true;
     MaterialHandle material;          // none: the default material
+    // A skinned mesh (8C): world x inverse bind per joint of its skin. Its vertices are moved by these (the shader's
+    // linear blend skinning) and world_from_object is ignored. The span must stay valid until the frame is rendered.
+    std::span<const math::Mat4> skin_palette{};
     std::uint32_t first_index = 0;    // a range of the mesh's indices (a submesh);
     std::uint32_t index_count = 0;    // 0 = the whole mesh
     // Splatting (terrains, Milestone 6 part 7): up to four materials blended per pixel by the vertex

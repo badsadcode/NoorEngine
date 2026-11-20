@@ -1,0 +1,3301 @@
+{
+  "noor_scene": 2,
+  "id": "2a4001f6-bc1c-43ee-95ed-f775a69684e1",
+  "name": "Skinning",
+  "entities": [
+    {
+      "id": "5ade8c38-3837-4dd8-9634-da5cb8fd4e7c",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "plane",
+          "size": [
+            30,
+            1,
+            30
+          ],
+          "color": "#8FA070"
+        }
+      }
+    },
+    {
+      "id": "5fc9f9fe-eccc-4563-8da2-a847a1ab7cd1",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          5.0,
+          0.0
+        ],
+        "rotation": [
+          -0.3937651813030243,
+          0.19688253104686737,
+          0.0,
+          0.8978787660598755
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "133429f6-6cd6-4d66-a3e3-7e645813a474",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "turbidity": 2,
+          "ground_albedo": 0.3
+        }
+      }
+    },
+    {
+      "id": "159e8ce4-66ec-452a-bb61-c7638f8ad412",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.10000000149011612,
+          1.5,
+          5.599999904632568
+        ],
+        "rotation": [
+          -0.06975650042295456,
+          0.0,
+          0.0,
+          0.9975640773773193
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 50,
+          "near": 0.05,
+          "ev100": 15.0,
+          "tonemapper": "neutral"
+        }
+      }
+    },
+    {
+      "id": "8e1e852e-c175-4794-a480-300e92b1a649",
+      "name": "Ward (bind pose)",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.7000000476837158,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "model": {
+          "asset": "1bd540c6-2e5f-4f19-a978-6ed1941d04f3"
+        }
+      }
+    },
+    {
+      "id": "3db32be8-d223-4b43-b880-ff603149dff7",
+      "name": "Ward",
+      "layer": "default",
+      "tags": [],
+      "parent": "8e1e852e-c175-4794-a480-300e92b1a649",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "1bd540c6-2e5f-4f19-a978-6ed1941d04f3",
+          "mesh_index": 0,
+          "skin": 0,
+          "joints": [
+            "7fe8b7bc-56ab-431f-bb65-c43ae3fe38d1",
+            "cfe00baf-5217-4a1e-80ef-f33f77521966",
+            "bb729d20-457e-4516-a1db-6f33a866fed0",
+            "a9d6c699-bd36-4419-b56c-c89155cd6ac2",
+            "75e3c7e6-89a7-441f-bfb8-6a198ff9036c",
+            "e27309c8-e794-46ba-96ad-d1c85f6686ac",
+            "bb9b01a3-d29c-47bd-861a-cfa06899e170",
+            "bd4b69a9-8ac6-4f9f-b957-83a50dfd9037",
+            "aa585dd2-c10c-4c5b-9e4e-70b10919b59b",
+            "092e2f06-b431-4d66-bc51-de7cba5a1aa4",
+            "d186e1a3-817f-4bcd-9d24-68c719fce862",
+            "0d67fa85-34e6-4388-82a2-75acff2fafeb",
+            "c64872f8-e04b-433f-8c47-fd6a88780e51",
+            "6a163e99-8bd2-4514-8895-c829887ed339",
+            "8af8d0d3-b181-4a6b-a761-e942ab8b7c41",
+            "39b856ec-3b5a-40b4-80d0-41d4ef7ffceb",
+            "60547b47-be61-41ef-a5f4-892f4d6ea3dd"
+          ]
+        }
+      }
+    },
+    {
+      "id": "7fe8b7bc-56ab-431f-bb65-c43ae3fe38d1",
+      "name": "DEF-hips",
+      "layer": "default",
+      "tags": [],
+      "parent": "8e1e852e-c175-4794-a480-300e92b1a649",
+      "transform": {
+        "position": [
+          0.0,
+          0.949999988079071,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "cfe00baf-5217-4a1e-80ef-f33f77521966",
+      "name": "DEF-spine",
+      "layer": "default",
+      "tags": [],
+      "parent": "7fe8b7bc-56ab-431f-bb65-c43ae3fe38d1",
+      "transform": {
+        "position": [
+          0.0,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "bb729d20-457e-4516-a1db-6f33a866fed0",
+      "name": "DEF-chest",
+      "layer": "default",
+      "tags": [],
+      "parent": "cfe00baf-5217-4a1e-80ef-f33f77521966",
+      "transform": {
+        "position": [
+          0.0,
+          0.20000000298023224,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "a9d6c699-bd36-4419-b56c-c89155cd6ac2",
+      "name": "DEF-neck",
+      "layer": "default",
+      "tags": [],
+      "parent": "bb729d20-457e-4516-a1db-6f33a866fed0",
+      "transform": {
+        "position": [
+          0.0,
+          0.20000000298023224,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "75e3c7e6-89a7-441f-bfb8-6a198ff9036c",
+      "name": "DEF-head",
+      "layer": "default",
+      "tags": [],
+      "parent": "a9d6c699-bd36-4419-b56c-c89155cd6ac2",
+      "transform": {
+        "position": [
+          0.0,
+          0.07999999821186066,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "e27309c8-e794-46ba-96ad-d1c85f6686ac",
+      "name": "DEF-upper_arm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "bb729d20-457e-4516-a1db-6f33a866fed0",
+      "transform": {
+        "position": [
+          0.20000000298023224,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "bb9b01a3-d29c-47bd-861a-cfa06899e170",
+      "name": "DEF-forearm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "e27309c8-e794-46ba-96ad-d1c85f6686ac",
+      "transform": {
+        "position": [
+          0.2800000011920929,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "bd4b69a9-8ac6-4f9f-b957-83a50dfd9037",
+      "name": "DEF-hand.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "bb9b01a3-d29c-47bd-861a-cfa06899e170",
+      "transform": {
+        "position": [
+          0.25999999046325684,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "aa585dd2-c10c-4c5b-9e4e-70b10919b59b",
+      "name": "DEF-upper_arm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "bb729d20-457e-4516-a1db-6f33a866fed0",
+      "transform": {
+        "position": [
+          -0.20000000298023224,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "092e2f06-b431-4d66-bc51-de7cba5a1aa4",
+      "name": "DEF-forearm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "aa585dd2-c10c-4c5b-9e4e-70b10919b59b",
+      "transform": {
+        "position": [
+          -0.2800000011920929,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "d186e1a3-817f-4bcd-9d24-68c719fce862",
+      "name": "DEF-hand.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "092e2f06-b431-4d66-bc51-de7cba5a1aa4",
+      "transform": {
+        "position": [
+          -0.25999999046325684,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "0d67fa85-34e6-4388-82a2-75acff2fafeb",
+      "name": "DEF-thigh.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "7fe8b7bc-56ab-431f-bb65-c43ae3fe38d1",
+      "transform": {
+        "position": [
+          0.10000000149011612,
+          -0.029999999329447746,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c64872f8-e04b-433f-8c47-fd6a88780e51",
+      "name": "DEF-shin.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "0d67fa85-34e6-4388-82a2-75acff2fafeb",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "6a163e99-8bd2-4514-8895-c829887ed339",
+      "name": "DEF-foot.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "c64872f8-e04b-433f-8c47-fd6a88780e51",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "8af8d0d3-b181-4a6b-a761-e942ab8b7c41",
+      "name": "DEF-thigh.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "7fe8b7bc-56ab-431f-bb65-c43ae3fe38d1",
+      "transform": {
+        "position": [
+          -0.10000000149011612,
+          -0.029999999329447746,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "39b856ec-3b5a-40b4-80d0-41d4ef7ffceb",
+      "name": "DEF-shin.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "8af8d0d3-b181-4a6b-a761-e942ab8b7c41",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "60547b47-be61-41ef-a5f4-892f4d6ea3dd",
+      "name": "DEF-foot.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "39b856ec-3b5a-40b4-80d0-41d4ef7ffceb",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "df380c74-5c0b-461a-9f9e-4c9d75914fcb",
+      "name": "Ward (posed)",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.30070579051971436,
+          0.0,
+          0.9537169933319092
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "model": {
+          "asset": "cd5ecd6e-3fdf-47b2-b6d1-99090fa8c7cf"
+        }
+      }
+    },
+    {
+      "id": "1be05250-9923-42ab-bbab-1de8ede43ac4",
+      "name": "Ward",
+      "layer": "default",
+      "tags": [],
+      "parent": "df380c74-5c0b-461a-9f9e-4c9d75914fcb",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "cd5ecd6e-3fdf-47b2-b6d1-99090fa8c7cf",
+          "mesh_index": 0,
+          "skin": 0,
+          "joints": [
+            "715c70ec-3657-4c64-85d6-bf73cae25873",
+            "c4772e79-5f20-4ed1-8ebe-34b25d967bed",
+            "cb711840-4334-41a6-a221-8b71460649f4",
+            "f9be3ade-6409-425b-b2ed-2809a2ea1615",
+            "ca0efe4c-c31b-4cea-b642-0d540f7b1172",
+            "18a25e02-8bef-47a8-88c0-1870373b1fd1",
+            "8ffb4bff-160c-4b03-aa8d-07350f968ecd",
+            "99477543-06ce-439a-a906-d983404dae64",
+            "1602eb98-2739-4a7d-a7d5-8f6e6f8673fa",
+            "1c04b47d-bef5-42b8-ad2b-a5af01f873ff",
+            "cb2ddd56-3cfd-4cc2-86d6-be4e6a634f7a",
+            "0e3db41e-8383-499c-9e06-cef8bcc2ff7e",
+            "a7172980-8ba3-40c3-bce6-a3fb1e2193d9",
+            "daa66812-6904-4361-b038-7064d50340a6",
+            "201c3e57-c1ab-490f-93a2-9890427cd161",
+            "402b6c0e-ca6f-4e17-91ac-d7422aa0a591",
+            "660ce754-7ed1-4e11-a7a1-4964e5e3cda8"
+          ]
+        }
+      }
+    },
+    {
+      "id": "715c70ec-3657-4c64-85d6-bf73cae25873",
+      "name": "DEF-hips",
+      "layer": "default",
+      "tags": [],
+      "parent": "df380c74-5c0b-461a-9f9e-4c9d75914fcb",
+      "transform": {
+        "position": [
+          0.0,
+          0.949999988079071,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c4772e79-5f20-4ed1-8ebe-34b25d967bed",
+      "name": "DEF-spine",
+      "layer": "default",
+      "tags": [],
+      "parent": "715c70ec-3657-4c64-85d6-bf73cae25873",
+      "transform": {
+        "position": [
+          0.0,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "cb711840-4334-41a6-a221-8b71460649f4",
+      "name": "DEF-chest",
+      "layer": "default",
+      "tags": [],
+      "parent": "c4772e79-5f20-4ed1-8ebe-34b25d967bed",
+      "transform": {
+        "position": [
+          0.0,
+          0.20000000298023224,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "f9be3ade-6409-425b-b2ed-2809a2ea1615",
+      "name": "DEF-neck",
+      "layer": "default",
+      "tags": [],
+      "parent": "cb711840-4334-41a6-a221-8b71460649f4",
+      "transform": {
+        "position": [
+          0.0,
+          0.20000000298023224,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "ca0efe4c-c31b-4cea-b642-0d540f7b1172",
+      "name": "DEF-head",
+      "layer": "default",
+      "tags": [],
+      "parent": "f9be3ade-6409-425b-b2ed-2809a2ea1615",
+      "transform": {
+        "position": [
+          0.0,
+          0.07999999821186066,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.2164396196603775,
+          0.0,
+          0.9762960076332092
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "18a25e02-8bef-47a8-88c0-1870373b1fd1",
+      "name": "DEF-upper_arm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "cb711840-4334-41a6-a221-8b71460649f4",
+      "transform": {
+        "position": [
+          0.20000000298023224,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          -0.0,
+          -0.0,
+          -0.5735764503479004,
+          0.8191520571708679
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "8ffb4bff-160c-4b03-aa8d-07350f968ecd",
+      "name": "DEF-forearm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "18a25e02-8bef-47a8-88c0-1870373b1fd1",
+      "transform": {
+        "position": [
+          0.2800000011920929,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.4226182699203491,
+          0.0,
+          0.9063078165054321
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "99477543-06ce-439a-a906-d983404dae64",
+      "name": "DEF-hand.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "8ffb4bff-160c-4b03-aa8d-07350f968ecd",
+      "transform": {
+        "position": [
+          0.25999999046325684,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "1602eb98-2739-4a7d-a7d5-8f6e6f8673fa",
+      "name": "DEF-upper_arm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "cb711840-4334-41a6-a221-8b71460649f4",
+      "transform": {
+        "position": [
+          -0.20000000298023224,
+          0.15000000596046448,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.5735764503479004,
+          0.8191520571708679
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "1c04b47d-bef5-42b8-ad2b-a5af01f873ff",
+      "name": "DEF-forearm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "1602eb98-2739-4a7d-a7d5-8f6e6f8673fa",
+      "transform": {
+        "position": [
+          -0.2800000011920929,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "cb2ddd56-3cfd-4cc2-86d6-be4e6a634f7a",
+      "name": "DEF-hand.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "1c04b47d-bef5-42b8-ad2b-a5af01f873ff",
+      "transform": {
+        "position": [
+          -0.25999999046325684,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "0e3db41e-8383-499c-9e06-cef8bcc2ff7e",
+      "name": "DEF-thigh.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "715c70ec-3657-4c64-85d6-bf73cae25873",
+      "transform": {
+        "position": [
+          0.10000000149011612,
+          -0.029999999329447746,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "a7172980-8ba3-40c3-bce6-a3fb1e2193d9",
+      "name": "DEF-shin.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "0e3db41e-8383-499c-9e06-cef8bcc2ff7e",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "daa66812-6904-4361-b038-7064d50340a6",
+      "name": "DEF-foot.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "a7172980-8ba3-40c3-bce6-a3fb1e2193d9",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "201c3e57-c1ab-490f-93a2-9890427cd161",
+      "name": "DEF-thigh.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "715c70ec-3657-4c64-85d6-bf73cae25873",
+      "transform": {
+        "position": [
+          -0.10000000149011612,
+          -0.029999999329447746,
+          0.0
+        ],
+        "rotation": [
+          -0.30070579051971436,
+          -0.0,
+          -0.0,
+          0.9537169337272644
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "402b6c0e-ca6f-4e17-91ac-d7422aa0a591",
+      "name": "DEF-shin.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "201c3e57-c1ab-490f-93a2-9890427cd161",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.5,
+          0.0,
+          0.0,
+          0.8660253882408142
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "660ce754-7ed1-4e11-a7a1-4964e5e3cda8",
+      "name": "DEF-foot.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "402b6c0e-ca6f-4e17-91ac-d7422aa0a591",
+      "transform": {
+        "position": [
+          0.0,
+          -0.41999998688697815,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "1f28b0c8-48f9-4a34-a64b-89e6c396b6ba",
+      "name": "Robot",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.899999976158142,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          0.44999998807907104,
+          0.44999998807907104,
+          0.44999998807907104
+        ]
+      },
+      "components": {
+        "model": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149"
+        }
+      }
+    },
+    {
+      "id": "6bffb265-dec4-4a58-9f1c-61eb385c72de",
+      "name": "RootNode",
+      "layer": "default",
+      "tags": [],
+      "parent": "1f28b0c8-48f9-4a34-a64b-89e6c396b6ba",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "b7ea85b6-73ec-4702-a45b-6650abd21912",
+      "name": "RobotArmature",
+      "layer": "default",
+      "tags": [],
+      "parent": "6bffb265-dec4-4a58-9f1c-61eb385c72de",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          -0.7071068286895752,
+          0.0,
+          0.0,
+          0.7071067094802856
+        ],
+        "scale": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "name": "Bone",
+      "layer": "default",
+      "tags": [],
+      "parent": "b7ea85b6-73ec-4702-a45b-6650abd21912",
+      "transform": {
+        "position": [
+          -3.1954630685504526e-05,
+          0.0019504808587953448,
+          -5.8851739595411345e-05
+        ],
+        "rotation": [
+          0.7071068286895752,
+          1.6858743379088992e-07,
+          1.685874053691805e-07,
+          0.7071067094802856
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "ab772b6f-0273-45cd-a63f-824e261a8e2e",
+      "name": "Foot.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "transform": {
+        "position": [
+          0.00636722007766366,
+          0.0003057920839637518,
+          0.0005701467744074762
+        ],
+        "rotation": [
+          -1.0893066004769025e-08,
+          0.6955496072769165,
+          0.7184780836105347,
+          1.1562575252810348e-07
+        ],
+        "scale": [
+          1.0,
+          0.9999998211860657,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "5e344b41-aa45-495c-979b-792ee1983efd",
+      "name": "Foot.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "ab772b6f-0273-45cd-a63f-824e261a8e2e",
+      "transform": {
+        "position": [
+          9.468793723499402e-05,
+          0.0031688297167420387,
+          0.003834450850263238
+        ],
+        "rotation": [
+          1.0470356670566616e-07,
+          -0.016212977468967438,
+          0.9998685717582703,
+          1.964305624824192e-07
+        ],
+        "scale": [
+          1.0,
+          1.0000001192092896,
+          1.0000001192092896
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 0
+        }
+      }
+    },
+    {
+      "id": "43195207-8f9c-4e4a-8692-7b4c2f90989f",
+      "name": "Foot.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "ab772b6f-0273-45cd-a63f-824e261a8e2e",
+      "transform": {
+        "position": [
+          1.1102229998097382e-18,
+          0.003255489282310009,
+          -3.469446874405432e-20
+        ],
+        "rotation": [
+          -3.469446951953614e-18,
+          -1.2407709188295415e-23,
+          -4.304788882405838e-41,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+      "name": "Body",
+      "layer": "default",
+      "tags": [],
+      "parent": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "transform": {
+        "position": [
+          5.245895590633154e-05,
+          0.01378378365188837,
+          0.0030771975871175528
+        ],
+        "rotation": [
+          5.284606812500825e-37,
+          1.1920928955078125e-07,
+          -4.433049498419892e-30,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "2fbaf82f-c101-424e-b309-e1aedb1b3a48",
+      "name": "Torso",
+      "layer": "default",
+      "tags": [],
+      "parent": "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+      "transform": {
+        "position": [
+          -4.766121492139064e-05,
+          0.008012580685317516,
+          -0.001322528813034296
+        ],
+        "rotation": [
+          -0.7071068286895752,
+          -2.5288110805377073e-07,
+          -2.528811648971896e-07,
+          0.7071067094802856
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 1
+        }
+      }
+    },
+    {
+      "id": "4a43f3d4-1a01-4e42-9afc-afa4dace5ddc",
+      "name": "Hips",
+      "layer": "default",
+      "tags": [],
+      "parent": "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+      "transform": {
+        "position": [
+          -2.0504983694991097e-05,
+          -0.0009657454211264849,
+          -0.001126716728322208
+        ],
+        "rotation": [
+          -0.11895506083965302,
+          -2.6579036216389795e-07,
+          -5.338466735338443e-08,
+          0.9928996562957764
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          0.9999999403953552
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c75c9ac8-50e9-4d2c-97ed-23c064e98109",
+      "name": "Abdomen",
+      "layer": "default",
+      "tags": [],
+      "parent": "4a43f3d4-1a01-4e42-9afc-afa4dace5ddc",
+      "transform": {
+        "position": [
+          -2.1649348186097164e-17,
+          0.0032879188656806946,
+          -7.450580430390374e-11
+        ],
+        "rotation": [
+          0.11516515910625458,
+          4.351356608367496e-07,
+          7.130794443810373e-08,
+          0.9933463335037231
+        ],
+        "scale": [
+          1.0,
+          1.0000001192092896,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "28abe9b4-4406-4e52-820e-a09d0987c037",
+      "name": "Torso",
+      "layer": "default",
+      "tags": [],
+      "parent": "c75c9ac8-50e9-4d2c-97ed-23c064e98109",
+      "transform": {
+        "position": [
+          -5.051514576756005e-17,
+          0.004845843650400639,
+          -3.725289868250492e-11
+        ],
+        "rotation": [
+          0.058274876326322556,
+          -8.309179975185543e-07,
+          1.3032783741095955e-08,
+          0.9983005523681641
+        ],
+        "scale": [
+          1.0,
+          0.9999999403953552,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "0233a735-a164-467c-8157-33c598b123b8",
+      "name": "Neck",
+      "layer": "default",
+      "tags": [],
+      "parent": "28abe9b4-4406-4e52-820e-a09d0987c037",
+      "transform": {
+        "position": [
+          2.839395258423896e-16,
+          0.00584088359028101,
+          2.793967557312982e-10
+        ],
+        "rotation": [
+          -0.04338092356920242,
+          -0.014181295409798622,
+          0.028290273621678352,
+          0.9985572695732117
+        ],
+        "scale": [
+          0.9999997019767761,
+          0.9999999403953552,
+          0.9999998211860657
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "36afd607-fa11-423f-a7f8-52514b050c83",
+      "name": "Head",
+      "layer": "default",
+      "tags": [],
+      "parent": "0233a735-a164-467c-8157-33c598b123b8",
+      "transform": {
+        "position": [
+          1.2252712733307192e-10,
+          0.0030986592173576355,
+          5.0058585748802287e-11
+        ],
+        "rotation": [
+          -0.035049546509981155,
+          -0.08216977119445801,
+          -0.0018932379316538572,
+          0.9960000514984131
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999999403953552,
+          0.9999999403953552
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "bfc6974c-781a-49e8-80dc-b7f3c023d03b",
+      "name": "Head",
+      "layer": "default",
+      "tags": [],
+      "parent": "36afd607-fa11-423f-a7f8-52514b050c83",
+      "transform": {
+        "position": [
+          -8.957981663115788e-06,
+          0.0064762127585709095,
+          0.0003639684582594782
+        ],
+        "rotation": [
+          -0.7137091755867004,
+          0.0010214144131168723,
+          -0.000962936959695071,
+          0.7004407644271851
+        ],
+        "scale": [
+          0.9999999403953552,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 2
+        }
+      }
+    },
+    {
+      "id": "d8ef7d9c-ba58-4956-97e8-8857807a7126",
+      "name": "Head_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "36afd607-fa11-423f-a7f8-52514b050c83",
+      "transform": {
+        "position": [
+          2.7755574995243454e-19,
+          0.011082831770181656,
+          -2.7755574995243454e-19
+        ],
+        "rotation": [
+          -6.938893903907228e-18,
+          -1.3877787807814457e-17,
+          -7.806255641895632e-18,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "db011c33-24a4-485d-8b5a-1a280ec0746a",
+      "name": "Shoulder.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "28abe9b4-4406-4e52-820e-a09d0987c037",
+      "transform": {
+        "position": [
+          0.005827377084642649,
+          0.0029672025702893734,
+          0.00032441297662444413
+        ],
+        "rotation": [
+          0.011449722573161125,
+          0.053247079253196716,
+          0.9761998057365417,
+          -0.2099227011203766
+        ],
+        "scale": [
+          1.0000001192092896,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "bd0b2486-776a-47ee-9971-8ec2ce60616c",
+      "name": "Shoulder.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "db011c33-24a4-485d-8b5a-1a280ec0746a",
+      "transform": {
+        "position": [
+          -3.8099287849036045e-06,
+          -9.833648618950974e-06,
+          -4.150958557147533e-05
+        ],
+        "rotation": [
+          0.4934736490249634,
+          0.506443202495575,
+          -0.506442129611969,
+          -0.4934728145599365
+        ],
+        "scale": [
+          1.0,
+          0.9999998807907104,
+          0.9999997615814209
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 4
+        }
+      }
+    },
+    {
+      "id": "6f3c46fc-7938-41c6-b28e-08c9c76aa91e",
+      "name": "UpperArm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "db011c33-24a4-485d-8b5a-1a280ec0746a",
+      "transform": {
+        "position": [
+          -8.405564022595513e-10,
+          0.0008403582032769918,
+          2.293404528785903e-11
+        ],
+        "rotation": [
+          -0.054585766047239304,
+          -0.6898865103721619,
+          0.06921384483575821,
+          0.7185307741165161
+        ],
+        "scale": [
+          0.9999998807907104,
+          0.9999998807907104,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "b3ed336d-1832-48fa-ad2e-9bedb14556c6",
+      "name": "Arm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "6f3c46fc-7938-41c6-b28e-08c9c76aa91e",
+      "transform": {
+        "position": [
+          0.0003514549171086401,
+          -0.006678103003650904,
+          -0.0007593405316583812
+        ],
+        "rotation": [
+          0.02785629965364933,
+          0.0200833547860384,
+          0.7280746698379517,
+          0.6846371293067932
+        ],
+        "scale": [
+          1.0,
+          0.9999997615814209,
+          0.9999998807907104
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 5
+        }
+      }
+    },
+    {
+      "id": "60782e10-3f9f-42ac-8715-0c454925d8a3",
+      "name": "LowerArm.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "6f3c46fc-7938-41c6-b28e-08c9c76aa91e",
+      "transform": {
+        "position": [
+          3.725290215195187e-11,
+          0.006572922226041555,
+          2.919696262537741e-09
+        ],
+        "rotation": [
+          0.30999240279197693,
+          0.49933749437332153,
+          -0.36494016647338867,
+          0.7220702767372131
+        ],
+        "scale": [
+          1.000000238418579,
+          1.0000001192092896,
+          1.0000003576278687
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "dae1d60a-353a-4892-b7fd-e0265c7de12b",
+      "name": "Palm2.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "60782e10-3f9f-42ac-8715-0c454925d8a3",
+      "transform": {
+        "position": [
+          2.98023217215615e-10,
+          0.01368200033903122,
+          0.0
+        ],
+        "rotation": [
+          -0.003352781757712364,
+          0.005874999798834324,
+          -0.32552555203437805,
+          0.9455090165138245
+        ],
+        "scale": [
+          1.0,
+          1.0000001192092896,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "dfe59334-15a0-43e5-b6a9-7b235cc4119b",
+      "name": "Middle1.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "dae1d60a-353a-4892-b7fd-e0265c7de12b",
+      "transform": {
+        "position": [
+          -2.98023217215615e-10,
+          0.0037119798362255096,
+          -2.2351741291171123e-10
+        ],
+        "rotation": [
+          -0.004421138670295477,
+          0.023823954164981842,
+          -0.5520719885826111,
+          0.8334442973136902
+        ],
+        "scale": [
+          0.9999998807907104,
+          0.999999463558197,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "a3e4a950-d059-4e6f-8ace-7a7c7826fc5e",
+      "name": "Middle2.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "dfe59334-15a0-43e5-b6a9-7b235cc4119b",
+      "transform": {
+        "position": [
+          1.490116086078075e-10,
+          0.0018936687847599387,
+          -9.685754420729609e-10
+        ],
+        "rotation": [
+          -0.03811081871390343,
+          0.000934104376938194,
+          -0.6996556520462036,
+          0.7134624123573303
+        ],
+        "scale": [
+          0.9999997615814209,
+          1.0,
+          0.9999999403953552
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "47a86f73-dcf9-4908-9be5-f78f9f71c0d3",
+      "name": "Middle2.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "a3e4a950-d059-4e6f-8ace-7a7c7826fc5e",
+      "transform": {
+        "position": [
+          0.0,
+          0.0013147495919838548,
+          0.0
+        ],
+        "rotation": [
+          -3.159728815010309e-35,
+          -2.6020852139652106e-18,
+          -1.214306433183765e-17,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "8663d50a-3d97-412e-8e46-f7f0446ff818",
+      "name": "Thumb.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "60782e10-3f9f-42ac-8715-0c454925d8a3",
+      "transform": {
+        "position": [
+          0.0008417422650381923,
+          0.01257474347949028,
+          0.0018977815052494407
+        ],
+        "rotation": [
+          0.7298741340637207,
+          0.6353415250778198,
+          0.21108931303024292,
+          0.13808046281337738
+        ],
+        "scale": [
+          1.0,
+          0.9999998807907104,
+          0.9999997615814209
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "44a2e42a-ca17-4ac7-ad8f-ee729e4faa0d",
+      "name": "Thumb2.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "8663d50a-3d97-412e-8e46-f7f0446ff818",
+      "transform": {
+        "position": [
+          -5.9604643443123e-10,
+          0.0013667276361957192,
+          8.940696516468449e-10
+        ],
+        "rotation": [
+          -0.24897371232509613,
+          0.6271843910217285,
+          0.630886435508728,
+          -0.38292837142944336
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999998807907104,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c7e6fd3c-90ed-4a62-8f4e-c866f3b9cfc0",
+      "name": "Thumb2.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "44a2e42a-ca17-4ac7-ad8f-ee729e4faa0d",
+      "transform": {
+        "position": [
+          1.1102229998097382e-18,
+          0.0012678442290052772,
+          0.0
+        ],
+        "rotation": [
+          -1.3877787807814457e-17,
+          2.7755575615628914e-17,
+          -2.7755575615628914e-17,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "beaff661-d18c-4769-bba8-b5b5a4618fda",
+      "name": "Palm1.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "60782e10-3f9f-42ac-8715-0c454925d8a3",
+      "transform": {
+        "position": [
+          2.98023217215615e-10,
+          0.01368200033903122,
+          0.0
+        ],
+        "rotation": [
+          0.30397099256515503,
+          0.27878904342651367,
+          -0.21035031974315643,
+          0.8863583207130432
+        ],
+        "scale": [
+          1.0,
+          0.9999999403953552,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "262ddd88-e814-48f7-9087-e2565500674a",
+      "name": "Index.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "beaff661-d18c-4769-bba8-b5b5a4618fda",
+      "transform": {
+        "position": [
+          -2.98023217215615e-10,
+          0.004224264528602362,
+          -1.490116086078075e-10
+        ],
+        "rotation": [
+          0.04673539102077484,
+          -0.3961111307144165,
+          -0.5890608429908752,
+          0.7027937769889832
+        ],
+        "scale": [
+          1.0,
+          1.0000001192092896,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "69e0b3c2-980a-4515-baf2-b942838d14d5",
+      "name": "Index2.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "262ddd88-e814-48f7-9087-e2565500674a",
+      "transform": {
+        "position": [
+          -2.98023217215615e-10,
+          0.0018936670385301113,
+          -6.705522248573459e-10
+        ],
+        "rotation": [
+          -0.042587194591760635,
+          -0.01837962679564953,
+          -0.699962317943573,
+          0.7126719355583191
+        ],
+        "scale": [
+          0.9999999403953552,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "a09435dd-2158-4f0c-b8b3-80cd31213169",
+      "name": "Index2.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "69e0b3c2-980a-4515-baf2-b942838d14d5",
+      "transform": {
+        "position": [
+          0.0,
+          0.0013147523859515786,
+          0.0
+        ],
+        "rotation": [
+          2.407412430484045e-35,
+          -6.938893903907228e-18,
+          3.469446951953614e-18,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "cade8981-0ba8-42da-9e03-f44076f55df7",
+      "name": "Palm3.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "60782e10-3f9f-42ac-8715-0c454925d8a3",
+      "transform": {
+        "position": [
+          2.98023217215615e-10,
+          0.01368200033903122,
+          0.0
+        ],
+        "rotation": [
+          -0.3355661630630493,
+          -0.3364405333995819,
+          -0.18058958649635315,
+          0.8611565232276917
+        ],
+        "scale": [
+          1.0,
+          1.0000001192092896,
+          1.0000001192092896
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "15ec1743-38b9-4b50-98be-61c660f3b09b",
+      "name": "Ring1.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "cade8981-0ba8-42da-9e03-f44076f55df7",
+      "transform": {
+        "position": [
+          5.9604643443123e-10,
+          0.004262065049260855,
+          7.450580430390374e-11
+        ],
+        "rotation": [
+          -0.0680166706442833,
+          0.4831852912902832,
+          -0.5840135812759399,
+          0.6487170457839966
+        ],
+        "scale": [
+          0.9999996423721313,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c27c0745-6f48-4220-953a-22bf3a96434f",
+      "name": "Ring2.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "15ec1743-38b9-4b50-98be-61c660f3b09b",
+      "transform": {
+        "position": [
+          5.21540644005114e-10,
+          0.0018936668056994677,
+          2.98023217215615e-10
+        ],
+        "rotation": [
+          -0.0425872802734375,
+          -0.018379447981715202,
+          -0.6999623775482178,
+          0.7126718759536743
+        ],
+        "scale": [
+          1.0,
+          0.9999999403953552,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "94a048ca-fd44-4361-a4e4-68c8faf8d89f",
+      "name": "Ring2.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "c27c0745-6f48-4220-953a-22bf3a96434f",
+      "transform": {
+        "position": [
+          2.2204459996194763e-18,
+          0.0013147523859515786,
+          -1.1102229998097382e-18
+        ],
+        "rotation": [
+          -8.326672684688674e-17,
+          5.204170427930421e-18,
+          -1.0408340855860843e-17,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "b84181b1-5ac3-47d5-942e-e1e894cef2bd",
+      "name": "Shoulder.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "28abe9b4-4406-4e52-820e-a09d0987c037",
+      "transform": {
+        "position": [
+          -0.006368156988173723,
+          0.0029674696270376444,
+          0.0003243909450247884
+        ],
+        "rotation": [
+          -0.012289016507565975,
+          0.053060390055179596,
+          0.9727679491043091,
+          0.22529105842113495
+        ],
+        "scale": [
+          0.9999998211860657,
+          0.9999998807907104,
+          1.0000001192092896
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "0879aa51-9d11-4731-b033-c349aed00b83",
+      "name": "Shoulder.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "b84181b1-5ac3-47d5-942e-e1e894cef2bd",
+      "transform": {
+        "position": [
+          3.5178661619283957e-06,
+          -3.3126771086244844e-06,
+          -4.150958557147533e-05
+        ],
+        "rotation": [
+          0.49752891063690186,
+          -0.5024583339691162,
+          0.5024588108062744,
+          -0.49752962589263916
+        ],
+        "scale": [
+          1.0,
+          0.9999998807907104,
+          0.9999998211860657
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 6
+        }
+      }
+    },
+    {
+      "id": "eed0a431-5742-4841-90e0-7c658c173c10",
+      "name": "UpperArm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "b84181b1-5ac3-47d5-942e-e1e894cef2bd",
+      "transform": {
+        "position": [
+          2.153385525449636e-10,
+          0.0010217777453362942,
+          1.18484423661247e-11
+        ],
+        "rotation": [
+          0.0435723215341568,
+          0.8045700192451477,
+          0.05747793987393379,
+          0.5894614458084106
+        ],
+        "scale": [
+          1.0,
+          0.9999997019767761,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "f8621454-5891-4aee-ab7b-1b062a9688b6",
+      "name": "Arm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "eed0a431-5742-4841-90e0-7c658c173c10",
+      "transform": {
+        "position": [
+          -7.940888463053852e-05,
+          0.003349392442032695,
+          -4.72581377835013e-05
+        ],
+        "rotation": [
+          0.10148204118013382,
+          -0.08723048865795135,
+          -0.7227259874343872,
+          0.6780555844306946
+        ],
+        "scale": [
+          0.22704064846038818,
+          0.22704057395458221,
+          0.22704057395458221
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 7
+        }
+      }
+    },
+    {
+      "id": "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+      "name": "LowerArm.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "eed0a431-5742-4841-90e0-7c658c173c10",
+      "transform": {
+        "position": [
+          1.8626450382086546e-10,
+          0.005752381402999163,
+          -1.0244548542814869e-09
+        ],
+        "rotation": [
+          0.08972542732954025,
+          -0.7050579190254211,
+          0.25501349568367004,
+          0.6555995345115662
+        ],
+        "scale": [
+          0.9999995827674866,
+          0.9999999403953552,
+          0.9999998211860657
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "61acf4b8-de8f-47dd-aa67-f7aa4d1660f3",
+      "name": "Palm2.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+      "transform": {
+        "position": [
+          -5.9604643443123e-10,
+          0.013797169551253319,
+          -8.940696516468449e-10
+        ],
+        "rotation": [
+          -0.03721217066049576,
+          -0.07471846789121628,
+          0.3232538104057312,
+          0.9426236748695374
+        ],
+        "scale": [
+          0.9999998807907104,
+          0.9999999403953552,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "b6bed38c-b59c-4115-8ebc-9fbaeaf64b63",
+      "name": "Middle1.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "61acf4b8-de8f-47dd-aa67-f7aa4d1660f3",
+      "transform": {
+        "position": [
+          5.9604643443123e-10,
+          0.0037119793705642223,
+          -4.4703482582342247e-10
+        ],
+        "rotation": [
+          -0.04367835074663162,
+          -0.010327792726457119,
+          0.5250889658927917,
+          0.8498629927635193
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "5005946d-825c-4728-b376-cadaf21ffd31",
+      "name": "Middle2.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "b6bed38c-b59c-4115-8ebc-9fbaeaf64b63",
+      "transform": {
+        "position": [
+          -2.2351741291171123e-10,
+          0.0018936684355139732,
+          1.490116086078075e-10
+        ],
+        "rotation": [
+          0.034868109971284866,
+          -0.03900551423430443,
+          0.5047189593315125,
+          0.8616968989372253
+        ],
+        "scale": [
+          0.9999998807907104,
+          0.9999997019767761,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "f7de8d9e-408e-4bd8-a5df-c0967cebaba1",
+      "name": "Middle2.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "5005946d-825c-4728-b376-cadaf21ffd31",
+      "transform": {
+        "position": [
+          0.0,
+          0.0013147495919838548,
+          0.0
+        ],
+        "rotation": [
+          -5.551115123125783e-17,
+          5.551115123125783e-17,
+          -5.551115123125783e-17,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "f9bc8bc5-9121-45d2-8ba9-e6748925a8e8",
+      "name": "Thumb.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+      "transform": {
+        "position": [
+          -0.0011636422714218497,
+          0.012689991854131222,
+          0.0017193647800013423
+        ],
+        "rotation": [
+          0.6694647073745728,
+          -0.5870134830474854,
+          -0.27999579906463623,
+          0.3589351773262024
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999996423721313,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "d2f8c606-08c1-41a3-9869-79d07c2fbae2",
+      "name": "Thumb2.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "f9bc8bc5-9121-45d2-8ba9-e6748925a8e8",
+      "transform": {
+        "position": [
+          -5.867332175668594e-10,
+          0.0013667272869497538,
+          -1.7881393032936899e-09
+        ],
+        "rotation": [
+          -0.13557210564613342,
+          0.7351329922676086,
+          0.5946211218833923,
+          -0.2960158586502075
+        ],
+        "scale": [
+          1.0,
+          1.0000007152557373,
+          1.0000007152557373
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "80586865-2993-4c58-97fa-c98539d46765",
+      "name": "Thumb2.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "d2f8c606-08c1-41a3-9869-79d07c2fbae2",
+      "transform": {
+        "position": [
+          0.0,
+          0.0012678442290052772,
+          -2.2204459996194763e-18
+        ],
+        "rotation": [
+          -2.256949153578792e-36,
+          -2.6020852139652106e-18,
+          -8.673617379884035e-19,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "dabb2d07-40bb-44d9-868e-ad44fb8b80a4",
+      "name": "Palm1.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+      "transform": {
+        "position": [
+          -5.9604643443123e-10,
+          0.013797169551253319,
+          -8.940696516468449e-10
+        ],
+        "rotation": [
+          -0.15843671560287476,
+          0.7430613040924072,
+          0.33388185501098633,
+          0.557925283908844
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999998807907104,
+          0.9999999403953552
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "eb45b06a-054b-478f-b4f8-684d0a4db024",
+      "name": "Index.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "dabb2d07-40bb-44d9-868e-ad44fb8b80a4",
+      "transform": {
+        "position": [
+          0.0,
+          0.004224267788231373,
+          1.490116086078075e-10
+        ],
+        "rotation": [
+          -0.5046626329421997,
+          -0.573820948600769,
+          0.1357741355895996,
+          0.6305636763572693
+        ],
+        "scale": [
+          1.0000003576278687,
+          1.0000003576278687,
+          1.0000001192092896
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "5e8a566c-b9f4-4a1a-9807-99fa343d3890",
+      "name": "Index2.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "eb45b06a-054b-478f-b4f8-684d0a4db024",
+      "transform": {
+        "position": [
+          7.450580430390374e-11,
+          0.001893665874376893,
+          -2.2351740458503855e-09
+        ],
+        "rotation": [
+          -0.04186922684311867,
+          -0.012042711488902569,
+          0.5272379517555237,
+          0.8486000895500183
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "02ceb586-9fd5-4fdb-be2a-24b0913bfdc3",
+      "name": "Index2.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "5e8a566c-b9f4-4a1a-9807-99fa343d3890",
+      "transform": {
+        "position": [
+          1.1102229998097382e-18,
+          0.0013147523859515786,
+          0.0
+        ],
+        "rotation": [
+          2.7755575615628914e-17,
+          1.3877787807814457e-17,
+          6.938893903907228e-18,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "ab08a2b6-563c-4f7a-b13c-941d5fb20e9a",
+      "name": "Palm3.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+      "transform": {
+        "position": [
+          -5.9604643443123e-10,
+          0.013797169551253319,
+          -8.940696516468449e-10
+        ],
+        "rotation": [
+          -0.11510854214429855,
+          0.8580546379089355,
+          -0.36312082409858704,
+          -0.34443503618240356
+        ],
+        "scale": [
+          0.9999998807907104,
+          1.0,
+          0.9999999403953552
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "4b7e39f9-410b-4141-be9d-1b273ae5e783",
+      "name": "Ring1.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "ab08a2b6-563c-4f7a-b13c-941d5fb20e9a",
+      "transform": {
+        "position": [
+          -7.450580430390374e-11,
+          0.00426206411793828,
+          8.568167286782113e-10
+        ],
+        "rotation": [
+          0.5752184391021729,
+          0.5529013276100159,
+          0.11674302071332932,
+          0.5914346575737
+        ],
+        "scale": [
+          1.0000001192092896,
+          1.000000238418579,
+          1.0000001192092896
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "40473688-0f81-4eb4-98c8-5a92cd765758",
+      "name": "Ring2.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "4b7e39f9-410b-4141-be9d-1b273ae5e783",
+      "transform": {
+        "position": [
+          2.2351741291171123e-10,
+          0.0018936662236228585,
+          5.9604643443123e-10
+        ],
+        "rotation": [
+          0.1386028230190277,
+          0.024903016164898872,
+          0.4270629584789276,
+          0.8931888341903687
+        ],
+        "scale": [
+          0.9999996423721313,
+          0.9999999403953552,
+          0.9999998807907104
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "b23a7fb3-2083-4b8c-a4fc-178984dd8cc9",
+      "name": "Ring2.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "40473688-0f81-4eb4-98c8-5a92cd765758",
+      "transform": {
+        "position": [
+          0.0,
+          0.0013147523859515786,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          1.3877787807814457e-17,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "86512e11-fc7a-4704-a5db-f5f665bf05b6",
+      "name": "UpperLeg.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+      "transform": {
+        "position": [
+          0.00628246134147048,
+          0.0009622549987398088,
+          -0.0018256090115755796
+        ],
+        "rotation": [
+          0.977612316608429,
+          0.021643847227096558,
+          -0.08342275768518448,
+          0.1919538825750351
+        ],
+        "scale": [
+          1.0,
+          1.0000017881393433,
+          1.0000156164169312
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "cd63d8ef-0129-4317-8606-b7bbc55499aa",
+      "name": "Leg.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "86512e11-fc7a-4704-a5db-f5f665bf05b6",
+      "transform": {
+        "position": [
+          -6.740152457496151e-05,
+          0.0033247864339500666,
+          -2.8693675631075166e-05
+        ],
+        "rotation": [
+          0.7775822877883911,
+          -0.0016216922085732222,
+          0.0025967047549784184,
+          0.6287737488746643
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999930262565613,
+          1.000000238418579
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 8
+        }
+      }
+    },
+    {
+      "id": "4a96c0eb-c685-4e6d-ac0c-de188775df60",
+      "name": "LowerLeg.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "86512e11-fc7a-4704-a5db-f5f665bf05b6",
+      "transform": {
+        "position": [
+          6.891787140972383e-10,
+          0.006110067944973707,
+          -1.490116086078075e-10
+        ],
+        "rotation": [
+          0.3502858877182007,
+          1.1633537155830709e-07,
+          -7.830271897546481e-08,
+          0.9366428256034851
+        ],
+        "scale": [
+          1.0000001192092896,
+          0.9999995827674866,
+          1.0000014305114746
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "9d8c436a-9c79-4cee-97a5-e3e4f37ccdd5",
+      "name": "LowerLeg.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "4a96c0eb-c685-4e6d-ac0c-de188775df60",
+      "transform": {
+        "position": [
+          -6.817817484261468e-05,
+          0.004989797715097666,
+          -0.002520889975130558
+        ],
+        "rotation": [
+          0.636176586151123,
+          -0.001069811754859984,
+          0.002868525916710496,
+          0.7715374231338501
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.9999927282333374,
+          1.000000238418579
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 9
+        }
+      }
+    },
+    {
+      "id": "ae11f1aa-de03-40b6-9e82-3ccc471df4b8",
+      "name": "LowerLeg.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "4a96c0eb-c685-4e6d-ac0c-de188775df60",
+      "transform": {
+        "position": [
+          1.1102229998097382e-18,
+          0.009278596378862858,
+          -5.551114999048691e-19
+        ],
+        "rotation": [
+          -2.7755575615628914e-17,
+          -2.7755575615628914e-17,
+          3.469446951953614e-18,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "5977ca9d-4ab1-4dc8-a69b-a2035630649a",
+      "name": "UpperLeg.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+      "transform": {
+        "position": [
+          -0.006453565787523985,
+          0.0009622549987398088,
+          -0.0018256190232932568
+        ],
+        "rotation": [
+          0.971677303314209,
+          -0.03227996453642845,
+          0.13601066172122955,
+          0.19053174555301666
+        ],
+        "scale": [
+          1.0,
+          1.0000017881393433,
+          1.0000157356262207
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "2da8fb70-df0b-491b-af53-4c683403f26a",
+      "name": "Leg.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "5977ca9d-4ab1-4dc8-a69b-a2035630649a",
+      "transform": {
+        "position": [
+          5.345284807845019e-05,
+          0.0033251766581088305,
+          6.209373532328755e-05
+        ],
+        "rotation": [
+          0.7673865556716919,
+          -0.0016511984867975116,
+          0.0025988128036260605,
+          0.6411773562431335
+        ],
+        "scale": [
+          0.9999999403953552,
+          0.999973475933075,
+          1.000000238418579
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 10
+        }
+      }
+    },
+    {
+      "id": "bdeeda06-e9e2-40f2-bdc7-0ed2ee8bfa86",
+      "name": "LowerLeg.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "5977ca9d-4ab1-4dc8-a69b-a2035630649a",
+      "transform": {
+        "position": [
+          -6.332993573998635e-10,
+          0.006110068876296282,
+          -1.490116086078075e-10
+        ],
+        "rotation": [
+          0.3502858877182007,
+          -2.925784485796612e-07,
+          7.407686553051462e-08,
+          0.9366428256034851
+        ],
+        "scale": [
+          1.0,
+          0.9999995827674866,
+          1.0000011920928955
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "d4a9c954-86f1-44d0-8d62-483cd0aeecc2",
+      "name": "LowerLeg.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "bdeeda06-e9e2-40f2-bdc7-0ed2ee8bfa86",
+      "transform": {
+        "position": [
+          4.707992047769949e-05,
+          0.004990001674741507,
+          -0.0025199386291205883
+        ],
+        "rotation": [
+          0.6361505389213562,
+          -0.0011440552771091461,
+          0.0028583151288330555,
+          0.7715588212013245
+        ],
+        "scale": [
+          1.0,
+          0.9999728798866272,
+          1.0000009536743164
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 11
+        }
+      }
+    },
+    {
+      "id": "5c998411-a7c3-43e7-92c4-e5cdccfe5c43",
+      "name": "LowerLeg.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "bdeeda06-e9e2-40f2-bdc7-0ed2ee8bfa86",
+      "transform": {
+        "position": [
+          0.0,
+          0.009278596378862858,
+          -5.551114999048691e-19
+        ],
+        "rotation": [
+          -5.551115123125783e-17,
+          2.7755575615628914e-17,
+          -6.938893903907228e-18,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "e8eb5122-48c5-4499-a904-468d350e3eb0",
+      "name": "PoleTarget.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "transform": {
+        "position": [
+          0.009135231375694275,
+          0.010580837726593018,
+          0.01709488220512867
+        ],
+        "rotation": [
+          5.283981721281859e-37,
+          1.1920931797249068e-07,
+          -4.432524005425301e-30,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "ee0af587-07d0-4599-895f-7b22b2e1d8e7",
+      "name": "PoleTarget.L_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "e8eb5122-48c5-4499-a904-468d350e3eb0",
+      "transform": {
+        "position": [
+          -1.1102229998097382e-18,
+          0.003091207705438137,
+          0.0
+        ],
+        "rotation": [
+          -4.513898307157584e-36,
+          5.293955920339377e-23,
+          -1.0743411247193395e-29,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "dec83fba-8f2e-4ca2-96c3-9c7e5967b9f4",
+      "name": "Foot.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "transform": {
+        "position": [
+          -0.00636880612000823,
+          0.0003057920839637518,
+          0.0005701399641111493
+        ],
+        "rotation": [
+          5.032641183788655e-07,
+          0.6955496072769165,
+          0.7184780836105347,
+          6.133917054285121e-07
+        ],
+        "scale": [
+          1.0,
+          1.0000003576278687,
+          1.0000001192092896
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "e348dd33-b1d6-47ab-9548-b289e2920951",
+      "name": "Foot.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "dec83fba-8f2e-4ca2-96c3-9c7e5967b9f4",
+      "transform": {
+        "position": [
+          -2.078413854178507e-05,
+          0.0031688297167420387,
+          0.003834450151771307
+        ],
+        "rotation": [
+          8.198653631552588e-07,
+          -0.016212914139032364,
+          0.9998685717582703,
+          2.0802693256882776e-07
+        ],
+        "scale": [
+          1.0,
+          0.9999995827674866,
+          1.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 3
+        }
+      }
+    },
+    {
+      "id": "5085cb0e-5347-406f-b6c2-3df22246af6f",
+      "name": "Foot.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "dec83fba-8f2e-4ca2-96c3-9c7e5967b9f4",
+      "transform": {
+        "position": [
+          0.0,
+          0.0032554897479712963,
+          0.0
+        ],
+        "rotation": [
+          -3.469446951953614e-18,
+          -3.143286327701505e-23,
+          -2.6469779601696886e-23,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "c0e8f923-afdb-426e-bf96-c14d4221105d",
+      "name": "PoleTarget.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+      "transform": {
+        "position": [
+          -0.011009122245013714,
+          0.010580837726593018,
+          0.017094872891902924
+        ],
+        "rotation": [
+          5.284606812500825e-37,
+          1.1920928955078125e-07,
+          -4.433049498419892e-30,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "12fcc310-e0ca-4821-88b8-85794cc6460d",
+      "name": "PoleTarget.R_end",
+      "layer": "default",
+      "tags": [],
+      "parent": "c0e8f923-afdb-426e-bf96-c14d4221105d",
+      "transform": {
+        "position": [
+          0.0,
+          0.003091207705438137,
+          0.0
+        ],
+        "rotation": [
+          4.513898307157584e-36,
+          5.293955920339377e-23,
+          -1.0743936364029794e-29,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "components": {}
+    },
+    {
+      "id": "9daeb798-7987-4490-8e0e-2ceea8b73c80",
+      "name": "Hand.R",
+      "layer": "default",
+      "tags": [],
+      "parent": "6bffb265-dec4-4a58-9f1c-61eb385c72de",
+      "transform": {
+        "position": [
+          -0.0027156369760632515,
+          2.370297431945801,
+          -0.020994147285819054
+        ],
+        "rotation": [
+          -0.7071068286895752,
+          0.0,
+          0.0,
+          0.7071067094802856
+        ],
+        "scale": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 12,
+          "skin": 0,
+          "joints": [
+            "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+            "ab772b6f-0273-45cd-a63f-824e261a8e2e",
+            "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+            "4a43f3d4-1a01-4e42-9afc-afa4dace5ddc",
+            "c75c9ac8-50e9-4d2c-97ed-23c064e98109",
+            "28abe9b4-4406-4e52-820e-a09d0987c037",
+            "0233a735-a164-467c-8157-33c598b123b8",
+            "36afd607-fa11-423f-a7f8-52514b050c83",
+            "db011c33-24a4-485d-8b5a-1a280ec0746a",
+            "6f3c46fc-7938-41c6-b28e-08c9c76aa91e",
+            "60782e10-3f9f-42ac-8715-0c454925d8a3",
+            "dae1d60a-353a-4892-b7fd-e0265c7de12b",
+            "dfe59334-15a0-43e5-b6a9-7b235cc4119b",
+            "a3e4a950-d059-4e6f-8ace-7a7c7826fc5e",
+            "8663d50a-3d97-412e-8e46-f7f0446ff818",
+            "44a2e42a-ca17-4ac7-ad8f-ee729e4faa0d",
+            "beaff661-d18c-4769-bba8-b5b5a4618fda",
+            "262ddd88-e814-48f7-9087-e2565500674a",
+            "69e0b3c2-980a-4515-baf2-b942838d14d5",
+            "cade8981-0ba8-42da-9e03-f44076f55df7",
+            "15ec1743-38b9-4b50-98be-61c660f3b09b",
+            "c27c0745-6f48-4220-953a-22bf3a96434f",
+            "b84181b1-5ac3-47d5-942e-e1e894cef2bd",
+            "eed0a431-5742-4841-90e0-7c658c173c10",
+            "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+            "61acf4b8-de8f-47dd-aa67-f7aa4d1660f3",
+            "b6bed38c-b59c-4115-8ebc-9fbaeaf64b63",
+            "5005946d-825c-4728-b376-cadaf21ffd31",
+            "f9bc8bc5-9121-45d2-8ba9-e6748925a8e8",
+            "d2f8c606-08c1-41a3-9869-79d07c2fbae2",
+            "dabb2d07-40bb-44d9-868e-ad44fb8b80a4",
+            "eb45b06a-054b-478f-b4f8-684d0a4db024",
+            "5e8a566c-b9f4-4a1a-9807-99fa343d3890",
+            "ab08a2b6-563c-4f7a-b13c-941d5fb20e9a",
+            "4b7e39f9-410b-4141-be9d-1b273ae5e783",
+            "40473688-0f81-4eb4-98c8-5a92cd765758",
+            "86512e11-fc7a-4704-a5db-f5f665bf05b6",
+            "4a96c0eb-c685-4e6d-ac0c-de188775df60",
+            "5977ca9d-4ab1-4dc8-a69b-a2035630649a",
+            "bdeeda06-e9e2-40f2-bdc7-0ed2ee8bfa86",
+            "e8eb5122-48c5-4499-a904-468d350e3eb0",
+            "dec83fba-8f2e-4ca2-96c3-9c7e5967b9f4",
+            "c0e8f923-afdb-426e-bf96-c14d4221105d"
+          ]
+        }
+      }
+    },
+    {
+      "id": "e3561328-54db-41be-81e3-ad2de6e659bf",
+      "name": "Hand.L",
+      "layer": "default",
+      "tags": [],
+      "parent": "6bffb265-dec4-4a58-9f1c-61eb385c72de",
+      "transform": {
+        "position": [
+          -0.0027156369760632515,
+          2.370297431945801,
+          -0.020994147285819054
+        ],
+        "rotation": [
+          -0.7071068286895752,
+          0.0,
+          0.0,
+          0.7071067094802856
+        ],
+        "scale": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      },
+      "components": {
+        "mesh": {
+          "asset": "18506b07-dec8-4608-9f9d-78a1f603b149",
+          "mesh_index": 13,
+          "skin": 1,
+          "joints": [
+            "8dd4abf3-5d12-40d0-af37-f0e2ea0a4334",
+            "ab772b6f-0273-45cd-a63f-824e261a8e2e",
+            "417a9e55-dcac-4b25-88fa-2cd3db2cd052",
+            "4a43f3d4-1a01-4e42-9afc-afa4dace5ddc",
+            "c75c9ac8-50e9-4d2c-97ed-23c064e98109",
+            "28abe9b4-4406-4e52-820e-a09d0987c037",
+            "0233a735-a164-467c-8157-33c598b123b8",
+            "36afd607-fa11-423f-a7f8-52514b050c83",
+            "db011c33-24a4-485d-8b5a-1a280ec0746a",
+            "6f3c46fc-7938-41c6-b28e-08c9c76aa91e",
+            "60782e10-3f9f-42ac-8715-0c454925d8a3",
+            "dae1d60a-353a-4892-b7fd-e0265c7de12b",
+            "dfe59334-15a0-43e5-b6a9-7b235cc4119b",
+            "a3e4a950-d059-4e6f-8ace-7a7c7826fc5e",
+            "8663d50a-3d97-412e-8e46-f7f0446ff818",
+            "44a2e42a-ca17-4ac7-ad8f-ee729e4faa0d",
+            "beaff661-d18c-4769-bba8-b5b5a4618fda",
+            "262ddd88-e814-48f7-9087-e2565500674a",
+            "69e0b3c2-980a-4515-baf2-b942838d14d5",
+            "cade8981-0ba8-42da-9e03-f44076f55df7",
+            "15ec1743-38b9-4b50-98be-61c660f3b09b",
+            "c27c0745-6f48-4220-953a-22bf3a96434f",
+            "b84181b1-5ac3-47d5-942e-e1e894cef2bd",
+            "eed0a431-5742-4841-90e0-7c658c173c10",
+            "9fd81c17-3c56-4cb3-8b6d-1d039e6a1f62",
+            "61acf4b8-de8f-47dd-aa67-f7aa4d1660f3",
+            "b6bed38c-b59c-4115-8ebc-9fbaeaf64b63",
+            "5005946d-825c-4728-b376-cadaf21ffd31",
+            "f9bc8bc5-9121-45d2-8ba9-e6748925a8e8",
+            "d2f8c606-08c1-41a3-9869-79d07c2fbae2",
+            "dabb2d07-40bb-44d9-868e-ad44fb8b80a4",
+            "eb45b06a-054b-478f-b4f8-684d0a4db024",
+            "5e8a566c-b9f4-4a1a-9807-99fa343d3890",
+            "ab08a2b6-563c-4f7a-b13c-941d5fb20e9a",
+            "4b7e39f9-410b-4141-be9d-1b273ae5e783",
+            "40473688-0f81-4eb4-98c8-5a92cd765758",
+            "86512e11-fc7a-4704-a5db-f5f665bf05b6",
+            "4a96c0eb-c685-4e6d-ac0c-de188775df60",
+            "5977ca9d-4ab1-4dc8-a69b-a2035630649a",
+            "bdeeda06-e9e2-40f2-bdc7-0ed2ee8bfa86",
+            "e8eb5122-48c5-4499-a904-468d350e3eb0",
+            "dec83fba-8f2e-4ca2-96c3-9c7e5967b9f4",
+            "c0e8f923-afdb-426e-bf96-c14d4221105d"
+          ]
+        }
+      }
+    }
+  ]
+}

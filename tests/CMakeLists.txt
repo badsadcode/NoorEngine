@@ -34,6 +34,7 @@ add_executable(noor_unit_tests
     unit/test_particle_collisions.cpp
     unit/test_sprites.cpp
     unit/test_sprite_animation.cpp
+    unit/test_skinning.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -195,6 +196,21 @@ add_test(NAME render.golden_Particles_Terrain
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Particles_Terrain
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Particles_Terrain PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# Skinned meshes (Milestone 8C, part 1): Ward bound in a T-pose, Ward posed by his joints' own transforms (arms down, a
+# knee and an elbow bent), and the CC0 robot (rigid parts on bones, skinned hands), all casting shadows
+# (tools/samples/add_skinning_scene.py); and what 100 skinned characters cost.
+add_test(NAME render.golden_Skinning
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Skinning.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Skinning.png
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Skinning
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Skinning PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+add_test(NAME render.skinning_cost
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/skinning_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/skinning_cost_check.cmake)
+set_tests_properties(render.skinning_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
 # Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
 # from Lua in the project and in a built game (the same moments), and from C# in the built game.
 if(TARGET noor_scripting_managed)

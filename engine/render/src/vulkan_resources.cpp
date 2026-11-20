@@ -21,6 +21,7 @@ Status Renderer::Impl::create_allocator() {
     allocator_info.device = device;
     allocator_info.instance = instance;
     allocator_info.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocator_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;  // skinned meshes (8C)
     NOOR_VK_TRY(vmaCreateAllocator(&allocator_info, &allocator));
     return {};
 }
@@ -532,6 +533,25 @@ Result<MeshHandle> Renderer::Impl::create_mesh(const MeshData& data) {
     }
     mesh.index_count = static_cast<std::uint32_t>(data.indices.size());
     mesh.bytes = data.vertices.size_bytes() + data.indices.size_bytes();
+    // A skinned mesh (8C): its skin data in a buffer of its own, read by the vertex shader through its address.
+    if (!data.skin.empty()) {
+        if (data.skin.size() != data.vertices.size()) {
+            destroy_buffer(mesh.vertices);
+            destroy_buffer(mesh.indices);
+            return fail(ErrorCode::InvalidArgument, std::format("Skin data for {} vertices, the mesh has {}", data.skin.size(), data.vertices.size()));
+        }
+        if (auto s = upload_to_device(data.skin.data(), data.skin.size_bytes(),
+                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, mesh.skin);
+            !s) {
+            destroy_buffer(mesh.vertices);
+            destroy_buffer(mesh.indices);
+            return std::unexpected(s.error());
+        }
+        VkBufferDeviceAddressInfo address{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+        address.buffer = mesh.skin.buffer;
+        mesh.skin_address = vkGetBufferDeviceAddress(device, &address);
+        mesh.bytes += data.skin.size_bytes();
+    }
     {
         // Bounding sphere: the box's centre, and the farthest vertex from it.
         math::Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
@@ -545,6 +565,7 @@ Result<MeshHandle> Renderer::Impl::create_mesh(const MeshData& data) {
     mesh.alive = true;
     const std::string label = data.debug_name.empty() ? std::string("Mesh") : std::string(data.debug_name);
     set_name(VK_OBJECT_TYPE_BUFFER, mesh.vertices.buffer, label + " vertices");
+    if (mesh.skin.buffer != VK_NULL_HANDLE) set_name(VK_OBJECT_TYPE_BUFFER, mesh.skin.buffer, label + " skin");
     set_name(VK_OBJECT_TYPE_BUFFER, mesh.indices.buffer, label + " indices");
 
     for (std::uint32_t i = 0; i < meshes.size(); ++i) {
@@ -565,6 +586,7 @@ void Renderer::Impl::destroy_mesh(MeshHandle handle) {
     GpuMesh& mesh = meshes[handle.id - 1];
     destroy_buffer(mesh.vertices);
     destroy_buffer(mesh.indices);
+    destroy_buffer(mesh.skin);
     mesh = {};
 }
 

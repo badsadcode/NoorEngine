@@ -1,0 +1,43 @@
+# What skinning costs (Milestone 8C, part 1, ADR-036): render_scenes/Skinning_Crowd (100 posed Wards, 17 joints each,
+# skinned in the vertex shader, casting shadows) against Skinning_Empty (the same floor, sun and camera). Judged on each
+# run's fastest GPU frame, like the other GPU cost tests. Budgets: GPU 1 ms over the empty scene (measured 0.19);
+# gathering the scene 4 ms of CPU (measured 1.2: 1,900 entities, bones included, about 0.6 us each).
+#   -DPLAYER=<noor_player> -DPROJECT=<render_scenes> -DWORK=<folder>
+file(MAKE_DIRECTORY "${WORK}")
+function(run scene report)
+    file(REMOVE "${report}")
+    execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene ${scene} --frames 300 --no-audio --no-input --report "${report}" --log "${report}.log"
+                    RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+    if(NOT code EQUAL 0 OR NOT EXISTS "${report}")
+        message(FATAL_ERROR "noor_player failed on ${scene} (${code}); see ${report}.log")
+    endif()
+endfunction()
+function(microseconds value out)  # "1.234" ms -> 1234
+    string(REGEX REPLACE "^([0-9]+)[.]?([0-9]*).*" "\\1" whole "${value}")
+    string(REGEX REPLACE "^([0-9]+)[.]?([0-9]*).*" "\\2000" frac "${value}")
+    string(SUBSTRING "${frac}" 0 3 frac)
+    math(EXPR us "${whole} * 1000 + ${frac}")
+    set(${out} ${us} PARENT_SCOPE)
+endfunction()
+run(Scenes/Skinning_Empty.noorscene "${WORK}/empty.json")
+run(Scenes/Skinning_Crowd.noorscene "${WORK}/crowd.json")
+file(READ "${WORK}/empty.json" empty)
+file(READ "${WORK}/crowd.json" crowd)
+string(JSON empty_gpu GET "${empty}" timing_ms gpu min)
+string(JSON crowd_gpu GET "${crowd}" timing_ms gpu min)
+string(JSON crowd_collect GET "${crowd}" timing_ms collect median)
+string(JSON errors GET "${crowd}" errors)
+microseconds(${empty_gpu} empty_us)
+microseconds(${crowd_gpu} crowd_us)
+microseconds(${crowd_collect} collect_us)
+math(EXPR extra "${crowd_us} - ${empty_us}")
+message(STATUS "skinning: 100 characters +${extra} us of GPU; gathering the scene ${collect_us} us")
+if(NOT errors EQUAL 0)
+    message(FATAL_ERROR "errors were logged: see ${WORK}/crowd.json.log")
+endif()
+if(extra GREATER 1000)
+    message(FATAL_ERROR "100 skinned characters cost ${extra} us of GPU a frame (budget 1000)")
+endif()
+if(collect_us GREATER 4000)
+    message(FATAL_ERROR "gathering the 100-character scene took ${collect_us} us (budget 4000)")
+endif()

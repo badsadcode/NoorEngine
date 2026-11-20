@@ -12,6 +12,7 @@
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -35,9 +36,20 @@ struct Submesh {
     int material = -1;  // index into ImportedModel::materials, -1: the default material
 };
 
+// The most joints a skin may have (the renderer's palette per draw).
+inline constexpr std::size_t kMaxSkinJoints = 256;
+
+// How a vertex follows a skeleton (Milestone 8C, ADR-036): up to four joints (indices into its skin's joints) and
+// their weights, which add up to 1. The strongest four of glTF's JOINTS_0/1 and WEIGHTS_0/1, renormalised.
+struct SkinWeights {
+    std::array<std::uint16_t, 4> joints{};
+    math::Vec4 weights{1, 0, 0, 0};
+};
+
 struct ImportedMesh {
     std::string name;
     std::vector<MeshVertex> vertices;
+    std::vector<SkinWeights> skin;       // one per vertex for a skinned mesh, else empty
     std::vector<std::uint32_t> indices;  // triangle list
     std::vector<Submesh> submeshes;      // cover all indices, in order
     [[nodiscard]] std::uint64_t triangles() const noexcept { return indices.size() / 3; }
@@ -50,6 +62,7 @@ struct ImportedNode {
     math::Quat rotation{};
     math::Vec3 scale{1, 1, 1};
     int mesh = -1;  // index into ImportedModel::meshes
+    int skin = -1;  // index into ImportedModel::skins: the mesh is skinned by it (the node's own transform is then ignored)
     Json noor;      // the node's extras.noor block (Noor Interchange), or null
 
     [[nodiscard]] bool is_collision() const { return noor.is_object() && noor.contains("collision"); }
@@ -69,8 +82,17 @@ struct ImportedMaterial {
     Material material;
 };
 
+// A skeleton as glTF gives it: its joints (nodes) and, for each, the matrix that takes the mesh from where it was
+// bound into that joint's space. A vertex is drawn at sum(weight x world(joint) x inverse_bind(joint) x position).
+struct ImportedSkin {
+    std::string name;
+    std::vector<int> joints;               // indices into ImportedModel::nodes
+    std::vector<math::Mat4> inverse_bind;  // one per joint (identity where the file gives none)
+};
+
 struct ImportedModel {
     std::vector<ImportedNode> nodes;  // parents always come before their children
+    std::vector<ImportedSkin> skins;
     std::vector<ImportedMesh> meshes;
     std::vector<ImportedMaterial> materials;
     std::vector<ImportedImage> images;
