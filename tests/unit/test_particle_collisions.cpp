@@ -2,6 +2,7 @@
 // deaths, and budgets. Everything here is deterministic like the rest of NoorFX: the same scene, the same particles.
 #include "noor/fx/particle_system.h"
 #include "noor/fx/particles.h"
+#include "noor/game/game.h"
 #include "noor/game/particle_ground.h"
 #include "noor/runtime/world.h"
 #include "noor/terrain/terrain.h"
@@ -175,4 +176,27 @@ TEST_CASE("particle budgets: 50 emitters asking for 150,000 particles get the sc
     MESSAGE("50 emitters, budget 20000: " << st.particles << " alive, " << st.throttled << " held back, worst step " << worst << " ms");
     const auto [again, most2] = play(300, nullptr);
     CHECK(again.fingerprint == st.fingerprint);  // the budget is shared out the same way every run
+}
+
+TEST_CASE("effect wind: a weather zone's wind reaches effect particles, as much as the zone is on") {
+    // A calm scene; a storm zone round the camera whose weight a script would roll in. Its wind: 7 m/s towards +X.
+    scene::Scene s;
+    scene::Entity env, cam, zone;
+    env.id = Guid::generate();
+    env.components["environment"] = {{"sky", "atmosphere"}, {"wind_speed", 0}};
+    cam.id = Guid::generate();
+    cam.components["camera"] = Json::object();
+    zone.id = Guid::generate();
+    zone.components["weather_zone"] = {{"shape", "box"}, {"size", {100, 100, 100}}, {"blend", 1}, {"weight", 0.0},
+                                       {"environment", {{"wind_speed", 7}, {"wind_direction", 90}}}};
+    s.entities = {env, cam, zone};
+    runtime::World world(s);
+    const game::AssetPath none;
+    CHECK(math::length(game::effect_wind(world, none)) == doctest::Approx(0.0f));
+    world.find(zone.id)->components["weather_zone"]["weight"] = 1.0;
+    const auto full = game::effect_wind(world, none);
+    CHECK(full.x == doctest::Approx(7.0f).epsilon(1e-4));
+    CHECK(full.z == doctest::Approx(0.0f).epsilon(1e-4));
+    world.find(zone.id)->components["weather_zone"]["weight"] = 0.5;
+    CHECK(math::length(game::effect_wind(world, none)) == doctest::Approx(3.5f).epsilon(1e-3));  // halfway in, half the wind
 }

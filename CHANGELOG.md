@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8B, part 8: the sample and the 8B review
+**Added**
+- **The 8B sample:** `samples/Hillside/Scenes/Hillside_Storm.noorscene` (`tools/samples/add_hillside_storm.py`,
+  through the editor API): a storm rolling into the evening valley (a weather zone faded in by
+  `Scripts/storm_roll.luau`), a campfire from the Fire, Smoke and Sparks presets (sparks landing on the hillside), and
+  Coth walking round it (`Scripts/coth_circle.luau`, an 8-direction sprite on a character controller). The sample's
+  `Assets/Effects` and `Assets/Sprites` (Coth's sheet, with permission).
+- `tools/samples/measure_hillside_storm.py`: the sample's cost, ingredient by ingredient, and twenty campfires.
+- `game::effect_wind`; `ParticleSystem::Options::wind`.
+- **The 8B review** ([M8B_REVIEW.md](docs/milestones/M8B_REVIEW.md)).
+
+**Fixed:** effect particles ignored weather zones' wind (the storm's rain blew, the campfire's smoke didn't); the
+particle system read the environment file from disk every fixed step.
+
+**Tests:** golden `Hillside_Storm`; unit test "effect wind".
+
 ### 2026-11-20 — Milestone 8B, part 7: gameplay particles
 **Added**
 - **Particle collisions** (`collide`): the scene's terrains (`game::ParticleGround`, the drawn surface) and planes;

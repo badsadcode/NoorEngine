@@ -1,0 +1,66 @@
+{
+  "noor_sprite": 1,
+  "name": "Coth",
+  "texture": "1609812b-d6cd-4859-90fd-3796d0c81c7c",
+  "grid": {
+    "columns": 8,
+    "rows": 6,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.078125
+  ],
+  "pixels_per_metre": 64,
+  "filter": "linear",
+  "animations": {
+    "idle": {
+      "frames": [
+        0
+      ],
+      "fps": 2,
+      "loop": true
+    },
+    "walk": {
+      "frames": [
+        8,
+        16
+      ],
+      "fps": 6,
+      "loop": true
+    },
+    "windup": {
+      "frames": [
+        24
+      ],
+      "fps": 4,
+      "loop": false
+    },
+    "attack": {
+      "frames": [
+        32
+      ],
+      "fps": 6,
+      "loop": false
+    },
+    "hurt": {
+      "frames": [
+        40
+      ],
+      "fps": 4,
+      "loop": false,
+      "directional": false
+    },
+    "die": {
+      "frames": [
+        40,
+        44
+      ],
+      "fps": 3,
+      "loop": false,
+      "directional": false
+    }
+  },
+  "directions": 8
+}

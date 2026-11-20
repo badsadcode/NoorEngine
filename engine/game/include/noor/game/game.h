@@ -205,6 +205,11 @@ struct SceneView {
 // Finds a model asset's file from the `mesh` component's asset id.
 using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid& asset)>;
 
+// The wind effect particles feel in a running world (Milestone 8B, part 8): the first environment's "wind_speed" and
+// "wind_direction" with the weather zones blended in, judged from the first camera like the rest of the weather.
+// m/s, world space, blowing towards the direction (0 = -Z, 90 = +X).
+[[nodiscard]] math::Vec3 effect_wind(runtime::World& world, const AssetPath& asset_path);
+
 // `scene` must be expanded (no prefab instances left), e.g. World::scene(). `render_poses`
 // (World::render_poses()) replaces the world matrices of entities physics moves with where to draw
 // them this frame; their children (a player's camera) follow.

@@ -170,6 +170,7 @@ EmitterSet::Stats EmitterSet::stats() const {
 ParticleSystem::ParticleSystem(Options options) : options_(std::move(options)) {}
 
 math::Vec3 ParticleSystem::wind(runtime::World& world) const {
+    if (options_.wind) return options_.wind(world);
     for (const auto& e : world.scene().entities) {
         if (!e.has("environment") || !e.components.at("environment").is_object()) continue;
         Json env = e.components.at("environment");

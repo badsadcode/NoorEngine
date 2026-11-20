@@ -11,8 +11,8 @@ each ending in its own review, like Milestone 7 ended in one.
 | Group | What | Status |
 |---|---|---|
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
-| **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Next** ([parts below](#8b-particles-and-sprites), proposed) |
-| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | Planned |
+| **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
+| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Next** (its plan comes first) |
 | **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | Planned |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
@@ -230,7 +230,7 @@ Fantasy Crisp, and Alien World in phase C), environment graphs and Lua drivers.
 | 5 ✅ | **Sprites:** the `.noorsprite` asset and slicer, the `sprite` component (billboard modes, cutout, shadows, filtering), flipbook animation | A sliced sheet's frames match their grid exactly (unit test); goldens of sprites in light and in shadow; an editor smoke test slices a sheet and previews an animation |
 | 6 ✅ | **8-direction characters and scripts:** direction rows from the camera angle, `play`/speed/events from Lua and C#, emitters from scripts (bursts, parameters) | A sprite walking a circle shows each of the 8 directions in turn (frame indices checked per frame); a script plays walk, then attack, and gets the end event; the same in a built game |
 | 7 ✅ | **Gameplay particles:** collisions (ground, terrain, physics planes), sub-emitters on events (a spark hits the ground, a splash), budgets (a cap per emitter and per scene, distance culling) | Particles stop on the terrain, not through it (unit and golden); sub-emitters fire on hits deterministically; a 50-emitter scene stays within its budget (measured) |
-| 8 | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
+| 8 ✅ | **Sample + review:** a stormy evening on Hillside (rain, a weather zone, a campfire with smoke and sparks, a sprite creature walking about), a particle-heavy benchmark scene, performance notes, the 8B review | The 8B gate |
 
 ## Part 1 result (2026-11-19)
 Done. A new module, `engine/fx` (NoorFX): the `emitter` component and `.noorfx` assets (importer `fx`, overrides like
@@ -320,6 +320,15 @@ splashing); `render.particles_cost` (50 fountains: 98,750 of a 100,000 budget, 1
 0.18 ms); the editor smoke test (a death sub-emitter appears in the preview and is muted with its fire). Not done:
 collisions with physics bodies (boxes, models); sub-emitters of sub-emitters; a per-scene budget setting (the 100,000
 is fixed for now); the editor's preview has no scene budget.
+
+## Part 8 result (2026-11-20)
+Done. The 8B sample: `Hillside_Storm` (tools/samples/add_hillside_storm.py, through the editor API): a storm rolling
+into the Dusk valley (a weather zone faded in by a script: rain, wind, low cloud, fog), a campfire from the Fire,
+Smoke and Sparks presets (the sparks landing on the hillside), and Coth walking round it on a character controller;
+a golden. Performance notes from `tools/samples/measure_hillside_storm.py`, and a particle-heavy benchmark on the
+sample (twenty campfires). The sample found that effect particles ignored weather zones' wind and that the particle
+system read the environment file every step: both fixed (`game::effect_wind`, tested). The review:
+[M8B_REVIEW.md](M8B_REVIEW.md).
 
 ## Open questions
 

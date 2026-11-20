@@ -390,6 +390,19 @@ foreach(name IN ITEMS Rain Snow)
     set_tests_properties(render.golden_Hillside_${name} PROPERTIES LABELS "gpu;render;sample" TIMEOUT 180 RESOURCE_LOCK hillside_cache
                          FIXTURES_REQUIRED hillside_cooked)
 endforeach()
+# The 8B sample (Milestone 8B, part 8): a stormy evening on Hillside (tools/samples/add_hillside_storm.py): the storm
+# rolls in (a weather zone faded in by a script: rain, wind, low cloud, fog), a campfire (the Fire, Smoke and Sparks
+# presets, the sparks landing on the hillside) and Coth walking round it (an 8-direction sprite on a character
+# controller). Five and a half seconds in.
+add_test(NAME render.golden_Hillside_Storm
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Storm.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Storm.png -DFRAMES=330
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Storm
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Storm PROPERTIES LABELS "gpu;render;sample" TIMEOUT 240 RESOURCE_LOCK "hillside_cache;gpu_timing"
+                     FIXTURES_REQUIRED hillside_cooked)
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).
 add_test(NAME cli.cook_hillside COMMAND $<TARGET_FILE:noor_cli> cook ${PROJECT_SOURCE_DIR}/samples/Hillside)
@@ -459,6 +472,14 @@ add_test(NAME player.hillside_walk
     COMMAND ${CMAKE_COMMAND} "-DPLAYER=${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game/Hillside.exe" -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside
         -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_check.cmake)
 set_tests_properties(player.hillside_walk PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120 FIXTURES_REQUIRED built_hillside_game)
+# The 8B sample (Milestone 8B, part 8): the stormy evening plays the same in the built game as in the project
+# (particles to the bit, spark landings, Coth walking).
+add_test(NAME player.hillside_storm
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game/Hillside.exe"
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside_storm
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_storm_check.cmake)
+set_tests_properties(player.hillside_storm PROPERTIES LABELS "gpu;player;sample" TIMEOUT 240 FIXTURES_REQUIRED "built_hillside_game;hillside_cooked"
+                     RESOURCE_LOCK "hillside_cache;gpu_timing")  # heavy: not beside the timing tests
 # The judge must notice a different picture: today's daylight against the sunset reference fails.
 add_test(NAME render.golden_catches_a_change
     COMMAND noor_image_compare ${CMAKE_CURRENT_BINARY_DIR}/render_golden_Daylight/screenshot.bmp

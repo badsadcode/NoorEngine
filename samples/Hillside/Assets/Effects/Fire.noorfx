@@ -1,0 +1,63 @@
+{
+  "noor_fx": 1,
+  "name": "Fire",
+  "emitter": {
+    "rate": 90,
+    "shape": {
+      "type": "cone",
+      "angle": 15,
+      "radius": 0.25
+    },
+    "lifetime": [
+      0.4,
+      0.8
+    ],
+    "speed": [
+      0.8,
+      1.6
+    ],
+    "gravity": -0.3,
+    "drag": 1.0,
+    "size": [
+      [
+        0,
+        0.5
+      ],
+      [
+        1,
+        0.12
+      ]
+    ],
+    "color": [
+      [
+        0,
+        "#FFE0A0"
+      ],
+      [
+        0.5,
+        "#FF7020"
+      ],
+      [
+        1,
+        "#801000"
+      ]
+    ],
+    "alpha": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    "seed": 1,
+    "max_particles": 500,
+    "render": {
+      "blend": "additive",
+      "emission": 8000
+    }
+  },
+  "preset": "Fire"
+}

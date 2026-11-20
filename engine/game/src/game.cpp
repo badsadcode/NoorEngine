@@ -226,6 +226,9 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         }
         return cache->ground.query();
     };
+    // Their wind is the one the weather has: the scene's environment with its weather zones blended in (a storm
+    // rolling in blows the smoke about, not just the rain).
+    fx_options.wind = [asset_path = registry_asset_path(project, registry)](runtime::World& w) { return effect_wind(w, asset_path); };
     world->add_system(std::make_unique<fx::ParticleSystem>(std::move(fx_options)));
     // Sprite animations played by scripts: their end events (Milestone 8B, part 6).
     world->add_system(std::make_unique<SpriteAnimationSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
@@ -311,7 +314,49 @@ math::Vec3 color_of(const Json& primitive, math::Vec3 color = {0.55f, 0.52f, 0.6
     }
 }
 
+math::Vec3 effect_wind_of(runtime::World& world, const AssetPath& asset_path) {
+    const auto& entities = world.scene().entities;
+    const scene::Entity* env_entity = nullptr;
+    math::Vec3 viewer{0, 0, 0};  // the first camera judges the zones, as for the sky
+    bool have_viewer = false;
+    for (const auto& e : entities) {
+        if (!env_entity && e.has("environment") && e.components.at("environment").is_object()) env_entity = &e;
+        if (!have_viewer && e.has("camera") && e.components.at("camera").is_object())
+            if (const auto m = runtime::api::world_matrix(world, e.id)) {
+                viewer = m->transform_point({0, 0, 0});
+                have_viewer = true;
+            }
+    }
+    if (!env_entity) return {0, 0, 0};
+    Json en = resolved_environment(env_entity->components.at("environment"), asset_path);  // cached by file and time
+    struct Applied {
+        float priority, weight;
+        const Json* zone;
+    };
+    std::vector<Applied> zones;
+    for (const auto& e : entities) {
+        if (!e.has("weather_zone") || !e.components.at("weather_zone").is_object()) continue;
+        const Json& z = e.components.at("weather_zone");
+        const auto m = runtime::api::world_matrix(world, e.id);
+        const float w = weather_zone_weight(z, m ? *m : math::Mat4::identity(), viewer);
+        if (w > 0.0f) zones.push_back({number(z, "priority", 0.0f), w, &z});
+    }
+    std::ranges::stable_sort(zones, [](const Applied& a, const Applied& b) { return a.priority < b.priority; });
+    for (const Applied& a : zones) {
+        const Json& z = *a.zone;
+        Json settings = Json::object();
+        if (z.contains("environment") && z["environment"].is_string()) settings = resolved_environment(Json{{"asset", z["environment"]}}, asset_path);
+        else if (z.contains("environment") && z["environment"].is_object()) settings = z["environment"];
+        en = asset::blend_environments(en, settings, a.weight);
+    }
+    const float speed = std::max(0.0f, number(en, "wind_speed", 0.0f));
+    const float angle = number(en, "wind_direction", 0.0f) * 3.14159265f / 180.0f;
+    return {fx::det_sin(angle) * speed, 0.0f, -fx::det_cos(angle) * speed};  // towards the direction (0 = -Z), as the clouds
+}
+
 } // namespace
+
+math::Vec3 effect_wind(runtime::World& world, const AssetPath& asset_path) { return effect_wind_of(world, asset_path); }
 
 SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, const std::unordered_map<Guid, math::Mat4>* render_poses,
                        const std::filesystem::path& project_root) {

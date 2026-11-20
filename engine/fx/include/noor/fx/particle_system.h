@@ -71,6 +71,9 @@ public:
         std::function<GroundQuery(runtime::World&)> ground;
         // The most effect particles the scene may have at once (part 7): spawning stops there until some die.
         std::uint32_t max_particles = 100000;
+        // The wind for this step (m/s, world). Games give the scene's environment with its weather zones blended in
+        // (game::make_world); empty: the first environment component's own "wind_speed" and "wind_direction".
+        std::function<math::Vec3(runtime::World&)> wind;
     };
     explicit ParticleSystem(Options options = {});
 

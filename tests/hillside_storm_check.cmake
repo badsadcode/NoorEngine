@@ -1,0 +1,38 @@
+# The 8B sample in a built game (Milestone 8B, part 8): samples/Hillside's stormy evening (Hillside_Storm: the storm
+# rolling in, the campfire's three effects, the sparks landing on the hillside, Coth walking round the fire on a
+# character controller) runs 330 frames in the project and in the built Hillside game, and must play the same: the
+# same particles to the bit (positions, velocities, ages), the same number of spark landings, Coth playing the walk.
+#   -DPLAYER=<noor_player> -DGAME=<the built Hillside.exe> -DPROJECT=<samples/Hillside> -DWORK=<folder>
+file(REMOVE_RECURSE "${WORK}")
+file(MAKE_DIRECTORY "${WORK}")
+set(args --scene Scenes/Hillside_Storm.noorscene --frames 330 --no-audio --no-input)
+execute_process(COMMAND "${PLAYER}" "${PROJECT}" ${args} --report "${WORK}/project.json" --log "${WORK}/project.log"
+                RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+if(NOT code EQUAL 0 OR NOT EXISTS "${WORK}/project.json")
+    message(FATAL_ERROR "noor_player failed on the sample (${code}); see ${WORK}/project.log")
+endif()
+execute_process(COMMAND "${GAME}" ${args} --report "${WORK}/game.json" --log "${WORK}/game.log" RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
+if(NOT code EQUAL 0 OR NOT EXISTS "${WORK}/game.json")
+    message(FATAL_ERROR "the built Hillside game failed (${code}); see ${WORK}/game.log")
+endif()
+file(READ "${WORK}/project.json" a)
+file(READ "${WORK}/game.json" b)
+foreach(side a b)
+    string(JSON ${side}_emitters GET "${${side}}" particles emitters)
+    string(JSON ${side}_alive GET "${${side}}" particles alive)
+    string(JSON ${side}_print GET "${${side}}" particles fingerprint)
+    string(JSON ${side}_hits GET "${${side}}" particles hits)
+    string(JSON ${side}_anim GET "${${side}}" sprites entities 0 animation)
+    string(JSON ${side}_errors GET "${${side}}" errors)
+endforeach()
+message(STATUS "project:    ${a_emitters} emitters, ${a_alive} particles, ${a_hits} landings, fingerprint ${a_print}, Coth: ${a_anim}")
+message(STATUS "built game: ${b_emitters} emitters, ${b_alive} particles, ${b_hits} landings, fingerprint ${b_print}, Coth: ${b_anim}")
+if(NOT a_errors EQUAL 0 OR NOT b_errors EQUAL 0)
+    message(FATAL_ERROR "errors were logged: see ${WORK}/project.log and ${WORK}/game.log")
+endif()
+if(NOT a_emitters EQUAL 3 OR a_alive LESS 50 OR a_hits LESS 50 OR NOT a_anim STREQUAL "walk")
+    message(FATAL_ERROR "the storm isn't playing in the project (3 emitters, dozens of particles and landings, Coth walking expected)")
+endif()
+if(NOT a_print STREQUAL b_print OR NOT a_hits EQUAL b_hits OR NOT a_anim STREQUAL b_anim)
+    message(FATAL_ERROR "the built game's storm differs from the project's")
+endif()

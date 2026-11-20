@@ -46,6 +46,11 @@ nine built-in environment presets, each applied through the editor API like the 
 ringed planet, a small moon and two suns. `tools/samples/measure_hillside_skies.py` prints what each sky costs.
 `tools/samples/add_hillside_weather.py` (Milestone 8B) adds `Scenes/Weather/`: the valley in rain and in snow,
 the Overcast environment with the weather written beside it as overrides.
+`tools/samples/add_hillside_storm.py` (the 8B sample) adds `Scenes/Hillside_Storm.noorscene`: a storm rolling into
+the evening valley (a weather zone that `Scripts/storm_roll.luau` fades in), a campfire from the Fire, Smoke and Sparks
+presets (`Assets/Effects`, the sparks landing on the hillside), and Coth from The Uncounted walking round it
+(`Scripts/coth_circle.luau`, an 8-direction sprite on a character controller; `Assets/Sprites`).
+`tools/samples/measure_hillside_storm.py` prints what it costs, ingredient by ingredient.
 Doing it by hand in the editor takes the same steps, with a mouse.
 
 The meadow is `Assets/Materials/meadow.noormat`, a material instance of Leafy Grass with a greener
@@ -60,6 +65,8 @@ base colour (Poly Haven's Leafy Grass is autumn-coloured).
   `gate.hillside_forest_generate_equals_cook`: the same bytes as the editor's cook.
 - `cli.build_hillside` + `player.hillside_walk`: a built game; the walker must end inside the house,
   standing on its floor (it does: it walks until it meets the inside of the north wall).
+- `render.golden_Hillside_Storm` and `player.hillside_storm`: the stormy evening's picture, and the built game playing
+  it exactly as the project does.
 - `api: …the Hillside sample opens, and its house exports…`: the house exports as a GLB with a
   collision node, and reads back with the same triangles.
 
@@ -75,4 +82,6 @@ The oaks, rocks and grass: NoorMD's NoorForm (Bad Ideas Works, MIT), converted t
 by `tools/interchange/noormd_engine_export.py` (an oak about 6.8 MB with its four levels, a rock 0.9 MB, a grass
 clump under 0.1 MB).
 
-The scene, materials, terrain layers, graph and script are MIT like the rest of the repository.
+Coth's sprite sheet (`Assets/Sprites/coth.png`): Tom's art from The Uncounted, published here with his permission.
+
+The scene, materials, terrain layers, graph and scripts are MIT like the rest of the repository.
