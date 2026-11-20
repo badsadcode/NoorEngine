@@ -4,6 +4,14 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — The order from here
+**Docs**
+- [M9_PLAN.md](docs/milestones/M9_PLAN.md#the-order-from-here-sage-2026-11-20): Tom's list of game types, what each
+  needs that the engine lacks, and the order: 2D and 2.5D foundations, then gameplay foundations (spawning, timers,
+  game UI, saving, level changes, navigation: a change to the spec's roadmap, explained), then 9A part 2 onwards.
+- IDEAS: NoorFengShui (furnishing rooms, from Baltic Drive) as an independent generator. LUA_API.md: the "not yet" list
+  no longer says Milestone 4 will deliver it.
+
 ### 2026-11-20 — Milestone 9A, part 1: orthographic cameras, NoorPong and the yardsticks
 **Added**
 - Orthographic cameras: `"projection": "orthographic"`, `"height"`, `"far"` on the `camera` component;

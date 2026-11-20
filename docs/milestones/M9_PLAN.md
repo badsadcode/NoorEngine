@@ -48,6 +48,10 @@ someone wants to make Pong in NoorEngine, they should be able to (and 9A part 1 
 | **The showcase** | NoorWorldShowcase: a generated, explorable, streamed world: terrain and biomes, forests, a lake and river, roads and bridges, a small village of generated buildings, sky and weather, the generation graphs open, manual edits surviving regeneration, Alden exploring it. The milestone's gate review | Planned |
 | ~~9F: GIS~~ | **Deferred to a later milestone** (Tom and Noor). Milestone 9 must not block it: see [Ready for GIS](#ready-for-gis-later) | Later |
 
+**The order changed after 9A part 1** (2026-11-20): Tom asked for 2D, 2.5D and isometric games too and left the order to
+me. Next come 2D foundations, then gameplay foundations (spawning, UI, saving, navigation), then back to 9A part 2. Why:
+[The order from here](#the-order-from-here-sage-2026-11-20).
+
 The game Milestone 9 serves first is the **NoorWorldShowcase**, with a Thornwake-style procedural landscape as the
 technical reference: a world that feels geographically coherent, where terrain, water, vegetation and settlements
 shape each other. Nothing in the engine may become Thornwake-specific. The same systems must serve The Uncounted,
@@ -256,11 +260,46 @@ shadow maps included even with shadows off; an empty see-through pass costs abou
 frame is the draw list (5.1 ms, the scattered forest), not the gather (0.17 ms), so part 3's cache now covers the draw
 list too.
 
-## Proposed next: foundations for 2D, 2.5D and isometric games (Tom, 2026-11-20)
+## The order from here (Sage, 2026-11-20)
 
-Tom asked for 2D, 2.5D and isometric games to be possible too, before going back to big 3D worlds. Part 1 laid the first
-stone (the orthographic camera, NoorPong). This is what I'd build next, as its own small group between 9A part 1 and
-part 2, because none of it depends on big worlds and all of it is additive (the yardsticks and every golden guard 3D):
+Tom listed the games he wants NoorEngine for: 2D platformers; first-person action and RPGs; third-person action and
+adventure; RPGs in general; dungeon crawlers; open-world survival; driving; isometric action RPGs (Diablo- and
+Torchlight-like); "pretty much every game type". He asked me to choose the order and explain it. The rule I used is the
+spec's own first question for choosing a task (29.2): **does it unlock several other things?** So: what do the most games
+on that list need that the engine doesn't have yet?
+
+| Missing today | Games on the list that need it |
+|---|---|
+| **Spawning things at runtime** (a bullet, an enemy, a pickup: prefabs from scripts), timers, scripts using other scripts (`require`), moving between levels | Every one of them (M4's review left these as exceptions "until the first game needs them") |
+| **Navigation and AI**: finding a path round walls, agents that follow it | FPS enemies, RPGs, dungeon crawlers, third-person action, isometric action RPGs, survival (animals), driving (traffic) |
+| **Game UI**: menus, buttons, inventory grids, dialogue boxes (today: text and rectangles drawn each frame) | Every game's main menu; RPGs, crawlers, survival and isometric RPGs above all |
+| **Saving and loading a game** | RPGs, adventures, crawlers, survival, open worlds |
+| **2D**: plane physics, sprite layers, tilemaps, a 2D editor view | 2D platformers, Diablo-1-style isometric games, The Uncounted |
+| **Big worlds**: coordinates, streaming (the rest of 9A) | Open-world survival, driving, big RPGs |
+| **Vehicles** (spec 19.3, Milestone 10) | Driving games |
+| **Generated worlds**: land and water, roads, settlements, ecology (9B–9E) | Open-world survival, driving, big RPGs |
+| **Generators as tools**: NoorLevel's blockouts, NoorArchitect's buildings, NoorFengShui's furnished rooms | Dungeon crawlers, FPS levels, interiors for any 3D game |
+
+So the order:
+
+1. **2D, 2.5D and isometric foundations** (next, below). Tom asked for it; it's small and self-contained; it serves the
+   first real NoorEngine game (The Uncounted, Chapter Two: sprites in zones). Note that **3D isometric games like
+   Torchlight already work** with part 1's camera tilted (3D models, a fixed angled view); this group is for the 2D kind
+   (Diablo 1 and 2: sprites, tiles, sorting) and for platformers.
+2. **Gameplay foundations** (proposed, a plan of its own): spawning and timers, game UI, saving and loading, level
+   changes, navigation and AI agents. **This is a change to the roadmap**: the spec has no milestone for these, and
+   Milestone 9 wouldn't add them. But they're what turns a scene into a game in nearly every genre Tom listed, and a big
+   generated world with nothing that can walk round it, be saved, or show a menu isn't a game either.
+3. **Back to 9A, big worlds** (parts 2–8), then **9B–9E** and the showcase, as planned. Vehicles fit beside 9C (roads
+   and cars belong together; the showcase could add a drive); the generator contract (ADR-007, the 9D audit) brings in
+   NoorLevel and NoorFengShui as well as NoorArchitect.
+
+Everything stays measured by the yardsticks, so going 2D or adding gameplay systems can't quietly slow 3D down, or the
+other way round.
+
+### 2D, 2.5D and isometric foundations (next)
+
+What I'd build, and why each piece (it becomes a plan with proofs when it starts):
 
 | # | What | Why |
 |---|---|---|
@@ -274,8 +313,6 @@ part 2, because none of it depends on big worlds and all of it is additive (the 
 **2.5D** comes mostly from these plus what exists: a 3D world played on a plane (part 1's locked physics with 3D
 models), 8-direction sprites in a 3D world (8B, The Uncounted's style), or an isometric camera over 3D models. **2D
 lighting** (normal-mapped sprites, 2D lights and shadows) and **skeletal 2D animation** are worth their own later step.
-
-Waiting for Tom's yes (and any reordering) before it becomes a plan with parts and proofs.
 
 ## Highest risks (settle early)
 

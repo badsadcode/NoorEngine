@@ -202,5 +202,6 @@ and Latin Extended-A (Polish, Czech, German, French…) plus € ° – — … 
 show as `?`. Everything is drawn over the scene in the order you draw it (later on top).
 
 ## Not yet
-Pause and fades, spawning prefabs, timers and
-coroutines-based waits, and require-ing other script files arrive in later parts of Milestone 4.
+Pause and fades, spawning prefabs, timers and coroutine-based waits, and `require`-ing other script files. Milestone 4
+left them as exceptions; they're planned in the gameplay foundations group (see the
+[Milestone 9 plan](../milestones/M9_PLAN.md#the-order-from-here-sage-2026-11-20)).
