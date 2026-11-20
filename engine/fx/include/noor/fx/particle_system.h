@@ -37,8 +37,9 @@ public:
     // Each emitter's sub-emitters (part 7) step right after it and burst where its particles hit or died. `ground`:
     // what particles that collide stand on; `budget`: the most particles the whole set may hold (handed out in the
     // inputs' order, so the same scene throttles the same way every run).
+    // `water` (8D part 5): the water's surface, for emitters that collide with it.
     void step(std::span<const Input> inputs, float dt, math::Vec3 wind, const GroundQuery* ground = nullptr,
-              std::uint32_t budget = 0xffffffffu);
+              std::uint32_t budget = 0xffffffffu, const GroundQuery* water = nullptr);
     void restart(const Guid& entity);  // a fresh emitter (time 0, no particles) on the next step
     void clear();
 
@@ -52,6 +53,7 @@ public:
         std::uint64_t fingerprint = 0;  // every emitter's particles, in entity id order: equal runs, equal fingerprints
         std::uint64_t hits = 0;         // collision events so far (part 7)
         std::uint64_t throttled = 0;    // particles the budget held back so far
+        std::uint64_t splashes = 0;     // particles ended by the water so far (8D part 5)
     };
     [[nodiscard]] Stats stats() const;
 
@@ -94,6 +96,7 @@ public:
         std::uint64_t fingerprint = 0;
         double step_ms = 0;  // the last frame's fixed steps (CPU)
         std::uint64_t hits = 0, throttled = 0;
+        std::uint64_t splashes = 0;  // 8D part 5: particles ended by the water
     };
     [[nodiscard]] Stats stats() const;
 

@@ -198,6 +198,7 @@ public static unsafe class ScriptHost
                 case 3: s.OnTriggerExit(o); break;
                 case 4: s.OnAnimationEnd(Engine.Str(Engine.A.EventName()) ?? ""); break;
                 case 5: s.OnAnimationEvent(Engine.Str(Engine.A.EventName()) ?? ""); break;
+                case 6: s.OnWater(Engine.Str(Engine.A.EventName()) ?? ""); break;
             }
             return 1;
         }

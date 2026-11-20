@@ -426,6 +426,10 @@ struct WaterDraw {
         float shafts = 0.5f;
     };
     std::optional<Underwater> underwater;
+    // The weather on it (8D part 5; drawing only, gameplay's surface doesn't change): rain (0..1) rings spreading from
+    // drops, the ground wind (m/s) roughening its ripples and blurring its reflections.
+    float rain = 0.0f;
+    float wind_speed = 0.0f;
 };
 
 struct FrameDesc;

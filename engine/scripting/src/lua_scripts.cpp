@@ -312,6 +312,19 @@ struct LuaScriptSystem::Impl {
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
                  return 1;
              }},
+            // In the water (8D part 5): state ("dry", "wading", "swimming", "under"), depth at the feet, at the head.
+            {"character_water", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const auto w = p ? p->character_water(check_entity(L, 1)) : std::nullopt;
+                 if (!w) {
+                     lua_pushnil(L);
+                     return 1;
+                 }
+                 lua_pushstring(L, physics::PhysicsSystem::water_state_name(w->state));
+                 lua_pushnumber(L, w->feet_depth);
+                 lua_pushnumber(L, w->head_depth);
+                 return 3;
+             }},
             // ---- Animations (an animator or a sprite component; 8B part 6, 8C part 2) ----
             {"play_animation", [](lua_State* L) {
                  lua_pushboolean(L, api::play_animation(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2),
@@ -690,9 +703,9 @@ void LuaScriptSystem::late_update(runtime::World& world, double dt) {
     for (const auto& e : world.events()) {
         if (!d.instances.contains(e.entity)) continue;
         using K = runtime::Event::Kind;
-        if (e.kind == K::AnimationEnd || e.kind == K::AnimationEvent) {
+        if (e.kind == K::AnimationEnd || e.kind == K::AnimationEvent || e.kind == K::Water) {
             lua_pushstring(d.L, e.name.c_str());
-            d.call(e.entity, e.kind == K::AnimationEnd ? "on_animation_end" : "on_animation_event", 1);
+            d.call(e.entity, e.kind == K::AnimationEnd ? "on_animation_end" : e.kind == K::Water ? "on_water" : "on_animation_event", 1);
             continue;
         }
         const char* hook = e.kind == K::CollisionEnter ? "on_collision_enter"

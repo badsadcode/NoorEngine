@@ -47,6 +47,7 @@ store on `self` belong to that entity. Engine-set fields: `self.entity`, `self.p
 | `on_collision_enter(other)`, `on_collision_exit(other)` | Physics bodies start / stop touching (before `on_late_update`) |
 | `on_trigger_enter(other)`, `on_trigger_exit(other)` | Something enters / leaves a trigger collider |
 | `on_animation_end(name)` | A non-looping animation has finished: a sprite's or a model clip this entity's script played, or a controller state (any layer) (before `on_late_update`) |
+| `on_water(state)` | A character's state in the water changed: "dry", "wading", "swimming", "under" (8D) |
 | `on_animation_event(name)` | A named moment of the playing animation was passed (footsteps...: the animator's `"events"`, or a controller state's) |
 
 Errors stop that script for that entity (the Console shows file, line and stack); the game keeps
@@ -110,6 +111,7 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |
 | `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground |
 | `e:is_grounded()` | Character controller: standing on walkable ground |
+| `e:character_water()` | Character controller in water (8D): its state ("dry", "wading", "swimming", "under"), the water's depth at its feet and at its head (positive: under); `nil` if it isn't a character |
 | `e:play_sound()`, `e:stop_sound()`, `e:is_playing()` | The entity's `audio_source`: (re)start, stop, still playing? |
 | `e:play_animation(name [, speed])` | The entity's `animator` (a model's clip, or with a controller a state of its base layer) or else its `sprite`: plays it from the start (speed 1 by default); a non-looping one calls `on_animation_end(name)` when done. `false` with neither ([animation](../animation/ANIMATION.md), [sprites](../fx/SPRITES.md)) |
 | `e:stop_animation()`, `e:set_animation_speed(s)`, `e:animation()` | Freeze it where it is; play on faster or slower from here (0 freezes); what it's playing (a controller: its base layer's state) |

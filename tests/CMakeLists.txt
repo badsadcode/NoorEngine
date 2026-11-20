@@ -41,6 +41,7 @@ add_executable(noor_unit_tests
     unit/test_retarget.cpp
     unit/test_fbx.cpp
     unit/test_water.cpp
+    unit/test_water_physics.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -598,6 +599,21 @@ add_test(NAME player.water_waves
         -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_water_waves
         -P ${CMAKE_CURRENT_SOURCE_DIR}/water_waves_check.cmake)
 set_tests_properties(player.water_waves PROPERTIES LABELS "gpu;player" TIMEOUT 180 FIXTURES_REQUIRED built_render_scenes_game)
+# Water in the game (Milestone 8D, part 5): floating bodies and splashes the same in the built game, and the scene as a
+# golden (the Sea in the rain: rings on the water, bodies riding the waves, pebbles splashing).
+add_test(NAME player.water_float
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_render_scenes_game/Render Scenes.exe"
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_water_float
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/water_float_check.cmake)
+set_tests_properties(player.water_float PROPERTIES LABELS "gpu;player" TIMEOUT 180 FIXTURES_REQUIRED built_render_scenes_game)
+add_test(NAME render.golden_Water_Float
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Water_Float.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Water_Float.png -DFRAMES=300
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Water_Float
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Water_Float PROPERTIES LABELS "gpu;render" TIMEOUT 90)
 add_test(NAME render.golden_Hillside_Lake
     COMMAND ${CMAKE_COMMAND}
         -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>

@@ -4,6 +4,23 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 5: water in the game
+**Added**
+- **Floating** (`docs/water/WATER.md`, `physics.h`): dynamic bodies in water float by their density, tip to their
+  balance and ride the waves; `"buoyancy"` and `"water_drag"` on the rigidbody.
+- **Wading and swimming** for characters (`"swim_depth"`, `"wade_speed"`, `"swim_speed"`): state and depths for scripts
+  (Lua `e:character_water()`, `on_water(state)`; C# `WaterState`, `FeetDepth`, `HeadDepth`, `OnWater`; rt API v8);
+  `runtime::Event::Kind::Water`.
+- **Splashes**: particles' `"collide": {"water": true}` and `"on": "water"` sub-emitters; `particles.splashes` in the
+  player's report. **Rain rings** and **wind** on the drawn surface.
+
+**Fixed:** floating bodies are kept awake (Jolt's sleep froze a plank 8.5 mm off its depth).
+
+**Measured:** planks of 300, 500, 800 kg/m³ within a micrometre of their depth; the rainy-sea scene identical in a built
+game (12 splashes each).
+
+**Tests:** unit tests `test_water_physics.cpp` (4); `player.water_float`; golden `Water_Float`.
+
 ### 2026-11-20 — Milestone 8D, part 4: underwater
 **Added**
 - **Underwater** (`docs/water/WATER.md`): light under a water body dimmed by its depth (sun and sky; local lights

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 7u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water */
+#define NOOR_RT_API_VERSION 8u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -118,6 +118,11 @@ typedef struct noor_rt_api {
 
     /* v7 (8D part 2): the water surface at world (x, z) now: its height and normal. 0 where there's no water. */
     int32_t (*water)(float x, float z, float* height, noor_rt_vec3* normal);
+
+    /* v8 (8D part 5): a character in the water: 0 dry, 1 wading, 2 swimming, 3 under (its head under the surface), -1 not
+     * a character; the water's depth at its feet and at the top of its head (positive: under the surface). The WATER
+     * event (kind 6) comes when the state changes; event_name() gives the new state ("dry", "wading", ...). */
+    int32_t (*character_water)(noor_rt_entity e, float* feet_depth, float* head_depth);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

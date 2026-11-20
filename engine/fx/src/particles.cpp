@@ -179,6 +179,7 @@ EmitterSettings EmitterSettings::parse(const asset::Json& j) {
         Collision& col = s.collision;
         col.enabled = true;
         if (c.contains("ground") && c["ground"].is_boolean()) col.ground = c["ground"].get<bool>();
+        if (c.contains("water") && c["water"].is_boolean()) col.water = c["water"].get<bool>();
         col.bounce = std::clamp(number(c, "bounce", col.bounce), 0.0f, 1.0f);
         col.friction = std::clamp(number(c, "friction", col.friction), 0.0f, 1.0f);
         col.radius = std::max(0.0f, number(c, "radius", col.radius));
@@ -204,7 +205,8 @@ EmitterSettings EmitterSettings::parse(const asset::Json& j) {
         for (const auto& sub : j["sub_emitters"]) {
             if (!sub.is_object() || s.sub_emitters.size() >= 4) continue;
             SubEmitter e;
-            e.on = sub.value("on", std::string("hit")) == "death" ? SubEmitter::On::Death : SubEmitter::On::Hit;
+            const std::string on = sub.value("on", std::string("hit"));
+            e.on = on == "death" ? SubEmitter::On::Death : on == "water" ? SubEmitter::On::Water : SubEmitter::On::Hit;
             if (sub.contains("emitter") && sub["emitter"].is_object()) e.emitter = sub["emitter"];
             e.count = std::clamp(static_cast<int>(number(sub, "count", 4.0f)), 0, 1000);
             e.inherit_velocity = std::clamp(number(sub, "inherit_velocity", 0.0f), -2.0f, 2.0f);
@@ -313,7 +315,7 @@ void Emitter::spawn(int count, const math::Mat4& world, Vec3 extra, std::uint32_
     }
 }
 
-void Emitter::collide(const math::Mat4& world, const GroundQuery* ground) {
+void Emitter::collide(const math::Mat4& world, const GroundQuery* ground, const GroundQuery* water) {
     const Collision& c = settings_.collision;
     const bool local = settings_.local_space;
     const math::Mat4 inv = local ? math::inverse(world) : math::Mat4::identity();
@@ -350,6 +352,15 @@ void Emitter::collide(const math::Mat4& world, const GroundQuery* ground) {
                 any_killed = true;
             }
         }
+        // The water (8D part 5): under its surface the particle ends there, a splash.
+        if (c.water && water && *water && p.age < p.lifetime)
+            if (const auto w = (*water)(pos.x, pos.z); w && pos.y < w->height) {
+                pos.y = w->height;
+                ++splashes_;
+                events_.push_back({SubEmitter::On::Water, pos, vel});
+                p.age = p.lifetime;
+                any_killed = true;
+            }
         p.position = local ? inv.transform_point(pos) : pos;
         p.velocity = local ? math::transform_vector(inv, vel) : vel;
     }
@@ -361,7 +372,7 @@ void Emitter::collide(const math::Mat4& world, const GroundQuery* ground) {
     }
 }
 
-void Emitter::step(float dt, const math::Mat4& world, Vec3 wind, const GroundQuery* ground, std::uint32_t* budget) {
+void Emitter::step(float dt, const math::Mat4& world, Vec3 wind, const GroundQuery* ground, std::uint32_t* budget, const GroundQuery* water) {
     const auto& s = settings_;
     events_.clear();
     Vec3 gravity{0.0f, -kGravity * s.gravity, 0.0f};
@@ -385,7 +396,7 @@ void Emitter::step(float dt, const math::Mat4& world, Vec3 wind, const GroundQue
         p.velocity = (p.velocity + push) * keep;
         p.position = p.position + p.velocity * dt;
     }
-    if (s.collision.enabled) collide(world, ground);
+    if (s.collision.enabled) collide(world, ground, water);
     // This step's new particles.
     const double from = time_, to = time_ + static_cast<double>(dt);
     const bool running = s.duration <= 0.0f || s.loop || from < static_cast<double>(s.duration);

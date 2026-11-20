@@ -78,6 +78,8 @@ public unsafe struct RtApi
     public delegate* unmanaged<RtEntity, byte*, RtEntity*, int> Bone;
     // v7: water
     public delegate* unmanaged<float, float, float*, RtVec3*, int> Water;
+    // v8: characters in water
+    public delegate* unmanaged<RtEntity, float*, float*, int> CharacterWater;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -93,7 +95,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 7;
+    public const uint ExpectedVersion = 8;
     public static RtApi* Api;
 
     public static ref RtApi A

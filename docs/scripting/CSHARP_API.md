@@ -85,6 +85,7 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `Get(component)` → `JsonNode?`, `Set(component, JsonNode?)` | Component data (copies) |
 | `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies |
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
+| `WaterState`, `FeetDepth`, `HeadDepth` | Character controller in water (8D, rt API v8): "dry", "wading", "swimming", "under" (null: not a character); the water's depth at its feet and head |
 | `PlaySound()`, `StopSound()`, `IsPlaying` | The entity's `audio_source` ([components](LUA_API.md#sound-components)) |
 | `PlayAnimation(name, speed = 1)`, `StopAnimation()`, `SetAnimationSpeed(s)`, `Animation` | The entity's `animator` (a clip, or a controller's base-layer state) or else its `sprite` ([animation](../animation/ANIMATION.md), [sprites](../fx/SPRITES.md)); a non-looping animation calls `OnAnimationEnd` |
 | `CrossFade(name, seconds)`, `SetAnimationParameter(name, float or bool)`, `SetAnimationTrigger(name)` | An `animator`: blend to a clip or state over `seconds`; set its controller's parameters (a trigger resets when a transition uses it) |

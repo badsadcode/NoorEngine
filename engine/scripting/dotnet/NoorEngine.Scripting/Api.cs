@@ -33,6 +33,8 @@ public abstract class NoorScript
     public virtual void OnAnimationEnd(string animation) { }
     /// <summary>A named moment of the playing animation was passed (a controller state's "events": footsteps...).</summary>
     public virtual void OnAnimationEvent(string name) { }
+    /// <summary>A character's state in the water changed: "dry", "wading", "swimming" or "under" (its head under).</summary>
+    public virtual void OnWater(string state) { }
 }
 
 /// <summary>
@@ -129,6 +131,15 @@ public sealed unsafe class Entity : IEquatable<Entity>
     /// <summary>Character controller: jump (upward m/s) if standing on ground.</summary>
     public void CharacterJump(float speed = 5) => Engine.A.CharacterJump(Id, speed);
     public bool IsGrounded => Engine.A.IsGrounded(Id) != 0;
+    /// <summary>Character controller in the water: "dry", "wading", "swimming" or "under" (null: not a character).</summary>
+    public unsafe string? WaterState => Engine.A.CharacterWater(Id, null, null) switch
+    {
+        0 => "dry", 1 => "wading", 2 => "swimming", 3 => "under", _ => null,
+    };
+    /// <summary>How deep the water is at the character's feet (metres; negative: above it).</summary>
+    public unsafe float FeetDepth { get { float f = 0; Engine.A.CharacterWater(Id, &f, null); return f; } }
+    /// <summary>How deep the top of the character's head is under the water (positive: under).</summary>
+    public unsafe float HeadDepth { get { float h = 0; Engine.A.CharacterWater(Id, null, &h); return h; } }
 
     // ---- Sound (needs an audio_source component) ----
     /// <summary>(Re)starts the entity's audio_source.</summary>

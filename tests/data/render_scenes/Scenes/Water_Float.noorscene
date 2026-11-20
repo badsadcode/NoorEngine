@@ -1,0 +1,412 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-f10a-4000-8000-000000000000",
+  "name": "Water_Float",
+  "entities": [
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000001",
+      "name": "Sea",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "water": {
+          "shape": "sea",
+          "preset": "Sea"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000002",
+      "name": "Plank light",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.6,
+          0.5,
+          -6.0
+        ],
+        "rotation": [
+          0.0,
+          0.173648178,
+          0.0,
+          0.984807753
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1.2,
+            0.25,
+            0.5
+          ],
+          "color": "#B08850"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            1.2,
+            0.25,
+            0.5
+          ]
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 45.0
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000003",
+      "name": "Plank",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.4,
+          0.5,
+          -7.5
+        ],
+        "rotation": [
+          0.0,
+          -0.3007058,
+          0.0,
+          0.953716951
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1.2,
+            0.25,
+            0.5
+          ],
+          "color": "#8A6A40"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            1.2,
+            0.25,
+            0.5
+          ]
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 90.0
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000004",
+      "name": "Crate",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.2,
+          0.8,
+          -6.2
+        ],
+        "rotation": [
+          0.0,
+          0.087155743,
+          0.0,
+          0.996194698
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.6,
+            0.6,
+            0.6
+          ],
+          "color": "#A57A45"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            0.6,
+            0.6,
+            0.6
+          ]
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 86.4
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000005",
+      "name": "Barrel",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.4,
+          0.8,
+          -5.0
+        ],
+        "rotation": [
+          0.0,
+          0.382683432,
+          0.0,
+          0.923879533
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.5,
+            0.7,
+            0.5
+          ],
+          "color": "#6E4A2E"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            0.5,
+            0.7,
+            0.5
+          ]
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 122.5
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000006",
+      "name": "Pebbles",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.6,
+          3.0,
+          -7.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "emitter": {
+          "rate": 3,
+          "lifetime": 5,
+          "speed": 0,
+          "gravity": 1,
+          "shape": {
+            "type": "box",
+            "size": [
+              1.0,
+              0,
+              1.0
+            ]
+          },
+          "size": 0.08,
+          "color": "#555555",
+          "collide": {
+            "ground": false,
+            "water": true
+          },
+          "sub_emitters": [
+            {
+              "on": "water",
+              "count": 10,
+              "emitter": {
+                "lifetime": [
+                  0.4,
+                  0.7
+                ],
+                "speed": [
+                  1.2,
+                  2.6
+                ],
+                "gravity": 1,
+                "shape": {
+                  "type": "cone",
+                  "angle": 30
+                },
+                "size": 0.05,
+                "color": "#EAF4FF",
+                "alpha": [
+                  [
+                    0,
+                    0.9
+                  ],
+                  [
+                    1,
+                    0
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000007",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.2,
+          1.9,
+          1.5
+        ],
+        "rotation": [
+          -0.120798399,
+          -0.005838972,
+          -0.000710554,
+          0.992659634
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000008",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.282215415,
+          0.207336695,
+          0.062609303,
+          0.934583345
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-f10a-4000-8000-000000000009",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "time_of_day": 15.0,
+          "latitude": 50,
+          "day_of_year": 200,
+          "north": 230,
+          "ev100": "auto",
+          "rain": 0.6,
+          "wind_speed": 6,
+          "wind_direction": 160,
+          "cloud_cover": 0.6
+        }
+      }
+    }
+  ]
+}

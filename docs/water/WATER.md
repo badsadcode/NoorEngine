@@ -1,8 +1,8 @@
 # Water
 
 Milestone 8D ([plan](../milestones/M8_PLAN.md#8d-water), [ADR-037](../decisions/ADR-037-water.md)). What works so
-far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, and **part 4, underwater**.
-Floating and swimming, rivers and the Water panel are planned (parts 5 to 8); nothing below claims them.
+far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, **part 4, underwater**,
+and **part 5, water in the game**. Rivers and the Water panel are planned (parts 6 to 8); nothing below claims them.
 
 ## The `water` component (part 1)
 
@@ -187,6 +187,43 @@ What it isn't (yet): glass, smoke and particles aren't fogged by the water, and 
 body at a time from inside; depth counts from the water's level, not the waves passing over; no bubbles, splashes or
 drops on the lens (splashes: part 5).
 
+## Water in the game (part 5)
+
+**Floating** (`physics.h`): every dynamic physics body floats in water. It's cut into cells (a box 3 × 3 × 3; a sphere,
+capsule or hull the cells of a 5 × 5 × 5 grid that are inside it, sharing its volume), and each fixed step every cell
+under the surface is pushed up by the water it displaces (1000 kg/m³ × g × its volume × how much of its height is
+under, through the World's water query, so waves included) at its own centre, and slowed by the water in proportion.
+So a body settles at the depth its density says (mass over its collider's volume), tips to its balance (a cube of
+middling density floats on an edge, as real ones do), and rides the waves. A body floating at the surface isn't allowed
+to sleep (Jolt would freeze it a few millimetres off as it slows); sunk, it may. `"rigidbody": {"buoyancy": 1}` scales
+the lift (0: sinks whatever it weighs), `"water_drag": 1` the slowing. The water's density is fresh water's, fixed.
+
+**Wading and swimming** (characters): with water above their feet they slow down (`"wade_speed"`, 0.5: the speed's share
+left at swimming depth); deeper than `"swim_depth"` (0.65 of their height) they swim: no gravity, held with their chest
+at the surface, moving at `"swim_speed"` (0.6) of what's asked. Their state is "dry", "wading", "swimming" or "under"
+(the head under the surface), with the water's depth at their feet and head; each change is an event.
+
+```lua
+function on_water(state)          -- "dry", "wading", "swimming", "under"
+    local s, feet, head = self.entity:character_water()
+end
+```
+
+```csharp
+public override void OnWater(string state) { var feet = Entity.FeetDepth; }
+```
+
+**Splashes** (particles): `"collide": {"water": true}` makes the water's surface end a particle where it falls in (a
+death too) and fire its `"on": "water"` sub-emitters there; the player's report counts them (`particles.splashes`).
+
+**Rain and wind on the surface** (drawing only: gameplay's surface is the waves): rain (the environment's `rain`, weather
+zones included) rings the water with spreading circles (two layers of cells, a drop in more of them the harder it
+rains), and the ground wind roughens the ripples and blurs the reflections.
+
+What it isn't (yet): no currents (rivers, part 6) and waves don't carry things along; swimmers float at the surface (no
+diving), and there's no swimming animation (the state is there for one); bodies hitting the water don't splash by
+themselves; floating's CPU cost isn't measured yet (part 8's sample).
+
 ## How it's drawn
 
 When water is in view, the frame's scene pass is split in two:
@@ -215,7 +252,7 @@ The ripples are a few sine waves in world space moving with the game's clock, so
 Ripples smaller than a few pixels fade out, and roughen the reflection instead (otherwise they alias into a grid at a
 distance).
 
-**What it isn't (yet):** nothing floats (part 5). The absorption counts the stretch from the surface down as
+**What it isn't (yet):** rivers (part 6). The absorption counts the stretch from the surface down as
 water and the rest as air, so it's an approximation, as ADR-037 says.
 
 **Measured** (RTX 3080, 1280×720, 4× MSAA, fastest of 3 × 300 frames, `tools/samples/measure_hillside_lake.py`):
@@ -290,6 +327,12 @@ copy** and **See-through** separately (the Render panel and the player's report)
   map asked again).
 - `render.water_readback_shore`: the same readback over a beach (`Water_Shore_Probe`): only pixels at least 0.3 m deep
   count, at least 60 of them shallower than 2.5 m (where the waves are calmed); within 1 cm out to 20 m.
+- Unit tests for the game (4, `test_water_physics.cpp`): planks of 300, 500 and 800 kg/m³ settle where their density says
+  (measured: under a micrometre), heavier than water and `"buoyancy": 0` sink; a plank rides waves, identically every
+  run; a character slows as it wades (by the formula) and swims with its chest at the surface, the events in order;
+  ten drops make exactly ten splashes and thirty splash particles, none with no water.
+- `player.water_float`: the Sea in the rain with floating planks, a crate and a barrel, and pebbles splashing: the same
+  in the built game to the bit, the same splash count. Golden `Water_Float`.
 - Unit tests for underwater (2): the environment's underwater settings (read like the look's fields, what isn't said
   stays the water's, clamped; none: nothing replaced; the Deep sea preset), and the exposure opening up (nothing above
   or at the surface, half the lost light in stops 10 m down, only inside a box's footprint, the environment's settings

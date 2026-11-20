@@ -254,6 +254,15 @@ int32_t rt_water(float x, float z, float* height, noor_rt_vec3* normal) {
     return 1;
 }
 
+int32_t rt_character_water(noor_rt_entity e, float* feet, float* head) {
+    auto* p = physics_of();
+    const auto w = p ? p->character_water(from_rt(e)) : std::nullopt;
+    if (!w) return -1;
+    if (feet) *feet = w->feet_depth;
+    if (head) *head = w->head_depth;
+    return static_cast<int32_t>(w->state);
+}
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -268,6 +277,7 @@ const noor_rt_api kApi = {
     rt_animation_parameter,
     rt_bone,
     rt_water,
+    rt_character_water,
 };
 
 } // namespace

@@ -245,6 +245,39 @@ float2 ripple_slope(float2 p, float t, float footprint, out float lost)
     return slope * pc.size.z;
 }
 
+// Rain (8D part 5): rings spreading from drops. Two layers of cells (35 and 48 cm), each cell a drop at its own moment of
+// a 1.1 s cycle (more cells get one the harder it rains); a ring is a short wave train running out from where it fell,
+// fading as it spreads. Returns its slope; rings too small for a pixel fade out.
+float2 rain_slope(float2 p, float t, float rain, float footprint)
+{
+    if (rain <= 0.0) return 0.0;
+    float2 slope = 0.0;
+    [unroll] for (int layer = 0; layer < 2; ++layer)
+    {
+        const float cell = layer == 0 ? 0.35 : 0.48;
+        const float fade = saturate(1.5 - footprint / (cell * 0.08));
+        if (fade <= 0.0) continue;
+        const float2 q = p / cell + float2(3.7, 1.3) * float(layer);
+        const float2 i = floor(q);
+        [unroll] for (int y = -1; y <= 1; ++y)
+            [unroll] for (int x = -1; x <= 1; ++x)
+            {
+                const float2 g = i + float2(x, y);
+                const float2 h = caustic_hash(g + float2(17.0, 31.0) * float(layer));
+                if (h.y > rain) continue;  // no drop in this cell this time
+                const float phase = frac(t / 1.1 + h.x * 7.3);
+                const float2 d = q - (g + 0.2 + 0.6 * h);
+                const float dist = length(d);
+                const float r = phase * 0.6;           // the ring's radius, in cells
+                const float x0 = (dist - r) / 0.12;
+                const float wave = exp(-x0 * x0) * cos(6.2831853 * (dist - r) / 0.15);
+                const float strength = (1.0 - phase) * (1.0 - phase) * fade;
+                slope += (dist > 1e-4 ? d / dist : 0.0) * wave * strength * 0.35;
+            }
+    }
+    return slope * rain;
+}
+
 // Foam's lace: value noise in world space, two sizes drifting different ways, 0..1 (flattened to its average where a
 // pixel covers more than its detail).
 float hash12(float2 p)
@@ -413,7 +446,9 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float2 fw = fwidth(input.rest);
     const float footprint = max(fw.x, fw.y);
     float lost;
-    const float2 slope = ripple_slope(world.xz, t, footprint, lost);
+    // The wind roughens the ripples (8D part 5); rain rings them.
+    const float wind = s.map.w;
+    const float2 slope = ripple_slope(world.xz, t, footprint, lost) * (1.0 + wind * 0.12) + rain_slope(world.xz, t, s.shore.w, footprint);
     // The waves' normal at this pixel's point, tilted by the ripples.
     float3 wave_n;
     float squeeze;
@@ -470,7 +505,7 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float fresnel = 0.02 + 0.98 * pow(1.0 - n_dot_v, 5.0);
     float3 r = reflect(-v, n);
     r.y = abs(r.y);  // ripples can tip a reflection below the horizon: keep it in the sky
-    const float rough = saturate(pc.params.x + lost * pc.size.z * 0.12);  // ripples too small to draw still blur it
+    const float rough = saturate(pc.params.x + lost * pc.size.z * 0.12 + wind * 0.006);  // ripples too small to draw (and the wind) blur it
     float3 sky = environment_map.SampleLevel(environment_sampler, environment_direction(r), rough * frame.environment.w).rgb * frame.environment.x;
     if (s.shore.y * fresnel > 0.03 && rough < 0.5)  // where the reflection is too faint to see, the sky will do
     {

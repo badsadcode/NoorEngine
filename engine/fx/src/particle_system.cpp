@@ -77,7 +77,8 @@ Emitter& EmitterSet::ensure(const Guid& id, const Json& settings, bool sub) {
     return it->second;
 }
 
-void EmitterSet::step(std::span<const Input> inputs, float dt, math::Vec3 wind, const GroundQuery* ground, std::uint32_t budget) {
+void EmitterSet::step(std::span<const Input> inputs, float dt, math::Vec3 wind, const GroundQuery* ground, std::uint32_t budget,
+                      const GroundQuery* water) {
     // The budget left: the set's particles now (they live on), then what each spawn takes.
     std::uint64_t alive = 0;
     for (const auto& [id, e] : emitters_) alive += e.particles().size();
@@ -88,7 +89,7 @@ void EmitterSet::step(std::span<const Input> inputs, float dt, math::Vec3 wind, 
         seen.insert(in.entity);
         Emitter& parent = ensure(in.entity, *in.settings, false);
         const std::size_t before = parent.particles().size();
-        parent.step(dt, in.world, wind, ground, &left);
+        parent.step(dt, in.world, wind, ground, &left, water);
         // Particles that died this step give their room back (the budget counts the living).
         if (parent.particles().size() < before) left += static_cast<std::uint32_t>(before - parent.particles().size());
         // Sub-emitters: step, then burst where this step's hits and deaths happened.
@@ -101,7 +102,7 @@ void EmitterSet::step(std::span<const Input> inputs, float dt, math::Vec3 wind, 
             seen.insert(id);
             Emitter& child = ensure(id, subs[i].emitter, true);
             const std::size_t had = child.particles().size();
-            child.step(dt, math::Mat4::identity(), wind, ground, &left);
+            child.step(dt, math::Mat4::identity(), wind, ground, &left, water);
             if (child.particles().size() < had) left += static_cast<std::uint32_t>(had - child.particles().size());
             for (const Emitter::Event& ev : parent.events())
                 if (ev.on == subs[i].on) child.burst(subs[i].count, math::translation(ev.position), ev.velocity * subs[i].inherit_velocity, &left);
@@ -156,6 +157,7 @@ EmitterSet::Stats EmitterSet::stats() const {
         ids.push_back(id);
         s.particles += emitter.particles().size();
         s.hits += emitter.hits();
+        s.splashes += emitter.splashes();
         s.throttled += emitter.throttled();
     }
     std::ranges::sort(ids, [](const Guid& a, const Guid& b) { return a.to_string() < b.to_string(); });
@@ -214,7 +216,13 @@ void ParticleSystem::fixed_update(runtime::World& world, double fixed_dt) {
     }
     std::erase_if(resolved_, [&](const auto& kv) { return !seen.contains(kv.first); });
     const GroundQuery ground = options_.ground ? options_.ground(world) : GroundQuery{};
-    set_.step(inputs, static_cast<float>(fixed_dt), wind(world), ground ? &ground : nullptr, options_.max_particles);
+    // The water's surface (8D part 5), through the World's water query: nothing where there's no water.
+    const GroundQuery water = [&world](float x, float z) -> std::optional<GroundHit> {
+        const auto s = world.water_at(x, z);
+        if (!s) return std::nullopt;
+        return GroundHit{s->height, s->normal};
+    };
+    set_.step(inputs, static_cast<float>(fixed_dt), wind(world), ground ? &ground : nullptr, options_.max_particles, &water);
     for (const auto& [entity, count] : bursts_)
         if (Emitter* e = set_.find(entity))
             if (const auto matrix = runtime::api::world_matrix(world, entity)) e->burst(count, *matrix);
@@ -235,7 +243,7 @@ void ParticleSystem::shutdown(runtime::World&) {
 
 ParticleSystem::Stats ParticleSystem::stats() const {
     const auto s = set_.stats();
-    return {s.emitters, s.particles, s.fingerprint, step_ms_, s.hits, s.throttled};
+    return {s.emitters, s.particles, s.fingerprint, step_ms_, s.hits, s.throttled, s.splashes};
 }
 
 } // namespace noor::fx

@@ -627,7 +627,7 @@ skinning, network replication of animation state.
 | 2 ✅ | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
 | 3 ✅ | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
 | 4 ✅ | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
-| 5 | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
+| 5 ✅ | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
 | 6 | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
 | 7 | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
 | 8 | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
@@ -725,6 +725,20 @@ the whole change); goldens `Water_Underwater`, `Water_DeepSea`, `Water_Waterline
 caustics. **Measured:** from inside, about 0.3 ms. Not done: see-through things and particles aren't fogged; one body from
 inside; depth from the level, not the waves; caustics and shafts are patterns, not traced light. Thalassa (Tom's
 deep-sea game) is the mood this was tuned for (Tom, 2026-11-20).
+
+## Part 5 result (2026-11-20)
+Done. Dynamic bodies float (`physics.h`): cut into cells (a box 3 x 3 x 3, other shapes the inside cells of 5 x 5 x 5),
+each wet cell lifted by the water it displaces through the World's water query and slowed in proportion; a body floating
+at the surface may not sleep (Jolt froze one 8.5 mm off; woken, it looped for ever). `"buoyancy"`, `"water_drag"` on the
+rigidbody. Characters wade (slower with depth) and swim past `swim_depth` (chest at the surface, `swim_speed`), with a
+state and depths for scripts (`e:character_water()`, C# `WaterState`/`FeetDepth`/`HeadDepth`, rt API v8) and a Water
+event (`on_water`, `OnWater`). Particles collide with the water (`"collide": {"water": true}`) and fire `"on": "water"`
+sub-emitters; the player counts splashes. Rain rings and wind roughens the drawn surface. Proven: unit tests (planks of
+three densities within a micrometre of the textbook depth, sinking, riding waves identically, a character's wading speed
+and swimming height and events, exact splash counts); `player.water_float` (the rainy sea: floating bodies identical in
+the built game, 12 splashes each); golden `Water_Float`. Not done: currents, diving, a swim clip (Alden's is part 8),
+bodies splashing by themselves, floating's CPU cost (part 8). Changed from the plan: "wind roughening it" is the drawn
+ripples only (gameplay's waves already grow with the wind since part 2).
 
 ## Open questions
 

@@ -15,10 +15,10 @@
 
 struct WaterSettings
 {
-    float4 map;         // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples (header: x the clock)
+    float4 map;         // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples, w: wind (m/s) (header: x the clock)
     uint4 map_info;     // xy: samples across, z: texture slot, w: 1 = has a map (header: x bodies lighting, y camera body + 1)
     float4 foam;        // x: foam, y: foam depth (m), z: crest foam, w: wet (how much darker)
-    float4 shore;       // x: wet height (m), y: reflections, z: the wet band's height above the level (m)
+    float4 shore;       // x: wet height (m), y: reflections, z: the wet band's height above the level (m), w: rain (0..1)
     float4 body;        // xyz: its middle (y: the level), w: yaw
     float4 extent;      // xy: half size (m), z: 1 = a sea, w: caustics
     float4 absorption;  // rgb: per metre, w: shafts

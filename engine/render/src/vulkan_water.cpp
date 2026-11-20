@@ -49,10 +49,10 @@ static_assert(sizeof(WaterPush) == 128);
 // water_light.hlsli's WaterSettings (std430). Entry 0 is a header (map_info: x the bodies that light the scene, the
 // first kLightBodies draws; y the body the camera may be in, plus 1, or 0); draw i is entry i + 1 (WaterPush::grid[3]).
 struct WaterGpu {
-    float map[4];               // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples
+    float map[4];               // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples, w: wind (m/s)
     std::uint32_t map_info[4];  // x, y: samples across, z: texture slot, w: 1 = has a map
     float foam[4];              // x: foam, y: foam depth (m), z: crest foam, w: wet (darkening)
-    float shore[4];             // x: wet height (m), y: reflections, z: the wet band's height above the level (m), w: unused
+    float shore[4];             // x: wet height (m), y: reflections, z: the wet band's height above the level (m), w: rain
     float body[4];              // part 4: xyz its middle (y: the level), w: yaw
     float extent[4];            // x, y: half size (m), z: 1 = a sea, w: caustics
     float absorption[4];        // rgb: per metre, w: shafts
@@ -320,6 +320,8 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
         // The band reaches over the highest the waves can lift the water (the four amplitudes: 0.97 of the main
         // wave's height) and the wet height above that.
         g.shore[2] = 0.97f * std::max(0.0f, w.wave_height) + g.shore[0] + 0.01f;
+        g.shore[3] = std::clamp(w.rain, 0.0f, 1.0f);
+        g.map[3] = std::max(0.0f, w.wind_speed);
         const UnderwaterLook look = underwater_look(w, static_cast<int>(i) == water_camera_body);
         g.body[0] = w.center.x;
         g.body[1] = w.center.y;

@@ -30,11 +30,12 @@ class World;
 // Something that happened this frame, for scripts (collisions and triggers from physics, a sprite animation that
 // ended, ...). Events are cleared at the end of each frame, after late_update.
 struct Event {
-    enum class Kind : std::uint8_t { CollisionEnter, CollisionExit, TriggerEnter, TriggerExit, AnimationEnd, AnimationEvent };
+    enum class Kind : std::uint8_t { CollisionEnter, CollisionExit, TriggerEnter, TriggerExit, AnimationEnd, AnimationEvent, Water };
     Kind kind;
     Guid entity;       // the entity the event is for
-    Guid other;        // the other entity involved (AnimationEnd, AnimationEvent: the entity itself)
-    std::string name;  // AnimationEnd: the animation; AnimationEvent (8C part 4): the event's name
+    Guid other;        // the other entity involved (AnimationEnd, AnimationEvent, Water: the entity itself)
+    std::string name;  // AnimationEnd: the animation; AnimationEvent (8C part 4): the event's name; Water (8D part 5): the
+                       // character's new state in the water ("dry", "wading", "swimming", "under")
 };
 
 // A HUD element a script draws this frame (noor.ui.* in Lua, Ui.* in C#). Positions and sizes are

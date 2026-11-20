@@ -13,6 +13,8 @@
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
 #include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollidePointResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/RayCast.h>
@@ -130,10 +132,21 @@ struct PhysicsSystem::Impl {
     JPH::PhysicsSystem system;
 
     enum class Type { Static, Dynamic, Kinematic };
+    // Buoyancy (8D part 5): a dynamic body cut into cells, in its own space.
+    struct Cell {
+        math::Vec3 centre;   // body space, from its centre of mass
+        float volume;        // m3
+    };
     struct Body {
         JPH::BodyID id;
         Type type;
         bool sensor;
+        std::vector<Cell> cells;
+        math::Vec3 cell_half{0, 0, 0};  // half a cell's size (body space)
+        float bound = 0.0f;             // the farthest any of it reaches from the body's origin
+        float buoyancy = 1.0f, water_drag = 1.0f;
+        float last_water = 0.0f;        // the water's height summed over its wet cells last step (waves wake it up)
+        bool floating = false;          // partly under the water (not allowed to sleep)
     };
     std::unordered_map<Guid, Body> bodies;
     std::unordered_map<Guid, std::vector<JPH::BodyID>> terrain_bodies;  // static bodies per entity: terrain tiles, scattered trunks
@@ -142,6 +155,9 @@ struct PhysicsSystem::Impl {
         float step_height = 0.4f;
         math::Vec3 wanted{0, 0, 0};  // horizontal velocity this frame
         float jump = 0.0f;           // pending jump speed
+        // In the water (8D part 5).
+        float height = 1.8f, swim_depth = 1.17f, wade_speed = 0.5f, swim_speed = 0.6f;
+        CharacterWater water;
     };
     std::unordered_map<Guid, Character> characters;
     // The last two fixed-step poses of everything physics moves (dynamic bodies, characters), so
@@ -207,6 +223,87 @@ struct PhysicsSystem::Impl {
         for (auto& [entity, body] : bodies) {
             bi.RemoveBody(body.id);
             bi.DestroyBody(body.id);
+        }
+    }
+
+    // Cuts a dynamic body's shape into cells (relative to its centre of mass): its local bounds in a grid, the cells whose centres are inside the shape,
+    // each given an equal share of the shape's volume (a box: 3 x 3 x 3, all inside; anything else 5 x 5 x 5).
+    void make_cells(Body& body, const JPH::Shape& shape) {
+        const JPH::AABox box = shape.GetLocalBounds();
+        const bool is_box = shape.GetSubType() == JPH::EShapeSubType::Box;
+        const int n = is_box ? 3 : 5;
+        const JPH::Vec3 size = box.GetSize();
+        const math::Vec3 cell{size.GetX() / n, size.GetY() / n, size.GetZ() / n};
+        std::vector<math::Vec3> inside;
+        for (int z = 0; z < n; ++z)
+            for (int y = 0; y < n; ++y)
+                for (int x = 0; x < n; ++x) {
+                    const JPH::Vec3 p = box.mMin + JPH::Vec3((x + 0.5f) * cell.x, (y + 0.5f) * cell.y, (z + 0.5f) * cell.z);
+                    if (!is_box) {
+                        // Inside: the shape's own point query (bounds and points are relative to its centre of mass).
+                        JPH::AllHitCollisionCollector<JPH::CollidePointCollector> hits;
+                        shape.CollidePoint(p, JPH::SubShapeIDCreator(), hits);
+                        if (hits.mHits.empty()) continue;
+                    }
+                    inside.push_back(from_j(p));
+                }
+        if (inside.empty()) return;
+        const float volume = shape.GetVolume() / static_cast<float>(inside.size());
+        for (const auto& p : inside) {
+            body.cells.push_back({p, volume});
+            body.bound = std::max(body.bound, math::length(p) + 0.5f * math::length(cell));
+        }
+        body.cell_half = cell * 0.5f;
+    }
+
+    // Buoyancy and drag on the dynamic bodies in water, before the step (8D part 5).
+    void float_bodies(runtime::World& world) {
+        constexpr float kWaterDensity = 1000.0f;
+        constexpr float kDrag = 3.0f;  // 1/s for a cell fully under: about critically damped for a body a metre across
+        auto& bi = system.GetBodyInterface();
+        const float g = -system.GetGravity().GetY();
+        for (auto& [entity, body] : bodies) {
+            if (body.type != Type::Dynamic || body.cells.empty() || body.buoyancy <= 0.0f) continue;
+            const math::Vec3 pos = from_j(bi.GetCenterOfMassPosition(body.id));
+            const math::Quat rot = from_j(bi.GetRotation(body.id));
+            // Nothing to do far above any water (one query at its middle first).
+            const auto here = world.water_at(pos.x, pos.z);
+            if (!here || pos.y - body.bound > here->height + 3.0f) continue;
+            const math::Vec3 com = pos;
+            const math::Vec3 v = from_j(bi.GetLinearVelocity(body.id));
+            const math::Vec3 w = from_j(bi.GetAngularVelocity(body.id));
+            // A cell's height in the world (its box turned): what's under the surface is measured over it.
+            const math::Vec3 ax = math::rotate(rot, {body.cell_half.x, 0, 0}), ay = math::rotate(rot, {0, body.cell_half.y, 0}),
+                             az = math::rotate(rot, {0, 0, body.cell_half.z});
+            const float half_h = std::abs(ax.y) + std::abs(ay.y) + std::abs(az.y);
+            float water_sum = 0.0f, under_cells = 0.0f;
+            bool wet = false;
+            for (const Cell& cell : body.cells) {
+                const math::Vec3 p = pos + math::rotate(rot, cell.centre);
+                const auto s = world.water_at(p.x, p.z);
+                if (!s) continue;
+                const float under = std::clamp((s->height - (p.y - half_h)) / (2.0f * half_h), 0.0f, 1.0f);
+                if (under <= 0.0f) continue;
+                wet = true;
+                water_sum += s->height;
+                under_cells += under;
+                const math::Vec3 up{0, kWaterDensity * g * cell.volume * under * body.buoyancy, 0};
+                const math::Vec3 vp = v + math::cross(w, p - com);
+                const float mass_share = kWaterDensity * cell.volume * under;
+                const math::Vec3 drag = vp * (-kDrag * body.water_drag * mass_share);
+                bi.AddForce(body.id, to_j(up + drag), to_j(p), JPH::EActivation::DontActivate);
+            }
+            // Floating (partly under) it isn't allowed to sleep: Jolt would freeze it a few millimetres off as it slows
+            // (measured: 8.5 mm on a light plank), and woken again it would repeat that for ever. The water's drag settles
+            // it instead. Fully under (sunk, or out of the water) it may sleep; the water moving under it wakes it.
+            const bool floating = wet && under_cells < static_cast<float>(body.cells.size()) - 1e-3f;
+            if (floating != body.floating) {
+                const JPH::BodyLockWrite lock(system.GetBodyLockInterface(), body.id);
+                if (lock.Succeeded()) lock.GetBody().SetAllowSleeping(!floating);
+                body.floating = floating;
+            }
+            if (wet && !bi.IsActive(body.id) && (floating || std::abs(water_sum - body.last_water) > 1e-3f)) bi.ActivateBody(body.id);
+            body.last_water = water_sum;
         }
     }
 
@@ -360,6 +457,10 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         Impl::Character c;
         c.controller = new JPH::CharacterVirtual(&s, to_j(pos.value_or(math::Vec3{})), JPH::Quat::sIdentity(), d.entity_of.size(), &d.system);
         c.step_height = std::max(0.0f, number(*ch, "step_height", 0.4f));
+        c.height = height;
+        c.swim_depth = std::clamp(number(*ch, "swim_depth", 0.65f * height), 0.1f, height);
+        c.wade_speed = std::clamp(number(*ch, "wade_speed", 0.5f), 0.0f, 1.0f);
+        c.swim_speed = std::clamp(number(*ch, "swim_speed", 0.6f), 0.0f, 2.0f);
         d.characters[entity.id] = std::move(c);
     }
     // Terrain: one static height field per tile, placed at the entity (its rotation and scale are ignored).
@@ -462,7 +563,13 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         NOOR_LOG_ERROR("Physics", "'{}': too many physics bodies", entity.name);
         return;
     }
-    d.bodies[entity.id] = {id, type, settings.mIsSensor};
+    Impl::Body body{id, type, settings.mIsSensor};
+    if (type == Impl::Type::Dynamic && !settings.mIsSensor) {
+        body.buoyancy = std::max(0.0f, number(rb, "buoyancy", 1.0f));
+        body.water_drag = std::max(0.0f, number(rb, "water_drag", 1.0f));
+        d.make_cells(body, *shape);
+    }
+    d.bodies[entity.id] = std::move(body);
 }
 
 void PhysicsSystem::entity_destroyed(runtime::World&, const scene::Entity& entity) {
@@ -507,15 +614,40 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         ch.UpdateGroundVelocity();
         const JPH::Vec3 ground = ch.GetGroundVelocity();
         const JPH::Vec3 vertical(0, ch.GetLinearVelocity().GetY(), 0);
+        // The water where it stands (8D part 5): how deep at its feet and over its head, and so its state.
+        const math::Vec3 feet = from_j(ch.GetPosition());
+        CharacterWater water;
+        if (const auto s = world.water_at(feet.x, feet.z)) {
+            water.feet_depth = s->height - feet.y;
+            water.head_depth = s->height - (feet.y + c.height);
+        } else {
+            water.feet_depth = water.head_depth = -1e3f;
+        }
+        const bool was_swimming = c.water.state == WaterState::Swimming || c.water.state == WaterState::Under;
+        if (water.head_depth > 0.0f) water.state = WaterState::Under;
+        else if (water.feet_depth >= c.swim_depth || (was_swimming && water.feet_depth >= c.swim_depth - 0.1f)) water.state = WaterState::Swimming;
+        else if (water.feet_depth > 0.02f) water.state = WaterState::Wading;
+        else water.state = WaterState::Dry;
+        if (water.state != c.water.state) world.post({runtime::Event::Kind::Water, entity, entity, water_state_name(water.state)});
+        c.water = water;
+        const bool swimming = water.state == WaterState::Swimming || water.state == WaterState::Under;
+        // Wading slows it the deeper it goes; swimming moves at swim_speed.
+        float speed = 1.0f;
+        if (water.state == WaterState::Wading) speed = 1.0f + (c.wade_speed - 1.0f) * std::clamp(water.feet_depth / c.swim_depth, 0.0f, 1.0f);
+        else if (swimming) speed = c.swim_speed;
         JPH::Vec3 v;
-        if (ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && vertical.GetY() - ground.GetY() < 0.1f) {
+        if (swimming) {
+            // Held with its chest at the surface (feet swim_depth under it): pulled there, gently, no gravity.
+            const float target = feet.y + (water.feet_depth - c.swim_depth);
+            v = JPH::Vec3(0, std::clamp((target - feet.y) * 3.0f, -2.0f, 2.0f), 0);
+        } else if (ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && vertical.GetY() - ground.GetY() < 0.1f) {
             v = ground;  // standing: move with what we stand on
             if (c.jump > 0) v += JPH::Vec3(0, c.jump, 0);
         } else {
             v = vertical;  // in the air: keep falling (or rising)
         }
         c.jump = 0.0f;
-        v += gravity * step + JPH::Vec3(c.wanted.x, 0, c.wanted.z);
+        v += (swimming ? JPH::Vec3::sZero() : gravity * step) + JPH::Vec3(c.wanted.x * speed, 0, c.wanted.z * speed);
         ch.SetLinearVelocity(v);
         JPH::CharacterVirtual::ExtendedUpdateSettings settings;
         settings.mWalkStairsStepUp = JPH::Vec3(0, c.step_height, 0);
@@ -529,6 +661,7 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
             (void)e;
         }
     }
+    d.float_bodies(world);
     d.system.Update(step, 1, d.temp.get(), d.jobs.get());
     // Dynamic bodies move their entities.
     for (const auto& [entity, body] : d.bodies) {
@@ -654,6 +787,22 @@ void PhysicsSystem::character_move(const Guid& entity, math::Vec3 velocity) {
 
 void PhysicsSystem::character_jump(const Guid& entity, float speed) {
     if (const auto it = impl_->characters.find(entity); it != impl_->characters.end()) it->second.jump = std::max(it->second.jump, speed);
+}
+
+std::optional<PhysicsSystem::CharacterWater> PhysicsSystem::character_water(const Guid& entity) const {
+    const auto it = impl_->characters.find(entity);
+    if (it == impl_->characters.end()) return std::nullopt;
+    return it->second.water;
+}
+
+const char* PhysicsSystem::water_state_name(WaterState s) noexcept {
+    switch (s) {
+    case WaterState::Dry: return "dry";
+    case WaterState::Wading: return "wading";
+    case WaterState::Swimming: return "swimming";
+    case WaterState::Under: return "under";
+    }
+    return "dry";
 }
 
 bool PhysicsSystem::is_grounded(const Guid& entity) const {

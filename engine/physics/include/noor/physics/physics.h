@@ -25,6 +25,18 @@
 //
 // Events (runtime::Event): collision enter/exit between bodies, trigger enter/exit with sensors,
 // posted for both entities during the fixed step.
+//
+// Water (Milestone 8D, part 5, ADR-037), through the World's water query (game::WaterSystem):
+//   - Dynamic bodies float. Each is cut into cells (a box 3 x 3 x 3; a sphere, capsule or hull: the cells of a 5 x 5 x 5
+//     grid over it that are inside it, scaled to its volume); each cell under the surface is pushed up by the water it
+//     displaces (1000 kg/m3 x g x its volume x how much of its height is under) at its centre, and slowed by the water
+//     (drag on the cell's velocity, in proportion). So a body settles where its density says (a 500 kg/m3 crate half
+//     under), tips upright, and rides the waves. "rigidbody": {"buoyancy": 1 (0: sinks like a stone), "water_drag": 1}.
+//   - Characters wade and swim: with the water above their feet they slow down ("wade_speed": the speed's share left at
+//     swimming depth, 0.5), and once it's deeper than "swim_depth" (0.65 of their height) they swim: no gravity, held with
+//     their chest at the surface, moving at "swim_speed" (0.6) of what's asked. Their state ("dry", "wading", "swimming",
+//     "under": the head under the surface) and the water's depth at their feet and head are character_water(); each
+//     change is an Event::Kind::Water for the character, its name the new state.
 
 #include "noor/runtime/world.h"
 
@@ -107,6 +119,15 @@ public:
     // Jumps with this upward speed (m/s) at the next fixed step, if the character stands on ground.
     void character_jump(const Guid& entity, float speed);
     [[nodiscard]] bool is_grounded(const Guid& entity) const;
+    // In the water (8D part 5): its state and the water's depth at its feet and at the top of its head (positive: under).
+    enum class WaterState : std::uint8_t { Dry, Wading, Swimming, Under };
+    struct CharacterWater {
+        WaterState state = WaterState::Dry;
+        float feet_depth = 0.0f;
+        float head_depth = 0.0f;
+    };
+    [[nodiscard]] std::optional<CharacterWater> character_water(const Guid& entity) const;
+    [[nodiscard]] static const char* water_state_name(WaterState s) noexcept;
 
     void late_update(runtime::World& world, double dt) override;
 
