@@ -39,7 +39,8 @@ The list of Godot features below comes from a real game: an old 2D platformer of
 
 | Godot | NoorEngine | Status |
 |---|---|---|
-| Sprite2D, AnimatedSprite2D (SpriteFrames) | `sprite` + a `.noorsprite` sheet with animations | ✅; sorting by layer and by Y in 2D part 3 |
+| Sprite2D, AnimatedSprite2D (SpriteFrames) | `sprite` + a `.noorsprite` sheet with animations | ✅ |
+| `z_index`, `y_sort_enabled`, an unshaded material | the sprite's `layer` / `order`, `"sort": "y"`, `"unlit": true` | ✅ (2D part 3) |
 | Camera2D (follow, smoothing, limits) | an orthographic `camera` | Follow, smoothing, limits and pixel-perfect: 2D part 6 |
 | **TileMap** | | **Not yet**: 2D part 4 |
 | ParallaxBackground | | 2D part 6 |

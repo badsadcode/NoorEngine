@@ -43,9 +43,26 @@ struct GpuMaterial
     float4 params;           // metallic, roughness, normal scale, occlusion strength
     float4 uv;               // scale xy, offset xy
     uint4 tex0;              // base colour, metallic-roughness (G, B), roughness (R), metallic (R)
-    uint4 tex1;              // normal, occlusion (R), emissive, flags (bit 0: cutout, bit 1: see-through, bit 2: double-sided)
+    uint4 tex1;              // normal, occlusion (R), emissive, flags (bit 0: cutout, 1: see-through, 2: double-sided, 3: nearest,
+                             // 4: unlit, 5: coverage, 6: clamp uv: render::MaterialDesc)
 };
 [[vk::binding(2, 1)]] StructuredBuffer<GpuMaterial> materials;
+
+// A surface's texture coordinates through its material's scale and offset. With "clamp uv" (2D part 3: a sprite's frame)
+// they stay half a texel inside the 0..1 rectangle first, so the nearest texel is never the next frame's or the
+// opposite edge's (the sampler repeats).
+float2 material_uv(GpuMaterial mat, float2 surface_uv)
+{
+    if ((mat.tex1.w & 64u) != 0u)
+    {
+        float w, h;
+        textures[mat.tex0.x].GetDimensions(w, h);
+        const float2 texels = max(abs(mat.uv.xy) * float2(w, h), 1.0);
+        const float2 half_texel = 0.5 / texels;
+        surface_uv = clamp(surface_uv, half_texel, 1.0 - half_texel);
+    }
+    return surface_uv * mat.uv.xy + mat.uv.zw;
+}
 
 #include "frame.hlsli"  // the frame, its bindings, shadows, environment light, atmosphere and fog
 #include "water_light.hlsli"  // under water: the light from above dimmed by depth, caustics (8D part 4)
@@ -214,7 +231,7 @@ struct Surface
 Surface sample_surface(uint slot, float2 surface_uv, float3 n, float4 tangent)
 {
     const GpuMaterial mat = materials[slot];
-    const float2 uv = surface_uv * mat.uv.xy + mat.uv.zw;
+    const float2 uv = material_uv(mat, surface_uv);
     const float4 base_sample = sample_base(mat.tex0.x, uv, mat.tex1.w);
     Surface s;
     s.alpha = mat.base_color.a * base_sample.a;
@@ -241,7 +258,7 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const GpuMaterial mat = materials[pc.ids.x];
     if (!is_splat())
     {
-        const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
+        const float2 uv = material_uv(mat, input.uv);
         if ((mat.tex1.w & 1u) != 0u && mat.base_color.a * sample_base(mat.tex0.x, uv, mat.tex1.w).a < mat.emissive_cutoff.w) discard;  // cutout
     }
     if (!front) n = -n;  // double-sided: the back face's normal points the other way
@@ -286,6 +303,13 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     }
     n = surf.normal;
     const float alpha = surf.alpha;
+    if ((mat.tex1.w & 48u) != 0u && alpha < 1.0 / 255.0) discard;  // unlit or coverage: nothing where there's nothing
+    if ((mat.tex1.w & 16u) != 0u)
+    {
+        // Unlit (2D part 3): its own colours, as drawn: no light, no shadow, no air between (in see-through, premultiplied).
+        const float3 own = input.color * surf.base_color + surf.emissive;
+        return (mat.tex1.w & 2u) != 0u ? float4(own * saturate(alpha), saturate(alpha)) : float4(own, 1.0);
+    }
     const float3 v = -view_ray(input.world_position);
     const float3 base_color = input.color * surf.base_color;
     const float roughness = surf.roughness;
@@ -316,6 +340,7 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
         float air_t;
         float3 air_in;
         atmosphere_between(input.world_position, air_t, air_in);
+        if ((mat.tex1.w & 32u) != 0u) return float4((color + reflection + emissive) * a * air_t + air_in * a, a);  // coverage
         return float4((color * a + reflection + emissive) * air_t + air_in * a, a);
     }
     color += reflection;

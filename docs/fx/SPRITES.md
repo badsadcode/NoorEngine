@@ -77,8 +77,23 @@ default (BC7) is very close, but not identical.
 | `flip_x` | Mirror left to right (a character walking the other way). |
 | `color` | Multiplies the picture (sRGB `#RRGGBB`, or linear `[r, g, b]`). |
 | `cast_shadows` | Whether it throws a shadow. |
+| `layer`, `order` | **2D drawing order** (2D foundations, part 3): lower layers are drawn first (behind); within a layer, lower `order` first. Godot's `z_index`. |
+| `sort` | `"y"`: within its layer, the lower its pivot, the nearer it is: top-down and isometric scenes, where a character walks behind a tree and then in front of it. Godot's `y_sort_enabled`. |
+| `blend` | `true`: soft edges (alpha blending), for glows, smoke, anti-aliased art. |
+| `unlit` | `true`: shows its own colours exactly, whatever the light (no sun, no shadow, no fog). Godot's unshaded material. |
 
 The entity's position is where the pivot goes; its scale multiplies the frame's size.
+
+### Drawing order in 2D
+
+In 3D, what's in front is decided by depth: nearer things hide farther ones. In 2D every sprite usually sits at the
+same depth, so the artist decides instead. A sprite with `layer`, `order`, `sort` or `blend` is drawn in the
+see-through pass in that order: by layer, then order (or height, with `"sort": "y"`), then back to front. One without
+any of them is a lit cut-out, depth-tested like any 3D surface: right for sprites standing in a 3D world (The
+Uncounted's style), and every scene made before this works as it did.
+
+A sprite only ever shows its own frame: its edges are sampled half a texel inside the frame, so the frame next to it
+in the sheet (or the opposite edge) can't bleed in, even magnified.
 
 ## From scripts
 

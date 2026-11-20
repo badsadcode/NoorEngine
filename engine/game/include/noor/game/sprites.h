@@ -57,10 +57,11 @@ private:
         std::filesystem::file_time_type time{};
         asset::SpriteSheet sheet;
         render::TextureHandle texture;
-        std::map<std::tuple<int, std::uint32_t, bool>, render::MaterialHandle> materials;  // (frame, tint, flipped) -> material
+        // (frame, tint, flipped, look) -> material; look (2D part 3): bit 0 see-through (sorted or soft-edged), bit 1 unlit
+        std::map<std::tuple<int, std::uint32_t, bool, int>, render::MaterialHandle> materials;
     };
     Sheet* sheet(const std::filesystem::path& file);
-    render::MaterialHandle material(Sheet& s, int frame, math::Vec3 tint, bool flip);
+    render::MaterialHandle material(Sheet& s, int frame, math::Vec3 tint, bool flip, int look = 0);
 
     render::Renderer& renderer_;
     TextureLibrary& textures_;

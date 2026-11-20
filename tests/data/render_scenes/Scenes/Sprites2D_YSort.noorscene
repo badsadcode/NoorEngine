@@ -1,0 +1,813 @@
+{
+  "noor_scene": 2,
+  "id": "0fe1712c-6e69-5fc9-9a83-4547751ee95f",
+  "name": "Sprites2D_YSort",
+  "entities": [
+    {
+      "id": "b5d9c3da-8f38-53d5-a1a1-a832940b1a30",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 10,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "80b270d1-d60a-568c-ae85-8527a509fead",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 90000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "f619b70c-51e0-5275-b428-beaf30086cc5",
+      "name": "Backdrop",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            80,
+            50,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "410eff14-4f50-5c68-9c52-723f715f6a68",
+      "name": "Walker 0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#A07CFF"
+        }
+      }
+    },
+    {
+      "id": "76c4b037-e3dc-57e0-b4fb-a8cc65c68718",
+      "name": "Walker 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.1,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FFC857"
+        }
+      }
+    },
+    {
+      "id": "fae9f4d7-782a-5e3f-a2e4-2c558f963842",
+      "name": "Walker 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.7999999999999998,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#5FD3A8"
+        }
+      }
+    },
+    {
+      "id": "4cb0ebb5-2f55-5f9b-8ae3-a0aafdc819b2",
+      "name": "Walker 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.6999999999999993,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FF6B6B"
+        }
+      }
+    },
+    {
+      "id": "9fd1a9be-42b3-5611-95ca-b28ea6d2c485",
+      "name": "Walker 4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.4,
+          1.45,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FFC857"
+        }
+      }
+    },
+    {
+      "id": "801f2d69-0470-5e3f-a1d8-bc3703fcdea0",
+      "name": "Walker 5",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.5000000000000001,
+          1.45,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#5FD3A8"
+        }
+      }
+    },
+    {
+      "id": "e185e086-5d97-5528-a208-c7a9c4d1341d",
+      "name": "Walker 6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.4,
+          1.45,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FF6B6B"
+        }
+      }
+    },
+    {
+      "id": "dfbed133-57b6-5f26-adfd-2eaeed35a07f",
+      "name": "Walker 7",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.2999999999999994,
+          1.45,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "80dfcaf2-46a8-58d8-bbe5-3f25038a1ad2",
+      "name": "Walker 8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.0,
+          0.8999999999999999,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#5FD3A8"
+        }
+      }
+    },
+    {
+      "id": "8825cfcb-bcd3-58fa-802b-40ff70d0bb0e",
+      "name": "Walker 9",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.1,
+          0.8999999999999999,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FF6B6B"
+        }
+      }
+    },
+    {
+      "id": "e50f759c-b46f-57ed-821f-32976850f70e",
+      "name": "Walker 10",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.7999999999999998,
+          0.8999999999999999,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "d5afb7b5-e2e2-53e2-ab06-5f45b9e0bc44",
+      "name": "Walker 11",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.6999999999999993,
+          0.8999999999999999,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#F2EEFF"
+        }
+      }
+    },
+    {
+      "id": "14d35f01-4b33-50ae-b5d1-2f778a7f0105",
+      "name": "Walker 12",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.4,
+          0.34999999999999987,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FF6B6B"
+        }
+      }
+    },
+    {
+      "id": "785d871e-4d5e-5104-b73c-bcd6d96cdeda",
+      "name": "Walker 13",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -0.5000000000000001,
+          0.34999999999999987,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "475b7323-1216-5ed7-84d7-5b5e60765fba",
+      "name": "Walker 14",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.4,
+          0.34999999999999987,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#F2EEFF"
+        }
+      }
+    },
+    {
+      "id": "e58681d6-8d89-5bcb-b434-a9ee2b6f765f",
+      "name": "Walker 15",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.2999999999999994,
+          0.34999999999999987,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#A07CFF"
+        }
+      }
+    },
+    {
+      "id": "e42c2f1f-95dd-5938-9379-e25e9720220e",
+      "name": "Walker 16",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.0,
+          -0.20000000000000018,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "a5e494b8-c58f-577f-b816-f923c2320b7f",
+      "name": "Walker 17",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.1,
+          -0.20000000000000018,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 1,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#F2EEFF"
+        }
+      }
+    },
+    {
+      "id": "1c3b4b0f-9e71-5b09-9343-93ada9b82598",
+      "name": "Walker 18",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.7999999999999998,
+          -0.20000000000000018,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 2,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#A07CFF"
+        }
+      }
+    },
+    {
+      "id": "5e93c330-5aee-5849-be57-0fb49e407499",
+      "name": "Walker 19",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.6999999999999993,
+          -0.20000000000000018,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 3,
+          "billboard": "none",
+          "cast_shadows": false,
+          "sort": "y",
+          "color": "#FFC857"
+        }
+      }
+    }
+  ]
+}

@@ -152,7 +152,7 @@ struct GpuMaterial {
     math::Vec4 params;           // metallic, roughness, normal scale, occlusion strength
     math::Vec4 uv;               // scale xy, offset xy
     std::uint32_t tex0[4];       // base colour, metallic-roughness, roughness, metallic
-    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bit 0 cutout, bit 1 blend, bit 2 double-sided, bit 3 nearest)
+    std::uint32_t tex1[4];       // normal, occlusion, emissive, flags (bit 0 cutout, 1 blend, 2 double-sided, 3 nearest, 4 unlit, 5 coverage, 6 clamp uv)
 };
 static_assert(sizeof(GpuMaterial) == 96);
 static_assert(sizeof(Vertex) == 60, "mesh pipeline vertex layout: float3 position, normal, color, float2 uv, float4 tangent");

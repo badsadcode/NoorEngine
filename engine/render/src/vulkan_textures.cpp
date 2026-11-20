@@ -155,7 +155,7 @@ void Renderer::Impl::write_material(std::uint32_t slot, const MaterialDesc& d) {
         return t.valid() && t.id < textures.size() && textures[t.id].alive ? t.id : fallback;
     };
     const std::uint32_t flags = (d.alpha == AlphaMode::Cutout ? 1u : 0u) | (d.alpha == AlphaMode::Blend ? 2u : 0u) | (d.double_sided ? 4u : 0u) |
-                                (d.nearest_filter ? 8u : 0u);
+                                (d.nearest_filter ? 8u : 0u) | (d.unlit ? 16u : 0u) | (d.coverage ? 32u : 0u) | (d.clamp_uv ? 64u : 0u);
     const GpuMaterial m{d.base_color,
                         {d.emissive.x, d.emissive.y, d.emissive.z, d.alpha_cutoff},
                         {d.metallic, d.roughness, d.normal_scale, d.occlusion_strength},

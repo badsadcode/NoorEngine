@@ -1,0 +1,180 @@
+{
+  "noor_scene": 2,
+  "id": "442b738c-b610-5856-858f-156ae2969d23",
+  "name": "Sprites2D_Unlit",
+  "entities": [
+    {
+      "id": "b5d9c3da-8f38-53d5-a1a1-a832940b1a30",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 6,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "80b270d1-d60a-568c-ae85-8527a509fead",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 6000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "f619b70c-51e0-5275-b428-beaf30086cc5",
+      "name": "Backdrop",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            80,
+            50,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "3f3a7392-b0bc-518d-90ae-7bd9a0d02cda",
+      "name": "Lit coin",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.2,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false
+        }
+      }
+    },
+    {
+      "id": "da33b522-d826-5c13-91ad-2a46daad7a39",
+      "name": "Unlit coin",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.2,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true
+        }
+      }
+    }
+  ]
+}

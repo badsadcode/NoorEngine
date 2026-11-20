@@ -75,7 +75,15 @@ void PSMain(VertexOutput input)
 {
     const GpuMaterial mat = materials[pc.ids.x];
     if ((mat.tex1.w & 3u) == 0u) return;  // opaque: depth only (see-through ones cast shadows like cutouts)
-    const float2 uv = input.uv * mat.uv.xy + mat.uv.zw;
+    float2 surface_uv = input.uv;
+    if ((mat.tex1.w & 64u) != 0u)  // clamp uv (2D part 3): inside the frame, as mesh.hlsl's material_uv
+    {
+        float w, h;
+        textures[mat.tex0.x].GetDimensions(w, h);
+        const float2 half_texel = 0.5 / max(abs(mat.uv.xy) * float2(w, h), 1.0);
+        surface_uv = clamp(surface_uv, half_texel, 1.0 - half_texel);
+    }
+    const float2 uv = surface_uv * mat.uv.xy + mat.uv.zw;
     const float alpha = mat.base_color.a * ((mat.tex1.w & 8u) != 0u ? textures[mat.tex0.x].Sample(nearest_sampler, uv).a
                                                                      : textures[mat.tex0.x].Sample(texture_sampler, uv).a);
     if (alpha < mat.emissive_cutoff.w) discard;

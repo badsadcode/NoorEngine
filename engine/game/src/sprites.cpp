@@ -115,8 +115,8 @@ SpriteLibrary::Sheet* SpriteLibrary::sheet(const std::filesystem::path& file) {
     return &s;
 }
 
-render::MaterialHandle SpriteLibrary::material(Sheet& s, int frame, Vec3 tint, bool flip) {
-    const auto key = std::make_tuple(frame, pack(tint), flip);
+render::MaterialHandle SpriteLibrary::material(Sheet& s, int frame, Vec3 tint, bool flip, int look) {
+    const auto key = std::make_tuple(frame, pack(tint), flip, look);
     if (const auto it = s.materials.find(key); it != s.materials.end()) return it->second;
     const auto& f = s.sheet.frames[static_cast<std::size_t>(frame)];
     render::MaterialDesc d;
@@ -126,6 +126,12 @@ render::MaterialHandle SpriteLibrary::material(Sheet& s, int frame, Vec3 tint, b
     d.alpha_cutoff = 0.5f;
     d.double_sided = true;
     d.nearest_filter = s.sheet.nearest;
+    d.clamp_uv = true;  // only its own frame, never a texel of the next one (2D part 3)
+    if ((look & 1) != 0) {  // sorted or soft-edged: the see-through pass, its alpha covering all it shows
+        d.alpha = render::AlphaMode::Blend;
+        d.coverage = true;
+    }
+    d.unlit = (look & 2) != 0;
     d.uv_scale = f.uv_scale;
     d.uv_offset = f.uv_offset;
     if (flip) {  // mirrored in the texture, not by a negative scale (that would turn the quad's front face away)
@@ -186,8 +192,21 @@ void SpriteLibrary::add_draws(std::span<const SpriteInstance> sprites, Vec3 eye,
         render::DrawItem item;
         item.mesh = quad_;
         item.world_from_object = place;
-        item.material = material(s, frame, c.is_object() && c.contains("color") ? linear_of(c["color"]) : Vec3{1, 1, 1}, flip);
+        // 2D part 3 (ADR-040): sorted by layer, order or height ("sort": "y") instead of depth, soft-edged ("blend"),
+        // unlit. Any of the first three puts it in the see-through pass, where it's drawn in that order.
+        const bool sorted = c.is_object() && (c.contains("layer") || c.contains("order") || c.value("sort", std::string()) == "y");
+        const bool soft = c.is_object() && c.value("blend", false);
+        const bool unlit = c.is_object() && c.value("unlit", false);
+        const int look = (sorted || soft ? 1 : 0) | (unlit ? 2 : 0);
+        item.material = material(s, frame, c.is_object() && c.contains("color") ? linear_of(c["color"]) : Vec3{1, 1, 1}, flip, look);
         item.cast_shadow = !c.is_object() || c.value("cast_shadows", true);
+        if (c.is_object()) {
+            const auto num = [&](const char* k, double fallback) { return c.contains(k) && c[k].is_number() ? c[k].get<double>() : fallback; };
+            item.sort_layer = static_cast<std::int32_t>(std::lround(num("layer", 0.0)));
+            // "sort": "y": lower on the screen is nearer (top-down, isometric), its pivot's height decides; "order" nudges.
+            item.sort_order = c.value("sort", std::string()) == "y" ? -pos.y + static_cast<float>(num("order", 0.0)) * 1e-4f
+                                                                     : static_cast<float>(num("order", 0.0));
+        }
         out.push_back(item);
     }
 }

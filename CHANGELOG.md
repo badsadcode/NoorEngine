@@ -4,6 +4,20 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — 2D foundations, part 3: sprites for 2D
+**Added**
+- Sprite fields `layer`, `order`, `sort` (`"y"`), `blend`, `unlit`; sorted sprites go to the see-through pass.
+- `render::DrawItem::sort_layer`, `sort_order`; the see-through pass sorts by layer, order, then distance (along the
+  view for orthographic cameras).
+- `render::MaterialDesc::unlit`, `coverage`, `clamp_uv` (material flags 16, 32, 64; mesh.hlsl `material_uv`, the
+  shadow pass too).
+
+**Fixed**
+- Sprite frames bled at their edges (the sampler repeats): sprites now sample half a texel inside their frame.
+
+**Tests:** goldens `Sprites2D_Layers`, `Sprites2D_Unlit`, `Sprites2D_YSort`, `Sprites2D_Bleed`; every existing golden
+unchanged.
+
 ### 2026-11-20 — 2D foundations, part 2b: your own controllers
 **Added**
 - `character` `"motion": "script"`: the script owns the velocity (no gravity added), it slides, and its velocity is

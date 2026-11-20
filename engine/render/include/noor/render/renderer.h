@@ -116,7 +116,7 @@ struct TextureHandle {
 enum class AlphaMode : std::uint8_t {  // Blend: see-through, drawn after the opaque scene, sorted back to front
     Opaque,
     Cutout,  // pixels with alpha below alpha_cutoff are not drawn (leaves, fences)
-    Blend,   // see-through blending is not implemented yet: drawn like Cutout (logged once)
+    Blend,   // see-through (premultiplied), in the see-through pass, sorted (DrawItem::sort_layer, sort_order, distance)
 };
 
 // What the shader needs to draw a surface (glTF metallic-roughness, ADR-012). Factors multiply
@@ -133,6 +133,13 @@ struct MaterialDesc {
     bool double_sided = false;          // draw back faces too (thin leaves, cloth, planes seen from below)
     // The base colour (and cutout) sampled without blending between texels: crisp pixel art (sprites, 8B part 5).
     bool nearest_filter = false;
+    // 2D part 3 (ADR-040). Unlit: shows its own colours (base colour x texture, plus emissive), no light, no fog.
+    // Coverage: see-through by coverage (sprites, foliage cards): alpha scales everything it shows, reflections too
+    // (Blend alone is glass: a clear pane still reflects). Clamp UV: the texture is sampled only inside the 0..1 UV
+    // rectangle (after uv_scale / uv_offset: a sprite's frame), half a texel in, so neighbouring frames never bleed in.
+    bool unlit = false;
+    bool coverage = false;
+    bool clamp_uv = false;
     math::Vec2 uv_scale{1, 1};
     math::Vec2 uv_offset{0, 0};
     TextureHandle base_color_texture;          // rgb colour, a alpha
@@ -338,6 +345,11 @@ struct DrawItem {
     bool splat = false;
     std::array<MaterialHandle, 3> splat_layers{};
     math::Vec4 splat_tiling{1, 1, 1, 1};
+    // Order in the see-through pass (2D part 3, ADR-040): by layer (lower first, so behind), then by order (lower
+    // first), then back to front by distance (along the view for an orthographic camera). 0 and 0: by distance alone,
+    // as all see-through things were before. Opaque and cutout draws are depth-tested and ignore these.
+    std::int32_t sort_layer = 0;
+    float sort_order = 0.0f;
 };
 
 // The 2D overlay (HUD), drawn over the 3D scene with alpha blending. Triangle-list vertices in

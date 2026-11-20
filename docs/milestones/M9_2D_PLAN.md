@@ -27,7 +27,7 @@ the bit; every existing golden and yardstick unchanged.
 | 1 ✅ | **2D physics on Jolt**: a rigidbody can be locked to a plane (`"plane": "xy"`: moving in X and Y, turning about Z) or have any axis locked (`lock_position`, `lock_rotation`, for 3D too); 2D collider shapes: `rectangle`, `circle`, `polygon` (convex, from points), each a slab of a given depth | Bodies locked to the plane stay in it to the bit over a long tumbling pile, turning only about Z (unit); a circle rolls down a slope as a disc should (its speed against the formula); polygons land and rest; deterministic run to run; a golden of a 2D pile; existing physics tests unchanged |
 | 2 ✅ | **A 2D character controller**: walking, jumping with variable height, slopes, one-way platforms, ground snapping; coyote time and jump buffering as options; `on_ground` events for scripts | A scripted run over a test course (slope, gap, one-way platform) lands where the maths says; a built game identical |
 | 2b ✅ | **Your own controllers** (added 2026-11-20, Tom: "will the engine let me make my own controllers?"): a character whose velocity the script owns (`"motion": "script"`, Godot's CharacterBody), floor, wall and ceiling contacts, `set_velocity` on walking characters for one step, shape casts and overlaps, for Lua and C#; [Coming from Godot](../scripting/COMING_FROM_GODOT.md) | A script-owned character hangs where it's put, stops under a roof and on a floor with its velocity slid away; a double jump from a script; shape casts and overlaps by hand; a Godot-style platformer written in Lua lands, jumps and stops at a wall |
-| 3 | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
+| 3 ✅ | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
 | 4 | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
 | 5 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
 | 6 | **Cameras for 2D**: pixel-perfect (whole pixels at a chosen pixels per unit, integer scaling for retro resolutions), following with a dead zone and bounds, parallax layers | A moving pixel-perfect camera never draws a sprite between pixels (readback); parallax layers move by their factor (golden at two moments) |
@@ -80,6 +80,21 @@ speed gone), drops to the floor and stops (`is_on_floor`, normal straight up); a
 1.50 m jump to 2.61 m; a circle swept at a box hits at 4.0 m with the face's normal, overlaps find exactly what's
 there; and a Godot-style platformer written in Lua lands, jumps 1.78 m, sees the wall ahead with a shape cast, and stops
 against it with its run speed slid away.
+
+## Part 3 result (2026-11-20)
+Done. Sprites gain `layer`, `order`, `"sort": "y"`, `blend` and `unlit`. A sprite with any of the first four is drawn
+in the see-through pass, which now sorts by layer, then order, then distance (along the view for an orthographic camera,
+so sprites at one depth keep their scene order instead of a random one); before, that pass sorted by distance alone,
+and every existing see-through thing is layer 0, order 0, so nothing else moved. Three material flags behind it
+(`render::MaterialDesc`): **unlit** (its own colours, no light or fog), **coverage** (alpha scales everything a
+see-through surface shows: the glass path still added full-strength reflections where a sprite was clear, which would
+have drawn a faint rectangle round every soft sprite), and **clamp UV** (a frame sampled half a texel inside itself:
+the edge bleeding part 2 found). Plain sprites are unchanged and every existing golden matched.
+
+Proved by goldens: three walkers at one depth stacked by layer against their scene order, coins by order, soft glows
+over them; a lit and an unlit coin under a dim sun; a top-down crowd listed top to bottom and drawn bottom-nearest; a
+frame magnified beside a solid red one with no red pixel in the picture. And on Tom's art: the line under the hero's
+feet in the jump frame is gone.
 
 ## Highest risks (settle early)
 

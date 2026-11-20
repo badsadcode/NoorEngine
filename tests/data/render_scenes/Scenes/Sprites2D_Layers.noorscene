@@ -1,0 +1,428 @@
+{
+  "noor_scene": 2,
+  "id": "ee8e372a-d65e-5c8c-a098-a5d2e82447a8",
+  "name": "Sprites2D_Layers",
+  "entities": [
+    {
+      "id": "b5d9c3da-8f38-53d5-a1a1-a832940b1a30",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 10,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "80b270d1-d60a-568c-ae85-8527a509fead",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 90000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "f619b70c-51e0-5275-b428-beaf30086cc5",
+      "name": "Backdrop",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            80,
+            50,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "15633728-08b5-5981-b552-74f4421ebc3d",
+      "name": "Front (layer 2)",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.2,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "layer": 2,
+          "color": "#FF7070"
+        }
+      }
+    },
+    {
+      "id": "f457da99-bfb5-5993-b214-a987ea4b243a",
+      "name": "Back (layer -1)",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -4.4,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "layer": -1,
+          "color": "#70FF90"
+        }
+      }
+    },
+    {
+      "id": "284fedeb-c29e-51fc-bd5e-78ff190fcea1",
+      "name": "Middle (layer 0)",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.8,
+          -1.3,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "layer": 0,
+          "color": "#70A0FF"
+        }
+      }
+    },
+    {
+      "id": "09480a25-6f11-5061-bd6a-b33756abea23",
+      "name": "Coin order 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.2,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false,
+          "order": 3,
+          "color": "#A07CFF"
+        }
+      }
+    },
+    {
+      "id": "85c49649-2312-57dc-b1ac-181941a22da7",
+      "name": "Coin order 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.8,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false,
+          "order": 1,
+          "color": "#FFC857"
+        }
+      }
+    },
+    {
+      "id": "08eb2f2e-20fe-5f6e-a60c-6287d5180ab3",
+      "name": "Coin order 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.4,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false,
+          "order": 2,
+          "color": "#5FD3A8"
+        }
+      }
+    },
+    {
+      "id": "d9f92482-986b-562f-84e6-65d5169c1a2a",
+      "name": "Coin order 0",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.9999999999999998,
+          -1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "5b417e00-0001-4000-8000-000000000001",
+          "frame": 4,
+          "billboard": "none",
+          "cast_shadows": false,
+          "order": 0,
+          "color": "#FF6B6B"
+        }
+      }
+    },
+    {
+      "id": "f4759bd6-c42b-5f64-879c-a4c527631266",
+      "name": "Glow A",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3.6,
+          0.4,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "7bf47e44-3652-5800-b0ad-c9e1cf6519bc",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "blend": true,
+          "layer": 5
+        }
+      }
+    },
+    {
+      "id": "bb3f3be3-2ef6-52f0-8b3b-86c9f61d1c79",
+      "name": "Glow B",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.1,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "7bf47e44-3652-5800-b0ad-c9e1cf6519bc",
+          "frame": 0,
+          "billboard": "none",
+          "cast_shadows": false,
+          "blend": true,
+          "layer": 5
+        }
+      }
+    }
+  ]
+}

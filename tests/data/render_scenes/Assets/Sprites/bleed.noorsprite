@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "bleed",
+  "texture": "d6d1042b-d466-5bbd-9f7b-543c8bf97281",
+  "grid": {
+    "columns": 2,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.5
+  ],
+  "pixels_per_metre": 8,
+  "filter": "nearest",
+  "animations": {}
+}

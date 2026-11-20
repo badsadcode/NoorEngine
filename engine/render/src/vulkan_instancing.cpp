@@ -135,8 +135,16 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     struct Transparent {
         float distance;
         Candidate candidate;
+        std::int32_t layer = 0;  // DrawItem::sort_layer, sort_order (2D part 3)
+        float order = 0.0f;
     };
     std::vector<Transparent> transparent;
+    // How far back something is: from the eye, or (an orthographic camera) along the view, so things at one depth keep
+    // the order they came in (a 2D scene's sprites all sit at z = 0).
+    const math::Vec3 view_forward = math::normalize(math::transform_vector(math::inverse(frame.camera.view), {0, 0, -1}));
+    const auto depth_of = [&](math::Vec3 c) {
+        return frame.camera.orthographic() ? math::dot(c - eye, view_forward) : math::length(c - eye);
+    };
     opaque.reserve(frame.draws.size());
 
     for (const DrawItem& item : frame.draws) {
@@ -211,7 +219,7 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
             key.tiling[2] = std::bit_cast<std::uint32_t>(item.splat_tiling.z);
             key.tiling[3] = std::bit_cast<std::uint32_t>(item.splat_tiling.w);
             if (blend) {
-                transparent.push_back({math::length(centre - eye), {key, inst}});
+                transparent.push_back({depth_of(centre), {key, inst}, item.sort_layer, item.sort_order});
             } else {
                 opaque.push_back({key, inst});
             }
@@ -242,20 +250,27 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     group(opaque, p.instances, p.opaque);
     // The see-through pass: see-through meshes and particle emitters (Milestone 8B) in one order, back to front by
     // distance, so smoke behind a window is drawn before the window and smoke in front of it after.
+    // 2D part 3: by sort layer, then sort order, then distance (all see-through things were layer 0, order 0 before).
     struct SeeThroughItem {
         float distance;
         bool particles;
         std::size_t index;  // into `transparent` or frame.particles
+        std::int32_t layer = 0;
+        float sort = 0.0f;
     };
     std::vector<SeeThroughItem> order;
     order.reserve(transparent.size() + frame.particles.size());
-    for (std::size_t i = 0; i < transparent.size(); ++i) order.push_back({transparent[i].distance, false, i});
+    for (std::size_t i = 0; i < transparent.size(); ++i) order.push_back({transparent[i].distance, false, i, transparent[i].layer, transparent[i].order});
     for (std::size_t i = 0; i < frame.particles.size(); ++i) {
         const ParticleDraw& d = frame.particles[i];
         if (d.particles.empty() || !frustum.visible(d.center, std::max(0.0f, d.radius))) continue;
-        order.push_back({math::length(d.center - eye), true, i});
+        order.push_back({depth_of(d.center), true, i});
     }
-    std::ranges::stable_sort(order, [](const SeeThroughItem& a, const SeeThroughItem& b) { return a.distance > b.distance; });
+    std::ranges::stable_sort(order, [](const SeeThroughItem& a, const SeeThroughItem& b) {
+        if (a.layer != b.layer) return a.layer < b.layer;
+        if (a.sort != b.sort) return a.sort < b.sort;
+        return a.distance > b.distance;
+    });
     const float exposure = frame.lighting.exposure();
     for (const auto& item : order) {
         if (!item.particles) {
