@@ -124,5 +124,9 @@ a double (the sheet editor's preview stuck on frame 0); sub-emitters not muted w
   snow, three sprite scenes, particles on terrain, the storm).
 - The sample's whole frame with the storm: see the table above.
 
+## Alden discovers ...
+**... the weather.** Alden Wayfarer stands by a campfire on Hillside as a storm rolls in, rain blowing sideways and
+sparks hissing in the grass. (Picture: Tom or Noor; the milestone tradition.)
+
 ## Next
 **8C: skeletal animation** (skinned meshes and clips from glTF, an animation player, blending, a simple state machine, root motion, an editor preview, retargeting through a humanoid bone map with Rigify, Mixamo, Unreal-mannequin and metarig presets; Alden Wayfarer as the test character), as the plan orders it. It starts with its own plan, as 8B did.

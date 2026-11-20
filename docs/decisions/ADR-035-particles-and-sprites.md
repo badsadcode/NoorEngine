@@ -1,6 +1,6 @@
 # ADR-035: Particles and sprites
 
-**Status:** Accepted (Milestone 8B; parts 1-4: effect particles simulated and drawn, weather particles, the Effects panel, 2026-11-19)
+**Status:** Accepted (Milestone 8B, done 2026-11-20: all eight parts; [review](../milestones/M8B_REVIEW.md))
 
 ## Context
 NoorEngine has no particles and no sprites. 8A's weather needs rain and snow; The Uncounted, Chapter Two (the

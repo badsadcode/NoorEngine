@@ -12,7 +12,7 @@ each ending in its own review, like Milestone 7 ended in one.
 |---|---|---|
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
-| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Next** (its plan comes first) |
+| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Next** ([parts below](#8c-skeletal-animation), proposed) |
 | **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | Planned |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
@@ -345,3 +345,93 @@ system read the environment file every step: both fixed (`game::effect_wind`, te
 Trails and ribbons, mesh particles, GPU-simulated effect particles (until measuring asks for them), force-field
 volumes, lit/soft particles against scene depth (soft edges where smoke meets the ground), tilemaps and the 2D
 workflow (spec section 22), an effects node graph, and lightning (NoorSky phase B).
+
+---
+
+# 8C: skeletal animation
+
+## Where 8C starts
+
+- **Characters can't move their limbs.** Models are rigid: a placed GLB becomes node entities with meshes, and
+  the glTF importer (cgltf) reads meshes, materials and collision nodes but ignores skins (joints, weights,
+  inverse bind matrices) and animations. Vertices have position, normal, colour, UV and tangent: no joint
+  indices or weights. Characters today are capsules (Hillside's walker) or sprites (Coth).
+- **What already helps:** the character controller (feet at the origin, slopes, steps), scripts in Lua and C#
+  with events (8B's `on_animation_end` pattern), the deterministic runtime (fixed steps, built games replaying
+  bit for bit), instanced drawing (ADR-032), the editor's viewport and panels, and a test culture of goldens
+  and built-game comparisons.
+- **Who's waiting:** Alden Wayfarer (the mascot, a 3D character); Tom's Blender characters (Rigify rigs, plain
+  glTF); first- and third-person templates (spec 18.5: "working skeletal/animation integration"); Mixamo-style
+  animation sets that people bring.
+- **The spec (18.1-18.3)** asks for bones, skin weights, clips, blend trees, state machines, transitions,
+  masks, additive blending, root motion, retargeting, editor previews with timelines, and in 18.2 procedural
+  animation (IK, look-at, foot placement, ragdolls). 8C takes the core that every 3D character needs and that
+  the plan named (player, blending, a simple state machine, root motion, preview, retargeting), built so IK and
+  the rest can follow without a rewrite.
+
+## Decisions (ADR-036, to propose with part 1)
+
+- **glTF first, any rig Blender exports.** Skins and clips come from the GLB itself (Blender's exporter, Rigify
+  with "Deform bones only", Mixamo through Blender). FBX stays a research item (below), not a dependency.
+- **The skeleton is not entities.** A skinned model's bones live in its runtime pose, not as scene entities:
+  60 bones times 100 characters would be thousands of entities rewritten every frame, and saved scenes would
+  fill with bone transforms. Props attach through **sockets** (a child entity that follows a named bone), and
+  scripts can read a bone's world transform.
+- **Sampled on the CPU, skinned on the GPU.** Clips are sampled on the CPU from game time (deterministic: the
+  same time gives the same pose, in Debug and Release, in the editor and built games), blended there, and turned
+  into a joint palette per character. The vertex shader does linear blend skinning (4 influences, the glTF
+  limit) from a per-frame storage buffer of palettes; shadows use the same path. Dual-quaternion skinning and
+  GPU sampling only if measuring asks for them.
+- **An `animator` component and an animation controller asset.** The component plays a clip or runs a controller
+  (`.nooranim`: parameters, states with a clip or a 1D/2D blend space, transitions with conditions and
+  cross-fade times, layers with bone masks, additive layers). Scripts set parameters and play, cross-fade and
+  hear events (`on_animation_event(name)`, end events as in 8B), Lua and C# alike.
+- **Root motion is opt-in per clip**: the root's horizontal movement and turn are taken out of the pose and given
+  to the entity, through the character controller when there is one, so feet don't slide and walls stop walks.
+- **Retargeting through a humanoid bone map** (about 20 core bones: hips, spine, chest, neck, head, shoulders,
+  arms, hands, legs, feet, toes; fingers optional), with presets that recognise **Rigify** (`DEF-` bones),
+  **Mixamo** (`mixamorig:`), the **Unreal mannequin** and Blender's **metarig**, and a manual override. A clip
+  made for one humanoid plays on another by transferring each mapped bone's rotation relative to its rest pose,
+  with the hips' height scaled by leg length. T-pose and A-pose rigs are both handled by comparing rest poses.
+
+## Parts (each ends tested, documented and pushed)
+
+| Part | What | Proves |
+|---|---|---|
+| 1 | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
+| 2 | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
+| 3 | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
+| 4 | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
+| 5 | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
+| 6 | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
+| 7 | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
+| 8 | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
+
+## Highest risks (settle early)
+
+1. **Test characters we may publish.** Goldens and the sample need rigged characters and clips in the repository:
+   Mixamo's can't be redistributed. Candidates: Tom's own Blender characters (Alden, Rigify), CC0 sets
+   (Quaternius's animated characters), the Khronos glTF samples (check each licence). Downloads need Tom's yes.
+2. **What Blender actually exports.** Armature scale (Mixamo's 0.01), non-uniform scale in bones, several skins in
+   one file, joints outside the skin's root, Rigify's control bones if "Deform bones only" is off: part 1 meets
+   real files early and warns in plain words rather than guessing.
+3. **Skinning and batching.** ADR-032 batches identical meshes into one draw; skinned characters can't share a
+   pose. Each instance needs its own palette offset; a crowd must still be a handful of draws, not hundreds.
+4. **Retargeting quality.** Rest poses differ (T vs A, rolled bones); a naive rotation copy twists limbs. The
+   transfer must work relative to each rig's rest pose, and the tests must measure bone directions, not eyeball.
+5. **Determinism with blending.** Quaternion blending must be bit-stable (fixed order, no library slerp that an
+   optimiser may vectorise differently), as 8B's own sine and cosine were.
+
+## Open questions
+
+1. **Alden as a rigged GLB.** Is there one (from Thornwake, or made in Blender), and may it be committed? 8C's
+   sample needs him walking; part 1 can start on other characters meanwhile.
+2. **Which CC0 test characters?** May I download a CC0 animated character set (for example Quaternius's) for tests,
+   and/or will Tom export a Rigify character from Blender?
+3. **FBX:** keep part 7 (research, then maybe an importer), or drop it and stay glTF-only for now?
+
+## Not in 8C (planned later)
+IK solvers, look-at and aim constraints, foot placement on uneven ground, ragdolls and blending into them (spec
+18.2, with physics), morph targets and facial animation, the sequencer and cinematics (18.4), an animation studio
+for posing and keying in the editor (ideas inbox: after 8C), animation compression, GPU sampling, dual-quaternion
+skinning, network replication of animation state.
