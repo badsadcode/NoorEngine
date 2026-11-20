@@ -3,7 +3,7 @@
 // animations from scripts. No GPU here: games' drawing (sprites.h), the editor and tests all ask the same functions.
 //
 // A sprite's animation clock comes from its component:
-//   - played by a script (runtime::api::sprite_play): "started" (game seconds) and "speed"; stopped: "paused_at"
+//   - played by a script (runtime::api::play_animation): "started" (game seconds) and "speed"; stopped: "paused_at"
 //     (seconds into the animation where it froze);
 //   - otherwise the scene's clock: seconds x "speed" + "time_offset" (a looping idle that needs no script).
 // 8-direction sheets (asset::SpriteSheet::directions) pick their column from the angle between the entity's forward

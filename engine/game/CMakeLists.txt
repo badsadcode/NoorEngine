@@ -9,6 +9,7 @@ noor_add_module(game
         src/particle_ground.cpp
         src/model_lod.cpp
         src/scatter.cpp
+        src/animator.cpp
         src/sprite_animation.cpp
         src/sprites.cpp
         src/texture_library.cpp

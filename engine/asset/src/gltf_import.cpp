@@ -495,6 +495,51 @@ Result<ImportedModel> import_gltf(const stdfs::path& path, std::uint64_t max_fil
         model.nodes[static_cast<std::size_t>(node)].skin = skin;
     }
 
+
+    // Animations (8C part 2): translation, rotation and scale channels of nodes in the scene. Morph-target weights
+    // aren't supported yet: those channels are skipped (said once).
+    std::size_t morph_channels = 0;
+    for (cgltf_size a = 0; a < data->animations_count; ++a) {
+        const cgltf_animation& src = data->animations[a];
+        ImportedAnimation clip;
+        clip.name = src.name ? src.name : std::format("animation_{}", a);
+        for (cgltf_size c = 0; c < src.channels_count; ++c) {
+            const cgltf_animation_channel& ch = src.channels[c];
+            if (ch.target_path == cgltf_animation_path_type_weights) {
+                ++morph_channels;
+                continue;
+            }
+            if (!ch.sampler || !ch.sampler->input || !ch.sampler->output || !ch.target_node) continue;
+            const int node = ours[cgltf_node_index(data.get(), ch.target_node)];
+            if (node < 0) continue;  // a node outside the scene
+            AnimationChannel out;
+            out.node = node;
+            out.path = ch.target_path == cgltf_animation_path_type_rotation ? AnimationChannel::Path::Rotation
+                       : ch.target_path == cgltf_animation_path_type_scale  ? AnimationChannel::Path::Scale
+                                                                            : AnimationChannel::Path::Translation;
+            out.interpolation = ch.sampler->interpolation == cgltf_interpolation_type_step           ? AnimationChannel::Interpolation::Step
+                                : ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline ? AnimationChannel::Interpolation::CubicSpline
+                                                                                                     : AnimationChannel::Interpolation::Linear;
+            const cgltf_size keys = ch.sampler->input->count;
+            const cgltf_size n = out.path == AnimationChannel::Path::Rotation ? 4 : 3;
+            const cgltf_size per_key = out.interpolation == AnimationChannel::Interpolation::CubicSpline ? 3 : 1;
+            if (keys == 0 || ch.sampler->output->count != keys * per_key || cgltf_num_components(ch.sampler->output->type) != n) {
+                model.warnings.push_back(std::format("animation '{}': a channel's keys and values don't match; skipped", clip.name));
+                continue;
+            }
+            out.times.resize(keys);
+            cgltf_accessor_unpack_floats(ch.sampler->input, out.times.data(), keys);
+            for (cgltf_size k = 1; k < keys; ++k) out.times[k] = std::max(out.times[k], out.times[k - 1]);  // never backwards
+            out.values.resize(keys * per_key * n);
+            cgltf_accessor_unpack_floats(ch.sampler->output, out.values.data(), out.values.size());  // normalised ints too
+            clip.duration = std::max(clip.duration, out.times.back());
+            clip.channels.push_back(std::move(out));
+        }
+        if (!clip.channels.empty()) model.animations.push_back(std::move(clip));
+    }
+    if (morph_channels > 0)
+        model.warnings.push_back(std::format("{} morph-target (face shape) animation channels skipped: not supported yet", morph_channels));
+
     for (const auto& w : model.warnings) NOOR_LOG_WARN("Import", "{}: {}", path.filename().generic_string(), w);
     return model;
 }

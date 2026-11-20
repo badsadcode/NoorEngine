@@ -219,15 +219,15 @@ int32_t rt_ui_rect(float x, float y, float w, float h, const char* color, const 
 int32_t rt_sprite(noor_rt_entity e, int32_t op, const char* animation, float speed) {
     if (!t_world) return 0;
     switch (op) {
-    case NOOR_RT_SPRITE_PLAY: return animation && api::sprite_play(*t_world, from_rt(e), animation, speed) ? 1 : 0;
-    case NOOR_RT_SPRITE_STOP: api::sprite_stop(*t_world, from_rt(e)); return 1;
-    case NOOR_RT_SPRITE_SPEED: api::sprite_set_speed(*t_world, from_rt(e), speed); return 1;
+    case NOOR_RT_SPRITE_PLAY: return animation && api::play_animation(*t_world, from_rt(e), animation, speed) ? 1 : 0;
+    case NOOR_RT_SPRITE_STOP: api::stop_animation(*t_world, from_rt(e)); return 1;
+    case NOOR_RT_SPRITE_SPEED: api::set_animation_speed(*t_world, from_rt(e), speed); return 1;
     default: return 0;
     }
 }
 const char* rt_sprite_animation(noor_rt_entity e) {
     if (!t_world) return nullptr;
-    const auto a = api::sprite_animation(*t_world, from_rt(e));
+    const auto a = api::current_animation(*t_world, from_rt(e));
     return a ? give(*a) : nullptr;
 }
 int32_t rt_burst(noor_rt_entity e, int32_t count) { return t_world && api::emitter_burst(*t_world, from_rt(e), count) ? 1 : 0; }

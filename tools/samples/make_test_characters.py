@@ -8,6 +8,12 @@ Writes into tests/data/animation/Ward/ (and copies into tests/data/render_scenes
                   DEF-upper_arm.L ...), bound in a T-pose. The file's own pose is the bind pose, so it draws as bound.
   Ward_Posed.glb  the same mesh and skin, but its joints' transforms are posed (arms down, the left elbow and right knee
                   bent, the head turned): before any animation exists, drawing it proves the whole skinning path.
+  Ward_Anim.glb   Ward bound and at rest in the T-pose, with clips (part 2), each with answers worked out by hand:
+                    Wave   LINEAR rotation: the right upper arm 0 -> 90 degrees about Z over 1 s (45 at 0.5 s);
+                    Nod    STEP rotation: the head 0 degrees until 0.5 s, then 30 about Y;
+                    Glide  CUBICSPLINE translation: the hips 1 m forward (+Z) over 1 s, leaving at 2 m/s and arriving
+                           still (0.4375 m at 0.25 s, 0.75 m at 0.5 s);
+                    Walk   a 1 s walk cycle, first key = last (loops): legs and arms swing (arms down), hips bob.
 
 Every body part is a tube along its bone; vertices near a joint blend between the two bones that meet there, so elbows
 and knees bend smoothly. Colours: a blue-grey tunic, light grey limbs, a warm head (vertex colours).
@@ -135,7 +141,38 @@ def quat(axis, degrees):
     return [x * math.sin(a), y * math.sin(a), z * math.sin(a), math.cos(a)]
 
 
-def write_glb(path, posed):
+def qmul(a, b):
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return [aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz]
+
+
+def clips():
+    """Ward_Anim's clips: (name, [(bone, path, interpolation, times, values per key)])."""
+    walk_t = [0, 0.25, 0.5, 0.75, 1.0]
+    swing = [30, 0, -30, 0, 30]
+    arm_l = [qmul(quat((1, 0, 0), -a * 0.6), quat((0, 0, 1), -70)) for a in swing]  # down, then swinging against the leg
+    arm_r = [qmul(quat((1, 0, 0), a * 0.6), quat((0, 0, 1), 70)) for a in swing]
+    return [
+        ('Wave', [('DEF-upper_arm.R', 'rotation', 'LINEAR', [0, 1], [quat((0, 0, 1), 0), quat((0, 0, 1), 90)])]),
+        ('Nod', [('DEF-head', 'rotation', 'STEP', [0, 0.5, 1.0], [quat((0, 1, 0), 0), quat((0, 1, 0), 30), quat((0, 1, 0), 30)])]),
+        # Cubic spline values per key: in-tangent, value, out-tangent. Leaves at 2 m/s along +Z, arrives still.
+        ('Glide', [('DEF-hips', 'translation', 'CUBICSPLINE', [0, 1],
+                    [[0, 0, 0], [0, 0.95, 0], [0, 0, 2], [0, 0, 0], [0, 0.95, 1], [0, 0, 0]])]),
+        ('Walk', [
+            ('DEF-thigh.L', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), -a) for a in swing]),
+            ('DEF-thigh.R', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), a) for a in swing]),
+            ('DEF-shin.L', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), b) for b in (0, 10, 40, 10, 0)]),
+            ('DEF-shin.R', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), b) for b in (40, 10, 0, 10, 40)]),
+            ('DEF-upper_arm.L', 'rotation', 'LINEAR', walk_t, arm_l),
+            ('DEF-upper_arm.R', 'rotation', 'LINEAR', walk_t, arm_r),
+            ('DEF-hips', 'translation', 'LINEAR', walk_t, [[0, y, 0] for y in (0.95, 0.93, 0.95, 0.93, 0.95)]),
+        ]),
+    ]
+
+
+def write_glb(path, posed, animated=False):
     positions, normals, colours, joints, weights, indices = build_mesh()
     blobs = []
 
@@ -188,6 +225,20 @@ def write_glb(path, posed):
         if kids:
             node['children'] = kids
         nodes.append(node)
+    animations = []
+    if animated:
+        index_of = {b[0]: i + 1 for i, b in enumerate(BONES)}  # glTF node index (node 0 is the mesh)
+        for name, channels in clips():
+            samplers, chans = [], []
+            for bone, target, interp, times, values in channels:
+                a_in = accessor(b''.join(struct.pack('<f', t) for t in times), '', len(times), 5126, 'SCALAR', None, ([min(times)], [max(times)]))
+                flat = [v for value in values for v in value]
+                kind = 'VEC4' if target == 'rotation' else 'VEC3'
+                a_out = accessor(b''.join(struct.pack('<f', v) for v in flat), '', len(values), 5126, kind)
+                samplers.append({'input': a_in, 'output': a_out, 'interpolation': interp})
+                chans.append({'sampler': len(samplers) - 1, 'target': {'node': index_of[bone], 'path': target}})
+            animations.append({'name': name, 'samplers': samplers, 'channels': chans})
+
     gltf = {
         'asset': {'version': '2.0', 'generator': 'NoorEngine tools/samples/make_test_characters.py'},
         'scene': 0, 'scenes': [{'nodes': [0, 1]}],
@@ -197,6 +248,7 @@ def write_glb(path, posed):
         'materials': [{'name': 'Ward', 'pbrMetallicRoughness': {'baseColorFactor': [1, 1, 1, 1], 'metallicFactor': 0, 'roughnessFactor': 0.7}}],
         'skins': [{'name': 'Ward', 'joints': list(range(1, len(BONES) + 1)), 'inverseBindMatrices': a_ibm, 'skeleton': 1}],
         'accessors': accessors, 'bufferViews': views,
+        **({'animations': animations} if animations else {}),
     }
     binary = b''.join(blobs)
     while len(binary) % 4:
@@ -215,8 +267,9 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     write_glb(OUT / 'Ward_Bind.glb', posed=False)
     write_glb(OUT / 'Ward_Posed.glb', posed=True)
+    write_glb(OUT / 'Ward_Anim.glb', posed=False, animated=True)
     SCENE_ASSETS.mkdir(parents=True, exist_ok=True)
-    for f in ('Ward_Bind.glb', 'Ward_Posed.glb'):
+    for f in ('Ward_Bind.glb', 'Ward_Posed.glb', 'Ward_Anim.glb'):
         shutil.copyfile(OUT / f, SCENE_ASSETS / f)
     shutil.copyfile(ROOT / 'tests' / 'data' / 'animation' / 'RobotExpressive' / 'RobotExpressive.glb', SCENE_ASSETS / 'RobotExpressive.glb')
 

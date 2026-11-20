@@ -307,22 +307,22 @@ struct LuaScriptSystem::Impl {
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
                  return 1;
              }},
-            // ---- Sprites (needs a sprite component; 8B part 6) ----
+            // ---- Animations (an animator or a sprite component; 8B part 6, 8C part 2) ----
             {"play_animation", [](lua_State* L) {
-                 lua_pushboolean(L, api::sprite_play(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2),
+                 lua_pushboolean(L, api::play_animation(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2),
                                                      static_cast<float>(luaL_optnumber(L, 3, 1.0))));
                  return 1;
              }},
             {"stop_animation", [](lua_State* L) {
-                 api::sprite_stop(world_of(L), check_entity(L, 1));
+                 api::stop_animation(world_of(L), check_entity(L, 1));
                  return 0;
              }},
             {"set_animation_speed", [](lua_State* L) {
-                 api::sprite_set_speed(world_of(L), check_entity(L, 1), static_cast<float>(luaL_checknumber(L, 2)));
+                 api::set_animation_speed(world_of(L), check_entity(L, 1), static_cast<float>(luaL_checknumber(L, 2)));
                  return 0;
              }},
             {"animation", [](lua_State* L) {
-                 if (const auto a = api::sprite_animation(world_of(L), check_entity(L, 1))) lua_pushstring(L, a->c_str());
+                 if (const auto a = api::current_animation(world_of(L), check_entity(L, 1))) lua_pushstring(L, a->c_str());
                  else lua_pushnil(L);
                  return 1;
              }},

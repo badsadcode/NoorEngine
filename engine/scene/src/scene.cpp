@@ -271,6 +271,13 @@ Guid instantiate_model(Scene& scene, const Guid& asset, const asset::ImportedMod
         mesh["skin"] = node.skin;
         mesh["joints"] = std::move(joints);
     }
+    // Animated models (8C part 2): the root lists the entity each glTF node became, in the file's order, so clips
+    // (which name nodes by index) move the right entities whatever they've been renamed to.
+    if (!model.animations.empty()) {
+        asset::Json nodes = asset::Json::array();
+        for (const Guid& id : ids) nodes.push_back(id.to_string());
+        scene.entities[first - 1].components["model"]["nodes"] = std::move(nodes);  // the root, just before its nodes
+    }
     return root_id;
 }
 

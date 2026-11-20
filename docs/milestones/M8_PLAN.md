@@ -399,7 +399,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
-| 2 | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
+| 2 ✅ | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
 | 3 | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
 | 4 | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
 | 5 | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
@@ -440,6 +440,23 @@ gathering 1.2 ms of CPU); the editor smoke test (a posed Ward placed, 19 entitie
 Test characters: CC0 RobotExpressive and SimpleSkin, our generated Ward (`make_test_characters.py`). Found on the way:
 a palette offset counted in joints where rows were meant (the first character drew right by luck). Not done: the
 gizmo doesn't bend a skinned mesh mid-drag; levels of detail don't switch skinned models; morph targets.
+
+## Part 2 result (2026-11-20)
+Done. Clips from glTF (translation, rotation and scale; step, linear with shortest-path slerp, cubic spline; morph
+channels skipped with a warning), `asset::sample` (a pure function of clip and time), the `animator` component on a
+model's root (animation, loop, speed, time offset; started and paused by scripts) and `game::AnimatorSystem` (poses the
+bones at the frame's end time, posts the end of a script-played one-shot). Placing an animated model lists its node
+entities on the root; older scenes fall back to names. Scripts: sprites' play, stop, speed and `on_animation_end`
+now drive animators too (one API, Lua and C#). Proven: unit tests against hand-worked values (Ward's generated clips:
+Wave 45 degrees at 0.5 s by slerp, Nod's step at 0.5 s, Glide's Hermite 0.4375 m at 0.25 s and 0.75 m at 0.5 s; the
+robot's 14 clips sound at every time) and through a world (bones by node list and by name; loop, speed and offset;
+equal fingerprints; a Lua script playing, stopping and hearing one end); golden `Animation` at 0.75 s (Ward walking,
+waving, nodding; the robot walking); `cli.animation_scripts_build_identically` (Lua in the project and the built game,
+C# in the built game: both end events at the same frames, bone fingerprints equal); `render.animation_cost` (100
+walking characters: +0.43 ms game update, +0.2 ms GPU, gathering 1.24 ms). Found on the way: bones were posed at the
+frame's start time while sprites showed its end (a frame behind; a loose test tolerance had hidden it); the test
+scripts summed `dt` in doubles (Lua) and floats (C#) and acted a frame apart (counted in frames now, and documented).
+Not done: no edit-mode preview (part 6); changing clip snaps (part 3).
 
 ## Open questions
 

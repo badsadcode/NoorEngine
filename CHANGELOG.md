@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 2: clips and the player
+**Added**
+- **Clips from glTF** (`asset::ImportedAnimation`, `AnimationChannel`): translation, rotation and scale; step, linear
+  and cubic-spline; morph-target channels skipped with a warning.
+- `asset/animation.h`: `sample` (deterministic: a pure function of clip and time), `rest_pose`, `slerp`,
+  `find_animation`.
+- **The `animator` component** (animation, loop, speed, time_offset) and `game::AnimatorSystem`: poses a model's bone
+  entities every frame, posts `AnimationEnd` for script-played one-shots; the player's report gains `animation`
+  (what plays, ends, a pose fingerprint).
+- Placing a model with clips lists its node entities on the root (`"model": {"nodes"}`); older scenes match bones by
+  name (said once).
+- Ward_Anim (`make_test_characters.py`: Wave, Nod, Glide, Walk, one per interpolation); `tools/samples/add_animation_scene.py`.
+
+**Changed:** the script API's animation functions work on animators as well as sprites, renamed in C++
+(`runtime::api::play_animation`, `stop_animation`, `set_animation_speed`, `current_animation`); the Lua and C# names
+are unchanged.
+
+**Tests:** unit tests "animation" (6) and "animator" (3); golden `Animation`; `cli.animation_scripts_build_identically`;
+`render.animation_cost`.
+
 ### 2026-11-20 — Milestone 8C, part 1: skinned meshes
 **Added**
 - **Skins from glTF** (`asset::ImportedSkin`, `SkinWeights`, `ImportedNode::skin`): joints, inverse bind matrices, the

@@ -90,9 +90,27 @@ struct ImportedSkin {
     std::vector<math::Mat4> inverse_bind;  // one per joint (identity where the file gives none)
 };
 
+// One animated property of one node through keyframes (Milestone 8C, part 2; sampled by asset/animation.h).
+struct AnimationChannel {
+    enum class Path : std::uint8_t { Translation, Rotation, Scale } path = Path::Translation;
+    enum class Interpolation : std::uint8_t { Step, Linear, CubicSpline } interpolation = Interpolation::Linear;
+    int node = -1;              // index into ImportedModel::nodes
+    std::vector<float> times;   // seconds, increasing
+    std::vector<float> values;  // 3 (translation, scale) or 4 (rotation, xyzw) per key; cubic splines: in-tangent, value,
+                                // out-tangent per key
+};
+
+// A clip: its channels, and how long it is (its last key).
+struct ImportedAnimation {
+    std::string name;
+    std::vector<AnimationChannel> channels;
+    float duration = 0.0f;
+};
+
 struct ImportedModel {
     std::vector<ImportedNode> nodes;  // parents always come before their children
     std::vector<ImportedSkin> skins;
+    std::vector<ImportedAnimation> animations;
     std::vector<ImportedMesh> meshes;
     std::vector<ImportedMaterial> materials;
     std::vector<ImportedImage> images;

@@ -25,6 +25,7 @@
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
 #include "noor/fx/particle_system.h"
+#include "noor/game/animator.h"
 #include "noor/game/game.h"
 #include "noor/game/hud.h"
 #include "noor/game/scene_renderer.h"
@@ -512,6 +513,21 @@ int run(const Options& o) {
                         }
                         const auto* anim = (*world)->system<noor::game::SpriteAnimationSystem>();
                         report["sprites"] = {{"entities", std::move(sprites)}, {"ended", anim ? anim->ended() : 0}};
+                    }
+                    // Skeletal animation (Milestone 8C, part 2): what each animator plays and since when, how many
+                    // one-shot clips have ended, and a fingerprint of every bone pose of the last frame.
+                    {
+                        Json animators = Json::array();
+                        for (const auto& e : (*world)->scene().entities) {
+                            if (!e.has("animator") || !e.components.at("animator").is_object()) continue;
+                            const auto& c = e.components.at("animator");
+                            animators.push_back({{"name", e.name}, {"animation", c.value("animation", std::string())},
+                                                 {"started", c.contains("started") ? c["started"] : Json(nullptr)}});
+                        }
+                        const auto* anim = (*world)->system<noor::game::AnimatorSystem>();
+                        const auto st = anim ? anim->stats() : noor::game::AnimatorSystem::Stats{};
+                        report["animation"] = {{"entities", std::move(animators)}, {"posed", st.animators}, {"bones", st.nodes},
+                                               {"ended", st.ended}, {"fingerprint", std::format("{:016x}", st.fingerprint)}};
                     }
                     report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
                     if (o.trace_environment) report["environment_trace"] = std::move(environment_trace);

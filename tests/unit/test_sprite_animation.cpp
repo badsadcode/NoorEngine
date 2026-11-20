@@ -157,20 +157,20 @@ TEST_CASE("sprite scripts: speed changes don't jump, stop freezes the frame") {
     e.components["sprite"] = {{"sheet", Guid::generate().to_string()}};
     world.spawn(e);
     world.frame(1.0, {});
-    REQUIRE(runtime::api::sprite_play(world, e.id, "walk", 1.0f));
+    REQUIRE(runtime::api::play_animation(world, e.id, "walk", 1.0f));
     for (int i = 0; i < 10; ++i) world.frame(0.05, {});  // 0.5 s in
     const auto& c = world.find(e.id)->components.at("sprite");
     const double before = game::sprite_time(c, world.time());
-    runtime::api::sprite_set_speed(world, e.id, 3.0f);
+    runtime::api::set_animation_speed(world, e.id, 3.0f);
     CHECK(game::sprite_time(world.find(e.id)->components.at("sprite"), world.time()) == doctest::Approx(before));  // no jump
     world.frame(0.1, {});
     CHECK(game::sprite_time(world.find(e.id)->components.at("sprite"), world.time()) == doctest::Approx(before + 0.3));  // 3x
-    runtime::api::sprite_stop(world, e.id);
+    runtime::api::stop_animation(world, e.id);
     const double frozen = game::sprite_time(world.find(e.id)->components.at("sprite"), world.time());
     world.frame(0.1, {});
     CHECK(game::sprite_time(world.find(e.id)->components.at("sprite"), world.time()) == doctest::Approx(frozen));
-    CHECK(runtime::api::sprite_animation(world, e.id) == "walk");
-    CHECK(!runtime::api::sprite_play(world, Guid::generate(), "walk"));  // no such entity: nothing happens
+    CHECK(runtime::api::current_animation(world, e.id) == "walk");
+    CHECK(!runtime::api::play_animation(world, Guid::generate(), "walk"));  // no such entity: nothing happens
 }
 
 TEST_CASE("emitter scripts: a burst from a script spawns that many particles at the next fixed step") {

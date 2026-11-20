@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, and **part 2, clips and the player**.
 
 ## Skinned meshes (part 1)
 
@@ -42,8 +42,63 @@ GPU buffer addresses, so no new pipelines or descriptor sets were needed. The sa
 Rigify-style deform bones, in a bind and a posed version), **RobotExpressive** (Quaternius, CC0: 14 clips, rigid
 parts on bones, skinned hands, an armature scaled ×100) and the glTF tutorial's **SimpleSkin**.
 
+## Clips and the player (part 2)
+
+A **clip** is an animation inside a glTF/GLB file ("Walk", "Wave"...): keys that move nodes' translation, rotation and
+scale over time. NoorEngine reads all three kinds of glTF interpolation: **step** (hold each key), **linear** (rotations
+turn evenly, the shorter way round) and **cubic spline** (glTF's smooth curve through keys and tangents). Before its
+first key a clip holds its first pose, after its last its last.
+
+**Playing one:** an `animator` component on the model's root (the entity that has `"model"`):
+
+```json
+"animator": { "animation": "Walk", "loop": true, "speed": 1, "time_offset": 0.3 }
+```
+
+| Field | Meaning |
+|---|---|
+| `animation` | the clip's name, as in the file |
+| `loop` | true (default): wraps round. false: holds the last pose; played by a script, it sends `on_animation_end` |
+| `speed` | 1 = as authored |
+| `time_offset` | seconds; so a crowd on the same clip isn't in step |
+| `started`, `paused_at` | written by scripts (below) |
+
+Without a script the clip plays on the scene's clock: an idle loop needs nothing else. The same fields, and the same
+script functions, as sprites' animations (8B).
+
+**From scripts** (Lua and C#; on an entity with an `animator`, or else a `sprite`):
+
+| Lua | C# | |
+|---|---|---|
+| `entity:play_animation("Wave", 2)` | `Entity.PlayAnimation("Wave", 2)` | from its start, at a speed (default 1) |
+| `entity:stop_animation()` | `Entity.StopAnimation()` | freezes the pose where it is |
+| `entity:set_animation_speed(0.5)` | `Entity.SetAnimationSpeed(0.5f)` | from here on, without a jump (0 freezes) |
+| `entity:animation()` | `Entity.Animation` | the clip it's playing |
+| `function S:on_animation_end(name)` | `override void OnAnimationEnd(string name)` | a non-looping clip a script played has finished (once) |
+
+**What moves:** each frame, every bone that any of the model's clips moves is set from the playing clip (so changing
+clip puts the last clip's bones back to rest); the model's other entities are left alone. Bones are ordinary entities,
+so the pose is their transforms, at runtime only: the saved scene keeps the rest pose.
+
+**Deterministic:** a pose is a pure function of the clip and the time (no state carried from frame to frame), sampled
+at the moment the frame ends, the same moment sprites show. The same game time gives the same pose in the editor, in
+a built game, from Lua or C#, bit for bit (a test compares a fingerprint of every bone). One trap for scripts we fell
+into ourselves: summing `dt` gives different totals in Lua (doubles) and C# (floats), so "after one second" can land a
+frame apart. Count frames, or compare against the game's own clock, when two scripts must agree exactly.
+
+**Placed before part 2?** A model's root now lists the entity each of its file's nodes became (`"model": {"nodes":
+[...]}`), so clips find their bones even when they're renamed. A model placed before that has no list: its bones are
+matched by name under the root, and the Console says so once. Placing it again fixes it.
+
+**Measured** (RTX 3080): 100 walking characters (8 bones each moved) cost +0.43 ms of game update a frame and
++0.2 ms of GPU; gathering the scene stays at about 1.2 ms (`render.animation_cost`).
+
 ## Not yet
 
-- **Animations** (clips, playback, blending, controllers): parts 2 and 3. Clips in files are read in part 2.
+- **Blending** (cross-fades, blend spaces, layers) and the `.nooranim` controller: part 3. Changing clip now snaps.
+- **Root motion**, sockets and bone transforms for scripts: part 4. Clips that move the hips move them in place.
+- **Previewing clips in the editor** (a timeline to scrub): part 6, the Animation panel. Clips play when you press
+  Play (and in games); in edit mode characters stand in their rest pose.
+- Morph-target (face shape) channels are skipped, with a warning.
 - The editor's gizmo doesn't bend a skinned mesh while dragging (it follows when you let go); levels of detail don't
   switch skinned models; morph targets (face shapes) are skipped.

@@ -35,6 +35,7 @@ add_executable(noor_unit_tests
     unit/test_sprites.cpp
     unit/test_sprite_animation.cpp
     unit/test_skinning.cpp
+    unit/test_animation.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -211,6 +212,30 @@ add_test(NAME render.skinning_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/skinning_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/skinning_cost_check.cmake)
 set_tests_properties(render.skinning_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+# Skeletal animation (Milestone 8C, part 2): three Wards and the CC0 robot each playing a clip on the scene's clock
+# (walking, a wave held at its end, a nod; the robot walking), captured at a fixed frame (0.75 s), so every bone is at a
+# known time (tools/samples/add_animation_scene.py); and what 100 walking characters cost.
+add_test(NAME render.golden_Animation
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Animation.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Animation.png -DFRAMES=45
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Animation
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Animation PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+add_test(NAME render.animation_cost
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_cost_check.cmake)
+set_tests_properties(render.animation_cost PROPERTIES LABELS "gpu;render" TIMEOUT 120 RESOURCE_LOCK gpu_timing)
+# Skeletal animation from scripts (8C part 2): Ward waves, nods on the wave's end event and walks on at the nod's, from
+# Lua in the project and in a built game, and from C# in the built game: the same moments, the same final pose.
+if(TARGET noor_scripting_managed)
+    add_test(NAME cli.animation_scripts_build_identically
+        COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCRIPTS=${CMAKE_CURRENT_SOURCE_DIR}/data/animation_scripts
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_scripts_build -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_build_check.cmake)
+    set_tests_properties(cli.animation_scripts_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
+endif()
 # Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
 # from Lua in the project and in a built game (the same moments), and from C# in the built game.
 if(TARGET noor_scripting_managed)

@@ -3,6 +3,7 @@
 #include "noor/asset/environment_asset.h"
 #include "noor/game/weather.h"
 #include "noor/fx/particle_system.h"
+#include "noor/game/animator.h"
 #include "noor/game/sprite_animation.h"
 #include "noor/game/particle_ground.h"
 #include "noor/runtime/script_api.h"
@@ -232,6 +233,13 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
     world->add_system(std::make_unique<fx::ParticleSystem>(std::move(fx_options)));
     // Sprite animations played by scripts: their end events (Milestone 8B, part 6).
     world->add_system(std::make_unique<SpriteAnimationSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
+        const auto* rec = registry.find(id);
+        if (!rec) return std::nullopt;
+        auto p = project.resolve(rec->path);
+        return p ? std::optional(*p) : std::nullopt;
+    }));
+    // Skeletal animation (Milestone 8C, part 2): models' animators pose their bones, after scripts have had their say.
+    world->add_system(std::make_unique<AnimatorSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
         const auto* rec = registry.find(id);
         if (!rec) return std::nullopt;
         auto p = project.resolve(rec->path);

@@ -172,28 +172,37 @@ double animation_seconds(const asset::Json& c, double now) {
 }
 } // namespace
 
-bool sprite_play(World& w, const Guid& e, std::string_view animation, float speed) {
-    const auto* c = component(w, e, "sprite");
+// The component an entity's animations live in: a model's animator, or a sprite.
+const char* animated(World& w, const Guid& e) {
+    if (const auto* a = component(w, e, "animator"); a && a->is_object()) return "animator";
+    return "sprite";
+}
+
+bool play_animation(World& w, const Guid& e, std::string_view animation, float speed) {
+    const char* type = animated(w, e);
+    const auto* c = component(w, e, type);
     if (!c || !c->is_object()) return false;
     asset::Json s = *c;
     s["animation"] = std::string(animation);
     s["started"] = w.time();
     s["speed"] = speed;
     s.erase("paused_at");
-    set_component(w, e, "sprite", std::move(s));
+    set_component(w, e, type, std::move(s));
     return true;
 }
 
-void sprite_stop(World& w, const Guid& e) {
-    const auto* c = component(w, e, "sprite");
+void stop_animation(World& w, const Guid& e) {
+    const char* type = animated(w, e);
+    const auto* c = component(w, e, type);
     if (!c || !c->is_object() || c->contains("paused_at")) return;
     asset::Json s = *c;
     s["paused_at"] = animation_seconds(s, w.time());
-    set_component(w, e, "sprite", std::move(s));
+    set_component(w, e, type, std::move(s));
 }
 
-void sprite_set_speed(World& w, const Guid& e, float speed) {
-    const auto* c = component(w, e, "sprite");
+void set_animation_speed(World& w, const Guid& e, float speed) {
+    const char* type = animated(w, e);
+    const auto* c = component(w, e, type);
     if (!c || !c->is_object()) return;
     asset::Json s = *c;
     const double now = w.time();
@@ -206,11 +215,11 @@ void sprite_set_speed(World& w, const Guid& e, float speed) {
         s.erase("time_offset");
     }
     s["speed"] = std::max(0.0f, speed);
-    set_component(w, e, "sprite", std::move(s));
+    set_component(w, e, type, std::move(s));
 }
 
-std::optional<std::string> sprite_animation(World& w, const Guid& e) {
-    const auto* c = component(w, e, "sprite");
+std::optional<std::string> current_animation(World& w, const Guid& e) {
+    const auto* c = component(w, e, animated(w, e));
     if (!c || !c->is_object() || !c->contains("animation") || !(*c)["animation"].is_string()) return std::nullopt;
     return (*c)["animation"].get<std::string>();
 }

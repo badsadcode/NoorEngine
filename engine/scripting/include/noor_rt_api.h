@@ -54,7 +54,7 @@ enum { NOOR_RT_START = 0, NOOR_RT_UPDATE = 1, NOOR_RT_FIXED_UPDATE = 2, NOOR_RT_
 /* events (noor_rt_host.event), same order as runtime::Event::Kind. ANIMATION_END: `other` is the entity itself and
  * noor_rt_api.event_name() gives the animation. */
 enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3, NOOR_RT_ANIMATION_END = 4 };
-/* sprite(): ops */
+/* sprite(): ops (an animator's clips too, since 8C part 2: the name stayed for the ABI) */
 enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2 };
 
 typedef struct noor_rt_api {

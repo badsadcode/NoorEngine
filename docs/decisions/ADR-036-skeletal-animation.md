@@ -59,7 +59,12 @@ main asset path.
 - Characters become a renderer feature (palettes per frame, read by address) and a runtime system (sampling,
   blending, root motion, events), sharing the scene, scripts and tests the rest of the engine has.
 - Bones are ordinary entities: saved with the scene in their rest pose, selectable, scriptable. Animation writes
-  their transforms at runtime (not into the saved scene).
+  their transforms at runtime (not into the saved scene). *Part 2:* the model's root lists the entity each of its
+  file's nodes became (`"model": {"nodes"}`), so clips (which name nodes by index) find them; the animator samples at
+  the moment the frame ends (after scripts), and writes every bone any of the model's clips moves.
+- *Part 2:* sprites and skeletal animators share one script API (`play_animation`, `stop_animation`,
+  `set_animation_speed`, `on_animation_end`) and the same component fields; 100 walking characters cost 0.43 ms of
+  game update (sampling and writing 800 bones).
 - Crowds cost CPU per bone (gathering the scene) and per character (sampling); the crowd benchmark in part 8 says
   where the limit is. GPU sampling and a hidden pose stay later options.
 - The device must support buffer device addresses and 64-bit shader integers (every desktop GPU we target does); one
