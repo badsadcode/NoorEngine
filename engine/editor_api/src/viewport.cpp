@@ -90,6 +90,7 @@ struct noor_viewport {
         float move_step = 1.0f, rotate_step = 15.0f, scale_step = 0.1f;
         float fly_speed = 8.0f, look_sensitivity = 1.0f, gizmo_scale = 1.0f;
         std::uint32_t msaa = 4;
+        bool flat = false;  // "view": "2d" (2D part 5)
     } options;
     std::string render_stats = "{}";  // JSON (noor_viewport_render_stats), under stats_mutex
     std::optional<Guid> face_brush;  // the outlined brush face (noor_viewport_set_face_highlight), under doc_mutex
@@ -99,6 +100,9 @@ struct noor_viewport {
     // The sculpt brush (noor_viewport_set_brush), under doc_mutex: the terrain it works on, its size.
     std::optional<Guid> brush_terrain;
     float brush_radius = 8.0f;
+    // The tile brush (2D part 5), under doc_mutex: the tilemap it paints and the tile (-1: erases).
+    std::optional<Guid> brush_tilemap;
+    std::int32_t brush_tile = 0;
 
     // The camera of the last drawn frame (for noor_viewport_world_to_screen).
     std::mutex camera_mutex;
@@ -378,6 +382,10 @@ void render_thread_main(noor_viewport* vp) {
     // Sculpting: a left-drag on the brush's terrain is a stroke; the circle shows where it lands.
     bool stroking = false;
     std::optional<Vec3> brush_hit;
+    // Painting tiles (2D part 5): a stroke in progress, the last cell sent, the outline of the cell under the pointer.
+    bool tiling = false;
+    std::optional<noor::game::Cell> last_tile_cell;
+    std::vector<Vec3> tile_outline;
     noor::render::MaterialHandle ghost_subtract, ghost_intersect, face_material;
     noor::render::MeshHandle face_mesh;     // the highlighted face, lifted 3 mm off the surface
     Mat4 face_world = Mat4::identity();
@@ -542,6 +550,7 @@ void render_thread_main(noor_viewport* vp) {
             if (vp->options_version != seen_options_version) {
                 seen_options_version = vp->options_version;
                 options = vp->options;
+                camera.flat = options.flat;  // the 2D view (part 5), before any framing this frame
                 camera.fly_speed = options.fly_speed;
                 camera.turn_speed = 0.006f * options.look_sensitivity;
                 if (options.msaa != r.msaa_samples()) r.set_msaa(options.msaa);
@@ -920,6 +929,14 @@ void render_thread_main(noor_viewport* vp) {
                     for (const Vec3 corner : {Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{1, 1, 0}, Vec3{0, 1, 0}}) grow(lo, hi, quad.transform_point(corner));
                     any = true;
                 }
+                for (const auto& tm : shown->tilemaps) {  // tilemaps (2D part 5): their cells' outer corners
+                    if (!wanted.contains(tm.entity) || !tm.grid || tm.grid->width == 0) continue;
+                    const auto st = noor::game::tilemap_settings(tm.settings);
+                    for (const auto& [cx, cy] : {std::pair{0, 0}, std::pair{tm.grid->width - 1, 0}, std::pair{0, tm.grid->height - 1},
+                                                 std::pair{tm.grid->width - 1, tm.grid->height - 1}})
+                        for (const auto& c : noor::game::cell_outline(st.layout, st.cell, cx, cy)) grow(lo, hi, tm.world.transform_point({c.x, c.y, 0.0f}));
+                    any = true;
+                }
                 if (!any) {  // no geometry (an empty entity): frame its origin
                     for (const Guid& id : *frame_request) {
                         if (auto it = entity_by_id.find(id); it != entity_by_id.end()) {
@@ -949,9 +966,14 @@ void render_thread_main(noor_viewport* vp) {
         last_frame_time = frame_now;
         // Fly mode (hold the right button): mouse looks, WASD moves, Q/E down/up, Shift faster,
         // wheel changes the speed. Alt + left-drag orbits; middle-drag pans; the wheel zooms.
-        const bool flying = pointer.right_down;
+        camera.flat = options.flat;
+        camera.pixels_wide = static_cast<float>(std::max(1u, size.width));
+        camera.pixels_high = static_cast<float>(std::max(1u, size.height));
+        const bool flying = pointer.right_down && !camera.flat;  // the 2D view has no flying: the right button pans
         if (pointer.left_down && !last_pointer.left_down) alt_orbit = pointer.alt;
-        if (flying && last_pointer.right_down) {
+        if (camera.flat && ((pointer.right_down && last_pointer.right_down) || (pointer.left_down && last_pointer.left_down && alt_orbit))) {
+            camera.pan(dx, dy);
+        } else if (flying && last_pointer.right_down) {
             camera.look(dx, dy);
         } else if (pointer.left_down && last_pointer.left_down && alt_orbit) {
             camera.orbit(dx, dy);
@@ -968,7 +990,7 @@ void render_thread_main(noor_viewport* vp) {
         }
         if (const float wheel = vp->window->take_wheel(); wheel != 0.0f) {
             if (flying) camera.change_fly_speed(wheel);
-            else camera.zoom(wheel);
+            else camera.zoom_at(wheel, static_cast<float>(pointer.x), static_cast<float>(pointer.y));
         }
 
         // While playing with a camera entity, the viewport is the game view.
@@ -1048,9 +1070,58 @@ void render_thread_main(noor_viewport* vp) {
             stroking = false;
         }
 
+        // ---- Tile brush (2D part 5): the cell under the pointer on the tilemap's plane; strokes as events ----
+        std::optional<Guid> brush_tilemap;
+        std::int32_t brush_tile = 0;
+        {
+            std::scoped_lock lock(vp->doc_mutex);
+            brush_tilemap = vp->brush_tilemap;
+            brush_tile = vp->brush_tile;
+        }
+        tile_outline.clear();
+        const noor::game::SceneView::Tilemap* brush_map = nullptr;
+        if (brush_tilemap && shown && !shown->camera)
+            for (const auto& tm : shown->tilemaps)
+                if (tm.entity == *brush_tilemap) brush_map = &tm;
+        std::optional<noor::game::Cell> tile_cell;
+        if (brush_map && (pointer.inside || tiling)) {
+            const Vec3 origin = brush_map->world.transform_point({0, 0, 0});
+            const Vec3 normal = noor::math::normalize(noor::math::transform_vector(brush_map->world, {0, 0, 1}));
+            if (auto t = ed::ray_plane(ray, origin, normal)) {
+                const Vec3 local = noor::math::inverse(brush_map->world).transform_point(ray.origin + ray.dir * *t);
+                const auto st = noor::game::tilemap_settings(brush_map->settings);
+                tile_cell = noor::game::cell_at(st.layout, st.cell, {local.x, local.y});
+                for (const auto& c : noor::game::cell_outline(st.layout, st.cell, tile_cell->x, tile_cell->y))
+                    tile_outline.push_back(brush_map->world.transform_point({c.x, c.y, 0.0f}));
+            }
+        }
+        const auto tile_event = [&](const char* phase) {
+            noor::asset::Json ev{{"type", "tiles"}, {"phase", phase}, {"tilemap", brush_tilemap ? brush_tilemap->to_string() : std::string()},
+                                 {"tile", brush_tile}};
+            if (tile_cell) ev["cell"] = {tile_cell->x, tile_cell->y};
+            push_event(vp, std::move(ev));
+        };
+        if (brush_map) {
+            if (pressed && !alt_orbit && tile_cell) {
+                tiling = true;
+                last_tile_cell = tile_cell;
+                tile_event("begin");
+            } else if (tiling && pointer.left_down && tile_cell && tile_cell != last_tile_cell) {
+                last_tile_cell = tile_cell;  // only when the pointer reaches another cell
+                tile_event("paint");
+            }
+            if (tiling && !pointer.left_down) {
+                tile_event("end");
+                tiling = false;
+            }
+        } else if (tiling) {
+            tile_event("end");
+            tiling = false;
+        }
+
         if (pressed && alt_orbit) {
             click_pending = false;
-        } else if (pressed && brush_on) {
+        } else if (pressed && (brush_on || brush_map)) {
             click_pending = false;  // the brush has the left button
         } else if (pressed) {
             // Hit-test at the press itself (hover tracking may not have run, e.g. a click that
@@ -1417,6 +1488,26 @@ void render_thread_main(noor_viewport* vp) {
                 const auto pixels = r.swapchain_size();
                 hud->build(shown->ui, static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
             }
+            // The tile brush: the outline of the cell under the pointer (2D part 5).
+            if (tile_outline.size() >= 3) {
+                if (!hud) {
+                    hud.emplace();
+                    if (auto s = r.set_overlay_atlas(hud->atlas_width(), hud->atlas_height(), hud->atlas()); !s)
+                        NOOR_LOG_ERROR("Viewport", "HUD font: {}", s.error().describe());
+                }
+                const Vec4 color{0.85f, 0.75f, 1.0f, tiling ? 1.0f : 0.85f};
+                for (std::size_t i = 0; i < tile_outline.size(); ++i) {
+                    const auto a = ed::world_to_screen(basis, static_cast<float>(size.width), static_cast<float>(size.height), tile_outline[i]);
+                    const auto b = ed::world_to_screen(basis, static_cast<float>(size.width), static_cast<float>(size.height),
+                                                       tile_outline[(i + 1) % tile_outline.size()]);
+                    if (!a || !b) continue;
+                    const float sx = b->x - a->x, sy = b->y - a->y, len = std::max(1e-3f, std::sqrt(sx * sx + sy * sy));
+                    const float nx = -sy / len, ny = sx / len;
+                    const noor::render::OverlayVertex v0{{a->x + nx, a->y + ny}, {-1, -1}, color}, v1{{b->x + nx, b->y + ny}, {-1, -1}, color};
+                    const noor::render::OverlayVertex v2{{b->x - nx, b->y - ny}, {-1, -1}, color}, v3{{a->x - nx, a->y - ny}, {-1, -1}, color};
+                    overlay.insert(overlay.end(), {v0, v1, v2, v0, v2, v3});
+                }
+            }
             // The sculpt brush: a circle lying on the ground under the pointer.
             if (brush_hit && brush_tg) {
                 if (!hud) {
@@ -1738,6 +1829,7 @@ NOOR_API void noor_viewport_set_options(noor_viewport* viewport, const char* opt
     num("look_sensitivity", o.look_sensitivity, 0.1f, 5.0f);
     num("gizmo_scale", o.gizmo_scale, 0.3f, 3.0f);
     if (j.contains("msaa") && j["msaa"].is_number_integer()) o.msaa = std::clamp(j["msaa"].get<std::uint32_t>(), 1u, 8u);
+    if (j.contains("view") && j["view"].is_string()) o.flat = j["view"].get<std::string>() == "2d";
     ++viewport->options_version;
 }
 
@@ -1790,18 +1882,24 @@ NOOR_API int32_t noor_viewport_mouse_captured(noor_viewport* viewport) {
 
 NOOR_API void noor_viewport_set_brush(noor_viewport* viewport, const char* brush_json) {
     if (!viewport) return;
-    std::optional<Guid> terrain;
+    std::optional<Guid> terrain, tilemap;
     float radius = 8.0f;
+    std::int32_t tile = 0;
     if (brush_json) {
         if (auto j = noor::asset::parse_json(brush_json, "brush"); j && j->is_object()) {
             if (j->contains("terrain") && (*j)["terrain"].is_string())
                 if (auto id = Guid::parse((*j)["terrain"].get<std::string>())) terrain = *id;
             if (j->contains("radius") && (*j)["radius"].is_number()) radius = std::clamp((*j)["radius"].get<float>(), 0.1f, 500.0f);
+            if (j->contains("tilemap") && (*j)["tilemap"].is_string())
+                if (auto id = Guid::parse((*j)["tilemap"].get<std::string>())) tilemap = *id;
+            if (j->contains("tile") && (*j)["tile"].is_number_integer()) tile = (*j)["tile"].get<std::int32_t>();
         }
     }
     std::scoped_lock lock(viewport->doc_mutex);
     viewport->brush_terrain = terrain;
     viewport->brush_radius = radius;
+    viewport->brush_tilemap = tilemap;
+    viewport->brush_tile = tile;
 }
 
 NOOR_API void noor_viewport_set_face_highlight(noor_viewport* viewport, const char* brush_id, int32_t face) {

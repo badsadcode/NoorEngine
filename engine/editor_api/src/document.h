@@ -241,6 +241,9 @@ public:
     // The Animation panel (8C part 6): model, set_bone, controller, save_controller, characters, preview
     // (noor_doc_animation; document_animation.cpp).
     [[nodiscard]] Result<asset::Json> animation(const asset::Json& command);
+    // The Tilemap panel (2D part 5): list (tilesets), info (a tilemap's palette and shape), paint (a stroke of cells,
+    // one undo step; growing the map as needed) (noor_doc_tilemap; document_tilemap.cpp).
+    [[nodiscard]] Result<asset::Json> tilemap(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);

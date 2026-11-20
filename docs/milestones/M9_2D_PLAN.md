@@ -29,8 +29,8 @@ the bit; every existing golden and yardstick unchanged.
 | 2b ✅ | **Your own controllers** (added 2026-11-20, Tom: "will the engine let me make my own controllers?"): a character whose velocity the script owns (`"motion": "script"`, Godot's CharacterBody), floor, wall and ceiling contacts, `set_velocity` on walking characters for one step, shape casts and overlaps, for Lua and C#; [Coming from Godot](../scripting/COMING_FROM_GODOT.md) | A script-owned character hangs where it's put, stops under a roof and on a floor with its velocity slid away; a double jump from a script; shape casts and overlaps by hand; a Godot-style platformer written in Lua lands, jumps and stops at a wall |
 | 3 ✅ | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
 | 4 ✅ | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
-| 5 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
-| 6 | **Cameras for 2D**: pixel-perfect (whole pixels at a chosen pixels per unit, integer scaling for retro resolutions), following with a dead zone and bounds, parallax layers | A moving pixel-perfect camera never draws a sprite between pixels (readback); parallax layers move by their factor (golden at two moments) |
+| 5 ✅ | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
+| 6 | **Resolution, display and cameras for 2D** (widened 2026-11-21: Tom asked whether a game can run full screen at the screen's own resolution yet look like a lower one, as Godot's stretch modes do): project display settings (window size, fullscreen, borderless); a **base resolution** with stretch modes like Godot's (`viewport`: the game drawn at e.g. 320 × 180 and scaled up with whole-pixel steps and nearest filtering, black bars where the shape differs; `canvas`: drawn at the screen's resolution but laid out for the base one; off) and aspect handling (keep, expand); a **render scale** for 3D (draw at 50-100% and scale up, for speed); pixel-perfect cameras (whole pixels at a chosen pixels per unit), following with a dead zone and bounds, parallax layers | A 320 × 180 game full screen at 1920 × 1080 is exactly 6 screen pixels per game pixel (readback); a moving pixel-perfect camera never draws a sprite between pixels; parallax layers move by their factor (golden at two moments); a 3D scene at 50% scale costs less GPU (measured) |
 | 7 | **Samples, templates and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks. The first **project templates** (spec 24.1): Empty 2D, 2D Platformer, Top-Down 2D, each a small working start made only of public features; the review | The gate |
 
 ## Part 1 result (2026-11-20)
@@ -117,6 +117,26 @@ outside the tile, so its texture coordinate ran into the next frame of the sheet
 Texture coordinates are now interpolated at the **centroid** (inside the covered part of the pixel), for every mesh.
 That moved leaf edges in the Forest golden (1.4% of its pixels, indistinguishable by eye) and nothing else; its reference
 was updated. **Not yet:** painting (part 5), animated tiles, auto-tiling, collision for isometric and hexagonal maps.
+
+## Part 5 result (2026-11-21)
+Done. **The 2D view**: a toggle in the viewport's toolbar; the editor camera looks straight down -Z at the XY plane,
+orthographic; right or middle drag (or Alt + left) pans exactly with the pointer, the wheel zooms keeping the point
+under the pointer where it is, F frames (tilemaps included). **Painting tiles**: the Tilemaps panel (a tileset picker
+and New tilemap; a palette cut from the tileset's picture, crisp; the eraser; Paint; Snap to tiles and to pixels); the
+viewport outlines the cell under the pointer (squares, diamonds, hexagons) and turns left-drags into "tiles" events,
+one per cell reached; the document paints them (`noor_doc_tilemap`, editor API v30), a stroke one undo step, growing
+the map past its edges and moving the entity when it grows left or down so nothing already painted moves.
+
+Proved: the cell under a point is the inverse of where cells sit, in all three layouts (49 cells each, and points
+inside them); painting grows maps, erasing never does, hexagonal maps grow downwards by two rows to keep odd rows odd
+(unit); the 2D camera pans with the pointer, zooms at it and frames an XY box (unit); the panel's commands: listing,
+the palette's frames, a stroke as one undo step, growing left and down with the entity moved back, refusing a
+non-tilemap (API); and in the running editor, a drag across a map in the 2D view paints the four cells it crosses as
+one undo step, and one undo takes it back (smoke test).
+
+**Not done here:** dragging an entity itself in the 2D view (the gizmo's X and Y arrows move it; there's no
+drag-the-sprite yet); a 2D grid drawn in the view; rectangle and fill tools; an eyedropper. Sprites from the Content
+Browser can be added to the scene as before (Add to scene).
 
 ## Highest risks (settle early)
 

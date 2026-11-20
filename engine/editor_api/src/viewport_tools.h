@@ -59,6 +59,11 @@ struct EditorCamera {
     float fov_y = math::radians(50.0f);
     float fly_speed = 8.0f;     // metres per second (Shift: x4)
     float turn_speed = 0.006f;  // radians per pixel (look and orbit)
+    // The 2D view (2D foundations, part 5): looking straight down -Z at the XY plane, orthographic, `ortho_height`
+    // metres top to bottom; orbit and look do nothing, pan slides in XY, zoom changes ortho_height.
+    bool flat = false;
+    float ortho_height = 12.0f;
+    float pixels_wide = 1280.0f, pixels_high = 720.0f;  // the viewport's size (pan moves things with the pointer)
 
     [[nodiscard]] math::Vec3 eye() const;
     [[nodiscard]] math::Mat4 view() const;
@@ -69,6 +74,8 @@ struct EditorCamera {
     void look(float dx, float dy);               // eye stays, view turns (fly mode)
     void pan(float dx, float dy);                // slide sideways/up, screen-relative
     void zoom(float notches);                    // wheel: closer/further
+    // 2D view: zooms keeping the world point under pixel (px, py) under it.
+    void zoom_at(float notches, float px, float py);
     // move: x = right, y = world up, z = forward (each -1..1); seconds = frame time.
     void fly(math::Vec3 move, float seconds, bool fast);
     void change_fly_speed(float notches);        // wheel while flying

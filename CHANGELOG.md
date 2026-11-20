@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — 2D foundations, part 5: the editor in 2D
+**Added**
+- The 2D view: viewport option `"view": "2d"` (editor API v30), a 2D toggle in the toolbar; `EditorCamera::flat`,
+  `ortho_height`, `zoom_at` (pan with the pointer, zoom at it, frame an XY box).
+- Painting tiles: `noor_doc_tilemap` (list, info, paint; a stroke one undo step; maps grow, moving the entity when they
+  grow left or down); the viewport's tile brush (`{"tilemap", "tile"}`: the cell under the pointer outlined, "tiles"
+  events); `game::cell_at`, `cell_outline`, `paint_tiles`.
+- The Tilemaps panel (`TilemapPanel.cs`): tileset picker, New tilemap, palette, eraser, Paint, Snap to tiles and pixels.
+- The viewport frames tilemaps.
+
+**Tests:** unit (cells inverse to centres in every layout; painting, growing, erasing, hexagonal row pairs; the 2D
+camera); API (`test_tilemap_api.cpp`); the editor smoke test paints a row in the 2D view and undoes it.
+
 ### 2026-11-21 — 2D foundations, part 4: tilemaps
 **Added**
 - `.noortileset` assets (`asset/tileset_asset.h`: a sprite sheet, solid and one-way tiles; the rows format and its

@@ -132,6 +132,101 @@ Vec2 cell_centre(TileLayout layout, Vec2 cell, int x, int y) noexcept {
     return {fx * cell.x, fy * cell.y};
 }
 
+Cell cell_at(TileLayout layout, Vec2 cell, Vec2 p) noexcept {
+    switch (layout) {
+    case TileLayout::Isometric: {
+        // Undo the diamond mapping: p = ((x - y) w / 2, (x + y) h / 2).
+        const float a = p.x / (cell.x * 0.5f), b = p.y / (cell.y * 0.5f);
+        return {static_cast<int>(std::lround((a + b) * 0.5f)), static_cast<int>(std::lround((b - a) * 0.5f))};
+    }
+    case TileLayout::Hexagonal: {
+        // The nearest centre among the rows around the point (hexagons are exactly the cells nearest their centres).
+        const int y0 = static_cast<int>(std::lround(p.y / (cell.y * 0.75f)));
+        Cell best{};
+        float best_d = 1e30f;
+        for (int y = y0 - 1; y <= y0 + 1; ++y) {
+            const float shift = (y & 1) != 0 ? 0.5f : 0.0f;
+            const int x0 = static_cast<int>(std::lround(p.x / cell.x - shift));
+            for (int x = x0 - 1; x <= x0 + 1; ++x) {
+                const Vec2 c = cell_centre(layout, cell, x, y);
+                // Hexagons are wider across their flats than they are tall per row: compare in a space where the
+                // centres are evenly spaced (rows 0.75 h apart, h = 2 / sqrt(3) w for regular hexagons).
+                const float dx = (p.x - c.x) / cell.x, dy = (p.y - c.y) / cell.y;
+                const float d = dx * dx + dy * dy;
+                if (d < best_d) {
+                    best_d = d;
+                    best = {x, y};
+                }
+            }
+        }
+        return best;
+    }
+    case TileLayout::Square: break;
+    }
+    return {static_cast<int>(std::lround(p.x / cell.x)), static_cast<int>(std::lround(p.y / cell.y))};
+}
+
+std::vector<Vec2> cell_outline(TileLayout layout, Vec2 cell, int x, int y) {
+    const Vec2 c = cell_centre(layout, cell, x, y);
+    const float hw = cell.x * 0.5f, hh = cell.y * 0.5f;
+    switch (layout) {
+    case TileLayout::Isometric: return {{c.x, c.y - hh}, {c.x + hw, c.y}, {c.x, c.y + hh}, {c.x - hw, c.y}};
+    case TileLayout::Hexagonal:
+        return {{c.x, c.y - hh}, {c.x + hw, c.y - hh * 0.5f}, {c.x + hw, c.y + hh * 0.5f},
+                {c.x, c.y + hh}, {c.x - hw, c.y + hh * 0.5f}, {c.x - hw, c.y - hh * 0.5f}};
+    case TileLayout::Square: break;
+    }
+    return {{c.x - hw, c.y - hh}, {c.x + hw, c.y - hh}, {c.x + hw, c.y + hh}, {c.x - hw, c.y + hh}};
+}
+
+PaintResult paint_tiles(Json& component, std::span<const Cell> cells, std::int32_t tile) {
+    PaintResult out;
+    if (!component.is_object() || cells.empty()) return out;
+    auto parsed = asset::parse_tile_rows(component.contains("rows") ? component["rows"] : Json::array());
+    if (!parsed) return out;
+    asset::TileGrid g = std::move(*parsed);
+    const TilemapSettings st = tilemap_settings(component);
+    // How far the map has to grow each way.
+    int lo_x = 0, lo_y = 0, hi_x = g.width - 1, hi_y = g.height - 1;
+    for (const Cell& c : cells) {
+        lo_x = std::min(lo_x, c.x);
+        lo_y = std::min(lo_y, c.y);
+        hi_x = std::max(hi_x, c.x);
+        hi_y = std::max(hi_y, c.y);
+    }
+    if (tile < 0) {  // erasing never grows the map: cells outside it are already empty
+        lo_x = lo_y = 0;
+        hi_x = g.width - 1;
+        hi_y = g.height - 1;
+    }
+    int sx = -lo_x, sy = -lo_y;
+    if (st.layout == TileLayout::Hexagonal && (sy & 1) != 0) ++sy;  // odd rows stay odd
+    const int w = std::max(g.width, hi_x + 1) + sx, h = std::max(g.height, hi_y + 1) + sy;
+    if (w != g.width || h != g.height) {
+        asset::TileGrid grown;
+        grown.width = w;
+        grown.height = h;
+        grown.tiles.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), -1);
+        for (int y = 0; y < g.height; ++y)
+            for (int x = 0; x < g.width; ++x)
+                grown.tiles[static_cast<std::size_t>(y + sy) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x + sx)] = g.at(x, y);
+        g = std::move(grown);
+        out.changed = true;
+    }
+    for (const Cell& c : cells) {
+        const int x = c.x + sx, y = c.y + sy;
+        if (x < 0 || y < 0 || x >= g.width || y >= g.height) continue;
+        auto& t = g.tiles[static_cast<std::size_t>(y) * static_cast<std::size_t>(g.width) + static_cast<std::size_t>(x)];
+        if (t != tile) {
+            t = tile;
+            out.changed = true;
+        }
+    }
+    if (out.changed) component["rows"] = asset::tile_rows_json(g);
+    out.shift = {sx, sy};
+    return out;
+}
+
 std::vector<CellRect> merge_cells(const asset::TileGrid& g, const std::set<int>& tiles) {
     std::vector<CellRect> out;
     if (tiles.empty() || g.width <= 0 || g.height <= 0) return out;

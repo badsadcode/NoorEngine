@@ -37,6 +37,7 @@ public sealed class EditorDocument : IDisposable
         SetSculpting(false);  // picking a transform tool puts the brush down
         SetPainting(false);
         SetScattering(null);
+        SetTilePainting(false);
         if (tool == Tool) return;
         Tool = tool;
         ToolChanged?.Invoke();
@@ -59,6 +60,48 @@ public sealed class EditorDocument : IDisposable
         Sculpting = on;
         if (on) { Painting = false; Scattering = null; }
         SculptChanged?.Invoke();
+    }
+
+    // ---- Painting tiles (2D foundations, part 5) ----
+
+    /// <summary>On: left-drags on the selected tilemap paint TileBrush (-1 erases); the gizmo is hidden.</summary>
+    public bool TilePainting { get; private set; }
+    /// <summary>The tile being painted (a frame of the tilemap's sheet), or -1: the eraser.</summary>
+    public int TileBrush { get; private set; }
+
+    public void SetTilePainting(bool on)
+    {
+        if (on == TilePainting) return;
+        TilePainting = on;
+        if (on) { Sculpting = false; Painting = false; Scattering = null; }
+        SculptChanged?.Invoke();
+    }
+
+    public void SetTileBrush(int tile)
+    {
+        if (tile == TileBrush) return;
+        TileBrush = tile;
+        SculptChanged?.Invoke();
+    }
+
+    /// <summary>The snap step a panel asks the viewport for (metres): tiles, or pixels. The viewport panel applies it.</summary>
+    public event Action<double>? SnapStepRequested;
+    public void RequestSnapStep(double metres) => SnapStepRequested?.Invoke(metres);
+
+    /// <summary>
+    /// One tilemap command (noor_doc_tilemap: list, info, paint; 2D part 5). A stroke's begin and end refresh the scene (the
+    /// viewport shows each piece at once). A failure is logged and gives null.
+    /// </summary>
+    public JsonNode? Tilemap(JsonObject command)
+    {
+        var json = Native.Tilemap(_handle, command.ToJsonString());
+        if (json == null)
+        {
+            Interop.EngineLog.Warn("Tilemap", Native.LastError());
+            return null;
+        }
+        if (command["op"]?.GetValue<string>() == "paint" && command["phase"]?.GetValue<string>() is "end") Refresh();
+        return JsonNode.Parse(json);
     }
 
     // ---- Scatter editing (Milestone 7, part 7): plant and remove trees with the brush ----

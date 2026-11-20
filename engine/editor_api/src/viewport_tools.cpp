@@ -96,11 +96,15 @@ Vec3 direction(float yaw, float pitch) {
 }
 } // namespace
 
-Vec3 EditorCamera::eye() const { return target + direction(yaw, pitch) * distance; }
+// The 2D view stands this far in front of the XY plane (well inside the editor's 1 km far plane).
+constexpr float kFlatEye = 400.0f;
 
-math::Mat4 EditorCamera::view() const { return math::look_at(eye(), target, {0, 1, 0}); }
+Vec3 EditorCamera::eye() const { return flat ? Vec3{target.x, target.y, target.z + kFlatEye} : target + direction(yaw, pitch) * distance; }
+
+math::Mat4 EditorCamera::view() const { return flat ? math::look_at(eye(), target, {0, 1, 0}) : math::look_at(eye(), target, {0, 1, 0}); }
 
 CameraBasis EditorCamera::basis() const {
+    if (flat) return {eye(), {0, 0, -1}, {1, 0, 0}, {0, 1, 0}, fov_y, ortho_height};
     const Vec3 e = eye();
     const Vec3 f = normalize(target - e);
     const Vec3 r = normalize(cross(f, {0, 1, 0}));
@@ -109,28 +113,57 @@ CameraBasis EditorCamera::basis() const {
 
 void EditorCamera::frame(Vec3 lo, Vec3 hi) {
     target = (lo + hi) * 0.5f;
+    if (flat) {  // the box's XY extent fills the view, with a margin
+        const float aspect = pixels_wide / std::max(1.0f, pixels_high);
+        ortho_height = std::clamp(std::max(hi.y - lo.y, (hi.x - lo.x) / aspect) * 1.2f, 1.0f, 100'000.0f);
+        return;
+    }
     const float radius = std::max(1.0f, math::length(hi - lo) * 0.5f);
     distance = radius / std::sin(fov_y * 0.5f) * 1.1f;
 }
 
 void EditorCamera::orbit(float dx, float dy) {
+    if (flat) return;
     yaw -= dx * turn_speed;
     pitch = std::clamp(pitch + dy * turn_speed, -kMaxPitch, kMaxPitch);
 }
 
 void EditorCamera::look(float dx, float dy) {
+    if (flat) return;
     const Vec3 e = eye();
     orbit(dx, dy);  // same angles; then move the target so the eye stays put
     target = e - direction(yaw, pitch) * distance;
 }
 
 void EditorCamera::pan(float dx, float dy) {
+    if (flat) {  // exactly with the pointer: one pixel is ortho_height / pixels_high metres
+        const float k = ortho_height / std::max(1.0f, pixels_high);
+        target = target + Vec3{-dx * k, dy * k, 0.0f};
+        return;
+    }
     const auto b = basis();
     const float k = distance * 0.0015f;
     target = target - b.right * (dx * k) + b.up * (dy * k);
 }
 
-void EditorCamera::zoom(float notches) { distance = std::clamp(distance * std::pow(0.88f, notches), 0.5f, 50'000.0f); }
+void EditorCamera::zoom(float notches) {
+    if (flat) {
+        ortho_height = std::clamp(ortho_height * std::pow(0.88f, notches), 0.25f, 100'000.0f);
+        return;
+    }
+    distance = std::clamp(distance * std::pow(0.88f, notches), 0.5f, 50'000.0f);
+}
+
+void EditorCamera::zoom_at(float notches, float px, float py) {
+    if (!flat) {
+        zoom(notches);
+        return;
+    }
+    const auto before = screen_ray(basis(), pixels_wide, pixels_high, px, py).origin;
+    zoom(notches);
+    const auto after = screen_ray(basis(), pixels_wide, pixels_high, px, py).origin;
+    target = target + Vec3{before.x - after.x, before.y - after.y, 0.0f};
+}
 
 void EditorCamera::fly(Vec3 move, float seconds, bool fast) {
     if (move == Vec3{}) return;

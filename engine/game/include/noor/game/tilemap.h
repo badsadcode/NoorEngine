@@ -61,6 +61,28 @@ struct TilemapSettings {
 // Where a cell's centre is, in the tilemap's own plane (metres).
 [[nodiscard]] math::Vec2 cell_centre(TileLayout layout, math::Vec2 cell, int x, int y) noexcept;
 
+// The cell whose centre is nearest a point in the tilemap's plane (the inverse of cell_centre): the cell under the
+// pointer when painting. Isometric: the diamond it's in; hexagonal: the hexagon it's in.
+struct Cell {
+    int x = 0, y = 0;
+    bool operator==(const Cell&) const = default;
+};
+[[nodiscard]] Cell cell_at(TileLayout layout, math::Vec2 cell, math::Vec2 point) noexcept;
+
+// The corners of a cell's outline in the tilemap's plane (4 for squares and diamonds, 6 for hexagons): the editor
+// draws it under the pointer.
+[[nodiscard]] std::vector<math::Vec2> cell_outline(TileLayout layout, math::Vec2 cell, int x, int y);
+
+// Paints `tile` (-1: erases) into `cells` of a tilemap component, in place. Cells beyond the map's right or top edge
+// grow it; cells left of or below (0, 0) grow it the other way, shifting every cell up by `shift` (so the map's cells
+// keep their places, the entity must move by cell_centre(-shift.x, -shift.y): the caller does that). Hexagonal maps
+// shift rows in pairs, so odd rows stay odd. Returns whether anything changed.
+struct PaintResult {
+    bool changed = false;
+    Cell shift;
+};
+[[nodiscard]] PaintResult paint_tiles(asset::Json& component, std::span<const Cell> cells, std::int32_t tile);
+
 // Cells as rectangles: [x, x + w) x [y, y + h).
 struct CellRect {
     int x = 0, y = 0, w = 0, h = 0;

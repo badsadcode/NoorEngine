@@ -70,6 +70,14 @@ public sealed class VulkanViewport : NativeControlHost
         if (_viewport != IntPtr.Zero) Native.noor_viewport_set_options(_viewport, json);
     }
 
+    /// <summary>The 2D view (2D part 5): kept apart from the preferences, so a recreated viewport gets both.</summary>
+    public bool Flat { get; private set; }
+    public void SetFlat(bool on)
+    {
+        Flat = on;
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_options(_viewport, on ? "{\"view\":\"2d\"}" : "{\"view\":\"3d\"}");
+    }
+
     /// <summary>Highlights these entities (pass a whole subtree to highlight an object).</summary>
     public void SetSelection(IReadOnlyList<string> ids)
     {
@@ -93,9 +101,15 @@ public sealed class VulkanViewport : NativeControlHost
     private string? _brushJson;
 
     /// <summary>The sculpt brush on a terrain (null: off): its circle follows the pointer, drags become "stroke" events.</summary>
-    public void SetBrush(string? terrainId, double radius)
+    public void SetBrush(string? terrainId, double radius) =>
+        SetBrushJson(terrainId == null ? null : new JsonObject { ["terrain"] = terrainId, ["radius"] = radius }.ToJsonString());
+
+    /// <summary>The tile brush on a tilemap (2D part 5): the cell under the pointer is outlined, drags become "tiles" events.</summary>
+    public void SetTileBrush(string tilemapId, int tile) =>
+        SetBrushJson(new JsonObject { ["tilemap"] = tilemapId, ["tile"] = tile }.ToJsonString());
+
+    private void SetBrushJson(string? json)
     {
-        var json = terrainId == null ? null : new JsonObject { ["terrain"] = terrainId, ["radius"] = radius }.ToJsonString();
         if (json == _brushJson) return;
         _brushJson = json;
         if (_viewport != IntPtr.Zero) Native.noor_viewport_set_brush(_viewport, json);
@@ -144,6 +158,7 @@ public sealed class VulkanViewport : NativeControlHost
         Native.noor_viewport_set_selection(_viewport, _selectionJson);
         Native.noor_viewport_set_gizmo(_viewport, _gizmoEntity, _gizmoMode);
         if (_optionsJson != null) Native.noor_viewport_set_options(_viewport, _optionsJson);
+        if (Flat) Native.noor_viewport_set_options(_viewport, "{\"view\":\"2d\"}");
         if (_faceBrush != null) Native.noor_viewport_set_face_highlight(_viewport, _faceBrush, _face);
         if (_brushJson != null) Native.noor_viewport_set_brush(_viewport, _brushJson);
         if (!_preview)

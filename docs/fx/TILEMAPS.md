@@ -53,6 +53,23 @@ maps collide.
   those is usually a game's own rule.
 - **`cast_shadows`**: `false` by default.
 
+## In the editor
+
+The **Tilemaps** tab at the bottom of the editor, beside Water (2D foundations, part 5):
+
+1. Pick a tileset and press **New tilemap**: a one-cell map at the origin, selected.
+2. Turn on the **2D** view in the viewport's toolbar: straight down at the XY plane, flat. The right or middle button
+   pans, the wheel zooms where the pointer is, F frames the selection.
+3. Pick a tile from the palette (the tileset's own pictures; the eraser is first) and drag in the viewport. Every cell
+   the pointer crosses gets that tile, the cell under the pointer is outlined, and **a whole drag is one undo step**.
+4. Paint past the edge and the map grows. Grow it to the left or downwards and the entity moves back by the cells
+   added, so the tiles already there stay exactly where they were.
+5. **Snap to tiles** and **Snap to pixels** set the viewport's snapping, for moving things onto the grid or onto
+   whole pixels of the art.
+
+Choosing the Move, Rotate or Scale tool puts the brush down. The panel paints through the editor API
+(`noor_doc_tilemap`), so tools and tests can paint exactly as a person does; games change tiles with `e:set_tile`.
+
 ## Collision
 
 The solid tiles of a square map become as few boxes as cover them exactly: each row's runs, grown upwards while the
@@ -76,5 +93,5 @@ rows are fingerprinted each frame to notice changes; for very large maps that fi
 
 ## Not yet
 
-Painting tiles in the editor (2D part 5); animated tiles; auto-tiling (picking the right edge and corner tiles by
+Rectangle and flood-fill tools; picking a tile from the map (an eyedropper); animated tiles; auto-tiling (picking the right edge and corner tiles by
 themselves); collision for isometric and hexagonal maps; several tilesets in one map (use one tilemap per tileset).

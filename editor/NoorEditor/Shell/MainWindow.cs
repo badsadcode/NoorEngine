@@ -37,6 +37,7 @@ public sealed class MainWindow : Window
     public EnvironmentPanel? Environments { get; private set; }
     public EffectsPanel? Effects { get; private set; }
     public WaterPanel? Water { get; private set; }
+    public TilemapPanel? Tilemaps { get; private set; }
     public AnimationPanel? Animation { get; private set; }
     public ViewportPanel? ViewportView { get; private set; }
 
@@ -212,6 +213,11 @@ public sealed class MainWindow : Window
             Id = "Water", Title = "Water", CanClose = false,
             CreateView = () => Water = new WaterPanel(Doc),
         };
+        var tilemaps = new PanelTool
+        {
+            Id = "Tilemaps", Title = "Tilemaps", CanClose = false,
+            CreateView = () => Tilemaps = new TilemapPanel(Doc),
+        };
         var animation = new PanelTool
         {
             Id = "Animation", Title = "Animation", CanClose = false,
@@ -245,7 +251,7 @@ public sealed class MainWindow : Window
         foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
-        Fill(bottom, content, console, render, environments, effects, water, animation);
+        Fill(bottom, content, console, render, environments, effects, water, tilemaps, animation);
 
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };

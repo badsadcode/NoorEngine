@@ -167,3 +167,38 @@ TEST_CASE("tilemap + physics: a character stands on solid tiles, on a one-way ti
     CHECK(runtime::api::tile(world, map.id, 2, 0) == -1);
     CHECK(runtime::api::tile(world, map.id, 1, 0) == 0);
 }
+
+TEST_CASE("tilemap editing: the cell under a point is the inverse of where cells sit, in every layout") {
+    using game::TileLayout;
+    for (const auto layout : {TileLayout::Square, TileLayout::Isometric, TileLayout::Hexagonal}) {
+        const math::Vec2 cell = layout == TileLayout::Isometric ? math::Vec2{2, 1} : math::Vec2{1, 1};
+        for (int y = -3; y <= 3; ++y)
+            for (int x = -3; x <= 3; ++x) {
+                const auto c = game::cell_centre(layout, cell, x, y);
+                CHECK(game::cell_at(layout, cell, c) == game::Cell{x, y});
+                // A little way inside the cell still finds it (a fifth of the way to its edge).
+                CHECK(game::cell_at(layout, cell, {c.x + cell.x * 0.1f, c.y + cell.y * 0.05f}) == game::Cell{x, y});
+            }
+        // Its outline: four corners (six for hexagons), around its centre.
+        CHECK(game::cell_outline(layout, cell, 1, 1).size() == (layout == TileLayout::Hexagonal ? 6u : 4u));
+    }
+}
+
+TEST_CASE("tilemap editing: painting grows the map, erasing never does, hexagonal maps shift rows in pairs") {
+    Json c{{"rows", Json::array({"0 0"})}};
+    const game::Cell right[] = {{3, 0}};
+    auto r = game::paint_tiles(c, right, 5);
+    CHECK(r.changed);
+    CHECK(r.shift == game::Cell{0, 0});
+    CHECK(c["rows"] == Json::array({"0 0 . 5"}));
+    const game::Cell outside[] = {{7, 7}};
+    r = game::paint_tiles(c, outside, -1);
+    CHECK_FALSE(r.changed);
+    CHECK(c["rows"] == Json::array({"0 0 . 5"}));
+    // Hexagons: one row down would turn odd rows even (and shift them sideways): it grows two rows instead.
+    Json h{{"layout", "hexagonal"}, {"rows", Json::array({"1"})}};
+    const game::Cell below[] = {{0, -1}};
+    r = game::paint_tiles(h, below, 2);
+    CHECK(r.shift == game::Cell{0, 2});
+    CHECK(h["rows"] == Json::array({"1", "2", "."}));
+}

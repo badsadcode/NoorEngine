@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 29u
+#define NOOR_EDITOR_API_VERSION 30u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -184,6 +184,20 @@ NOOR_API const char* noor_water_presets(void);
         debug view of water
    NULL on error (noor_last_error). */
 NOOR_API const char* noor_doc_water(noor_doc* doc, const char* command);
+/* v30: the Tilemap panel (2D foundations, part 5). noor_doc_tilemap runs one command:
+     {"op": "list"} -> {"tilesets": [{"id", "path", "name"}]}
+     {"op": "info", "tilemap": entity id} -> {"layout", "width", "height", "tileset" (path), "texture_path",
+         "frames": [[x, y, w, h] pixels], "pixels_per_metre", "solid", "one_way"} ("error" if its tileset won't load)
+     {"op": "paint", "tilemap": id, "phase": "begin" | "paint" | "end", "cells": [[x, y], ...], "tile": n (-1 erases)}
+         -> {"changed", "width", "height", "shifted"?: [x, y]}. A stroke (begin .. end) is one undo step. Painting
+         past the right or top edge grows the map; past the left or bottom edge too, and the entity moves back by the
+         cells added (so the tiles already there stay put).
+   noor_viewport_set_brush also takes {"tilemap": entity id, "tile": n (-1: eraser)}: the outline of the cell under the
+   pointer follows it, and left-drags become "tiles" events: {"type": "tiles", "phase": "begin" | "paint" | "end",
+   "tilemap", "tile", "cell": [x, y]} ("paint" each time the pointer reaches another cell; no "cell" when it's off).
+   noor_viewport_set_options takes "view": "2d" | "3d" (v30): the 2D view looks straight down -Z, orthographic; the
+   right or middle button (or Alt + left) pans, the wheel zooms at the pointer. */
+NOOR_API const char* noor_doc_tilemap(noor_doc* doc, const char* command);
 /* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
      {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
         "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),

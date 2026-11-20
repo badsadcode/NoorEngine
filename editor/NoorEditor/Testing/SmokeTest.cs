@@ -962,6 +962,67 @@ internal static class SmokeTest
         doc.Undo();  // the look applied
         doc.Undo();  // the water itself
         check(doc.Scene.Entities.Count == count, "water: undo removes it");
+        await TilemapChecks(window, check, shot);
+    }
+
+    // 2D foundations, part 5: the Tilemaps panel makes a tilemap from the project's tileset; in the 2D view a drag with
+    // the tile brush paints every cell it crosses (one undo step).
+    private static async Task TilemapChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        var vp = VulkanViewport.Active;
+        // The render scenes' square tiles, copied into the project (the ids come with their metas).
+        var from = Path.Combine(Program.Options.TestData!, "render_scenes", "Assets", "Tiles");
+        var to = Path.Combine(doc.ProjectRoot, "Assets", "Tiles");
+        Directory.CreateDirectory(to);
+        foreach (var f in new[] { "square.png", "square.noorsprite", "square.noortileset" })
+        {
+            File.Copy(Path.Combine(from, f), Path.Combine(to, f), overwrite: true);
+            File.Copy(Path.Combine(from, f + ".noormeta"), Path.Combine(to, f + ".noormeta"), overwrite: true);
+        }
+        doc.RefreshAssets(rescan: true);
+        if (window.FindDockable("Tilemaps") is { } dockable) window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<TilemapPanel>().FirstOrDefault();
+        var count = doc.Scene.Entities.Count;
+        var id = doc.Create("Tilemap", new JsonObject
+        {
+            ["tilemap"] = new JsonObject { ["tileset"] = doc.Assets.First(a => a.Path == "Assets/Tiles/square.noortileset").Guid,
+                                           ["rows"] = new JsonArray(". . . . . .", ". . . . . .", "0 0 0 0 0 0") },
+        }, new Vec3(0, 40, 0));
+        if (id == null || vp == null || window.ViewportView == null)
+        {
+            check(false, "tilemaps: a tilemap to paint");
+            return;
+        }
+        doc.Select(id);
+        await Task.Delay(300);
+        check(panel != null && panel.PaletteCount == 8, $"tilemaps: the panel shows the tileset's eight tiles ({panel?.PaletteCount})");
+        window.ViewportView.Set2DView(true);
+        _testViewport = vp.EngineHandle;
+        await Task.Delay(800);
+        doc.SetTileBrush(4);
+        doc.SetTilePainting(true);
+        await Task.Delay(300);
+        // Drag along row y = 2 (40 m up, where the map is) from cell 1 to cell 4.
+        var path = new List<(float X, float Y)>();
+        for (var x = 1.0; x <= 4.0; x += 0.25)
+            if (vp.WorldToScreen(new Vec3(x, 42, 0)) is { } p) path.Add(((float)p.X, (float)p.Y));
+        if (path.Count > 2) await Drag(IntPtr.Zero, path);
+        await Task.Delay(300);
+        window.ViewportView.DrainEvents();
+        var rows = doc.Scene.Entities.FirstOrDefault(e => e.Id == id)?.Components["tilemap"]?["rows"] as JsonArray;
+        var top = rows?[0]?.GetValue<string>();
+        check(top == ". 4 4 4 4 ." && doc.Scene.UndoLabel == "Paint tiles",
+              $"tilemaps: a drag in the 2D view paints the cells it crosses, one undo step ({top}, {doc.Scene.UndoLabel})");
+        shot(window, "editor_40_tiles.png");
+        doc.SetTilePainting(false);
+        doc.Undo();
+        var undone = doc.Scene.Entities.FirstOrDefault(e => e.Id == id)?.Components["tilemap"]?["rows"] as JsonArray;
+        check(undone?[0]?.GetValue<string>() == ". . . . . .", "tilemaps: one undo takes the stroke back");
+        doc.Undo();  // the tilemap
+        window.ViewportView.Set2DView(false);
+        check(doc.Scene.Entities.Count == count, "tilemaps: undo removes the tilemap");
     }
 
     // Milestone 8D, part 7: the Water panel gives the lake a look of its own (one undo step), an edit to it shows in the

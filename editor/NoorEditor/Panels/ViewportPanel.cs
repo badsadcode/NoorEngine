@@ -23,6 +23,10 @@ public sealed class ViewportPanel : DockPanel
     private readonly EditorDocument _doc;
     private readonly EditorSettings _settings;
     private readonly ToggleButton _snap = new() { Content = "Snap", Classes = { "tool" } };
+    private readonly ToggleButton _view2d = new() { Content = "2D", Classes = { "tool" } };
+    private const string Hint3D = "Click select · Hold right: look + WASD/QE fly · Alt+drag orbit · Middle pan · Wheel zoom · F frame";
+    private const string Hint2D = "Click select · Right or middle drag pan · Wheel zoom at the pointer · F frame";
+    private readonly TextBlock _hint = new() { Text = Hint3D, FontSize = 11, Classes = { "muted" }, Margin = new Thickness(12, 0, 0, 0) };
     private readonly DispatcherTimer _events = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly Dictionary<EditorTool, ToggleButton> _toolButtons = new();
 
@@ -51,6 +55,9 @@ public sealed class ViewportPanel : DockPanel
             _settings.SetPreferences(p);
         };
         toolbar.Children.Add(_snap);
+        ToolTip.SetTip(_view2d, "The 2D view (2D foundations): straight down at the XY plane, flat. Right or middle drag pans, the wheel zooms at the pointer");
+        _view2d.Click += (_, _) => Set2DView(_view2d.IsChecked == true);
+        toolbar.Children.Add(_view2d);
         toolbar.Children.Add(new Border { Width = 1, Background = NoorTheme.Brush(NoorTheme.Border), Margin = new Thickness(6, 4) });
         var frameAll = new Button { Content = "Frame all", Classes = { "tool" } };
         frameAll.Click += (_, _) => Viewport.Frame(null);
@@ -58,11 +65,7 @@ public sealed class ViewportPanel : DockPanel
         frameSel.Click += (_, _) => { if (doc.SelectedId is { } id) Viewport.Frame(doc.Subtree(id)); };
         toolbar.Children.Add(frameAll);
         toolbar.Children.Add(frameSel);
-        toolbar.Children.Add(new TextBlock
-        {
-            Text = "Click select · Hold right: look + WASD/QE fly · Alt+drag orbit · Middle pan · Wheel zoom · F frame",
-            FontSize = 11, Classes = { "muted" }, Margin = new Thickness(12, 0, 0, 0),
-        });
+        toolbar.Children.Add(_hint);
         foreach (var c in toolbar.Children) c.VerticalAlignment = VerticalAlignment.Center;
 
         var host = new Border { Child = toolbar, Background = NoorTheme.Brush(NoorTheme.Panel) };
@@ -80,6 +83,7 @@ public sealed class ViewportPanel : DockPanel
         _doc.SceneChanged += SyncViewport;
         _doc.ToolChanged += OnToolChanged;
         _doc.SculptChanged += SyncViewport;
+        _doc.SnapStepRequested += SnapStep;
         _settings.PreferencesChanged += ApplyPreferences;
         ApplyPreferences();
         SyncToolButtons();
@@ -95,7 +99,26 @@ public sealed class ViewportPanel : DockPanel
         _doc.SceneChanged -= SyncViewport;
         _doc.ToolChanged -= OnToolChanged;
         _doc.SculptChanged -= SyncViewport;
+        _doc.SnapStepRequested -= SnapStep;
         _settings.PreferencesChanged -= ApplyPreferences;
+    }
+
+    /// <summary>The 2D view on or off (2D part 5); the view keeps what it was framing.</summary>
+    public void Set2DView(bool on)
+    {
+        _view2d.IsChecked = on;
+        _hint.Text = on ? Hint2D : Hint3D;
+        Viewport.SetFlat(on);
+        Viewport.Frame(_doc.SelectedId is { } id ? _doc.Subtree(id) : null);
+    }
+
+    /// <summary>A panel asked for snapping to a step (tiles, pixels): snapping goes on with that move step.</summary>
+    private void SnapStep(double metres)
+    {
+        var p = _settings.Preferences.Copy();
+        p.Snap = true;
+        p.MoveStep = metres;
+        _settings.SetPreferences(p);
     }
 
     private void ApplyPreferences()
@@ -127,7 +150,11 @@ public sealed class ViewportPanel : DockPanel
         var ground = _doc.Scattering != null && selected is { FromPrefab: false } && !_doc.Playing ? selected.Components["scatter"]?["ground"]?.GetValue<string>() : null;
         if (ground != null && _doc.Scene.Entities.All(e => e.Id != ground)) ground = null;
         sculpting = sculpting || ground != null;
-        Viewport.SetBrush(ground ?? (sculpting ? selected!.Id : null), _doc.Brush.Radius);
+        // Painting tiles (2D part 5): the selected tilemap takes the left button.
+        var tiling = _doc.TilePainting && selected is { FromPrefab: false } && selected.Components["tilemap"] != null && !_doc.Playing;
+        if (tiling) Viewport.SetTileBrush(selected!.Id, _doc.TileBrush);
+        else Viewport.SetBrush(ground ?? (sculpting ? selected!.Id : null), _doc.Brush.Radius);
+        sculpting = sculpting || tiling;
         var mode = selected is { FromPrefab: false } && !_doc.Playing && !sculpting ? (int)_doc.Tool : 0;  // EditorTool values match noor_gizmo_mode
         Viewport.SetGizmo(mode == 0 ? null : selected!.Id, mode);
         Viewport.SetFaceHighlight(selected != null && _doc.SelectedFace is { } face ? selected.Id : null, _doc.SelectedFace ?? 0);
@@ -173,6 +200,24 @@ public sealed class ViewportPanel : DockPanel
         if (!_doc.Sculpt(command, refresh: phase != "dab")) _stroking = false;
     }
 
+    private bool _tiling;
+
+    /// <summary>A tile-painting event from the viewport (2D part 5): each cell the pointer reaches is painted; a stroke is one undo step.</summary>
+    private void Tiles(JsonNode ev)
+    {
+        var phase = ev["phase"]?.GetValue<string>() ?? "paint";
+        var tilemap = ev["tilemap"]?.GetValue<string>();
+        if (phase == "begin") _tiling = !string.IsNullOrEmpty(tilemap);
+        if (!_tiling) return;
+        var command = new JsonObject
+        {
+            ["op"] = "paint", ["tilemap"] = tilemap, ["phase"] = phase, ["tile"] = ev["tile"]?.GetValue<int>() ?? _doc.TileBrush,
+            ["cells"] = ev["cell"] is JsonArray cell ? new JsonArray(cell.DeepClone()) : new JsonArray(),
+        };
+        if (phase == "end") _tiling = false;
+        if (_doc.Tilemap(command) == null) _tiling = false;
+    }
+
     /// <summary>Handles the viewport's clicks and gizmo results (also called by the smoke test).</summary>
     public void DrainEvents()
     {
@@ -196,6 +241,9 @@ public sealed class ViewportPanel : DockPanel
                     break;
                 case "stroke":
                     Stroke(ev);
+                    break;
+                case "tiles":
+                    Tiles(ev);
                     break;
                 case "mouse_capture":  // a script asked (play mode); the cursor belongs to the UI thread
                     Native.noor_viewport_set_mouse_capture(Viewport.EngineHandle, ev["capture"]?.GetValue<bool>() == true ? 1 : 0);

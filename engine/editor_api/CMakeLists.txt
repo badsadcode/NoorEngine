@@ -5,6 +5,7 @@ add_library(noor_editor_api SHARED
     src/document.cpp
     src/document_api.cpp
     src/document_animation.cpp
+    src/document_tilemap.cpp
     src/viewport_tools.cpp)
 target_include_directories(noor_editor_api PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_compile_definitions(noor_editor_api PRIVATE NOOR_EDITOR_API_BUILD)

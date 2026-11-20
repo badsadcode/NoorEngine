@@ -186,3 +186,35 @@ TEST_CASE("viewport tools: scale handles follow the entity's rotation and scale 
     CHECK(f.y == doctest::Approx(1.0f));
     CHECK(f.z == doctest::Approx(1.0f));
 }
+
+TEST_CASE("viewport tools: the 2D view looks down -Z, pans with the pointer and zooms at it (2D part 5)") {
+    EditorCamera c;
+    c.flat = true;
+    c.ortho_height = 10.0f;
+    c.pixels_wide = 200.0f;
+    c.pixels_high = 100.0f;
+    c.target = {3, 4, 0};
+    const CameraBasis b = c.basis();
+    CHECK(near(b.forward, {0, 0, -1}));
+    CHECK(b.ortho_height == 10.0f);
+    // The middle of the view is the target.
+    const Ray mid = screen_ray(b, 200, 100, 99.5f, 49.5f);
+    CHECK(mid.origin.x == doctest::Approx(3.0f));
+    CHECK(mid.origin.y == doctest::Approx(4.0f));
+    // Dragging 10 pixels right moves the world 10 pixels right: the view goes 1 m left (10 m over 100 pixels).
+    c.pan(10, 0);
+    CHECK(c.target.x == doctest::Approx(2.0f));
+    // Orbiting does nothing in 2D.
+    c.orbit(50, 50);
+    CHECK(near(c.basis().forward, {0, 0, -1}));
+    // Zooming in at a corner keeps the world point under that corner where it was.
+    const Ray before = screen_ray(c.basis(), 200, 100, 20, 10);
+    c.zoom_at(3, 20, 10);
+    const Ray after = screen_ray(c.basis(), 200, 100, 20, 10);
+    CHECK(c.ortho_height < 10.0f);
+    CHECK(after.origin.x == doctest::Approx(before.origin.x).epsilon(1e-4));
+    CHECK(after.origin.y == doctest::Approx(before.origin.y).epsilon(1e-4));
+    // Framing a box fits its XY extent.
+    c.frame({0, 0, 0}, {40, 4, 0});
+    CHECK(c.ortho_height == doctest::Approx(40.0f / 2.0f * 1.2f));
+}
