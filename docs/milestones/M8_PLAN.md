@@ -577,7 +577,7 @@ skinning, network replication of animation state.
 ## Where 8D starts
 
 - **There's no water.** Hillside has a valley and no lake; the open question from 8A ("a deep-sea environment
-  before 8D?") is still open; Tom's deep-sea project and Thornwake's rivers both want it.
+  before 8D?") is still open; Thalassa (Tom's deep-sea game) and Thornwake's rivers both want it.
 - **What the renderer has:** a see-through pass after the opaque scene, sorted back to front (glass, particles);
   the sky, sun and environment lighting rebuilt on the GPU (8A: reflections of the sky are already there to sample);
   height fog and aerial perspective; MSAA (4x by default); cascaded sun shadows.
@@ -626,7 +626,7 @@ skinning, network replication of animation state.
 | 1 ✅ | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
 | 2 ✅ | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
 | 3 ✅ | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
-| 4 | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
+| 4 ✅ | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
 | 5 | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
 | 6 | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
 | 7 | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
@@ -708,6 +708,23 @@ water 0.32 ms (was 0.11: reflections 0.14, foam 0.03). **Changed from the plan:*
 Hillside house is 80 m from the lake behind a rise, so the far shore hides its reflection from every camera that sees
 the lake; the proof is a test pond with a house on its bank, and the Hillside lake reflects its trees. Not done: only
 terrains count as ground; waves don't slow, turn or break in the shallows; the wet band is fixed.
+
+## Part 4 result (2026-11-20)
+Done. Light under a body's level (inside its footprint, the first eight bodies) comes through the water in every lit
+mesh (`water_light.hlsli`): the sky's `exp(-absorption depth)`, the sun's over its refracted slant, with caustics (two
+layers of drifting cells bent by a swirl, fading in over 25 cm and out with depth); local lights undimmed. From inside
+(the camera in a body), two full-screen passes after the surfaces: what gets through multiplied, the scattered light
+added (16 jittered steps: sunlit with forward scattering and one shadow tap, skylit, dimmer with depth, broken into
+shafts), each pixel deciding by its near-plane point whether it's under the surface (the waterline across the screen,
+a dark line along it). The surface from below: Snell's window (the sky, what's above traced through the copy, the
+sun's glint), total internal reflection beyond it showing the water's glow. The exposure opens by half the stops the
+water has taken at the camera's depth. The environment's `underwater_*` settings (blended by weather zones) replace a
+body's own while the camera is in it. Look fields `caustics`, `shafts`; the "Deep sea" preset. Proven: unit tests (2
+new, 14 in all); `render.water_descent` (a camera walked down through the pond's surface: the biggest step 16% of
+the whole change); goldens `Water_Underwater`, `Water_DeepSea`, `Water_Waterline`; the other water goldens redrawn with
+caustics. **Measured:** from inside, about 0.3 ms. Not done: see-through things and particles aren't fogged; one body from
+inside; depth from the level, not the waves; caustics and shafts are patterns, not traced light. Thalassa (Tom's
+deep-sea game) is the mood this was tuned for (Tom, 2026-11-20).
 
 ## Open questions
 

@@ -79,6 +79,8 @@ void WaterLook::apply(const Json& s) {
     number(s, "wet", wet, 0.0f, 1.0f);
     number(s, "wet_height", wet_height, 0.0f, 5.0f);
     number(s, "reflections", reflections, 0.0f, 1.0f);
+    number(s, "caustics", caustics, 0.0f, 4.0f);
+    number(s, "shafts", shafts, 0.0f, 1.0f);
 }
 
 const Json& water_presets() {
@@ -93,7 +95,14 @@ const Json& water_presets() {
          {"water", {{"tint", "#4F9FB0"}, {"clarity", 6.0}, {"scatter", "#0E3A4A"}, {"refraction", 0.05}, {"shore_fade", 0.2},
                     {"roughness", 0.08}, {"ripple", 0.8}, {"ripple_scale", 1.5}, {"wave_height", 0.6}, {"wave_length", 14.0},
                     {"wave_direction", 160.0}, {"choppiness", 0.55}, {"wind", 0.3},
-                    {"foam", 1.0}, {"foam_depth", 0.9}, {"crest_foam", 0.45}, {"wet", 0.4}, {"wet_height", 0.25}}}},
+                    {"foam", 1.0}, {"foam_depth", 0.9}, {"crest_foam", 0.45}, {"wet", 0.4}, {"wet_height", 0.25},
+                    {"caustics", 1.0}, {"shafts", 0.6}}}},
+        {{"name", "Deep sea"},
+         {"description", "The open ocean over deep water: long, heavy swell, ink-blue below, the light gone a few tens of metres down"},
+         {"water", {{"tint", "#059CCC"}, {"clarity", 20.0}, {"scatter", "#0B4F7A"}, {"refraction", 0.05}, {"shore_fade", 0.3},
+                    {"roughness", 0.1}, {"ripple", 0.7}, {"ripple_scale", 2.0}, {"wave_height", 1.4}, {"wave_length", 34.0},
+                    {"wave_direction", 150.0}, {"choppiness", 0.5}, {"wind", 0.5}, {"foam", 1.0}, {"foam_depth", 1.2},
+                    {"crest_foam", 0.5}, {"wet", 0.4}, {"wet_height", 0.4}, {"caustics", 0.8}, {"shafts", 0.8}}}},
     });
     return presets;
 }
@@ -116,6 +125,21 @@ Result<Json> load_water_file(const std::filesystem::path& file) {
     if (!json->contains("water") || !(*json)["water"].is_object())
         return fail(ErrorCode::ParseError, std::format("{}: no \"water\" settings", file.filename().string()));
     return std::move(*json);
+}
+
+std::optional<UnderwaterLook> underwater_look(const Json& en, const WaterLook& base) {
+    if (!en.is_object()) return std::nullopt;
+    bool any = false;
+    for (const char* key : {"underwater_tint", "underwater_absorption", "underwater_scatter", "underwater_caustics", "underwater_shafts"})
+        any = any || en.contains(key);
+    if (!any) return std::nullopt;
+    // The same rules as the look's own fields, read from the prefixed keys.
+    Json fields = Json::object();
+    for (const auto& [key, value] : en.items())
+        if (key.starts_with("underwater_")) fields[key.substr(11)] = value;
+    WaterLook look = base;
+    look.apply(fields);
+    return UnderwaterLook{look.absorption, look.scatter, look.caustics, look.shafts};
 }
 
 math::Vec3 water_transmittance(const WaterLook& look, float metres) {

@@ -1,11 +1,12 @@
-"""What water costs (Milestone 8D, parts 1 to 3): Hillside's lake, the test pool, the wavy sea, the shore and the reflecting pond,
+"""What water costs (Milestone 8D, parts 1 to 4): Hillside's lake, the test pool, the wavy sea, the shore and the reflecting pond,
 with and without their water.
 
     python tools/samples/measure_hillside_lake.py
 
 Draws samples/Hillside/Scenes/Hillside_Lake.noorscene (tools/samples/add_hillside_lake.py) and
 tests/data/render_scenes/Scenes/Water_Pool.noorscene, Water_Waves.noorscene (part 2: the Sea preset), Water_Shore.noorscene
-and Water_Reflection.noorscene (part 3: foam, wet sand, screen-space reflections) for 300 frames with noor_player, each as it is and with its water
+Water_Reflection.noorscene (part 3: foam, wet sand, screen-space reflections), Water_Underwater.noorscene and
+Water_DeepSea.noorscene (part 4: from inside the water) for 300 frames with noor_player, each as it is and with its water
 entity taken out, three runs each, and prints the fastest GPU frame (the work itself: a desktop GPU that idles clocked
 down and is shared makes medians swing) and the fastest Scene, Scene copy and See-through passes
 (water and see-through draws), each the fastest frame's. Works on temporary copies, so nothing is written to the projects. Needs a build.
@@ -22,7 +23,9 @@ CASES = [(ROOT / 'samples' / 'Hillside', 'Scenes/Hillside_Lake.noorscene', 'Lake
          (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Pool.noorscene', 'Water'),
          (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Waves.noorscene', 'Sea'),
          (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Shore.noorscene', 'Sea'),
-         (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Reflection.noorscene', 'Pond')]
+         (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Reflection.noorscene', 'Pond'),
+         (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_Underwater.noorscene', 'Pond'),
+         (ROOT / 'tests' / 'data' / 'render_scenes', 'Scenes/Water_DeepSea.noorscene', 'Sea')]
 RUNS = 3
 
 

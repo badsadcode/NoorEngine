@@ -379,6 +379,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
                        const std::filesystem::path& project_root) {
     SceneView view;
     std::vector<std::pair<WaterBody, asset::WaterLook>> pending_water;  // water bodies, waved once the wind is known
+    Json water_environment;  // the environment as blended (its underwater settings, 8D part 4)
     const auto& entities = scene.entities;
     bool has_environment = false;
     float env_intensity = 8000.0f;
@@ -514,6 +515,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             }
             for (const Zone& zone : zones)  // weather zones over the scene's own environment
                 en = asset::blend_environments(en, zone_settings(zone.index), zone.weight);
+            water_environment = en;
             if (en.contains("ev100") && (en["ev100"].is_number() || en["ev100"].is_string())) environment_ev100 = en["ev100"];
             const std::string sky_mode = en.contains("sky") && en["sky"].is_string() ? en["sky"].get<std::string>() : std::string();
             render::FogParams& fog = view.lighting.fog;
@@ -929,6 +931,8 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     for (auto& [body, look] : pending_water) {
         body.waves = make_waves(look, water_wind);
         view.water.push_back(water_draw(body, look));
+        if (const auto under = asset::underwater_look(water_environment, look))
+            view.water.back().underwater = render::WaterDraw::Underwater{under->absorption, under->scatter, under->caustics, under->shafts};
     }
     if (!view.water.empty()) set_water_depths(view.water, view.terrains);
     return view;

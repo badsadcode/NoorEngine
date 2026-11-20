@@ -14,7 +14,15 @@
 //     in world space, moving with time) bend the normal on top;
 //   - part 3: foam where the water is shallow (round the shore and anything standing in it, surging with the waves)
 //     and on crests steep enough to fold (where the waves squeeze the surface together), and wet ground: a flat band
-//     just above the water (VSWet/PSWet, drawn before the surface) darkens what's under it near the waterline.
+//     just above the water (VSWet/PSWet, drawn before the surface) darkens what's under it near the waterline;
+//   - part 4, from under the water: the surface shows the sky (and what's above, traced like a reflection) through a
+//     bright window straight overhead (refraction out of the water, Snell's law), and beyond its edge (48.6 degrees)
+//     mirrors the water's own glow (total internal reflection). Then two full-screen passes (VSFog/PSFogMul/PSFogAdd)
+//     fill the water between the camera and whatever it sees: what gets through multiplied, the light the water
+//     scatters added (sunlit and skylit, dimmer with depth, in shafts under the waves, shadowed by what's in the way).
+//     Each pixel decides for itself whether its near-plane point is under the surface, so a camera half in sees the
+//     waterline cross the screen. Light under the surface reaching objects (dimmed by depth, caustics) is mesh.hlsl's
+//     (water_light.hlsli).
 // The atmosphere and fog between the camera and the surface apply to the water's own light (reflected, scattered); what's
 // seen through already had its own (an approximation: the stretch from the surface down counts as air). A sea is the same
 // surface, drawn under the camera out to the horizon. Writes depth and alpha 1.
@@ -26,15 +34,8 @@
 [[vk::combinedImageSampler]] [[vk::binding(8, 0)]] Texture2D<float> scene_depth;
 [[vk::combinedImageSampler]] [[vk::binding(8, 0)]] SamplerState scene_depth_sampler;
 
-// Each draw's settings beyond its push constants (vulkan_water.cpp's WaterGpu), indexed by grid.w.
-struct WaterSettings
-{
-    float4 map;       // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples
-    uint4 map_info;   // xy: samples across, z: texture slot, w: 1 = has a map
-    float4 foam;      // x: foam, y: foam depth (m), z: crest foam, w: wet (how much darker)
-    float4 shore;     // x: wet height (m), y: reflections, z: the wet band's height above the level (m)
-};
-[[vk::binding(9, 0)]] StructuredBuffer<WaterSettings> water_settings;
+// Each draw's settings beyond its push constants (vulkan_water.cpp's WaterGpu), entry grid.w; entry 0 the header.
+#include "water_light.hlsli"
 // The texture table (set 1): depth maps are R32 float textures in it.
 [[vk::binding(0, 1)]] Texture2D<float4> textures[];
 
@@ -333,6 +334,72 @@ bool reflected_hit(float3 origin, float3 dir, float2 inv_size, out float2 hit_uv
     return false;
 }
 
+// The surface's height (world y) over (x, z): stepping back from the waves' sideways motion (3 steps: close enough to
+// say which side of it a point is, game/water.h does 12 for gameplay).
+float surface_height(float2 xz, WaterSettings s)
+{
+    float3 nn;
+    float sq;
+    float2 rest = xz;
+    [unroll] for (int i = 0; i < 3; ++i)
+    {
+        const float3 o = gerstner(rest, 0.0, s, nn, sq);
+        rest = xz - o.xz;
+    }
+    return pc.center_yaw.y + gerstner(rest, 0.0, s, nn, sq).y;
+}
+
+// Henyey-Greenstein phase, scaled so it averages 1 over the sphere: light keeps going mostly the way it was.
+float phase_forward(float cos_theta, float g)
+{
+    const float g2 = g * g;
+    return (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * cos_theta, 1e-4), 1.5);
+}
+
+// The light the water sends towards the eye from a point `depth` metres under the surface, looking along `dir` (from
+// the eye): the sun's (forward-scattered, through the water above it, times `sun_share` for shadow and shafts) and the
+// sky's, each times the water's scattering colour. At the surface and seen from above this is the `inside` of PSMain.
+float3 water_glow(float depth, float3 dir, float sun_share)
+{
+    const float d = max(depth, 0.0);
+    const float3 ls = water_sun_direction();
+    const float3 sun = frame.sun_radiance.rgb * max(frame.to_sun.y, 0.0) / kPi * phase_forward(dot(dir, ls), 0.55) *
+                       exp(-pc.absorption.rgb * d / max(ls.y, 0.05)) * sun_share;
+    const float3 sky = environment_irradiance(float3(0, 1, 0)) / kPi * exp(-pc.absorption.rgb * d);
+    return pc.scatter.rgb * (sun + sky);
+}
+
+// The surface from below: through the window straight overhead, the sky (and anything above the water, traced through
+// the copied scene like a reflection) bent by the surface; beyond the critical angle, the water's own glow mirrored.
+float3 surface_from_below(float3 world, float3 v, float3 n, float2 inv_size, WaterSettings s, float rough)
+{
+    const float3 nb = -n;  // facing down, towards the eye
+    const float cos_i = saturate(dot(v, nb));
+    const float sin_t2 = kWaterIor * kWaterIor * (1.0 - cos_i * cos_i);
+    // The mirrored water: its glow along the reflected ray, from about as deep as that ray sees into it.
+    const float3 r = reflect(-v, nb);
+    const float a_mean = max((pc.absorption.r + pc.absorption.g + pc.absorption.b) / 3.0, 0.01);
+    const float3 mirrored = water_glow(max(-r.y, 0.0) / a_mean, r, 1.0);
+    if (sin_t2 >= 1.0) return mirrored;  // total internal reflection
+    const float cos_t = sqrt(1.0 - sin_t2);
+    const float3 t = refract(-v, nb, kWaterIor);
+    float3 seen = environment_map.SampleLevel(environment_sampler, environment_direction(t), rough * frame.environment.w).rgb * frame.environment.x;
+    if (s.shore.y > 0.0)
+    {
+        float2 hit_uv;
+        float confidence;
+        if (reflected_hit(world + float3(0.0, 0.02, 0.0), t, inv_size, hit_uv, confidence))
+            seen = lerp(seen, scene_color.SampleLevel(scene_color_sampler, hit_uv, 0).rgb, confidence);
+    }
+    // The sun itself through the window.
+    const float alpha = max(rough * rough, 0.004);
+    seen += frame.sun_radiance.rgb * d_ggx(saturate(dot(t, frame.to_sun.xyz)), alpha) * 0.25 * sun_shadow(world, float3(0, 1, 0));
+    // Towards the window's edge more of it is mirror (Fresnel), and over the last stretch before the critical angle it
+    // blends into the mirror outright: the exact edge is a single pixel wide and only shimmers.
+    const float f = lerp(0.02 + 0.98 * pow(1.0 - cos_t, 5.0), 1.0, smoothstep(0.85, 1.0, sin_t2));
+    return seen * (1.0 - f) + mirrored * f;
+}
+
 float4 PSMain(VertexOutput input) : SV_Target0
 {
     const WaterSettings s = settings();
@@ -352,6 +419,16 @@ float4 PSMain(VertexOutput input) : SV_Target0
     float squeeze;
     gerstner(input.rest, footprint, s, wave_n, squeeze);
     const float3 n = normalize(float3(wave_n.x - slope.x * wave_n.y, wave_n.y, wave_n.z - slope.y * wave_n.y));
+    // Seen from under the water (the camera's body, the camera under its surface): the window and the mirror.
+    if (pc.grid.w == water_settings[0].map_info.y)
+    {
+        const float3 eye = frame.camera_position.xyz;
+        if (eye.y < surface_height(eye.xz, s))
+        {
+            const float rough_below = saturate(pc.params.x + lost * pc.size.z * 0.12);
+            return float4(surface_from_below(world, v, n, inv_size, s, rough_below), 1.0);
+        }
+    }
 
     // How deep the water is here: what the scene has under this pixel.
     const uint2 px = uint2(input.position.xy);
@@ -379,7 +456,10 @@ float4 PSMain(VertexOutput input) : SV_Target0
     if (depth_r > 0.0) below *= wet_factor(floor_r, s);
 
     // Through the water: absorbed along the way down (the light) and back up the view ray.
-    const float3 transmittance = exp(-pc.absorption.rgb * (view_depth + vertical));
+    // The light's way down is mesh.hlsl's for the bodies that light the scene (it dims what's under them by depth, and
+    // adds caustics); for any further body, counted here.
+    const bool lit_below = pc.grid.w <= water_settings[0].map_info.x;
+    const float3 transmittance = exp(-pc.absorption.rgb * (view_depth + (lit_below ? 0.0 : vertical)));
     const float sun_light = max(frame.to_sun.y, 0.0);
     const float shadow = sun_shadow(world, float3(0, 1, 0)) * cloud_shadow(world);
     const float3 ambient = environment_irradiance(float3(0, 1, 0)) / kPi;
@@ -487,4 +567,99 @@ float4 PSWet(VertexOutput input) : SV_Target0
     else if (distance(ground.xz, frame.camera_position.xz) > pc.size.x)
         return 1.0;
     return float4(wet_factor(ground, s).xxx, 1.0);
+}
+
+// ---- Underwater, seen from inside (part 4) -------------------------------------------------------------------------
+// Two full-screen passes after the surfaces, with the camera's body's push constants: PSFogMul multiplies the picture
+// by what gets through the water between the near plane and what each pixel shows (the opaque scene's copied depth, or
+// the surface where the ray leaves through it), PSFogAdd adds the light the water scatters along the way. A pixel
+// whose near-plane point is above the surface is left alone (the camera half in: above the waterline the surface is
+// seen from above), and a thin dark line marks the waterline itself.
+
+VertexOutput VSFog(uint vertex : SV_VertexID)
+{
+    const float2 p = float2((vertex << 1) & 2, vertex & 2);
+    VertexOutput o;
+    o.position = float4(p * 2.0 - 1.0, 0.0, 1.0);
+    o.world = 0.0;
+    o.rest = 0.0;
+    return o;
+}
+
+// Where this pixel's view starts (its point on the near plane) and how far it runs through water. False: it starts in
+// the air. `edge`: 0 on the waterline, 1 a pixel or two away.
+bool fog_path(float4 position, WaterSettings s, out float3 start, out float3 dir, out float dist, out float edge)
+{
+    const float2 uv = position.xy * pc.params.zw;
+    start = scene_world(uv, 1.0);  // reverse-Z: the near plane
+    // The water on the lens isn't a ruler-straight edge: a few millimetres of wobble running along it.
+    const float t = pc.params.y;
+    const float wobble = 0.0012 * sin(dot(start.xz, float2(61.0, 37.0)) + t * 2.7) + 0.0008 * sin(dot(start.xz, float2(-43.0, 89.0)) - t * 3.9);
+    const float above = start.y - surface_height(start.xz, s) + wobble;
+    edge = saturate(abs(above) / (1.5 * fwidth(above) + 1e-6));
+    dir = normalize(start - frame.camera_position.xyz);
+    dist = 0.0;
+    if (above > 0.0) return false;
+    const float depth0 = scene_depth.Load(int3(uint2(position.xy), 0));
+    dist = depth0 > 0.0 ? distance(start, scene_world(uv, depth0)) : 1e5;
+    if (dir.y > 1e-4) dist = min(dist, max(pc.center_yaw.y - start.y, 0.0) / dir.y);  // out through the surface
+    return true;
+}
+
+float4 PSFogMul(VertexOutput input) : SV_Target0
+{
+    const WaterSettings s = settings();
+    float3 start, dir;
+    float dist, edge;
+    const bool under = fog_path(input.position, s, start, dir, dist, edge);
+    const float line_dark = lerp(0.35, 1.0, edge);
+    return float4((under ? exp(-pc.absorption.rgb * dist) : 1.0) * line_dark, 1.0);
+}
+
+// The sun's shadow at a point, one tap (the fog's shafts take many samples, each needn't be soft).
+float sun_shadow_tap(float3 world)
+{
+    if (frame.shadow_params.x == 0.0) return 1.0;
+    const float view_depth = dot(world - frame.camera_position.xyz, frame.camera_forward.xyz);
+    if (view_depth > frame.cascade_splits.w) return 1.0;
+    uint c = 0;
+    [unroll] for (uint i = 0; i < 3; ++i)
+        if (view_depth > frame.cascade_splits[i]) c = i + 1;
+    const float4 p = mul(frame.cascades[c], float4(world, 1.0));
+    return shadow_map.SampleCmpLevelZero(shadow_sampler, float3(p.xy * 0.5 + 0.5, c), p.z);
+}
+
+float4 PSFogAdd(VertexOutput input) : SV_Target0
+{
+    const WaterSettings s = settings();
+    float3 start, dir;
+    float dist, edge;
+    if (!fog_path(input.position, s, start, dir, dist, edge)) return 0.0;
+    // March as far as the water lets anything through (where the clearest colour is down to e^-6), in 16 steps with a
+    // per-pixel offset (no banding), then the rest of the way as the last step's light.
+    const float a_min = max(min(pc.absorption.r, min(pc.absorption.g, pc.absorption.b)), 1e-3);
+    const float reach = min(dist, 6.0 / a_min);
+    const int steps = 16;
+    const float ds = reach / steps;
+    const float jitter = frac(52.9829189 * frac(dot(input.position.xy, float2(0.06711056, 0.00583715))));
+    const float3 ls = water_sun_direction();
+    const float t = pc.params.y;
+    const float shafts = s.absorption.w;
+    float3 through = 1.0, glow = 0.0, last = 0.0;
+    [loop] for (int i = 0; i < steps; ++i)
+    {
+        const float3 x = start + dir * ((float(i) + jitter) * ds);
+        const float d = pc.center_yaw.y - x.y;
+        // Shafts: where the sun's ray to this point came through the surface, the waves gathered or spread it.
+        const float2 at = x.xz + ls.xz * (max(d, 0.0) / max(ls.y, 0.05));
+        const float n = value_noise(at * 0.22 + float2(t * 0.05, t * 0.035)) * 0.6 + value_noise(at * 0.61 - float2(t * 0.09, -t * 0.03)) * 0.4;
+        const float lit = smoothstep(0.42, 0.78, n);
+        const float shaft = lerp(1.0, 0.08 + 3.2 * lit * lit, shafts * exp(-max(d, 0.0) / 40.0));
+        last = water_glow(d, dir, sun_shadow_tap(x) * shaft) * (d > 0.0 ? 1.0 : 0.0);
+        const float3 next = through * exp(-pc.absorption.rgb * ds);
+        glow += last * (through - next);
+        through = next;
+    }
+    glow += last * through * (1.0 - exp(-pc.absorption.rgb * (dist - reach)));
+    return float4(glow, 0.0);
 }

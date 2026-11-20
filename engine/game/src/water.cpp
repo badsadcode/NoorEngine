@@ -342,6 +342,8 @@ render::WaterDraw water_draw(const WaterBody& b, const asset::WaterLook& look) {
     d.wet = look.wet;
     d.wet_height = look.wet_height;
     d.reflections = look.reflections;
+    d.caustics = look.caustics;
+    d.shafts = look.shafts;
     return d;
 }
 

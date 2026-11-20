@@ -22,12 +22,15 @@
 // water where foam gathers at the shore and round things standing in it), "crest_foam" (0..1: how readily steep wave
 // crests foam; 0: never), "wet" (0..1: how much darker wet ground is) and "wet_height" (metres above the water's reach
 // that are still wet), "reflections" (0..1: nearby things reflected by screen-space reflection; 0: the sky only).
+// Underwater (part 4): "caustics" (0..4: the sun's light gathered by the waves into a net on what's below; 0: none,
+// 1: as strong as the default) and "shafts" (0..1: light shafts in the water, seen from inside it).
 
 #include "noor/asset/json.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
 
 #include <filesystem>
+#include <optional>
 #include <string_view>
 
 namespace noor::asset {
@@ -54,12 +57,14 @@ struct WaterLook {
     float wet = 0.35f;
     float wet_height = 0.12f;  // metres
     float reflections = 1.0f;
+    float caustics = 1.0f;
+    float shafts = 0.5f;
 
     // Fields present in `settings` replace these (unknown fields are ignored; bad values keep the default).
     void apply(const Json& settings);
 };
 
-// The built-in presets: [{"name", "description", "water"}] (never written to): "Lake", "Sea".
+// The built-in presets: [{"name", "description", "water"}] (never written to): "Lake", "Sea", "Deep sea".
 [[nodiscard]] const Json& water_presets();
 [[nodiscard]] const Json* water_preset(std::string_view name);
 
@@ -71,5 +76,17 @@ struct WaterLook {
 
 // Absorption from a tint and a clarity (see above).
 [[nodiscard]] math::Vec3 absorption_from_tint(math::Vec3 tint_linear, float clarity);
+
+// The environment's underwater settings (8D part 4, flat keys so weather zones blend them like fog): the water's look
+// seen from inside it, over each body's own while the camera is in it: "underwater_tint" + "underwater_clarity" (or
+// "underwater_absorption": [r, g, b]), "underwater_scatter", "underwater_caustics", "underwater_shafts". Nullopt when
+// the environment has none of them.
+struct UnderwaterLook {
+    math::Vec3 absorption;
+    math::Vec3 scatter;
+    float caustics;
+    float shafts;
+};
+[[nodiscard]] std::optional<UnderwaterLook> underwater_look(const Json& environment, const WaterLook& base);
 
 } // namespace noor::asset

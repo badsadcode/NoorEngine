@@ -561,6 +561,23 @@ foreach(scene Water_Shore Water_Reflection)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${scene} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Underwater (Milestone 8D, part 4): under the pond looking up at the house (Snell's window), the deep sea from 18 m
+# down, and the camera half in the pond (the waterline across the picture).
+foreach(scene Water_Underwater Water_DeepSea Water_Waterline)
+    add_test(NAME render.golden_${scene}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${scene}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${scene}.png -DFRAMES=60
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${scene}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${scene} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
+# A camera walked down through the pond's surface: no pop (tests/water_descent_check.cmake).
+add_test(NAME render.water_descent
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/water_descent -P ${CMAKE_CURRENT_SOURCE_DIR}/water_descent_check.cmake)
+set_tests_properties(render.water_descent PROPERTIES LABELS "gpu;render" TIMEOUT 300)
 # What gameplay reads is what's drawn: the depth read back under the waves against water_height (within 1 cm, 20 m).
 add_test(NAME render.water_readback
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes

@@ -1,0 +1,608 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-5ef1-4000-8000-000000000001",
+  "name": "Water_Waterline",
+  "entities": [
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000001",
+      "name": "Ground west",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -16,
+          -1,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            12,
+            2,
+            40
+          ],
+          "color": "#5C7A3C"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000002",
+      "name": "Ground east",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          16,
+          -1,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            12,
+            2,
+            40
+          ],
+          "color": "#5C7A3C"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000003",
+      "name": "Ground north",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -1,
+          -19.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            20,
+            2,
+            21
+          ],
+          "color": "#5C7A3C"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000004",
+      "name": "Ground south",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -1,
+          15
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            20,
+            2,
+            16
+          ],
+          "color": "#5C7A3C"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000005",
+      "name": "Pond floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -1.9,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            20,
+            0.2,
+            16
+          ],
+          "color": "#6B6248"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000006",
+      "name": "Pond",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -0.15,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "water": {
+          "preset": "Lake",
+          "size": [
+            20,
+            16
+          ],
+          "ripple": 0.45
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000007",
+      "name": "Walls",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1.6,
+          -13
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            6,
+            3.2,
+            4
+          ],
+          "color": "#E2D6BC"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000008",
+      "name": "Door",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          1.0,
+          -10.98
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1.0,
+            2.0,
+            0.06
+          ],
+          "color": "#5A3A22"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000009",
+      "name": "Window west",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -1.9,
+          1.9,
+          -10.98
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.9,
+            0.9,
+            0.06
+          ],
+          "color": "#2E4A66"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000010",
+      "name": "Window east",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.9,
+          1.9,
+          -10.98
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.9,
+            0.9,
+            0.06
+          ],
+          "color": "#2E4A66"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000011",
+      "name": "Roof south",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          3.85,
+          -12.0
+        ],
+        "rotation": [
+          0.325568154,
+          0.0,
+          0.0,
+          0.945518576
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            6.6,
+            0.18,
+            2.75
+          ],
+          "color": "#9A3B2A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000012",
+      "name": "Roof north",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          3.85,
+          -14.0
+        ],
+        "rotation": [
+          -0.325568154,
+          0.0,
+          0.0,
+          0.945518576
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            6.6,
+            0.18,
+            2.75
+          ],
+          "color": "#9A3B2A"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000013",
+      "name": "Chimney",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          1.8,
+          4.6,
+          -13.6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.6,
+            1.6,
+            0.6
+          ],
+          "color": "#7A6A5E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000014",
+      "name": "Post",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -5.5,
+          0.4,
+          -6.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.25,
+            1.6,
+            0.25
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000015",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.5,
+          -0.15,
+          2.0
+        ],
+        "rotation": [
+          0.0,
+          0.020819785,
+          0.0,
+          0.999783245
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 55,
+          "near": 0.05
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000016",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          5,
+          0
+        ],
+        "rotation": [
+          -0.282215415,
+          0.207336695,
+          0.062609303,
+          0.934583345
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5ef1-4000-8000-000000000017",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "time_of_day": 14.0,
+          "latitude": 50,
+          "day_of_year": 172,
+          "north": 60,
+          "ev100": "auto"
+        }
+      }
+    }
+  ]
+}

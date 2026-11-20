@@ -981,7 +981,14 @@ void Renderer::destroy_material(MaterialHandle material) {
     impl_->materials[material.id] = {};
 }
 void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
-Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) { return impl_->render_frame(frame); }
+Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) {
+    // Under water the exposure opens up part of the way (8D part 4, vulkan_water.cpp): eyes and cameras adapt.
+    const float shift = underwater_exposure_shift(frame);
+    if (shift == 0.0f) return impl_->render_frame(frame);
+    FrameDesc adapted = frame;
+    adapted.lighting.ev100 -= shift;
+    return impl_->render_frame(adapted);
+}
 void Renderer::request_capture(bool with_depth) noexcept {
     impl_->capture_depth_requested = with_depth;
     if (!impl_->swapchain_supports_capture) {

@@ -498,6 +498,16 @@ int run(const Options& o) {
                     if (last_capture) {
                         const auto c = last_capture->rgba_at(last_capture->width / 2, last_capture->height / 2);
                         report["center_pixel"] = {c[0], c[1], c[2]};
+                        // The whole picture's average colour (0..255), for tests that follow a picture changing
+                        // smoothly (8D part 4: a camera walked down through the water's surface).
+                        double sum[3]{};
+                        for (std::uint32_t y = 0; y < last_capture->height; ++y)
+                            for (std::uint32_t x = 0; x < last_capture->width; ++x) {
+                                const auto q = last_capture->rgba_at(x, y);
+                                for (int k = 0; k < 3; ++k) sum[k] += q[static_cast<std::size_t>(k)];
+                            }
+                        const double pixels = std::max(1.0, static_cast<double>(last_capture->width) * last_capture->height);
+                        report["mean_rgb"] = {sum[0] / pixels, sum[1] / pixels, sum[2] / pixels};
                         // The pixel at UI position (40, 40) (the screen is 720 UI units tall), for HUD tests.
                         const auto ui = static_cast<std::uint32_t>(40.0f * static_cast<float>(last_capture->height) / noor::runtime::kUiHeight);
                         const auto p = last_capture->rgba_at(std::min(ui, last_capture->width - 1), std::min(ui, last_capture->height - 1));

@@ -1,8 +1,8 @@
 # Water
 
 Milestone 8D ([plan](../milestones/M8_PLAN.md#8d-water), [ADR-037](../decisions/ADR-037-water.md)). What works so
-far: **part 1, the water surface**, **part 2, waves**, and **part 3, shorelines and reflections**. Underwater, floating
-and swimming, rivers and the Water panel are planned (parts 4 to 8); nothing below claims them.
+far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, and **part 4, underwater**.
+Floating and swimming, rivers and the Water panel are planned (parts 5 to 8); nothing below claims them.
 
 ## The `water` component (part 1)
 
@@ -53,10 +53,13 @@ edits size and any field you add. The Render panel counts water surfaces drawn.
 | `wet` | 0..1: how much darker wet ground is (under the water and in a band above it). |
 | `wet_height` | Metres above where the waves reach that are still wet. |
 | `reflections` | 0..1: how much of nearby things is reflected (screen-space; 0: only the sky). |
+| `caustics` | 0..4: how strongly the waves gather the sun into a net of bright lines on what's under the water (0: none). |
+| `shafts` | 0..1: light shafts in the water, seen from inside it (0: an even glow). |
 
 Bad values are clamped or ignored, never fatal. The built-in presets so far: **Lake** (a calm, clear green lake, a few
 specks of foam at the edge) and **Sea** (a 14 m swell 0.6 m high with smaller waves on it, blue-green and deep, rougher
-in the wind, foam along the shore and on the steepest crests). The gallery of
+in the wind, foam along the shore and on the steepest crests) and **Deep sea** (open ocean: a long 1.4 m swell, clear
+and blue, red gone in a few metres and the light in a few tens; strong shafts). The gallery of
 presets (Pond, Sea, Tropical, Swamp, River, Deep sea) comes with the Water panel in part 7.
 
 ## Waves (part 2)
@@ -138,6 +141,52 @@ to see (looking straight down) it isn't traced. What the screen doesn't show (be
 bridge, a roof cut off at the top of the picture) is the sky. Planar reflections (a mirror-perfect lake, drawing the
 scene twice) are not in 8D (ADR-037).
 
+## Underwater (part 4)
+
+**Light comes down through the water.** Under a body's level, inside its footprint, everything lit by the sun and the
+sky gets their light through the water above it (`water_light.hlsli`, used by every lit mesh): the sky's light keeps
+`exp(-absorption × depth)` of each colour, the sun's the same over its slanted way down (bent towards straight down at
+the surface). So red goes first, then green: the deep goes blue, then dark. **Local lights don't dim**: a lamp at the
+bottom of the sea lights what's near it. The first eight bodies in the scene light like this. (Seen from above, the
+water's own pass then counts only the view's way through the water, so nothing is dimmed twice.)
+
+**Caustics** (`caustics`): the sun's light on what's under the water is gathered into a net of bright, drifting lines
+where its ray came through the surface (two layers of moving cells, bent by a slow swirl, brightest where their edges
+cross). They fade in over the first 25 cm and out with depth (half gone at about 5 m). A pattern in the spirit of what
+waves do, not light traced through them.
+
+**From inside** (the camera in a body: inside its footprint, under the highest its waves reach), two full-screen passes
+after the surfaces fill in the water between the camera and what each pixel shows (the opaque scene, or the surface
+where the view leaves through it):
+- what gets through is multiplied: `exp(-absorption × distance)`;
+- the light the water scatters is added, marched in 16 steps (offset per pixel against banding): the sun's light at
+  each point's depth (forward-scattered: brighter looking towards the sun) times the water's `scatter`, plus the sky's,
+  shadowed by what's above (one shadow-map tap a step: things cast shadows into the water), and broken into **shafts**
+  (`shafts`) by a drifting pattern where the sun's ray came through the surface, fading with depth. Looking down into
+  the deep goes darker than looking across, because there's less light down there.
+
+Each pixel decides for itself whether its point on the near plane is under the surface (the waves and a millimetre or
+two of wobble included), so a **camera half in** sees the waterline cross the screen, with a thin dark line along it.
+
+**The surface from below**: through a window straight overhead (out to the critical angle, 48.6° from straight up) the
+sky shows, bent by the surface (and anything above the water, found by tracing that ray through the copied scene like a
+reflection; the sun as a glint); beyond it the surface is a mirror (total internal reflection) showing the water's own
+glow. Towards the window's edge Fresnel turns it into mirror, and over the last few degrees it blends there outright,
+so the edge doesn't shimmer.
+
+**Eyes adjust**: under water the exposure opens up by half of what the water has taken from the sky's light at the
+camera's depth (in stops; `render::underwater_exposure_shift`). Zero at the surface, so crossing it doesn't jump;
+deeper still gets darker.
+
+**The environment's underwater settings** (`underwater_tint` + `underwater_clarity` or `underwater_absorption`,
+`underwater_scatter`, `underwater_caustics`, `underwater_shafts` on an environment or a `.noorenv`, blended by weather
+zones like fog): while the camera is in a body they replace its own (murkier water in a storm). If they differ from
+the water's, crossing the surface changes the look at once (the author's choice: without them it's seamless).
+
+What it isn't (yet): glass, smoke and particles aren't fogged by the water, and particles don't dim with depth; one
+body at a time from inside; depth counts from the water's level, not the waves passing over; no bubbles, splashes or
+drops on the lens (splashes: part 5).
+
 ## How it's drawn
 
 When water is in view, the frame's scene pass is split in two:
@@ -166,7 +215,7 @@ The ripples are a few sine waves in world space moving with the game's clock, so
 Ripples smaller than a few pixels fade out, and roughen the reflection instead (otherwise they alias into a grid at a
 distance).
 
-**What it isn't (yet):** there's no underwater view (part 4), and nothing floats (part 5). The absorption counts the stretch from the surface down as
+**What it isn't (yet):** nothing floats (part 5). The absorption counts the stretch from the surface down as
 water and the rest as air, so it's an approximation, as ADR-037 says.
 
 **Measured** (RTX 3080, 1280×720, 4× MSAA, fastest of 3 × 300 frames, `tools/samples/measure_hillside_lake.py`):
@@ -194,6 +243,24 @@ Part 3 (2026-11-20, the same way, `measure_hillside_lake.py`): foam, wet ground 
 | Shore without its water | 0.32 ms | 0.10 ms | 0 | 0.017 ms |
 | Reflecting pond (`Water_Reflection`) | 0.46 ms | 0.10 ms | 0.015 ms | 0.171 ms |
 | Reflecting pond without its water | 0.27 ms | 0.08 ms | 0 | 0.017 ms |
+
+Part 4 (2026-11-20, the same way): light under the water dimmed and caustics in every lit mesh, and from inside the
+water, the two full-screen passes.
+
+| Scene | GPU | Scene | Scene copy | See-through (water) |
+|---|---|---|---|---|
+| Wavy sea (seen from above) | 0.50 ms | 0.10 ms | 0.016 ms | 0.323 ms |
+| Shore (caustics on the sea bed now) | 0.72 ms | 0.17 ms | 0.018 ms | 0.329 ms |
+| Shore without its water | 0.32 ms | 0.10 ms | 0 | 0.017 ms |
+| Reflecting pond (seen from above) | 0.50 ms | 0.13 ms | 0.017 ms | 0.173 ms |
+| Under the pond (`Water_Underwater`) | 0.74 ms | 0.11 ms | 0.016 ms | 0.452 ms |
+| Under the pond without its water | 0.25 ms | 0.07 ms | 0 | 0.018 ms |
+| Deep sea, 18 m down (`Water_DeepSea`) | 0.94 ms | 0.16 ms | 0.016 ms | 0.608 ms |
+| Deep sea without its water | 0.27 ms | 0.09 ms | 0 | 0.018 ms |
+
+From inside, the two passes add about 0.3 ms (the pond 0.45 ms against 0.17 ms seen from above; the deep sea 0.61 ms
+against the wavy sea's 0.32 ms), most of it the 16-step march; `shafts` 0 drops the pattern but not the march. The light
+under the water in the opaque pass (`water_light.hlsli`) adds about 0.04 ms on the shore scene (0.13 to 0.17 ms).
 
 The wavy sea's own pass went from 0.11 to 0.32 ms; switching each part off on it (`reflections`, `foam`, `wet` 0):
 reflections 0.14 ms, foam 0.03 ms, wet ground under 0.01 ms; the rest (depth-map reads, settings) about 0.03 ms.
@@ -223,6 +290,16 @@ copy** and **See-through** separately (the Render panel and the player's report)
   map asked again).
 - `render.water_readback_shore`: the same readback over a beach (`Water_Shore_Probe`): only pixels at least 0.3 m deep
   count, at least 60 of them shallower than 2.5 m (where the waves are calmed); within 1 cm out to 20 m.
+- Unit tests for underwater (2): the environment's underwater settings (read like the look's fields, what isn't said
+  stays the water's, clamped; none: nothing replaced; the Deep sea preset), and the exposure opening up (nothing above
+  or at the surface, half the lost light in stops 10 m down, only inside a box's footprint, the environment's settings
+  counting).
+- `render.water_descent`: a camera walked down through the pond's surface (30 cm above to 30 cm under, half-centimetre
+  steps through it) never changes the picture's average colour by more than a third of the whole change in one step
+  (measured: 16%).
+- Goldens `Water_Underwater` (under the pond looking up: Snell's window with the house in it), `Water_DeepSea` (18 m
+  down in the Deep sea preset: shafts, rocks and a long shape in the gloom) and `Water_Waterline` (the camera half in
+  the pond); the other water goldens redrawn (caustics on what's under the water).
 - Goldens `Water_Shore` (the Sea preset round a sandy coast with three posts in the shallows) and `Water_Reflection` (a
   pond with a house on the far bank, its roof running off the top of the picture). The part 1 and 2 goldens were redrawn
   (reflections, foam and wet ground in them now).

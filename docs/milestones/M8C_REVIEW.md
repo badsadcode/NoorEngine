@@ -115,7 +115,8 @@ them instead of where the skin was bound; FBX textures multiplied by a black col
 1. A "deep sea" environment without a water surface, before 8D's water? (From 8A.)
 2. Which presets, if any, should use volumetric clouds? (From 8A.)
 3. Eranu and Dunstan (The Uncounted) as further 8-direction test characters? (From 8B.)
-4. May the docs name Tom's deep-sea project ("Thalassa"), whose store-bought creatures the FBX research used?
+4. May the docs name Tom's deep-sea project ("Thalassa"), whose store-bought creatures the FBX research used? **Yes**
+   (Tom, 2026-11-20: an Unreal experiment, likely to be built in NoorEngine). Its packs stay out of the repository.
 
 ## Measurements
 - Tests: **456/456** (RelWithDebInfo, incl. GPU, editor, samples and built games), up from 397 at the end of 8B.

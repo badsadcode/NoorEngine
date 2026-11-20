@@ -8,6 +8,9 @@
 
 #include "noor/shaders/water_ps.h"
 #include "noor/shaders/water_vs.h"
+#include "noor/shaders/water_fog_add_ps.h"
+#include "noor/shaders/water_fog_mul_ps.h"
+#include "noor/shaders/water_fog_vs.h"
 #include "noor/shaders/water_wet_ps.h"
 #include "noor/shaders/water_wet_vs.h"
 
@@ -19,6 +22,16 @@
 namespace noor::render {
 
 namespace {
+
+struct UnderwaterLook {
+    math::Vec3 absorption, scatter;
+    float caustics, shafts;
+};
+// A body's water as it's drawn: its own, or (the camera in it) the environment's underwater settings.
+UnderwaterLook underwater_look(const WaterDraw& w, bool camera_inside) {
+    if (camera_inside && w.underwater) return {w.underwater->absorption, w.underwater->scatter, w.underwater->caustics, w.underwater->shafts};
+    return {w.absorption, w.scatter, w.caustics, w.shafts};
+}
 
 // water.hlsl's push constants: 128 bytes (all Vulkan guarantees).
 struct WaterPush {
@@ -33,15 +46,21 @@ struct WaterPush {
 };
 static_assert(sizeof(WaterPush) == 128);
 
-// water.hlsl's WaterSettings (std430), one per draw, indexed by WaterPush::grid[3].
+// water_light.hlsli's WaterSettings (std430). Entry 0 is a header (map_info: x the bodies that light the scene, the
+// first kLightBodies draws; y the body the camera may be in, plus 1, or 0); draw i is entry i + 1 (WaterPush::grid[3]).
 struct WaterGpu {
     float map[4];               // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples
     std::uint32_t map_info[4];  // x, y: samples across, z: texture slot, w: 1 = has a map
     float foam[4];              // x: foam, y: foam depth (m), z: crest foam, w: wet (darkening)
     float shore[4];             // x: wet height (m), y: reflections, z: the wet band's height above the level (m), w: unused
+    float body[4];              // part 4: xyz its middle (y: the level), w: yaw
+    float extent[4];            // x, y: half size (m), z: 1 = a sea, w: caustics
+    float absorption[4];        // rgb: per metre, w: shafts
+    float scatter[4];           // rgb, w: the main wave's height (m)
 };
-static_assert(sizeof(WaterGpu) == 64);
+static_assert(sizeof(WaterGpu) == 128);
 constexpr std::uint32_t kMaxWaterDraws = 64;
+constexpr std::uint32_t kLightBodies = 8;  // the first draws: light under them is dimmed by the water (mesh.hlsl)
 constexpr float kWetBandRadius = 400.0f;  // a sea's wet band: metres round the camera
 
 constexpr std::uint32_t kWaterGrid = 32;       // a calm box's cells per side
@@ -188,10 +207,10 @@ void Renderer::Impl::record_scene_copy(VkCommandBuffer cmd, bool msaa) {
 Status Renderer::Impl::create_water_buffers() {
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         if (water_buffers[i].buffer == VK_NULL_HANDLE) {
-            auto buffer = create_buffer(kMaxWaterDraws * sizeof(WaterGpu), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, false);
+            auto buffer = create_buffer((kMaxWaterDraws + 1) * sizeof(WaterGpu), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, false);
             if (!buffer) return std::unexpected(buffer.error());
             water_buffers[i] = *buffer;
-            std::memset(water_buffers[i].mapped, 0, kMaxWaterDraws * sizeof(WaterGpu));
+            std::memset(water_buffers[i].mapped, 0, (kMaxWaterDraws + 1) * sizeof(WaterGpu));  // header 0: no water
             vmaFlushAllocation(allocator, water_buffers[i].allocation, 0, VK_WHOLE_SIZE);
             set_name(VK_OBJECT_TYPE_BUFFER, water_buffers[i].buffer, std::format("Water draws' settings (slot {})", i));
         }
@@ -215,11 +234,56 @@ void Renderer::Impl::destroy_water_resources() {
     water_maps.clear();
 }
 
-void Renderer::Impl::prepare_water(const FrameDesc& frame) {
-    if (frame.water.empty() || water_buffers[frame_index].buffer == VK_NULL_HANDLE) return;
-    ++water_frame;
-    auto* out = static_cast<WaterGpu*>(water_buffers[frame_index].mapped);
+// Whether the camera may be in this body: inside its footprint and below the highest its waves reach (plus a margin
+// for the near plane). The shaders decide pixel by pixel; this only says whether to look.
+static bool camera_may_be_in(const WaterDraw& w, math::Vec3 eye) {
+    if (eye.y > w.center.y + 0.97f * std::max(0.0f, w.wave_height) + 0.25f) return false;
+    if (w.endless) return true;
+    const float dx = eye.x - w.center.x, dz = eye.z - w.center.z;
+    const float c = std::cos(w.yaw), s = std::sin(w.yaw);
+    return std::abs(c * dx - s * dz) <= w.half_size.x && std::abs(s * dx + c * dz) <= w.half_size.y;
+}
+
+float underwater_exposure_shift(const FrameDesc& frame) {
+    if (frame.water.empty()) return 0.0f;
+    const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
     const std::size_t count = std::min<std::size_t>(frame.water.size(), kMaxWaterDraws);
+    for (std::size_t i = 0; i < count; ++i) {
+        const WaterDraw& w = frame.water[i];
+        if (!camera_may_be_in(w, eye)) continue;
+        const float depth = std::max(0.0f, w.center.y - eye.y);
+        const UnderwaterLook look = underwater_look(w, true);
+        // The sky's light left at the camera's depth (by brightness), and half of its loss made up, in stops.
+        const float left = 0.2126f * std::exp(-look.absorption.x * depth) + 0.7152f * std::exp(-look.absorption.y * depth) +
+                           0.0722f * std::exp(-look.absorption.z * depth);
+        return 0.5f * std::log2(1.0f / std::max(left, 1e-6f));
+    }
+    return 0.0f;
+}
+
+void Renderer::Impl::prepare_water(const FrameDesc& frame) {
+    water_camera_body = -1;
+    if (water_buffers[frame_index].buffer == VK_NULL_HANDLE) return;
+    auto* out = static_cast<WaterGpu*>(water_buffers[frame_index].mapped);
+    if (frame.water.empty()) {
+        if (out[0].map_info[0] != 0 || out[0].map_info[1] != 0) {
+            out[0] = {};
+            vmaFlushAllocation(allocator, water_buffers[frame_index].allocation, 0, sizeof(WaterGpu));
+        }
+        return;
+    }
+    ++water_frame;
+    const std::size_t count = std::min<std::size_t>(frame.water.size(), kMaxWaterDraws);
+    const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
+    for (std::size_t i = 0; i < count; ++i)
+        if (camera_may_be_in(frame.water[i], eye)) {
+            water_camera_body = static_cast<int>(i);
+            break;
+        }
+    out[0] = {};
+    out[0].map_info[0] = static_cast<std::uint32_t>(std::min<std::size_t>(count, kLightBodies));
+    out[0].map_info[1] = static_cast<std::uint32_t>(water_camera_body + 1);
+    out[0].map[0] = static_cast<float>(std::fmod(frame.water[0].time, 3600.0));  // the water's clock (caustics)
     for (std::size_t i = 0; i < count; ++i) {
         const WaterDraw& w = frame.water[i];
         WaterGpu g{};
@@ -256,7 +320,24 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
         // The band reaches over the highest the waves can lift the water (the four amplitudes: 0.97 of the main
         // wave's height) and the wet height above that.
         g.shore[2] = 0.97f * std::max(0.0f, w.wave_height) + g.shore[0] + 0.01f;
-        out[i] = g;
+        const UnderwaterLook look = underwater_look(w, static_cast<int>(i) == water_camera_body);
+        g.body[0] = w.center.x;
+        g.body[1] = w.center.y;
+        g.body[2] = w.center.z;
+        g.body[3] = w.yaw;
+        g.extent[0] = w.half_size.x;
+        g.extent[1] = w.half_size.y;
+        g.extent[2] = w.endless ? 1.0f : 0.0f;
+        g.extent[3] = std::max(0.0f, look.caustics);
+        g.absorption[0] = look.absorption.x;
+        g.absorption[1] = look.absorption.y;
+        g.absorption[2] = look.absorption.z;
+        g.absorption[3] = std::clamp(look.shafts, 0.0f, 1.0f);
+        g.scatter[0] = look.scatter.x;
+        g.scatter[1] = look.scatter.y;
+        g.scatter[2] = look.scatter.z;
+        g.scatter[3] = std::max(0.0f, w.wave_height);
+        out[i + 1] = g;
     }
     vmaFlushAllocation(allocator, water_buffers[frame_index].allocation, 0, VK_WHOLE_SIZE);
     // Maps no longer drawn (a terrain sculpted, a body moved) go after a few frames.
@@ -364,6 +445,28 @@ Status Renderer::Impl::ensure_water_pipeline() {
         blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
         if (result == VK_SUCCESS) result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &water_wet_pipeline);
     }
+    if (result == VK_SUCCESS) {
+        // Underwater from inside (part 4): full screen, no depth; [0] multiplies (what gets through), [1] adds.
+        vkDestroyShaderModule(device, vs, nullptr);
+        vkDestroyShaderModule(device, ps, nullptr);
+        vs = ps = VK_NULL_HANDLE;
+        result = make_module(k_water_fog_vs, sizeof(k_water_fog_vs), vs);
+        stages[0].module = vs;
+        stages[0].pName = "VSFog";
+        depth.depthTestEnable = VK_FALSE;
+        depth.depthWriteEnable = VK_FALSE;
+        for (int k = 0; k < 2 && result == VK_SUCCESS; ++k) {
+            if (ps) vkDestroyShaderModule(device, ps, nullptr);
+            ps = VK_NULL_HANDLE;
+            result = k == 0 ? make_module(k_water_fog_mul_ps, sizeof(k_water_fog_mul_ps), ps) : make_module(k_water_fog_add_ps, sizeof(k_water_fog_add_ps), ps);
+            if (result != VK_SUCCESS) break;
+            stages[1].module = ps;
+            stages[1].pName = k == 0 ? "PSFogMul" : "PSFogAdd";
+            blend_attachment.srcColorBlendFactor = k == 0 ? VK_BLEND_FACTOR_DST_COLOR : VK_BLEND_FACTOR_ONE;
+            blend_attachment.dstColorBlendFactor = k == 0 ? VK_BLEND_FACTOR_ZERO : VK_BLEND_FACTOR_ONE;
+            result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &water_fog_pipelines[k]);
+        }
+    }
     if (vs) vkDestroyShaderModule(device, vs, nullptr);
     if (ps) vkDestroyShaderModule(device, ps, nullptr);
     if (result != VK_SUCCESS) {
@@ -372,13 +475,18 @@ Status Renderer::Impl::ensure_water_pipeline() {
     }
     set_name(VK_OBJECT_TYPE_PIPELINE, water_pipeline, "Water pipeline (surfaces over the copied scene)");
     set_name(VK_OBJECT_TYPE_PIPELINE, water_wet_pipeline, "Water pipeline (wet ground at the waterline)");
+    set_name(VK_OBJECT_TYPE_PIPELINE, water_fog_pipelines[0], "Water pipeline (underwater: what gets through)");
+    set_name(VK_OBJECT_TYPE_PIPELINE, water_fog_pipelines[1], "Water pipeline (underwater: scattered light)");
     return {};
 }
 
 void Renderer::Impl::destroy_water_pipeline() {
     if (water_pipeline) vkDestroyPipeline(device, water_pipeline, nullptr);
     if (water_wet_pipeline) vkDestroyPipeline(device, water_wet_pipeline, nullptr);
+    for (auto& p : water_fog_pipelines)
+        if (p) vkDestroyPipeline(device, p, nullptr);
     water_pipeline = water_wet_pipeline = VK_NULL_HANDLE;
+    water_fog_pipelines[0] = water_fog_pipelines[1] = VK_NULL_HANDLE;
 }
 
 void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
@@ -423,19 +531,21 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         }
         push.size[2] = w.ripple;
         push.size[3] = std::max(0.01f, w.ripple_scale);
-        push.absorption[0] = w.absorption.x;
-        push.absorption[1] = w.absorption.y;
-        push.absorption[2] = w.absorption.z;
         push.absorption[3] = w.refraction;
-        push.scatter[0] = w.scatter.x;
-        push.scatter[1] = w.scatter.y;
-        push.scatter[2] = w.scatter.z;
         push.scatter[3] = std::max(0.001f, w.shore_fade);
         push.params[0] = std::clamp(w.roughness, 0.0f, 1.0f);
         push.params[1] = static_cast<float>(std::fmod(w.time, 3600.0));
         push.params[2] = 1.0f / static_cast<float>(std::max(1u, extent.width));
         push.params[3] = 1.0f / static_cast<float>(std::max(1u, extent.height));
-        push.grid[3] = index;
+        push.grid[3] = index + 1;  // its settings (entry 0 is the header)
+        // The camera's body seen from inside: the environment's underwater settings, if any, over the water's.
+        const UnderwaterLook look = underwater_look(w, static_cast<int>(index) == water_camera_body);
+        push.absorption[0] = look.absorption.x;
+        push.absorption[1] = look.absorption.y;
+        push.absorption[2] = look.absorption.z;
+        push.scatter[0] = look.scatter.x;
+        push.scatter[1] = look.scatter.y;
+        push.scatter[2] = look.scatter.z;
         return push;
     };
     // Wet ground first: a flat band over each body (a sea: round the camera), multiplying the ground under it.
@@ -460,6 +570,17 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         ++stats.draw_calls;
         ++stats.water_draws;
         stats.triangles += vertices / 3;
+    }
+    // The camera may be under a surface: the water between it and what it sees (each pixel decides).
+    if (water_camera_body >= 0 && static_cast<std::size_t>(water_camera_body) < count) {
+        std::uint32_t vertices = 0;
+        const WaterPush push = push_of(frame.water[static_cast<std::size_t>(water_camera_body)], static_cast<std::uint32_t>(water_camera_body), vertices);
+        for (VkPipeline p : water_fog_pipelines) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+            vkCmdPushConstants(cmd, water_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+            vkCmdDraw(cmd, 3, 1, 0, 0);
+            ++stats.draw_calls;
+        }
     }
     end_label(cmd);
 }

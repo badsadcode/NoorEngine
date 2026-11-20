@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 4: underwater
+**Added**
+- **Underwater** (`docs/water/WATER.md`): light under a water body dimmed by its depth (sun and sky; local lights
+  untouched) with caustics, in every lit mesh (`water_light.hlsli`); from inside, the water between the camera and what
+  it sees (absorbed, glowing with scattered light in shafts, shadowed), the waterline across the screen with the camera
+  half in, the surface from below (Snell's window, total internal reflection), the exposure opening up with depth.
+- Look fields `caustics`, `shafts`; the "Deep sea" preset. The environment's `underwater_tint`, `underwater_clarity`,
+  `underwater_absorption`, `underwater_scatter`, `underwater_caustics`, `underwater_shafts` (blended by weather zones).
+- `render::underwater_exposure_shift`; noor_player's report gives the picture's `mean_rgb`.
+
+**Measured:** a camera through the surface changes the picture by at most 16% of the whole in one step; from
+inside, the water's passes about 0.3 ms.
+
+**Tests:** unit tests "water" (14); `render.water_descent`; goldens `Water_Underwater`, `Water_DeepSea`,
+`Water_Waterline`; the other water goldens redrawn.
+
 ### 2026-11-20 — Milestone 8D, part 3: shorelines and reflections
 **Added**
 - **Depth maps** (`docs/water/WATER.md`): each water body's depth over the terrains under it (`game::water_depth_map`);

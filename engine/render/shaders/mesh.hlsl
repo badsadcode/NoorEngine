@@ -48,6 +48,7 @@ struct GpuMaterial
 [[vk::binding(2, 1)]] StructuredBuffer<GpuMaterial> materials;
 
 #include "frame.hlsli"  // the frame, its bindings, shadows, environment light, atmosphere and fog
+#include "water_light.hlsli"  // under water: the light from above dimmed by depth, caustics (8D part 4)
 
 static const uint kBrdfLut = 3;  // built-in texture slot
 
@@ -293,14 +294,19 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     const float3 emissive = surf.emissive;
 
     const float shadow = sun_shadow(input.world_position, normalize(input.normal) * (front ? 1.0 : -1.0)) * cloud_shadow(input.world_position);
-    float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow);
+    // Under water the sun and the sky have come down through it (local lights haven't).
+    float3 water_sun, water_sky;
+    float water_depth;
+    uint water_body;
+    water_light(input.world_position, water_sun, water_sky, water_depth, water_body);
+    float3 color = brdf_direct(n, v, frame.to_sun.xyz, base_color, metallic, roughness, frame.sun_radiance.rgb * shadow * water_sun);
     color += local_lights(input.world_position, n, v, base_color, metallic, roughness);
     // The environment (image-based lighting): diffuse irradiance and prefiltered reflections.
     const float n_dot_v = max(dot(n, v), 1e-4);
     const float3 f0 = lerp(float3(0.04, 0.04, 0.04), base_color, metallic);
     const float3 r = reflect(-v, n);
-    const float3 diffuse = base_color * (1.0 - metallic) * environment_irradiance(n) / kPi;
-    const float3 reflection = environment_specular(r, roughness, n_dot_v, f0) * occlusion;
+    const float3 diffuse = base_color * (1.0 - metallic) * environment_irradiance(n) / kPi * water_sky;
+    const float3 reflection = environment_specular(r, roughness, n_dot_v, f0) * occlusion * water_sky;
     color += diffuse * occlusion;
     if ((mat.tex1.w & 2u) != 0u)
     {

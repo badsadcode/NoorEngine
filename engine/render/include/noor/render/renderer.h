@@ -414,7 +414,24 @@ struct WaterDraw {
     float wet = 0.35f;
     float wet_height = 0.12f;
     float reflections = 1.0f;
+    // Underwater (8D part 4): sunlight's caustics on what's under the water (0: none, 1: the default strength) and
+    // light shafts in the water seen from inside it (0..1). The environment's underwater settings, if it has any,
+    // replace the water's own while the camera is in this body (`underwater`).
+    float caustics = 1.0f;
+    float shafts = 0.5f;
+    struct Underwater {
+        math::Vec3 absorption{0.45f, 0.09f, 0.06f};
+        math::Vec3 scatter{0.02f, 0.05f, 0.06f};
+        float caustics = 1.0f;
+        float shafts = 0.5f;
+    };
+    std::optional<Underwater> underwater;
 };
+
+struct FrameDesc;
+// Under water (8D part 4): how many stops the exposure opens up with the camera this deep in a body (half the light
+// the water has taken by then; 0 at the surface and out of water). render_frame applies it.
+[[nodiscard]] float underwater_exposure_shift(const FrameDesc& frame);
 
 struct FrameDesc {
     Camera camera;

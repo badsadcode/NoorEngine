@@ -392,3 +392,56 @@ TEST_CASE("water: a body's depth map comes from the terrain under it") {
     CHECK(!game::water_depth_map(false, {1000.0f, 0.0f, 0.0f}, {10.0f, 10.0f}, 0.0f, ground));
     CHECK(!game::water_depth_map(true, {0.0f, 0.0f, 0.0f}, {}, 0.0f, {}));
 }
+
+// ---- Underwater (part 4) ----------------------------------------------------------------------------------------
+
+TEST_CASE("water: the environment's underwater settings replace the water's, read like the look's own fields") {
+    asset::WaterLook lake;
+    lake.apply((*asset::water_preset("Lake"))["water"]);
+    // None of the keys: nothing to replace.
+    CHECK(!asset::underwater_look(Json{{"fog_density", 0.1}}, lake));
+    // A tint and a clarity, as for the look itself; what isn't said stays the water's.
+    const auto murky = asset::underwater_look(Json{{"underwater_tint", "#808080"}, {"underwater_clarity", 2.0}, {"underwater_shafts", 0.9}}, lake);
+    REQUIRE(murky);
+    const math::Vec3 expected = asset::absorption_from_tint({0.21586f, 0.21586f, 0.21586f}, 2.0f);  // #80 is 0.21586 linear
+    CHECK(murky->absorption.x == doctest::Approx(expected.x).epsilon(1e-3));
+    CHECK(murky->absorption.z == doctest::Approx(expected.z).epsilon(1e-3));
+    CHECK(murky->shafts == doctest::Approx(0.9f));
+    CHECK(murky->scatter.y == lake.scatter.y);
+    CHECK(murky->caustics == lake.caustics);
+    // Bad values are clamped like the look's.
+    CHECK(asset::underwater_look(Json{{"underwater_caustics", 99.0}}, lake)->caustics == 4.0f);
+    // The Deep sea preset: clear, blue, red gone in a couple of metres.
+    asset::WaterLook deep;
+    deep.apply((*asset::water_preset("Deep sea"))["water"]);
+    CHECK(deep.absorption.x > 0.25f);
+    CHECK(deep.absorption.z < 0.03f);
+    CHECK(deep.shafts == doctest::Approx(0.8f));
+}
+
+TEST_CASE("water: under water the exposure opens up by half of what the water has taken, from nothing at the surface") {
+    render::WaterDraw sea;
+    sea.endless = true;
+    sea.center = {0.0f, 0.0f, 0.0f};
+    sea.absorption = {0.3f, 0.06f, 0.03f};
+    const auto shift_at = [&](math::Vec3 eye, const render::WaterDraw& w) {
+        render::FrameDesc frame;
+        frame.camera.view = math::inverse(math::translation(eye));
+        frame.water = std::span(&w, 1);
+        return render::underwater_exposure_shift(frame);
+    };
+    CHECK(shift_at({0.0f, 2.0f, 0.0f}, sea) == 0.0f);   // above the water
+    CHECK(shift_at({0.0f, 0.0f, 0.0f}, sea) == 0.0f);   // at the surface: no jump crossing it
+    const float d = 10.0f;
+    const float left = 0.2126f * std::exp(-0.3f * d) + 0.7152f * std::exp(-0.06f * d) + 0.0722f * std::exp(-0.03f * d);
+    CHECK(shift_at({0.0f, -d, 0.0f}, sea) == doctest::Approx(0.5f * std::log2(1.0f / left)).epsilon(1e-4));
+    CHECK(shift_at({0.0f, -0.01f, 0.0f}, sea) < 0.01f);  // a centimetre under: hardly anything yet
+    // A box: only inside its footprint. The environment's underwater settings count while the camera is in it.
+    render::WaterDraw pond = sea;
+    pond.endless = false;
+    pond.half_size = {5.0f, 5.0f};
+    CHECK(shift_at({20.0f, -1.0f, 0.0f}, pond) == 0.0f);
+    CHECK(shift_at({0.0f, -1.0f, 0.0f}, pond) > 0.0f);
+    pond.underwater = render::WaterDraw::Underwater{{2.0f, 2.0f, 2.0f}, {0.1f, 0.1f, 0.1f}, 1.0f, 0.5f};
+    CHECK(shift_at({0.0f, -1.0f, 0.0f}, pond) == doctest::Approx(0.5f * std::log2(1.0f / std::exp(-2.0f))).epsilon(1e-4));
+}

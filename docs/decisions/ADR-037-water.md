@@ -6,8 +6,8 @@
 NoorEngine has no water. The spec's NoorWater (17.1) asks for distinct bodies (ocean, lake, river, pool, underwater
 volumes), shorelines, waves for open water, shallows and rivers, reflection, refraction, underwater fog and light
 falloff, foam, ripples, wind and weather, a query API for boats, swimmers and physics, and debug views; it accepts an
-art-directed approximation over a physically exact fluid, if consistent and disclosed. Hillside wants a lake, Tom's
-deep-sea project the deep sea, Thornwake rivers. The renderer draws see-through things after the opaque scene but
+art-directed approximation over a physically exact fluid, if consistent and disclosed. Hillside wants a lake, Thalassa
+(Tom's deep-sea game) the deep sea, Thornwake rivers. The renderer draws see-through things after the opaque scene but
 reads nothing behind them; everything else in the engine is deterministic and checked in built games, and water
 gameplay (floating, swimming) must be too.
 
@@ -43,6 +43,9 @@ Option 3.
 - Waves are art-directed, deterministic and cheap; they don't flow round obstacles or pile up. Disclosed in the docs.
 - Screen-space reflections miss what's off screen; the sky stands in for it. Measured in part 3 (2026-11-20, 1280×720):
   about 0.14 ms on a wavy sea filling most of the screen, the dominant part of water's cost.
+- Underwater (part 4): the light under a body is dimmed in the mesh shader for the first eight bodies; from inside,
+  two full-screen passes (about 0.3 ms at 1280×720, measured 2026-11-20). The `underwater` block is flat `underwater_*`
+  keys on the environment, so weather zones blend it like fog.
 - Water bodies are data (component and asset), so procedural graphs can place them later (lakes in hollows, rivers
   from drainage).
 

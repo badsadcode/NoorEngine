@@ -337,6 +337,8 @@ struct Renderer::Impl {
     };
     std::vector<WaterMapTexture> water_maps;
     std::uint64_t water_frame = 0;
+    int water_camera_body = -1;  // part 4: this frame's body the camera may be in (its draw index), or -1
+    VkPipeline water_fog_pipelines[2]{};  // part 4: underwater, seen from inside: [0] multiplies (what gets through), [1] adds (scattered light)
 
     // Sun shadows (vulkan_shadows.cpp): a 2D array, one layer per cascade
     VkImage shadow_image = VK_NULL_HANDLE;
