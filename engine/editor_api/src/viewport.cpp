@@ -1309,6 +1309,7 @@ void render_thread_main(noor_viewport* vp) {
                 noor::game::set_water_time(water_draws, shown->game_time ? *shown->game_time : static_cast<double>(frame.lighting.time));
             }
             frame.water = water_draws;
+            frame.water_debug = shown->water_debug;
             // Sprites (8B part 5): turned to this camera every frame, animated on the clock above; a sprite being
             // moved follows the gizmo, a selected one is tinted like the rest.
             sprite_quads.clear();

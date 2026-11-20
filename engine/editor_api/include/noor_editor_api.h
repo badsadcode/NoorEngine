@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 28u
+#define NOOR_EDITOR_API_VERSION 29u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -170,6 +170,20 @@ NOOR_API const char* noor_doc_sprite(noor_doc* doc, const char* command);
 /* v28: water (Milestone 8D, part 1, ADR-037): the built-in water presets, [{"name", "description", "water"}] (never
    written to), for the Inspector's choice of a `water` component's "preset". */
 NOOR_API const char* noor_water_presets(void);
+/* v29: the Water panel (Milestone 8D, part 7). noor_doc_water runs one command:
+     {"op": "list"}                                    -> [{"path", "guid", "name", "preset", "water"}]
+     {"op": "read", "asset": "Assets/Water/x.noorwater"} -> that object
+     {"op": "apply", "preset": "Lake" | "asset": path, "entity"?: id, "position"?: [x, y, z]}: a preset is first copied
+        into Assets/Water (kept, with its edits, once there); that entity's water component becomes {"asset": id} (its
+        shape, size, points, width and speed kept; its own look fields and preset dropped), or a new entity gets a
+        20 x 20 m surface with it (one undo step)  -> the asset's object plus "entity"
+     {"op": "duplicate", "asset": path, "name"?}       -> the new asset's object
+     {"op": "reset", "asset": path}                    -> back to the built-in preset it came from
+     {"op": "save", "asset": path, "water": {...}, "name"?}  -> its object (the scene and the viewports follow at once)
+     {"op": "debug", "view"?: "none" | "depth" | "flow" | "waves" | "normals" | "cost"} -> {"view"}: the viewports'
+        debug view of water
+   NULL on error (noor_last_error). */
+NOOR_API const char* noor_doc_water(noor_doc* doc, const char* command);
 /* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
      {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
         "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),

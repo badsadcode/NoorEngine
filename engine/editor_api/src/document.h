@@ -185,6 +185,7 @@ struct RenderSnapshot {
     std::vector<Guid> preview_muted;     // these aren't
     std::uint64_t preview_restart = 0;   // changed: every preview emitter starts again from nothing
     bool preview_paused = false;
+    std::uint32_t water_debug = 0;  // the Water panel's debug view (render::FrameDesc::water_debug)
     // The Animation panel's preview (8C part 6): the previewed character's skeleton, a line per bone (world), drawn
     // over everything. `highlight`: the bone picked in the panel; `joint`: its head is the picked node.
     struct Bone {
@@ -231,6 +232,8 @@ public:
     // Effect assets (Milestone 8B, part 4): {"op": "list" | "read" | "save" | "duplicate" | "reset" | "apply" |
     // "preview", ...} (noor_doc_effect in noor_editor_api.h).
     [[nodiscard]] Result<asset::Json> effect(const asset::Json& command);
+    // Water looks (8D part 7): noor_doc_water in noor_editor_api.h.
+    [[nodiscard]] Result<asset::Json> water(const asset::Json& command);
     // Sprite sheets (8B part 5): list, read (sliced), create from a texture, save, apply (noor_doc_sprite).
     [[nodiscard]] Result<asset::Json> sprite(const asset::Json& command);
     // The Animation panel (8C part 6): model, set_bone, controller, save_controller, characters, preview
@@ -411,6 +414,7 @@ private:
     std::vector<Guid> preview_muted_;
     std::uint64_t preview_restart_ = 0;
     bool preview_paused_ = false;
+    std::uint32_t water_debug_ = 0;  // the Water panel's debug view (8D part 7), published in every snapshot
     const void* script_host_ = nullptr;      // noor_rt_host*
     mutable std::recursive_mutex play_mutex_;  // world_ (see play())
     bool audio_device_ = true;

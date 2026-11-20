@@ -947,8 +947,67 @@ internal static class SmokeTest
             waterDraws = stats?["water_draws"]?.GetValue<long>() ?? 0;
         }
         check(waterDraws >= 1, $"water: the viewport draws it ({waterDraws} water surface(s))");
-        doc.Undo();
-        check(doc.Scene.Entities.Count == count, "water: one undo removes it");
+        if (waterId != null) await WaterPanelChecks(window, waterId, check, shot);
+        doc.Undo();  // the lake lifted
+        doc.Undo();  // the bigger lake
+        doc.Undo();  // the look applied
+        doc.Undo();  // the water itself
+        check(doc.Scene.Entities.Count == count, "water: undo removes it");
+    }
+
+    // Milestone 8D, part 7: the Water panel gives the lake a look of its own (one undo step), an edit to it shows in the
+    // viewport at once, and the debug views switch.
+    private static async Task WaterPanelChecks(MainWindow window, string waterId, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        if (window.FindDockable("Water") is not { } dockable)
+        {
+            check(false, "water panel: Window has a Water panel");
+            return;
+        }
+        window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(400);
+        var panel = window.GetVisualDescendants().OfType<WaterPanel>().FirstOrDefault();
+        if (panel == null)
+        {
+            check(false, "water panel: it shows");
+            return;
+        }
+        check(EditorDocument.WaterPresets().Count == 7, $"water panel: seven built-in looks ({EditorDocument.WaterPresets().Count})");
+        doc.Select(waterId);
+        panel.Select("Pond", null);
+        var applied = panel.UseOnSelected();
+        var guid = applied?["guid"]?.GetValue<string>();
+        var component = doc.Scene.Entities.FirstOrDefault(e => e.Id == waterId)?.Components["water"];
+        check(guid != null && component?["asset"]?.GetValue<string>() == guid && component?["size"] != null &&
+              File.Exists(Path.Combine(doc.ProjectRoot, "Assets", "Water", "Pond.noorwater")),
+              "water panel: Use on selected gives the lake the Pond look (copied into Assets/Water), its size kept");
+        async Task<(double R, double G, double B)?> Settled()
+        {
+            await Task.Delay(900);  // a few frames of the viewport
+            return ScreenCapture.MeanColor(window);
+        }
+        // A bigger lake (under the building and round it), so the picture has plenty of water to change.
+        var bigger = component!.DeepClone().AsObject();
+        bigger["size"] = new JsonArray(200, 200);
+        check(doc.Execute(new JsonObject { ["op"] = "set_component", ["entity"] = waterId, ["type"] = "water", ["value"] = bigger }) &&
+              doc.Execute(new JsonObject { ["op"] = "set_transform", ["entity"] = waterId,
+                                           ["transform"] = new JsonObject { ["position"] = new JsonArray(0, 0.3, 0) } }),
+              "water panel: the lake is made bigger (and lifted off the floor it was created on)");
+        var before = await Settled();
+        // Live editing: milky red water (red light scattered back, nothing seen through). The viewport has to go redder at once.
+        check(panel.SaveField("scatter", JsonValue.Create("#FF3020")!) && panel.SaveField("clarity", JsonValue.Create(0.05)!),
+              "water panel: an edit is saved");
+        var after = await Settled();
+        var redder = before is { } b && after is { } a ? (a.R - a.G) - (b.R - b.G) : 0;
+        check(redder > 0.5, $"water panel: the viewport shows the edit (red over green up by {redder:0.00} levels across the window)");
+        shot(window, "editor_31_water_panel.png");
+        // The debug views switch the viewports' water to false colours.
+        check(panel.SetDebugView("depth") == "depth", "water panel: the debug view switches to depth");
+        var depth = await Settled();
+        check(depth is { } d && after is { } a2 && Math.Abs(d.R - a2.R) + Math.Abs(d.G - a2.G) + Math.Abs(d.B - a2.B) > 0.5,
+              "water panel: the viewport shows the depth view");
+        check(panel.SetDebugView("none") == "none", "water panel: and back to the water itself");
     }
 
     // Milestone 5, part 7: the Render panel's numbers, and anti-aliasing switched from Preferences.

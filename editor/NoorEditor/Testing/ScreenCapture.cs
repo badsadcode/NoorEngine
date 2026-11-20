@@ -16,6 +16,44 @@ internal static class ScreenCapture
 {
     private const uint PwRenderFullContent = 0x00000002;
 
+    /// <summary>The window's average colour (0..255 per channel), the native viewport included; null if it can't be read
+    /// (Milestone 8D, part 7: the smoke test watches the water change).</summary>
+    public static (double R, double G, double B)? MeanColor(Window window)
+    {
+        var hwnd = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var r)) return null;
+        int w = r.Right - r.Left, h = r.Bottom - r.Top;
+        if (w <= 0 || h <= 0) return null;
+        var screenDc = GetDC(IntPtr.Zero);
+        var memDc = CreateCompatibleDC(screenDc);
+        var bmi = new BITMAPINFO { biSize = Marshal.SizeOf<BITMAPINFO>(), biWidth = w, biHeight = -h, biPlanes = 1, biBitCount = 32 };
+        var dib = CreateDIBSection(screenDc, ref bmi, 0, out var bits, IntPtr.Zero, 0);
+        var old = SelectObject(memDc, dib);
+        (double, double, double)? mean = null;
+        if (PrintWindow(hwnd, memDc, PwRenderFullContent))
+        {
+            var row = new byte[w * 4];
+            double sr = 0, sg = 0, sb = 0;
+            for (var y = 0; y < h; y++)
+            {
+                Marshal.Copy(bits + y * w * 4, row, 0, row.Length);
+                for (var x = 0; x < row.Length; x += 4)
+                {
+                    sb += row[x];
+                    sg += row[x + 1];
+                    sr += row[x + 2];
+                }
+            }
+            double n = (double)w * h;
+            mean = (sr / n, sg / n, sb / n);
+        }
+        SelectObject(memDc, old);
+        DeleteObject(dib);
+        DeleteDC(memDc);
+        ReleaseDC(IntPtr.Zero, screenDc);
+        return mean;
+    }
+
     public static bool CaptureWindow(Window window, string path)
     {
         var hwnd = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;

@@ -64,9 +64,13 @@ struct WaterLook {
     void apply(const Json& settings);
 };
 
-// The built-in presets: [{"name", "description", "water"}] (never written to): "Lake", "Sea", "Deep sea".
+// The built-in presets: [{"name", "description", "water"}] (never written to), in gallery order: "Lake", "Pond", "Sea",
+// "Tropical", "Swamp", "River", "Deep sea".
 [[nodiscard]] const Json& water_presets();
 [[nodiscard]] const Json* water_preset(std::string_view name);
+
+// A .noorwater file's JSON (8D part 7: the Water panel writes them).
+[[nodiscard]] Json water_file_json(std::string_view name, const Json& water, std::string_view preset = {});
 
 // A .noorwater file (checked: its format and that "water" is an object).
 [[nodiscard]] Result<Json> load_water_file(const std::filesystem::path& file);

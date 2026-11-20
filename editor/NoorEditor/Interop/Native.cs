@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 28;
+    public const uint ExpectedApiVersion = 29;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -84,6 +84,7 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_effect_presets();
     [DllImport(Dll)] private static extern IntPtr noor_water_presets();
     [DllImport(Dll)] private static extern IntPtr noor_doc_effect(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
+    [DllImport(Dll)] private static extern IntPtr noor_doc_water(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_sprite(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_animation(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     [DllImport(Dll)] private static extern IntPtr noor_doc_csg(IntPtr doc);
@@ -132,6 +133,7 @@ public static class Native
     public static string? EffectPresets() => Str(noor_effect_presets());
     public static string? WaterPresets() => Str(noor_water_presets());
     public static string? Effect(IntPtr doc, string command) => Str(noor_doc_effect(doc, command));
+    public static string? Water(IntPtr doc, string command) => Str(noor_doc_water(doc, command));
     // v26: sprite sheets (Milestone 8B, part 5).
     public static string? Sprite(IntPtr doc, string command) => Str(noor_doc_sprite(doc, command));
     // v27: the Animation panel (Milestone 8C, part 6): models, bone maps, controllers, characters, the preview.

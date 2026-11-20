@@ -2,7 +2,8 @@
 //
 // The water draws' settings are a storage buffer (set 0, binding 9; vulkan_water.cpp's WaterGpu). Entry 0 is a header:
 // map_info.x is how many bodies light the scene (the first draws, at most 8), map_info.y the body the camera may be in
-// plus 1 (0: none), map.x the water's clock (s). Draw i is entry i + 1.
+// plus 1 (0: none), map_info.z the debug view (0 none, 1 depth, 2 flow, 3 waves, 4 normals, 5 cost), map.x the water's
+// clock (s). Draw i is entry i + 1.
 //
 // Under a body's level (inside its footprint) the light from above has come down through water: the sky's light has
 // lost exp(-absorption depth) of each colour, the sun's the same over its slanted way down (refracted at the surface),

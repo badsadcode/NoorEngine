@@ -407,6 +407,27 @@ public sealed class EditorDocument : IDisposable
     }
 
     /// <summary>
+    /// One water command (noor_doc_water: list, read, apply, duplicate, reset, save, debug; Milestone 8D, part 7). Changes
+    /// refresh the asset list and the scene; a failure is logged and gives null.
+    /// </summary>
+    public JsonNode? Water(JsonObject command)
+    {
+        var json = Native.Water(_handle, command.ToJsonString());
+        var op = command["op"]?.GetValue<string>() ?? "";
+        if (json == null)
+        {
+            Interop.EngineLog.Error("Editor", $"Water {op}: {Native.LastError()}");
+            return null;
+        }
+        if (op is "apply" or "duplicate" or "reset" or "save")
+        {
+            RefreshAssets(rescan: false);
+            Refresh();
+        }
+        return JsonNode.Parse(json);
+    }
+
+    /// <summary>
     /// One sprite sheet command (noor_doc_sprite: list, read, create, save, apply; Milestone 8B, part 5). Changes refresh
     /// the asset list and the scene; a failure is logged and gives null.
     /// </summary>

@@ -629,7 +629,7 @@ skinning, network replication of animation state.
 | 4 ✅ | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
 | 5 ✅ | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
 | 6 ✅ | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
-| 7 | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
+| 7 ✅ | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
 | 8 | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
 
 ## Highest risks (settle early)
@@ -752,6 +752,17 @@ valley with a meander, a steep stretch, a crate and a barrel riding it) and `Wat
 done: one speed across, no view from underneath and no light dimmed under rivers, no waterfalls, no wet bank, no spline
 tool (part 7's panel). "A river following the ground": the points carry the heights (a generator can take them from the
 ground; Thornwake's hydrology does exactly that, in the ideas inbox).
+
+## Part 7 result (2026-11-20)
+Done. Window ▸ Water: the seven presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea; four new) and the project's
+looks as cards with pictures (`render_water_thumbnails.py`); Add, Use on selected (the shape kept, the look from the
+asset alone), Duplicate, Edit (live: saved as you type, the viewports and a playing game follow), Reset; a debug view
+(depth, flow, waves, normals, cost: the reflection march's steps) in the viewports and `noor_player --water-debug`.
+`noor_doc_water` (editor API v29). Gameplay and drawing now read a look's file only when it changes (they had read it
+every frame since part 2). Proven: API tests (presets, apply in one undo step onto a new surface and a river, edits
+reaching what a game reads, duplicate, reset, debug, bad commands); the smoke test edits a lake and sees the viewport
+change. Not done: no sliders or colour pickers (text fields), no river spline tool, the pictures show every look on
+the same coast.
 
 ## Open questions
 

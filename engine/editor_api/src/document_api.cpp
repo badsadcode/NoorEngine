@@ -239,6 +239,23 @@ NOOR_API const char* noor_doc_effect(noor_doc* doc, const char* command) {
     });
 }
 
+NOOR_API const char* noor_doc_water(noor_doc* doc, const char* command) {
+    if (!doc || !command) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(command, "water command");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto r = doc->doc->water(*json);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
 NOOR_API const char* noor_doc_sprite(noor_doc* doc, const char* command) {
     if (!doc || !command) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {

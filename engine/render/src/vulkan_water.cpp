@@ -286,6 +286,7 @@ void Renderer::Impl::prepare_water(const FrameDesc& frame) {
     out[0] = {};
     out[0].map_info[0] = static_cast<std::uint32_t>(std::min<std::size_t>(count, kLightBodies));
     out[0].map_info[1] = static_cast<std::uint32_t>(water_camera_body + 1);
+    out[0].map_info[2] = std::min(frame.water_debug, 5u);  // the debug view (part 7)
     out[0].map[0] = static_cast<float>(std::fmod(frame.water[0].time, 3600.0));  // the water's clock (caustics)
     for (std::size_t i = 0; i < count; ++i) {
         const WaterDraw& w = frame.water[i];

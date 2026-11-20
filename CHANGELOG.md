@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 7: the Water panel and debug views
+**Added**
+- **The Water panel** (Window ▸ Water): a gallery of looks with pictures; Add, Use on selected, Duplicate, Edit (live),
+  Reset; a debug view (depth, flow, waves, normals, cost). `noor_doc_water` (editor API v29).
+- Presets **Pond**, **Tropical**, **Swamp**, **River** (seven in all). `asset::water_file_json`.
+- Debug views in the renderer (`FrameDesc::water_debug`) and `noor_player --water-debug <view>`.
+- `tools/samples/render_water_thumbnails.py`.
+
+**Changed:** a water look's file is read again only when it changes (it was read every frame).
+
+**Tests:** API tests `test_water_api.cpp` (4); the editor smoke test edits a lake through the panel.
+
 ### 2026-11-20 — Milestone 8D, part 6: rivers
 **Added**
 - **Rivers** (`docs/water/WATER.md`): `"shape": "river"` with `points`, `width`, `speed`; a ribbon along a smooth course,

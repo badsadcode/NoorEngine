@@ -73,6 +73,7 @@ struct Options {
     bool cpu_sky = false;
     bool trace_environment = false;
     std::uint32_t water_probes = 0;  // N: the last frame's depth read back at N x N pixels, compared with water_height
+    std::uint32_t water_debug = 0;   // 8D part 7: none, depth, flow, waves, normals, cost (render::FrameDesc::water_debug)
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -92,6 +93,17 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--cpu-sky") o.cpu_sky = true;
         else if (a == "--trace-environment") o.trace_environment = true;
         else if (a == "--water-probes" && more) o.water_probes = static_cast<std::uint32_t>(std::stoul(argv[++i]));
+        else if (a == "--water-debug" && more) {
+            const std::string view = argv[++i];
+            const char* views[] = {"none", "depth", "flow", "waves", "normals", "cost"};
+            bool found = false;
+            for (std::uint32_t k = 0; k < 6; ++k)
+                if (view == views[k]) {
+                    o.water_debug = k;
+                    found = true;
+                }
+            if (!found) return false;
+        }
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
     }
@@ -392,7 +404,7 @@ int run(const Options& o) {
                     if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
                         particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
                     noor::game::set_water_time(view.water, (*world)->time());  // waves and ripples on the game's clock
-                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water});
+                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water, o.water_debug});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;

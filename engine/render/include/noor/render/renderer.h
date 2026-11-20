@@ -461,6 +461,9 @@ struct FrameDesc {
     std::span<const OverlayVertex> overlay;
     std::span<const ParticleDraw> particles;  // Milestone 8B: drawn in the see-through pass, sorted with see-through meshes
     std::span<const WaterDraw> water;         // Milestone 8D: drawn first in the see-through pass, over the copied scene
+    // Water's debug views (8D part 7): 0 none, 1 depth (how much water is under each pixel), 2 flow (which way and how
+    // fast it runs), 3 waves (how far they lift the surface), 4 normals, 5 cost (how hard each pixel worked).
+    std::uint32_t water_debug = 0;
 };
 
 struct FrameStats {

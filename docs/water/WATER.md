@@ -2,8 +2,8 @@
 
 Milestone 8D ([plan](../milestones/M8_PLAN.md#8d-water), [ADR-037](../decisions/ADR-037-water.md)). What works so
 far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, **part 4, underwater**,
-**part 5, water in the game**, and **part 6, rivers**. The Water panel and the sample are planned (parts 7 and 8); nothing
-below claims them.
+**part 5, water in the game**, **part 6, rivers**, and **part 7, the Water panel and debug views**. The sample is planned
+(part 8); nothing below claims it.
 
 ## The `water` component (part 1)
 
@@ -57,8 +57,9 @@ edits size and any field you add. The Render panel counts water surfaces drawn.
 | `caustics` | 0..4: how strongly the waves gather the sun into a net of bright lines on what's under the water (0: none). |
 | `shafts` | 0..1: light shafts in the water, seen from inside it (0: an even glow). |
 
-Bad values are clamped or ignored, never fatal. The built-in presets so far: **Lake** (a calm, clear green lake, a few
-specks of foam at the edge) and **Sea** (a 14 m swell 0.6 m high with smaller waves on it, blue-green and deep, rougher
+Bad values are clamped or ignored, never fatal. The built-in presets: **Lake** (a calm, clear green lake, a few specks of
+foam at the edge), **Pond** (small, still, murky green), **Tropical** (clear turquoise, gentle waves, bright caustics),
+**Swamp** (dark brown, nearly opaque, still), **River** (green-blue, busy ripples, foam along the banks) and **Sea** (a 14 m swell 0.6 m high with smaller waves on it, blue-green and deep, rougher
 in the wind, foam along the shore and on the steepest crests) and **Deep sea** (open ocean: a long 1.4 m swell, clear
 and blue, red gone in a few metres and the light in a few tens; strong shafts). The gallery of
 presets (Pond, Sea, Tropical, Swamp, River, Deep sea) comes with the Water panel in part 7.
@@ -250,6 +251,25 @@ What rivers don't do (yet): one speed everywhere across them (real rivers are sl
 underneath, and light under them isn't dimmed; no waterfalls (a steep stretch is white water, not a fall with spray);
 no wet bank or depth map; no spline tool in the editor (points are numbers in the Inspector; the Water panel is part 7).
 
+## The Water panel (part 7)
+
+**Window ▸ Water** (beside Environments and Effects): the seven built-in looks and the project's own (`Assets/Water/*.noorwater`)
+as cards with a picture (`tools/samples/render_water_thumbnails.py` renders them from the engine's presets).
+
+- **Add**: a new 20 × 20 m surface with the picked look; **Use on selected**: the selected entity's water gets it, keeping
+  its shape (box size, sea, a river's points, width and speed; its own look fields and preset go). Either is one undo
+  step; a built-in look is copied into `Assets/Water` the first time (and kept, with its edits). Double-click a card does
+  the same.
+- **Edit**: every setting of the picked project look (numbers, `#RRGGBB` colours, `[r, g, b]` lists), saved as you type:
+  the viewports follow at once, and a playing game too (gameplay and drawing read the file, again only when it changes).
+- **Duplicate**, **Reset** (back to the built-in preset it came from; the presets themselves are never written).
+- **Debug view**: the viewports draw water as its **depth** (water under each pixel, pale to dark blue at 5 m, a line
+  every metre), **flow** (direction as colour, speed as green, stripes running downstream; still water grey),
+  **waves** (lift red, drop blue), **normals**, or **cost** (the reflection march's steps per pixel, green to red).
+  `noor_player --water-debug <view>` draws the same.
+
+The editor API: `noor_doc_water` (list, read, apply, duplicate, reset, save, debug; API v29).
+
 ## How it's drawn
 
 When water is in view, the frame's scene pass is split in two:
@@ -353,6 +373,11 @@ copy** and **See-through** separately (the Render panel and the player's report)
   map asked again).
 - `render.water_readback_shore`: the same readback over a beach (`Water_Shore_Probe`): only pixels at least 0.3 m deep
   count, at least 60 of them shallower than 2.5 m (where the waves are calmed); within 1 cm out to 20 m.
+- API tests (4, `tests/api/test_water_api.cpp`): seven presets in gallery order; apply copies a preset into the project and
+  onto a new surface or a river (its course kept, its own look dropped) in one undo step; editing a look changes what a
+  game reads (`game::water_look`), never the preset, with duplicate and reset; the debug views and bad commands.
+- The editor smoke test: the Water panel gives Create ▸ Water's lake the Pond look, an edit (milky red) shows in the
+  viewport, the depth view switches on and off, undo takes it all back.
 - Unit tests for rivers (2, `test_water_physics.cpp`): a course from the points (the entity's place, length, direction,
   slope, widths) and points on it (height, how far along and across, off its banks and ends); a floating crate carried at
   the river's 1.5 m/s within 2% and a swimmer drifting with it, and the current through the World.

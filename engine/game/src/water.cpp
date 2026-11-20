@@ -9,6 +9,7 @@
 #include <cmath>
 #include <format>
 #include <mutex>
+#include <unordered_map>
 #include <numbers>
 #include <string>
 
@@ -150,13 +151,41 @@ bool WaterBody::covers(math::Vec2 xz) const noexcept {
     return std::abs(u) <= half_size.x && std::abs(v) <= half_size.y;
 }
 
+namespace {
+
+// A .noorwater file's settings, read again only when the file changes (gameplay and drawing ask every frame; the Water
+// panel's live edits change the file).
+std::optional<asset::Json> water_file_settings(const std::filesystem::path& file) {
+    struct Entry {
+        std::filesystem::file_time_type time;
+        asset::Json water;
+    };
+    static std::mutex mutex;
+    static std::unordered_map<std::string, Entry> cache;
+    std::error_code ec;
+    const auto time = std::filesystem::last_write_time(file, ec);
+    if (ec) return std::nullopt;
+    const std::string key = file.generic_string();
+    {
+        const std::lock_guard lock(mutex);
+        if (const auto it = cache.find(key); it != cache.end() && it->second.time == time) return it->second.water;
+    }
+    auto loaded = asset::load_water_file(file);
+    if (!loaded) return std::nullopt;
+    const std::lock_guard lock(mutex);
+    cache[key] = {time, (*loaded)["water"]};
+    return (*loaded)["water"];
+}
+
+} // namespace
+
 asset::WaterLook water_look(const asset::Json& wc, const AssetPath& asset_path) {
     asset::WaterLook look;
     if (wc.contains("preset") && wc["preset"].is_string())
         if (const asset::Json* preset = asset::water_preset(wc["preset"].get<std::string>())) look.apply((*preset)["water"]);
     if (const auto id = asset::guid_field(wc, "asset"); id && asset_path)
         if (const auto file = asset_path(*id))
-            if (auto loaded = asset::load_water_file(*file)) look.apply((*loaded)["water"]);
+            if (auto settings = water_file_settings(*file)) look.apply(*settings);
     look.apply(wc);
     return look;
 }

@@ -348,6 +348,9 @@ float d_ggx(float n_dot_h, float alpha)
     return a2 / (kPi * d * d);
 }
 
+// How many steps this pixel's reflection march took (the debug view "cost", part 7).
+static uint g_march_steps = 0u;
+
 // Screen-space reflection: the reflected ray marched through the copied scene in growing steps (20, out to about 75 m),
 // then narrowed down where it first goes behind something. `confidence` fades to 0 towards the screen's edges and the
 // march's end, where the sky takes over.
@@ -362,6 +365,7 @@ bool reflected_hit(float3 origin, float3 dir, float2 inv_size, out float2 hit_uv
     float t_prev = 0.0, t = 0.25;
     [loop] for (int i = 0; i < 20; ++i)
     {
+        ++g_march_steps;
         const float3 p = origin + dir * t;
         const float4 clip = c0 + cd * t;
         if (clip.w <= 1e-4) return false;
@@ -604,6 +608,40 @@ float4 PSMain(VertexOutput input) : SV_Target0
     float3 plain = scene_color.SampleLevel(scene_color_sampler, uv, 0).rgb;
     if (depth0 > 0.0) plain *= wet_factor(floor0, s);
     color = lerp(plain, color, saturate(vertical0 / pc.scatter.w));
+
+    // Debug views (part 7, the Water panel): false colours instead of the water.
+    const uint debug = water_settings[0].map_info.z;
+    if (debug == 1u)
+    {
+        // Depth: how much water is under this pixel (pale shallows to dark blue at 5 m), a line every metre.
+        const float d = depth0 <= 0.0 ? 50.0 : vertical0;
+        float3 c = lerp(float3(1.0, 0.95, 0.6), float3(0.02, 0.08, 0.45), saturate(d / 5.0));
+        if (frac(d) < 0.05 && d < 20.0) c *= 0.35;
+        return float4(c, 1.0);
+    }
+    if (debug == 2u)
+    {
+        // Flow: its direction as colour (x red, z blue), its speed as green, stripes running with it; still water grey.
+        const float speed = river ? s.body.w : 0.0;
+        if (speed <= 0.0) return float4(0.25, 0.25, 0.25, 1.0);
+        const float stripe = frac(ripple_at.x * 0.5) < 0.5 ? 1.0 : 0.7;
+        return float4(float3(0.5 + 0.5 * river_t.x, saturate(speed / 3.0), 0.5 + 0.5 * river_t.y) * stripe, 1.0);
+    }
+    if (debug == 3u)
+    {
+        // Waves: how far they lift (red) or lower (blue) the surface, against the most they can.
+        const float reach = max(0.97 * pc.waves.x, 0.01);
+        const float lift = river ? 0.0 : clamp((world.y - pc.center_yaw.y) / reach, -1.0, 1.0);
+        return float4(lift > 0.0 ? float3(0.5 + 0.5 * lift, 0.5 - 0.4 * lift, 0.5 - 0.4 * lift) : float3(0.5 + 0.4 * lift, 0.5 + 0.4 * lift, 0.5 - 0.5 * lift), 1.0);
+    }
+    if (debug == 4u) return float4(n * 0.5 + 0.5, 1.0);
+    if (debug == 5u)
+    {
+        // Cost: the reflection march's steps (most of the water's work): green none, yellow half, red all 20.
+        const float heat = saturate(float(g_march_steps) / 20.0);
+        return float4(heat < 0.5 ? lerp(float3(0.1, 0.7, 0.2), float3(1.0, 0.9, 0.1), heat * 2.0)
+                                  : lerp(float3(1.0, 0.9, 0.1), float3(0.9, 0.1, 0.1), heat * 2.0 - 1.0), 1.0);
+    }
     return float4(color, 1.0);
 }
 

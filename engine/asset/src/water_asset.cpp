@@ -90,6 +90,12 @@ const Json& water_presets() {
          {"water", {{"tint", "#6FB7A8"}, {"clarity", 4.0}, {"scatter", "#1F4A48"}, {"refraction", 0.06}, {"shore_fade", 0.12},
                     {"roughness", 0.06}, {"ripple", 1.0}, {"ripple_scale", 1.2}, {"wave_height", 0.0},
                     {"foam", 0.35}, {"foam_depth", 0.2}, {"crest_foam", 0.0}, {"wet", 0.35}, {"wet_height", 0.08}}}},
+        {{"name", "Pond"},
+         {"description", "A small, still pond: murky green, the bottom gone a metre down, hardly a ripple"},
+         {"water", {{"tint", "#7A9A6A"}, {"clarity", 1.6}, {"scatter", "#2E3B24"}, {"refraction", 0.04}, {"shore_fade", 0.08},
+                    {"roughness", 0.05}, {"ripple", 0.5}, {"ripple_scale", 0.8}, {"wave_height", 0.0},
+                    {"foam", 0.15}, {"foam_depth", 0.12}, {"crest_foam", 0.0}, {"wet", 0.3}, {"wet_height", 0.05},
+                    {"caustics", 0.4}, {"shafts", 0.3}}}},
         {{"name", "Sea"},
          {"description", "Open sea: a long swell with smaller waves on it, blue-green and deep, rougher in the wind"},
          {"water", {{"tint", "#4F9FB0"}, {"clarity", 6.0}, {"scatter", "#0E3A4A"}, {"refraction", 0.05}, {"shore_fade", 0.2},
@@ -97,6 +103,25 @@ const Json& water_presets() {
                     {"wave_direction", 160.0}, {"choppiness", 0.55}, {"wind", 0.3},
                     {"foam", 1.0}, {"foam_depth", 0.9}, {"crest_foam", 0.45}, {"wet", 0.4}, {"wet_height", 0.25},
                     {"caustics", 1.0}, {"shafts", 0.6}}}},
+        {{"name", "Tropical"},
+         {"description", "A tropical lagoon: clear turquoise over white sand, gentle waves, bright caustics"},
+         {"water", {{"tint", "#78DCD2"}, {"clarity", 12.0}, {"scatter", "#1E8C8C"}, {"refraction", 0.05}, {"shore_fade", 0.15},
+                    {"roughness", 0.05}, {"ripple", 0.8}, {"ripple_scale", 1.2}, {"wave_height", 0.3}, {"wave_length", 9.0},
+                    {"wave_direction", 150.0}, {"choppiness", 0.4}, {"wind", 0.2},
+                    {"foam", 0.8}, {"foam_depth", 0.5}, {"crest_foam", 0.15}, {"wet", 0.35}, {"wet_height", 0.15},
+                    {"caustics", 1.6}, {"shafts", 0.6}}}},
+        {{"name", "Swamp"},
+         {"description", "Swamp water: dark, brown and nearly opaque, still, a dull reflection"},
+         {"water", {{"tint", "#5A4A20"}, {"clarity", 0.6}, {"scatter", "#1C1A0C"}, {"refraction", 0.02}, {"shore_fade", 0.06},
+                    {"roughness", 0.12}, {"ripple", 0.3}, {"ripple_scale", 0.7}, {"wave_height", 0.0},
+                    {"foam", 0.0}, {"crest_foam", 0.0}, {"wet", 0.45}, {"wet_height", 0.1},
+                    {"caustics", 0.15}, {"shafts", 0.1}, {"reflections", 0.8}}}},
+        {{"name", "River"},
+         {"description", "A clear, quick river (for \"shape\": \"river\"): green-blue, busy ripples, foam along the banks"},
+         {"water", {{"tint", "#7DB8A8"}, {"clarity", 3.0}, {"scatter", "#25504A"}, {"refraction", 0.05}, {"shore_fade", 0.1},
+                    {"roughness", 0.08}, {"ripple", 1.2}, {"ripple_scale", 0.8}, {"wave_height", 0.0},
+                    {"foam", 0.7}, {"foam_depth", 0.4}, {"crest_foam", 0.0}, {"wet", 0.35}, {"wet_height", 0.1},
+                    {"caustics", 1.0}, {"shafts", 0.4}}}},
         {{"name", "Deep sea"},
          {"description", "The open ocean over deep water: long, heavy swell, ink-blue below, the light gone a few tens of metres down"},
          {"water", {{"tint", "#059CCC"}, {"clarity", 20.0}, {"scatter", "#0B4F7A"}, {"refraction", 0.05}, {"shore_fade", 0.3},
@@ -111,6 +136,12 @@ const Json* water_preset(std::string_view name) {
     for (const auto& p : water_presets())
         if (p["name"].get<std::string>() == name) return &p;
     return nullptr;
+}
+
+Json water_file_json(std::string_view name, const Json& water, std::string_view preset) {
+    Json j{{"noor_water", kWaterFormat}, {"name", std::string(name)}, {"water", water.is_object() ? water : Json::object()}};
+    if (!preset.empty()) j["preset"] = std::string(preset);
+    return j;
 }
 
 Result<Json> load_water_file(const std::filesystem::path& file) {

@@ -1,5 +1,6 @@
 #include "document.h"
 
+#include "noor/asset/water_asset.h"
 #include "noor/asset/environment_asset.h"
 #include "noor/fx/fx_asset.h"
 #include "noor/fx/particle_system.h"
@@ -401,6 +402,164 @@ Result<Json> Document::environment(const Json& command) {
         return d;
     }
     return fail(ErrorCode::InvalidArgument, std::format("environment: unknown op \"{}\"", op));
+}
+
+// ------------------------------------------------------------------ water looks (8D part 7)
+
+namespace {
+
+constexpr const char* kWaterDebugViews[] = {"none", "depth", "flow", "waves", "normals", "cost"};
+
+std::string water_file_name(std::string_view name) {
+    std::string out;
+    for (const char c : name) out += (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_') ? c : '_';
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return (out.empty() ? std::string("Water") : out) + std::string(asset::kWaterExtension);
+}
+
+} // namespace
+
+Result<Json> Document::water(const Json& command) {
+    if (!command.is_object() || !command.contains("op") || !command["op"].is_string())
+        return fail(ErrorCode::InvalidArgument, "water: the command needs an \"op\"");
+    const std::string op = command["op"];
+    const stdfs::path folder = project_.assets_dir() / "Water";
+    const auto rescan = [&]() -> Status {
+        if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
+        return {};
+    };
+    const auto describe = [&](const stdfs::path& file) -> Result<Json> {
+        auto json = asset::load_water_file(file);
+        if (!json) return std::unexpected(json.error());
+        const auto rel = project_.relative(file);
+        const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
+        return Json{{"path", rel ? *rel : file.generic_string()}, {"guid", rec ? rec->guid.to_string() : std::string()},
+                    {"name", json->value("name", file.stem().string())}, {"preset", json->value("preset", std::string())},
+                    {"water", (*json)["water"]}};
+    };
+    const auto file_of = [&](const Json& c) -> Result<stdfs::path> {
+        if (!c.contains("asset") || !c["asset"].is_string()) return fail(ErrorCode::InvalidArgument, "water: \"asset\" (a project path) is needed");
+        auto file = project_.resolve(c["asset"].get<std::string>());
+        if (!file) return std::unexpected(file.error());
+        if (!stdfs::exists(*file)) return fail(ErrorCode::NotFound, std::format("no water look at {}", c["asset"].get<std::string>()));
+        return *file;
+    };
+    const auto write = [&](const stdfs::path& file, const Json& json) -> Status {
+        std::error_code ec;
+        stdfs::create_directories(file.parent_path(), ec);
+        return noor::fs::write_file_atomic(file, asset::to_text(json), false);
+    };
+    const auto preset_named = [](const std::string& name) -> const Json* { return asset::water_preset(name); };
+
+    if (op == "list") {
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        Json list = Json::array();
+        for (const auto& rec : registry_.assets())
+            if (rec.importer == "water")
+                if (auto d = describe(project_.root() / rec.path)) list.push_back(*d);
+        return list;
+    }
+    if (op == "read") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(*file);
+    }
+    if (op == "save") {  // live editing: new settings (the scene and the viewports follow at once); its preset is kept
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        if (!command.contains("water") || !command["water"].is_object())
+            return fail(ErrorCode::InvalidArgument, "water save: \"water\" (an object) is needed");
+        auto old = asset::load_water_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string name = command.value("name", old->value("name", file->stem().string()));
+        if (auto w = write(*file, asset::water_file_json(name, command["water"], old->value("preset", std::string()))); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        changed();
+        return describe(*file);
+    }
+    if (op == "duplicate") {
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = asset::load_water_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string base = command.value("name", old->value("name", file->stem().string()) + " copy");
+        stdfs::path target = file->parent_path() / water_file_name(base);
+        for (int n = 2; stdfs::exists(target); ++n) target = file->parent_path() / water_file_name(std::format("{} {}", base, n));
+        if (auto w = write(target, asset::water_file_json(target.stem().string(), (*old)["water"], old->value("preset", std::string()))); !w)
+            return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        return describe(target);
+    }
+    if (op == "reset") {  // back to the built-in preset it came from (the presets themselves are never written)
+        auto file = file_of(command);
+        if (!file) return std::unexpected(file.error());
+        auto old = asset::load_water_file(*file);
+        if (!old) return std::unexpected(old.error());
+        const std::string from = old->value("preset", std::string());
+        const Json* preset = preset_named(from);
+        if (!preset) return fail(ErrorCode::InvalidArgument, std::format("{} didn't come from a preset: nothing to reset it to", file->filename().string()));
+        if (auto w = write(*file, asset::water_file_json(old->value("name", from), (*preset)["water"], from)); !w) return std::unexpected(w.error());
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        changed();
+        return describe(*file);
+    }
+    if (op == "apply") {  // an entity's water takes this look ({"asset": id}, its shape kept), or a new lake gets it: one undo step
+        if (auto s = require_editable(); !s) return std::unexpected(s.error());
+        stdfs::path file;
+        if (command.contains("preset")) {
+            const std::string name = command.value("preset", std::string());
+            const Json* preset = preset_named(name);
+            if (!preset) return fail(ErrorCode::NotFound, std::format("no water preset \"{}\"", name));
+            file = folder / water_file_name(name);
+            if (!stdfs::exists(file))  // a project copy, kept (with its edits) once made
+                if (auto w = write(file, asset::water_file_json(name, (*preset)["water"], name)); !w) return std::unexpected(w.error());
+        } else {
+            auto f = file_of(command);
+            if (!f) return std::unexpected(f.error());
+            file = *f;
+        }
+        if (auto s = rescan(); !s) return std::unexpected(s.error());
+        auto d = describe(file);
+        if (!d) return std::unexpected(d.error());
+        Json result = *d;
+        if (command.contains("entity") && command["entity"].is_string()) {
+            const std::string id = command["entity"].get<std::string>();
+            const auto guid = Guid::parse(id);
+            const scene::Entity* e = guid && scene_ ? scene_->find(*guid) : nullptr;
+            if (!e) return fail(ErrorCode::NotFound, std::format("water apply: no entity {}", id));
+            // Its shape stays (box size, sea, a river's course); the look comes from the asset alone (its own look
+            // fields and preset would sit over it, so they go).
+            Json component{{"asset", (*d)["guid"]}};
+            if (e->has("water") && e->components.at("water").is_object())
+                for (const char* key : {"shape", "size", "points", "width", "speed"})
+                    if (e->components.at("water").contains(key)) component[key] = e->components.at("water")[key];
+            if (auto s = execute({{"op", "set_component"}, {"entity", id}, {"type", "water"}, {"value", component}}); !s) return std::unexpected(s.error());
+            result["entity"] = id;
+        } else {
+            const Guid id = Guid::generate();
+            Json create{{"op", "create"}, {"id", id.to_string()}, {"name", (*d)["name"]},
+                        {"components", {{"water", {{"asset", (*d)["guid"]}, {"size", {20, 20}}}}}}};
+            if (command.contains("position") && command["position"].is_array()) create["transform"] = Json{{"position", command["position"]}};
+            if (auto s = execute(create); !s) return std::unexpected(s.error());
+            result["entity"] = id.to_string();
+        }
+        return result;
+    }
+    if (op == "debug") {  // the viewports' debug view: {"view": "none" | "depth" | "flow" | "waves" | "normals" | "cost"}
+        if (command.contains("view")) {
+            const std::string view = command.value("view", std::string("none"));
+            std::uint32_t found = ~0u;
+            for (std::uint32_t i = 0; i < std::size(kWaterDebugViews); ++i)
+                if (view == kWaterDebugViews[i]) found = i;
+            if (found == ~0u) return fail(ErrorCode::InvalidArgument, std::format("water debug: no view \"{}\" (none, depth, flow, waves, normals, cost)", view));
+            water_debug_ = found;
+            changed();
+        }
+        return Json{{"view", kWaterDebugViews[water_debug_]}};
+    }
+    return fail(ErrorCode::InvalidArgument, std::format("water: unknown op \"{}\"", op));
 }
 
 // ------------------------------------------------------------------ effect assets (8B part 4)
@@ -1224,6 +1383,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     snap->preview_muted = preview_muted_;
     snap->preview_restart = preview_restart_;
     snap->preview_paused = preview_paused_;
+    snap->water_debug = water_debug_;
     if (!world_) snap->bones = anim_bones_;
     // CSG models: built from their brush children in order (ADR-016), cached per model.
     csg_last_.clear();
