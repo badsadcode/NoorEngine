@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 26u
+#define NOOR_EDITOR_API_VERSION 27u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -167,6 +167,26 @@ NOOR_API const char* noor_doc_effect(noor_doc* doc, const char* command);
         sheet (its other sprite fields kept), or a new entity gets one (one undo step) -> the sheet's object plus "entity"
    NULL on error (noor_last_error). */
 NOOR_API const char* noor_doc_sprite(noor_doc* doc, const char* command);
+/* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
+     {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
+        "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),
+        "required", "node" (a node's name or null), "corrected" (set in the .noormeta)}], "warnings": [...]}}
+     {"op": "set_bone", "asset": path, "bone": "LeftHand", "node": name | null} corrects the map in the model's .noormeta
+        ("auto": true forgets the correction; "bone": "*" with "auto" forgets them all) -> the model's object
+     {"op": "controller", "asset": "Assets/x.nooranim"} -> {"path", "guid", "name", "controller" (the file), "error"?}
+     {"op": "save_controller", "asset": path, "controller": {...}} -> its object (one that doesn't parse is refused)
+     {"op": "characters"} -> the open scene's animated or skinned models: [{"entity", "name", "model", "model_guid",
+        "animator" (the component or null), "controller", "retarget_from" (paths or null), "clips", "skinned"}]
+     {"op": "preview", "entity"?: id | null, "clip"?, "controller"?: bool, "time"?: s, "parameters"?: {...}, "layer"?,
+        "state"?: name | null, "transition"?: index | null, "skeleton"?: bool, "in_place"?: bool, "highlight"?: node | null}:
+        one character posed in the viewports (the scene isn't changed) by a clip at a time, or by its animator's
+        controller: running from its start with these parameters (stepped at 60 a second), one state from its start, or
+        one transition (its "from" state for its exit time or half a time through, then the fade to "to"). Keys given
+        change the preview, the rest stay; "entity": null ends it. -> {"entity", "mode", "time", "length", "fingerprint"
+        (of the pose), "nodes", "joints", "bones", "root_position"?, "highlight_position"?, "states", "fade_weights",
+        "part" ("before" | "fading" | "after": a transition), "error"? and the settings}
+   NULL on error (noor_last_error). */
+NOOR_API const char* noor_doc_animation(noor_doc* doc, const char* command);
 /* v13: a texture's import settings and what they make of it (from the image header):
    {"settings": {"kind", "normal_convention", "mips", "max_size", "compression"},
     "source_width", "source_height", "width", "height", "mips", "format" ("BC7 sRGB", "BC5", "RGBA8"...),

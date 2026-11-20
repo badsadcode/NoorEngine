@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, **part 4, root motion and characters**, and **part 5, retargeting**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, **part 4, root motion and characters**, **part 5, retargeting**, and **part 6, the Animation panel**.
 
 ## Skinned meshes (part 1)
 
@@ -122,9 +122,9 @@ A controller has **parameters** (float, bool, trigger) that scripts set, and **l
 
 Ward's controller (`tests/data/render_scenes/Assets/Characters/Ward.nooranim`) is a complete small example: walk-run
 by speed, a nod on a trigger that returns by itself, a waving arm on a masked layer, a lean on an additive one. The
-file format is described at the top of `engine/asset/include/noor/asset/anim_controller.h`; until the Animation panel
-(part 6) it's edited as text, and its mistakes are reported in plain words ("layer 'Arm', transition 'Off' -> 'Wav':
-no such "to" state").
+file format is described at the top of `engine/asset/include/noor/asset/anim_controller.h`. The editor's Animation
+panel edits its states and transitions (below); its mistakes are reported in plain words ("layer 'Arm', transition
+'Off' -> 'Wav': no such "to" state"), and a version with one isn't saved.
 
 From scripts: `set_animation_parameter("speed", 3)`, `set_animation_trigger("nod")`, `play_animation("Nod")` (go to a
 state now), `cross_fade("Nod", 0.2)`, `animation()` (the base layer's state), `set_animation_speed` and
@@ -217,11 +217,40 @@ The test bodies: **Mast** (2.0 m, Mixamo names, T-pose, bones in centimetres und
 **Bollard** (1.45 m, Rigify's names with twist bones, A-pose, Blender's rolled bone frames), made by
 `tools/samples/make_test_characters.py`; the `Retargeting` golden shows them beside Ward on his controller.
 
+## The Animation panel (part 6)
+
+A tab beside the Content Browser (so the viewport stays in view; it makes the bottom dock taller the first time). It
+shows one character of the open scene: select one in the scene, or pick it at the top. Everything it shows is a
+**preview**: the character is posed in the viewport only, and the scene isn't changed (no edit, nothing to undo). The
+preview ends when the panel is hidden, and while playing the game shows the game.
+
+- **Clips:** pick one and it plays; the timeline under the panel scrubs (drag it), with play and pause (Space), back to
+  the start, a speed (a quarter to double) and looping. *In place* holds the hips horizontally, as root motion shows a
+  walk. *Skeleton* draws the bones over the model: a line from each joint to the next, a dot on each joint.
+- **Controller** (the character's animator's `.nooranim`): each layer's states as a graph (the entry state has a green
+  edge; the state the preview is in is filled, with its fade's progress), its transitions as arrows. Click a state to
+  preview it from its start, an arrow to preview that transition: its "from" state plays for its exit time (or half a
+  time through, at most a second), then it fades to "to", the fade shaded on the timeline. *Run* plays the whole
+  controller from its start with the preview's parameter values (floats, bools, and *Fire* for a trigger), as a game
+  would (stepped at 60 a second). Fields edit the picked state (name, clip, loop, speed, entry) or transition (from,
+  to, fade, exit time, conditions); new states and transitions, and deleting them. Every change is saved at once, and
+  the preview follows. A blend space's samples are shown but are still edited in the file.
+- **Bone map:** the humanoid map retargeting uses, for the character's model or the model its clips come from: the
+  detected preset, the warnings, and each of the 22 bones (the 15 required in bold) with the node it's on. Change one
+  and the correction goes into the model's `.noormeta` (`settings.bone_map`), retargeted clips are baked again, and the
+  bone lights up orange in the viewport; ↺ puts a bone back to the detected one, *Detect all again* forgets every
+  correction.
+
+The engine side is `noor_doc_animation` (editor API v27): `model`, `set_bone`, `controller`, `save_controller`,
+`characters` and `preview`. The preview poses the character with the same code a game uses (`game::AnimationAssets`,
+shared with `AnimatorSystem`), so what you scrub is what plays.
+
 ## Not yet
 - Retargeting fingers, and correcting feet to the ground (IK): later. A target much stockier than the source may see
   hands pass through hips.
-- **Previewing clips in the editor** (a timeline to scrub): part 6, the Animation panel. Clips play when you press
-  Play (and in games); in edit mode characters stand in their rest pose.
+- The Animation panel: blend-space samples, layers (adding, masks, weights) and parameters (adding) are edited in the
+  `.nooranim` itself; controller edits are saved at once, not undone with Ctrl+Z (the file can be put back by hand or
+  from version control); the graph lays states out by itself (positions aren't saved); no curves or key editing.
 - Morph-target (face shape) channels are skipped, with a warning.
 - The editor's gizmo doesn't bend a skinned mesh while dragging (it follows when you let go); levels of detail don't
   switch skinned models; morph targets (face shapes) are skipped.

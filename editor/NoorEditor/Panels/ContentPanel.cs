@@ -72,12 +72,12 @@ public sealed class ContentPanel : DockPanel
         add.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a); };
         _makeMaterial.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "texture" } a) MakeMaterial(a); };
         ToolTip.SetTip(_makeMaterial, "A material from this texture's set (its _albedo, _normal, _orm… files), saved beside it");
-        _edit.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" } a) EditRequested?.Invoke(a); };
-        ToolTip.SetTip(_edit, "Materials: the material editor. Textures: import settings (compression, size, kind). Sprite sheets: the grid and animations. Double-click does the same.");
+        _edit.Click += (_, _) => { if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" or "anim_controller" } a) EditRequested?.Invoke(a); };
+        ToolTip.SetTip(_edit, "Materials: the material editor. Textures: import settings (compression, size, kind). Sprite sheets: the grid and animations. Animation controllers: the Animation panel. Double-click does the same.");
         _assets.SelectionChanged += (_, _) =>
         {
             _makeMaterial.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "texture" };
-            _edit.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" };
+            _edit.IsEnabled = _assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" or "anim_controller" };
             ShowDetails(_assets.SelectedItem as AssetInfo);
         };
         var bar = new StackPanel
@@ -95,7 +95,7 @@ public sealed class ContentPanel : DockPanel
         _scenes.DoubleTapped += (_, _) => { if (_scenes.SelectedItem is string s) OpenSceneRequested?.Invoke(s); };
         _assets.DoubleTapped += (_, _) =>
         {
-            if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" } m) EditRequested?.Invoke(m);
+            if (_assets.SelectedItem is AssetInfo { Importer: "material" or "texture" or "sprite" or "anim_controller" } m) EditRequested?.Invoke(m);
             else if (_assets.SelectedItem is AssetInfo a) AddRequested?.Invoke(a);
         };
 

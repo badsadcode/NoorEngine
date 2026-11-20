@@ -39,6 +39,7 @@
 #include "noor/asset/anim_controller.h"
 #include "noor/asset/animation.h"
 #include "noor/asset/retarget.h"
+#include "noor/game/animation_assets.h"
 #include "noor/runtime/world.h"
 
 #include <cstdint>
@@ -59,7 +60,7 @@ namespace noor::game {
 class AnimatorSystem final : public runtime::System {
 public:
     using Resolver = std::function<std::optional<std::filesystem::path>(const Guid&)>;
-    explicit AnimatorSystem(Resolver resolve) : resolve_(std::move(resolve)) {}
+    explicit AnimatorSystem(Resolver resolve) : assets_(std::move(resolve), [this](const std::string& m) { say_once(m); }) {}
     [[nodiscard]] std::string_view name() const override { return "Animation"; }
     void attached(runtime::World& world) override;                // the "animator.play" command
     void update(runtime::World& world, double dt) override;       // controllers step; end events
@@ -75,37 +76,27 @@ public:
     [[nodiscard]] const Stats& stats() const noexcept { return stats_; }
 
 private:
-    struct Model {
-        asset::ImportedModel model;  // with "retarget_from", the other model's clips retargeted in place of its own
-        std::vector<int> animated;   // nodes any of its clips move, in node order
-        std::vector<asset::NodePose> rest;
-        int root = -1;               // asset::root_motion_node
-        math::Mat4 root_space{};     // from the root bone's parent's space into the model's (an armature's 0.01 scale)
-        std::unordered_map<std::string, int> aliases;  // other names controllers' masks may use: humanoid bones
-                                                       // ("RightUpperArm"), the clips' model's bones when retargeted
-    };
+    using Model = AnimationAssets::Model;
     struct Running {  // a controller running for one character
         Guid controller, model, clips;
         std::unique_ptr<asset::AnimControllerPlayer> player;
     };
     // The model a character's animator plays: its "model" asset, with "retarget_from"'s clips if it has one.
-    const Model* model(const Guid& id, const Guid& clips = {});
-    const Model* model_of(const scene::Entity& root);
-    const asset::AnimController* controller(const Guid& id);
+    const Model* model(const Guid& id, const Guid& clips = {}) { return assets_.model(id, clips); }
+    const Model* model_of(const scene::Entity& root) { return assets_.model_of(root); }
+    const asset::AnimController* controller(const Guid& id) { return assets_.controller(id); }
     asset::AnimControllerPlayer* running(const scene::Entity& root);
     asset::AnimParameters parameters(const asset::Json& component, const asset::AnimController& controller) const;
     const std::vector<Guid>& bind(runtime::World& world, const scene::Entity& root);
     void say_once(const std::string& message);
     void move_character(runtime::World& world, scene::Entity& model_root, math::Vec3 moved, double dt);
 
-    Resolver resolve_;
-    std::unordered_map<std::string, std::optional<Model>> models_;  // by asset id (and clips' id); nullopt: failed
-    std::unordered_map<Guid, std::optional<asset::AnimController>> controllers_;  // by asset id
+    std::unordered_map<std::string, bool> said_;  // before assets_: its warnings land here
+    AnimationAssets assets_;
     std::unordered_map<Guid, Running> running_;               // root entity -> its controller
     std::unordered_map<Guid, std::vector<Guid>> nodes_;      // root entity -> the entity of each node (nil: none)
     std::unordered_map<Guid, double> reported_;              // root entity -> the "started" whose end was posted
     std::vector<asset::NodePose> pose_, from_;               // scratch
-    std::unordered_map<std::string, bool> said_;
     Stats stats_;
 };
 

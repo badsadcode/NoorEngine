@@ -143,6 +143,13 @@ public:
     // Root motion (part 4): `node` (asset::root_motion_node) is the character's root. The base layer's movement of it
     // over each step is measured (root_motion()), and pose() holds it in place horizontally. -1: off.
     void set_root_motion(int node) { root_ = node; }
+
+    // Off: step() only moves time on, and no transition fires by itself (the editor's preview of one state or one
+    // transition plays them with play(); part 6). On by default.
+    void set_automatic(bool automatic) { automatic_ = automatic; }
+    // How long one time through a state is, in seconds, with these parameters (a blend space's samples weighted; an
+    // empty state counts as a second). -1 if there's no such layer or state.
+    [[nodiscard]] double state_length(std::size_t layer, std::string_view state, const AnimParameters& params) const;
     [[nodiscard]] math::Vec3 root_motion() const noexcept { return moved_; }
 
     // Goes to a state now (fade 0) or fading over `fade` seconds; false if the layer has no such state. The base layer
@@ -177,6 +184,7 @@ private:
 
     const AnimController* controller_;
     int root_ = -1;
+    bool automatic_ = true;
     math::Vec3 moved_{0, 0, 0};
     const ImportedModel* model_;
     std::vector<NodePose> rest_;

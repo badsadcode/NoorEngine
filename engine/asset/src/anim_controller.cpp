@@ -279,7 +279,7 @@ void AnimControllerPlayer::step(double dt, const AnimParameters& params, std::ve
         const AnimLayer& layer = controller_->layers[l];
         Running& r = layers_[l];
         // 1. Transitions (not mid-fade): the first that holds fires.
-        if (r.from < 0) {
+        if (r.from < 0 && automatic_) {
             for (const auto& t : layer.transitions) {
                 if ((t.from >= 0 && t.from != r.state) || t.to == r.state) continue;
                 if (t.exit_time && r.phase + 1e-9 < *t.exit_time) continue;
@@ -333,6 +333,12 @@ void AnimControllerPlayer::step(double dt, const AnimParameters& params, std::ve
             if (r.faded >= r.fade - 1e-9) r.from = -1;
         }
     }
+}
+
+double AnimControllerPlayer::state_length(std::size_t layer, std::string_view state, const AnimParameters& params) const {
+    if (layer >= controller_->layers.size()) return -1.0;
+    const int s = state_index(controller_->layers[layer], state);
+    return s < 0 ? -1.0 : length(static_cast<int>(layer), s, params);
 }
 
 bool AnimControllerPlayer::play(std::string_view state, float fade, std::string_view layer) {

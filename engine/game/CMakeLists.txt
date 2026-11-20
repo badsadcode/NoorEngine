@@ -10,6 +10,7 @@ noor_add_module(game
         src/model_lod.cpp
         src/scatter.cpp
         src/animator.cpp
+        src/animation_assets.cpp
         src/sprite_animation.cpp
         src/sprites.cpp
         src/texture_library.cpp

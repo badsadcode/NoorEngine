@@ -94,6 +94,7 @@ asset::Json Document::poll_files() {
     }
     if (!changed_list.empty()) {
         if (prefab_changed) prefabs_.clear();
+        forget_animation_files();
         if (world_) {
             // Keep playing on the old runtime copy; the new content shows after Stop.
             NOOR_LOG_INFO("Editor", "Changes apply when play mode stops");
@@ -897,6 +898,7 @@ Status Document::open_scene(std::string_view relative) {
     history_.clear();
     stroke_.reset();
     terrain_edits_.clear();  // unsaved sculpting goes with the unsaved scene
+    anim_preview_.reset();   // the Animation panel's preview was of the old scene's character
     // A scene that was just upgraded differs from its file: it should save as modified.
     if (scene_->migrations_applied.empty()) history_.mark_saved();
     changed();
@@ -1155,7 +1157,7 @@ void Document::changed() {
     }
     std::unordered_set<Guid> authored;
     for (const auto& e : scene_->entities) authored.insert(e.id);
-    publish(scene::expand_prefabs(*scene_, prefabs_.resolver()).scene, authored);
+    publish(expanded_for_view(), authored);
 }
 
 void Document::publish(const scene::Scene& expanded, const std::unordered_set<Guid>& authored) {
@@ -1218,6 +1220,7 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
     snap->preview_muted = preview_muted_;
     snap->preview_restart = preview_restart_;
     snap->preview_paused = preview_paused_;
+    if (!world_) snap->bones = anim_bones_;
     // CSG models: built from their brush children in order (ADR-016), cached per model.
     csg_last_.clear();
     for (std::size_t i = 0; i < entities.size(); ++i) {

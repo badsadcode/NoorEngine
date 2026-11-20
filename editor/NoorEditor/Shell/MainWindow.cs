@@ -36,6 +36,7 @@ public sealed class MainWindow : Window
     /// <summary>The environment gallery (Milestone 8A, part 6), once shown.</summary>
     public EnvironmentPanel? Environments { get; private set; }
     public EffectsPanel? Effects { get; private set; }
+    public AnimationPanel? Animation { get; private set; }
     public ViewportPanel? ViewportView { get; private set; }
 
     // NoorCode: the scripts open as tabs next to the viewport (they outlive layout rebuilds).
@@ -187,6 +188,7 @@ public sealed class MainWindow : Window
                     if (a.Importer == "texture") OpenTexture(a.Path);
                     else if (a.Importer == "sprite") OpenSprite(a.Path);
                     else if (a.Importer == "procgraph") OpenGraph(a.Path);
+                    else if (a.Importer == "anim_controller") ShowAnimationController(a.Path);
                     else OpenMaterial(a.Path);
                 };
                 return ContentBrowser;
@@ -203,6 +205,11 @@ public sealed class MainWindow : Window
         {
             Id = "Effects", Title = "Effects", CanClose = false,
             CreateView = () => Effects = new EffectsPanel(Doc),
+        };
+        var animation = new PanelTool
+        {
+            Id = "Animation", Title = "Animation", CanClose = false,
+            CreateView = () => Animation = new AnimationPanel(Doc),
         };
 
         DockFactory
@@ -232,7 +239,7 @@ public sealed class MainWindow : Window
         foreach (var graph in _graphs) DockFactory.AddDockable(documents, graph);
         Fill(left, hierarchy);
         Fill(right, inspector);
-        Fill(bottom, content, console, render, environments, effects);
+        Fill(bottom, content, console, render, environments, effects, animation);
 
         DockFactory.DefaultHostWindowLocator = () => new HostWindow();
         DockFactory.HostWindowLocator = new Dictionary<string, Func<IHostWindow?>> { [nameof(IDockWindow)] = () => new HostWindow() };
@@ -1120,6 +1127,36 @@ public sealed class MainWindow : Window
             DockFactory.SetFocusedDockable(owner, texture);
         }
         return texture;
+    }
+
+    /// <summary>
+    /// The Animation panel brought to the front (Milestone 8C, part 6), showing the first character whose animator runs
+    /// this controller (Edit on a .nooranim). Its tab sits beside the Content Browser, so the viewport stays in view.
+    /// </summary>
+    public AnimationPanel? ShowAnimationPanel()
+    {
+        // Its graph and bone list want more height than the bottom dock's default: make room once (resizable after).
+        if (FindDock("Bottom") is { } bottom && FindDock("Documents") is { } documents && bottom.Proportion is > 0 and < 0.42)
+        {
+            documents.Proportion = 1 - 0.42;
+            bottom.Proportion = 0.42;
+        }
+        if (FindDockable("Animation") is { } tab && tab.Owner is IDock owner)
+        {
+            DockFactory.SetActiveDockable(tab);
+            DockFactory.SetFocusedDockable(owner, tab);
+        }
+        return Animation;
+    }
+
+    public void ShowAnimationController(string relativePath)
+    {
+        ShowAnimationPanel();
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (Animation?.ShowController(relativePath) == false)
+                EngineLog.Warn("Animation", $"No character in this scene runs {relativePath}: give an animator \"controller\": it, then edit it here");
+        });
     }
 
     /// <summary>A sprite sheet's editor (Milestone 8B, part 5): its grid, animations and an animated preview, in a tab.</summary>

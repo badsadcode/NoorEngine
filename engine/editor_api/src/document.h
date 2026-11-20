@@ -8,6 +8,7 @@
 #include "noor/asset/registry.h"
 #include "noor/foundation/error.h"
 #include "noor/foundation/math.h"
+#include "noor/game/animation_assets.h"
 #include "noor/game/game.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/history.h"
@@ -183,6 +184,14 @@ struct RenderSnapshot {
     std::vector<Guid> preview_muted;     // these aren't
     std::uint64_t preview_restart = 0;   // changed: every preview emitter starts again from nothing
     bool preview_paused = false;
+    // The Animation panel's preview (8C part 6): the previewed character's skeleton, a line per bone (world), drawn
+    // over everything. `highlight`: the bone picked in the panel; `joint`: its head is the picked node.
+    struct Bone {
+        math::Vec3 from, to;
+        bool highlight = false;
+        bool joint = false;
+    };
+    std::vector<Bone> bones;
 };
 
 // Shared between a document and any viewports showing it; outlives either side.
@@ -223,6 +232,9 @@ public:
     [[nodiscard]] Result<asset::Json> effect(const asset::Json& command);
     // Sprite sheets (8B part 5): list, read (sliced), create from a texture, save, apply (noor_doc_sprite).
     [[nodiscard]] Result<asset::Json> sprite(const asset::Json& command);
+    // The Animation panel (8C part 6): model, set_bone, controller, save_controller, characters, preview
+    // (noor_doc_animation; document_animation.cpp).
+    [[nodiscard]] Result<asset::Json> animation(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);
@@ -358,6 +370,29 @@ private:
     [[nodiscard]] Status add_asset(const asset::Json& command);
     [[nodiscard]] Status create(const asset::Json& command);
     void changed();  // bumps the revision and republishes the render snapshot
+    // The Animation panel's preview (8C part 6, document_animation.cpp): one character posed in the snapshot only.
+    struct AnimPreview {
+        Guid entity;              // the character's model root
+        bool controller = false;  // posed by its animator's controller; else by `clip` (none: its rest pose)
+        std::string clip;
+        double time = 0.0;        // seconds into the clip, or since the controller started
+        bool in_place = false;    // the root-motion bone held horizontally
+        asset::Json parameters = asset::Json::object();  // the controller's, over the animator's
+        std::string layer;        // a state's or transition's layer (by name; empty: the base)
+        std::string state;        // just this state, from its start
+        int transition = -1;      // or just this transition (its index in the layer)
+        bool skeleton = true;
+        std::string highlight;    // a node drawn brighter
+        asset::Json result;       // the last evaluation (noor_doc_animation "preview" returns it)
+    };
+    std::optional<AnimPreview> anim_preview_;
+    std::unique_ptr<game::AnimationAssets> anim_assets_;  // loaded on first use; forgotten when files change
+    std::vector<RenderSnapshot::Bone> anim_bones_;       // the last evaluation's skeleton
+    game::AnimationAssets& anim_assets();
+    void forget_animation_files();
+    void apply_anim_preview(scene::Scene& expanded);
+    scene::Scene expanded_for_view();  // the open scene with prefabs expanded and the preview's pose applied
+    void republish();                  // the snapshot again, the revision unchanged (the preview moved)
     void publish(const scene::Scene& expanded, const std::unordered_set<Guid>& authored);
     void watch_assets();
     [[nodiscard]] Status require_editable() const;

@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 6: the Animation panel
+**Added**
+- The editor's **Animation panel**: a scene character's clips played and scrubbed on a timeline (speed, loop, in
+  place), the skeleton drawn in the viewport; its controller as a state graph, states and transitions previewed and
+  edited (saved as you go), the whole controller run with preview parameters; its humanoid bone map with preset and
+  warnings, corrected into the model's `.noormeta`, the picked bone lit up.
+- Editor API v27: `noor_doc_animation` (`model`, `set_bone`, `controller`, `save_controller`, `characters`,
+  `preview`); the viewport draws the previewed skeleton.
+- `asset::AnimControllerPlayer::set_automatic` and `state_length` (for previewing one state or transition).
+- Content Browser: Edit on a `.nooranim` opens it in the Animation panel.
+
+**Changed:** `game::AnimationAssets` (models with retargeting, controllers) split out of `AnimatorSystem`, shared by
+games and the editor's preview.
+
+**Tests:** API tests "animation api" (3); the editor smoke test's Animation panel checks (15).
+
 ### 2026-11-20 — Milestone 8C, part 5: retargeting
 **Added**
 - **Retargeting** (`asset/retarget.h`): humanoid bone maps detected from names (Rigify, Mixamo, Unreal mannequin,

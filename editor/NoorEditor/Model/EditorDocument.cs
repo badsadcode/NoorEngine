@@ -426,6 +426,22 @@ public sealed class EditorDocument : IDisposable
         return JsonNode.Parse(json);
     }
 
+    /// <summary>
+    /// One Animation panel command (noor_doc_animation: model, set_bone, controller, save_controller, characters, preview;
+    /// Milestone 8C, part 6). A failure is logged (unless <paramref name="quiet"/>) and gives null. The preview poses the
+    /// viewports only, so it changes nothing here.
+    /// </summary>
+    public JsonNode? Animation(JsonObject command, bool quiet = false)
+    {
+        var json = Native.Animation(_handle, command.ToJsonString());
+        if (json == null)
+        {
+            if (!quiet) Interop.EngineLog.Error("Animation", $"{command["op"]?.GetValue<string>()}: {Native.LastError()}");
+            return null;
+        }
+        return JsonNode.Parse(json);
+    }
+
     /// <summary>The built-in environment presets (Milestone 8A, part 6): [{name, description, environment}].</summary>
     public static JsonArray EnvironmentPresets() => Native.EnvironmentPresets() is { } json && JsonNode.Parse(json) is JsonArray a ? a : [];
 

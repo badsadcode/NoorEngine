@@ -403,7 +403,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | 3 ✅ | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
 | 4 ✅ | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
 | 5 ✅ | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
-| 6 | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
+| 6 ✅ | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
 | 7 | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
 | 8 | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
 
@@ -512,6 +512,23 @@ controller, a Bollard on root motion); `cli.retargeting_build_identically` (the 
 project, Lua and C# built game, the same pose). Found on the way: root motion ignored an armature's scale (fixed);
 Ward.nooranim's mask named Ward's bone, which other bodies don't have (masks now translate). Not done: fingers;
 foot IK; the editor's view of the map (part 6).
+
+## Part 6 result (2026-11-20)
+Done. The editor's **Animation panel** (a tab beside the Content Browser): the scene's characters (following the
+selection); clips played and scrubbed on a timeline with speed, looping and *in place*; the skeleton drawn over the
+model in the viewport; the controller's layers as a state graph, a state or a transition previewed (the fade shaded on
+the timeline) or the whole controller run with preview parameters; states and transitions edited (name, clip, loop,
+speed, entry; from, to, fade, exit time, conditions; added and deleted) and saved as you go; the bone map with its
+preset, warnings and 22 bones, corrected into the `.noormeta`, the picked bone lit up in the viewport. The engine side
+is `noor_doc_animation` (API v27); the preview poses the render snapshot only, through `game::AnimationAssets` (split
+out of `AnimatorSystem`, so the preview and games share the loading). Proven: API tests (clips, skeleton and map read;
+a correction written to the `.noormeta`, warned about and taken back; refusals; scrubbing: the same moment the same
+pose and not one scene transform or revision changed; a controller run, a state and a transition previewed, the fade
+weight exact to the step; a saved slower fade followed by the preview; a controller that doesn't parse not written);
+the editor smoke test (Ward picked by selecting him, Walk plays and is scrubbed, the scene untouched; Arm's Off → Wave
+at half its fade, the fade edited to 0.6 s and the preview at a quarter; his bone map shown, LeftHand unmapped (saved,
+warned), mapped elsewhere (lit up), put back; hiding the panel ends the preview). Not done: blend-space samples, layers
+and parameters edited in the file; controller edits aren't on the undo stack; graph positions aren't saved.
 
 ## Open questions
 

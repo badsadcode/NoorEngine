@@ -252,6 +252,7 @@ internal static class SmokeTest
         await EffectsPanelChecks(window, Check, Shot);
         await TextureSettingsChecks(window, Check, Shot);
         await SpriteChecks(window, Check, Shot);
+        await AnimationPanelChecks(window, Check, Shot);
         await BrushChecks(window, Check, Shot);
         await FaceChecks(window, Check, Shot);
         await TerrainChecks(window, Check, Shot);
@@ -1110,6 +1111,111 @@ internal static class SmokeTest
         shot(window, "editor_34_skinned_character.png");
         doc.Undo();
         check(doc.Scene.Entities.Count == count, "skinning: one undo removes the character");
+        await Task.Delay(300);
+    }
+
+    // Milestone 8C, part 6: the Animation panel. Ward (Create ▸ Player) is picked by selecting him; a clip plays and is
+    // scrubbed (the same moment, the same pose; the scene untouched); a transition of his controller is previewed and its
+    // fade edited, and the preview follows; his bone map is shown, a bone corrected (saved in the .noormeta, warned
+    // about) and put back; hiding the panel ends the preview.
+    private static async Task AnimationPanelChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        doc.Select(null);
+        var count = doc.Scene.Entities.Count;
+        var player = window.CreateThirdPersonPlayer(new Vec3(14.8, 0, 14));  // where the sprite and skinning checks looked
+        var ward = player == null ? null : doc.Scene.Entities.FirstOrDefault(e => e.Parent == player && e.Name == "Ward");
+        var panel = window.ShowAnimationPanel();
+        await Task.Delay(500);
+        panel ??= window.Animation;
+        check(ward != null && panel != null && window.FindDock("Bottom")?.ActiveDockable?.Id == "Animation",
+              "animation: the Animation tab comes up beside the Content Browser");
+        if (ward == null || panel == null)
+        {
+            if (player != null) doc.Undo();
+            return;
+        }
+        doc.Select(ward.Id);
+        await Task.Delay(200);
+        check(panel.CharacterId == ward.Id, "animation: selecting Ward shows him in the panel");
+        window.ViewportView?.Viewport.Frame(doc.Subtree(ward.Id));
+
+        // A clip plays (time moves on by itself), then is scrubbed: a moment always gives the same pose.
+        var modified = doc.Scene.Modified;
+        var undo = doc.Scene.UndoLabel;
+        var subtree = doc.Subtree(ward.Id).ToHashSet();
+        var before = doc.Scene.Entities.Where(e => subtree.Contains(e.Id)).Select(e => e.Transform.Rotation).ToList();
+        panel.PlayClip("Walk");
+        var t0 = panel.Time;
+        await Task.Delay(400);
+        check(panel.Playing && panel.Time > t0 + 0.1 && panel.Preview?["mode"]?.GetValue<string>() == "clip",
+              $"animation: Walk plays on its own ({t0:0.00} s to {panel.Time:0.00} s)");
+        panel.Scrub(0.25);
+        var a = panel.Preview?["fingerprint"]?.GetValue<string>();
+        panel.Scrub(0.6);
+        var b = panel.Preview?["fingerprint"]?.GetValue<string>();
+        panel.Scrub(0.25);
+        var again = panel.Preview?["fingerprint"]?.GetValue<string>();
+        check(!panel.Playing && a != null && a != b && a == again && panel.Preview?["bones"]?.GetValue<int>() == 17,
+              $"animation: scrubbing Walk poses Ward, the same moment the same pose ({a} / {b} / {again}), his 17 joints drawn");
+        doc.Refresh();
+        var after = doc.Scene.Entities.Where(e => subtree.Contains(e.Id)).Select(e => e.Transform.Rotation).ToList();
+        check(doc.Scene.Modified == modified && doc.Scene.UndoLabel == undo && before.SequenceEqual(after),
+              "animation: previewing changes nothing in the scene (no edit, no undo step)");
+        await Task.Delay(700);
+        shot(window, "editor_36_animation_clip.png");
+
+        // His controller: the Arm layer's Off -> Wave transition (fade 0.3) after its half-second lead-in.
+        panel.SelectTransition(1, 0);
+        panel.Scrub(0.65);
+        var w1 = panel.Preview?["fade_weights"]?[1]?.GetValue<double>() ?? -1;
+        var f1 = panel.Preview?["fingerprint"]?.GetValue<string>();
+        check(panel.Mode == "transition" && panel.Preview?["part"]?.GetValue<string>() == "fading" && Math.Abs(w1 - 0.5) < 1e-3,
+              $"animation: the Off → Wave transition previewed halfway through its fade (weight {w1:0.###})");
+        // A slower fade, saved in the .nooranim: the same moment of the preview is now a quarter of the way.
+        var saved = panel.SetTransitionFade(0.6);
+        var w2 = panel.Preview?["fade_weights"]?[1]?.GetValue<double>() ?? -1;
+        double? Fade() => JsonNode.Parse(File.ReadAllText(Path.Combine(doc.ProjectRoot, EntityTemplates.WardControllerPath)))?["layers"]?[1]?["transitions"]?[0]?["fade"]?.GetValue<double>();
+        check(saved && Math.Abs(w2 - 0.25) < 1e-3 && panel.Preview?["fingerprint"]?.GetValue<string>() != f1 && Fade() == 0.6,
+              $"animation: editing the fade to 0.6 s is saved and the preview follows (weight {w2:0.###})");
+        panel.SetTransitionFade(0.3);
+        check(Fade() == 0.3, "animation: and back to 0.3 s");
+        panel.Scrub(0.9);
+        await Task.Delay(700);
+        shot(window, "editor_37_animation_controller.png");
+
+        // His bone map (Rigify-style names): a correction is saved in the .noormeta and warned about; then undone.
+        panel.SelectTab(2);
+        await Task.Delay(200);
+        var map = panel.Model?["bone_map"];
+        check(map?["usable"]?.GetValue<bool>() == true && (map?["bones"] as JsonArray)?.Count == 22,
+              $"animation: Ward's bone map is shown ({map?["preset"]?.GetValue<string>()}, 22 bones, usable)");
+        var meta = Path.Combine(doc.ProjectRoot, EntityTemplates.WardModelPath + ".noormeta");
+        var none = panel.SetBone("LeftHand", null);
+        var metaJson = JsonNode.Parse(File.ReadAllText(meta));
+        check(none?["bone_map"]?["usable"]?.GetValue<bool>() == false &&
+              (none?["bone_map"]?["warnings"] as JsonArray)?.Any(w => w?.GetValue<string>().Contains("LeftHand") == true) == true &&
+              metaJson?["settings"]?["bone_map"] is JsonObject bm && bm.ContainsKey("LeftHand"),
+              "animation: mapping no bone to LeftHand is saved in Ward.glb.noormeta and the panel warns that the map can't be used");
+        var moved = panel.SetBone("LeftHand", "DEF-forearm.L");
+        check((moved?["bone_map"]?["bones"] as JsonArray)?.OfType<JsonObject>().Any(x => x["bone"]?.GetValue<string>() == "LeftHand" && x["node"]?.GetValue<string>() == "DEF-forearm.L") == true &&
+              panel.Preview?["highlight"]?.GetValue<string>() == "DEF-forearm.L" && panel.Preview?["highlight_position"] != null,
+              "animation: LeftHand mapped to another bone, which lights up in the viewport");
+        await Task.Delay(700);
+        shot(window, "editor_38_animation_bone_map.png");
+        var back = panel.SetBone("LeftHand", null, auto: true);
+        check(back?["bone_map"]?["usable"]?.GetValue<bool>() == true && JsonNode.Parse(File.ReadAllText(meta))?["settings"]?["bone_map"] == null,
+              "animation: back to the detected bone, the correction gone from the .noormeta");
+        panel.HighlightBone(null);
+
+        // Hidden: the preview ends (the viewport shows the scene as it is).
+        if (window.FindDockable("Content") is { } content) window.DockFactory.SetActiveDockable(content);
+        await Task.Delay(300);
+        check(doc.Animation(new JsonObject { ["op"] = "preview", ["time"] = 0 }, quiet: true) == null,
+              "animation: hiding the panel ends the preview");
+        doc.Undo();  // Create Player
+        check(doc.Scene.Entities.Count == count, "animation: one undo removes the player again");
+        check(EngineLog.Lines.All(l => l.Category != "Animation" || l.Level < 4), "animation: no errors from the Animation panel");
         await Task.Delay(300);
     }
 

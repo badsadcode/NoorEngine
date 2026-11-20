@@ -76,6 +76,13 @@ main asset path.
   it wraps, so nothing drifts) and given to the nearest character controller at or above the model as velocity, or
   to the model's position. Events are named moments on clips (the animator) or controller states. Bones-as-entities
   made sockets free: a prop is a child of a bone; `bone(name)` finds one. Script ABI v6 (bones, events).
+- *Part 6:* the Animation panel previews by posing the render snapshot only (the document's scene is never touched,
+  so previewing makes no undo steps and can't leave a character half-posed in a saved scene). It loads characters
+  through `game::AnimationAssets`, now shared with `AnimatorSystem`, so a preview is exactly what plays. Controllers
+  are previewed by stepping a fresh player from the start at 60 a second (cheap: phases only, one pose at the end); a
+  single state or transition is played with the player's automatic transitions off (`set_automatic(false)`), so
+  nothing else fires. Edits save straight to the `.nooranim` (refused if it doesn't parse) like the sprite and effect
+  editors; bone map corrections go into the model's `.noormeta`, where part 5 reads them.
 - *Part 5:* retargeting bakes: a source clip becomes an ordinary clip of the target (keys at every source key and at
   least 60 a second, linear) when the pair is first needed, so blending, controllers, root motion and events needed no
   changes. The transfer matches bone directions in model space (a per-bone shortest-arc correction between the rest

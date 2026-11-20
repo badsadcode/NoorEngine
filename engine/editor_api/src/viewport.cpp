@@ -1418,6 +1418,34 @@ void render_thread_main(noor_viewport* vp) {
                     prev = s;
                 }
             }
+            // The Animation panel's preview (8C part 6): the character's skeleton over everything, a line per bone and
+            // a dot per joint; the bone picked in the panel brighter and thicker.
+            if (shown && !shown->bones.empty()) {
+                if (!hud) {
+                    hud.emplace();
+                    if (auto s = r.set_overlay_atlas(hud->atlas_width(), hud->atlas_height(), hud->atlas()); !s)
+                        NOOR_LOG_ERROR("Viewport", "HUD font: {}", s.error().describe());
+                }
+                const float w = static_cast<float>(size.width), h = static_cast<float>(size.height);
+                const auto band = [&](const ed::ScreenPoint& a, const ed::ScreenPoint& b, float half, const Vec4& color) {
+                    const float sx = b.x - a.x, sy = b.y - a.y, len = std::max(1e-3f, std::sqrt(sx * sx + sy * sy));
+                    const float nx = -sy / len * half, ny = sx / len * half;
+                    const noor::render::OverlayVertex v0{{a.x + nx, a.y + ny}, {-1, -1}, color}, v1{{b.x + nx, b.y + ny}, {-1, -1}, color};
+                    const noor::render::OverlayVertex v2{{b.x - nx, b.y - ny}, {-1, -1}, color}, v3{{a.x - nx, a.y - ny}, {-1, -1}, color};
+                    overlay.insert(overlay.end(), {v0, v1, v2, v0, v2, v3});
+                };
+                const auto dot = [&](const ed::ScreenPoint& p, float half, const Vec4& color) {
+                    band({p.x - half, p.y, p.distance}, {p.x + half, p.y, p.distance}, half, color);
+                };
+                const Vec4 line{0.80f, 0.72f, 1.0f, 0.9f}, picked{1.0f, 0.62f, 0.25f, 1.0f}, joint{1.0f, 1.0f, 1.0f, 0.95f};
+                for (const auto& bone : shown->bones) {
+                    const auto a = ed::world_to_screen(basis, w, h, bone.from), b = ed::world_to_screen(basis, w, h, bone.to);
+                    if (a && b && (bone.from.x != bone.to.x || bone.from.y != bone.to.y || bone.from.z != bone.to.z))
+                        band(*a, *b, bone.highlight ? 2.0f : 1.0f, bone.highlight ? picked : line);
+                }
+                for (const auto& bone : shown->bones)  // dots on top of the lines
+                    if (const auto b = ed::world_to_screen(basis, w, h, bone.to)) dot(*b, bone.joint ? 4.0f : 2.0f, bone.joint ? picked : joint);
+            }
             frame.overlay = overlay;
         } else {
             r.set_clear_color(demo_clear_color(pointer, size));
