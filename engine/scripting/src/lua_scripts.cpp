@@ -315,6 +315,30 @@ struct LuaScriptSystem::Impl {
                  if (auto* p = physics_of(L)) p->character_drop(check_entity(L, 1));
                  return 0;
              }},
+            // Godot-style (2D part 2b): what the character touched in its last step.
+            {"is_on_floor", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const auto c = p ? p->character_contacts(check_entity(L, 1)) : std::nullopt;
+                 lua_pushboolean(L, c && c->floor);
+                 return 1;
+             }},
+            {"is_on_wall", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const auto c = p ? p->character_contacts(check_entity(L, 1)) : std::nullopt;
+                 lua_pushboolean(L, c && c->wall);
+                 return 1;
+             }},
+            {"is_on_ceiling", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const auto c = p ? p->character_contacts(check_entity(L, 1)) : std::nullopt;
+                 lua_pushboolean(L, c && c->ceiling);
+                 return 1;
+             }},
+            {"floor_normal", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const auto c = p ? p->character_contacts(check_entity(L, 1)) : std::nullopt;
+                 return push_vec(L, c && c->floor ? std::optional(c->floor_normal) : std::nullopt);
+             }},
             {"is_grounded", [](lua_State* L) {
                  auto* p = physics_of(L);
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
@@ -460,6 +484,45 @@ struct LuaScriptSystem::Impl {
                  lua_setfield(L, -2, "normal");
                  lua_pushnumber(L, hit->distance);
                  lua_setfield(L, -2, "distance");
+                 return 1;
+             }},
+            // noor.shape_cast(shape, from, to [, ignore]) -> hit table or nil (2D part 2b): a shape swept along a line
+            {"shape_cast", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const Json shape = to_json(L, 1);
+                 const math::Vec3 from = check_vec(L, 2);
+                 const math::Vec3 to = check_vec(L, 3);
+                 std::optional<Guid> ignore;
+                 if (lua_gettop(L) >= 4 && !lua_isnil(L, 4)) ignore = check_entity(L, 4);
+                 const auto hit = p ? p->shape_cast(shape, from, to, ignore) : std::nullopt;
+                 if (!hit) {
+                     lua_pushnil(L);
+                     return 1;
+                 }
+                 lua_createtable(L, 0, 4);
+                 push_entity(L, hit->entity);
+                 lua_setfield(L, -2, "entity");
+                 lua_pushvector(L, hit->point.x, hit->point.y, hit->point.z);
+                 lua_setfield(L, -2, "point");
+                 lua_pushvector(L, hit->normal.x, hit->normal.y, hit->normal.z);
+                 lua_setfield(L, -2, "normal");
+                 lua_pushnumber(L, hit->distance);
+                 lua_setfield(L, -2, "distance");
+                 return 1;
+             }},
+            // noor.overlap(shape, at [, ignore]) -> a list of the entities whose bodies overlap the shape there
+            {"overlap", [](lua_State* L) {
+                 auto* p = physics_of(L);
+                 const Json shape = to_json(L, 1);
+                 const math::Vec3 at = check_vec(L, 2);
+                 std::optional<Guid> ignore;
+                 if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) ignore = check_entity(L, 3);
+                 const auto found = p ? p->overlap(shape, at, ignore) : std::vector<Guid>{};
+                 lua_createtable(L, static_cast<int>(found.size()), 0);
+                 for (std::size_t i = 0; i < found.size(); ++i) {
+                     push_entity(L, found[i]);
+                     lua_rawseti(L, -2, static_cast<int>(i + 1));
+                 }
                  return 1;
              }},
             // noor.water_height(x, z) -> the water surface's height there now (waves included), or nil (8D part 2)

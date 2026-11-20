@@ -112,7 +112,7 @@ TEST_CASE("csharp host: sprites through the ABI, and the animation end event car
     w.frame(1.0 / 60.0, {});
     CHECK(std::ranges::find(Fake::calls, "event 4") != Fake::calls.end());
     CHECK(std::ranges::find(Fake::calls, "animation attack") != Fake::calls.end());
-    CHECK(api->version == 10u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop
+    CHECK(api->version == 11u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop; v11: shape casts, overlaps, contacts
     REQUIRE(api->bone != nullptr);
     REQUIRE(api->water != nullptr);
     float height = 1.0f;

@@ -604,3 +604,143 @@ TEST_CASE("platformer: a 3D character without the new settings moves exactly as 
     CHECK(step.x == doctest::Approx(2.0f).epsilon(0.02));
     CHECK(step.z == doctest::Approx(3.0f).epsilon(0.02));
 }
+
+// ---- Your own controllers (2D part 2b): script-owned velocity, contacts, shape queries ---------------------------
+
+TEST_CASE("own controllers: with motion script, the script owns the velocity (no gravity added) and it slides") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    s.entities.push_back(block("Roof", {0, 4.0f, 0}, 40, 1));  // underside at 3.5 m
+    scene::Entity e;
+    e.id = Guid::generate();
+    e.name = "Mover";
+    e.transform.position = {0, 1.0f, 0};
+    e.components["character"] = {{"radius", 0.3}, {"height", 1.0}, {"plane", "xy"}, {"motion", "script"}};
+    s.entities.push_back(e);
+    Sim sim(s);
+    // No velocity set: it hangs in the air (the engine adds no gravity to a script-owned character).
+    sim.run(1.0);
+    CHECK(sim.pos(e).y == doctest::Approx(1.0f).epsilon(0.001));
+    CHECK_FALSE(sim.physics->character_contacts(e.id)->floor);
+    // Straight up at 5 m/s: it stops under the roof, touching it, and its velocity's upward part is gone (slid off).
+    sim.physics->set_velocity(e.id, {0, 5, 0});
+    sim.run(1.0);
+    const auto c = sim.physics->character_contacts(e.id);
+    MESSAGE("under the roof: feet at " << sim.pos(e).y << ", velocity y " << sim.physics->velocity(e.id)->y);
+    CHECK(c->ceiling);
+    CHECK(sim.pos(e).y == doctest::Approx(2.5f).epsilon(0.02));  // head (1 m tall) at the roof's underside
+    CHECK(std::fabs(sim.physics->velocity(e.id)->y) < 0.01f);
+    // Down at 5 m/s: it lands on the floor and stops; its contacts say floor, with the floor's normal.
+    sim.physics->set_velocity(e.id, {0, -5, 0});
+    sim.run(1.0);
+    const auto f = sim.physics->character_contacts(e.id);
+    CHECK(f->floor);
+    CHECK(f->floor_normal.y == doctest::Approx(1.0f).epsilon(0.01));
+    CHECK(sim.pos(e).y == doctest::Approx(0.0f).epsilon(0.02));
+    CHECK(std::fabs(sim.physics->velocity(e.id)->y) < 0.01f);
+}
+
+TEST_CASE("own controllers: a walking character takes a script's velocity for one step (a double jump)") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    const auto h = hero({0.0f, 0.01f, 0});
+    s.entities.push_back(h);
+    Sim sim(s);
+    Pad pad{sim};
+    pad.frames(10);
+    pad.hold(Key::Space);
+    float first = 0, second = 0;
+    for (int i = 0; i < 26; ++i) {  // up to about the top of the first jump
+        pad.frames(1);
+        first = std::max(first, sim.pos(h).y);
+    }
+    sim.physics->set_velocity(h.id, {0, 9, 0});  // a second jump in mid-air: no API for it but the velocity
+    for (int i = 0; i < 60; ++i) {
+        pad.frames(1);
+        second = std::max(second, sim.pos(h).y);
+    }
+    MESSAGE("first jump " << first << " m, after the double jump " << second << " m");
+    CHECK(second > first + 1.0f);
+}
+
+TEST_CASE("own controllers: shape casts find the first thing a shape would hit, overlaps list what's there") {
+    scene::Scene s;
+    const auto box = body("Box", {5, 0.5f, 0}, {{"shape", "box"}, {"size", {1, 1, 1}}});
+    const auto other = body("Other", {-5, 0.5f, 0}, {{"shape", "box"}, {"size", {1, 1, 1}}});
+    s.entities = {box, other};
+    Sim sim(s);
+    sim.run(0.1);
+    // A 0.5 m circle swept right from the origin meets the box's face at x 4.5 when its centre is at x 4.0.
+    const auto hit = sim.physics->shape_cast({{"shape", "circle"}, {"radius", 0.5}}, {0, 0.5f, 0}, {10, 0.5f, 0});
+    REQUIRE(hit);
+    CHECK(hit->entity == box.id);
+    CHECK(hit->distance == doctest::Approx(4.0f).epsilon(0.02));
+    CHECK(hit->normal.x == doctest::Approx(-1.0f).epsilon(0.02));
+    // Ignoring the box: nothing else that way.
+    CHECK_FALSE(sim.physics->shape_cast({{"shape", "circle"}, {"radius", 0.5}}, {0, 0.5f, 0}, {10, 0.5f, 0}, box.id));
+    // Overlaps: a rectangle over each box finds just that one; one spanning both finds both, sorted; empty air: none.
+    CHECK(sim.physics->overlap({{"shape", "rectangle"}, {"size", {2, 2}}}, {5, 0.5f, 0}) == std::vector<Guid>{box.id});
+    CHECK(sim.physics->overlap({{"shape", "box"}, {"size", {12, 1, 1}}}, {0, 0.5f, 0}).size() == 2);
+    CHECK(sim.physics->overlap({{"shape", "sphere"}, {"radius", 1}}, {0, 5, 0}).empty());
+    // Not a shape: nothing, no crash.
+    CHECK_FALSE(sim.physics->shape_cast({{"shape", "teapot"}}, {0, 0, 0}, {1, 0, 0}));
+}
+
+TEST_CASE("own controllers + lua: a Godot-style platformer written in a script lands, jumps, and stops at a wall") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    s.entities.push_back(block("Wall", {6, 2, 0}, 1, 4));  // its face at x 5.5
+    scene::Entity e;
+    e.id = Guid::generate();
+    e.name = "Player";
+    e.transform.position = {0, 2.0f, 0};
+    e.components["character"] = {{"radius", 0.3}, {"height", 1.0}, {"plane", "xy"}, {"motion", "script"}};
+    e.components["script"] = {{"file", "Scripts/player.luau"}};
+    s.entities.push_back(e);
+    runtime::World world(s);
+    auto lua = std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{"."});
+    auto* lua_ptr = lua.get();
+    // What a GDScript CharacterBody2D would do in _physics_process: gravity, run, jump once landed, move_and_slide.
+    lua->add_source("Scripts/player.luau", R"(
+        local P = {}
+        local GRAVITY, SPEED, JUMP = 29.43, 4, 10
+        function P:on_start() self.log = { landed = false, wall = false, top = 0, jumped = false } end
+        function P:on_fixed_update(dt)
+            local e = self.entity
+            local v = e:velocity()  -- what the last step left after sliding (Godot: velocity after move_and_slide)
+            self.log.vx = v.x
+            v = vector.create(SPEED, v.y - GRAVITY * dt, 0)
+            if e:is_on_floor() then
+                self.log.landed = true
+                if not self.log.jumped and noor.time() > 0.6 then
+                    v = vector.create(v.x, JUMP, 0)
+                    self.log.jumped = true
+                end
+            end
+            if e:is_on_wall() then self.log.wall = true end
+            e:set_velocity(v)
+            if self.log.jumped then self.log.top = math.max(self.log.top, e:position().y) end
+            self.log.x = e:position().x
+            local hit = noor.shape_cast({ shape = "circle", radius = 0.3 }, e:position() + vector.create(0, 0.5, 0),
+                                        e:position() + vector.create(20, 0.5, 0), e)
+            self.log.ahead = hit and hit.entity:name() or "nothing"
+            e:set("log", self.log)
+        end
+        return P
+    )");
+    world.add_system(std::move(lua));
+    world.add_system(std::make_unique<PhysicsSystem>(PhysicsSystem::Options{}));
+    for (int i = 0; i < 60 * 3; ++i) world.frame(1.0 / 60.0, {});
+    CHECK(lua_ptr->errors().empty());
+    const auto* log = runtime::api::component(world, e.id, "log");
+    REQUIRE(log);
+    MESSAGE("lua player: " << log->dump());
+    CHECK((*log)["landed"].get<bool>());
+    CHECK((*log)["wall"].get<bool>());
+    CHECK((*log)["ahead"].get<std::string>() == "Wall");
+    // It jumped: 10 m/s against 29.43 m/s2 rises about 1.7 m.
+    CHECK((*log)["top"].get<float>() > 1.5f);
+    // Stopped at the wall: its body's edge (0.3 m) against the face at 5.5, its run speed slid away.
+    CHECK((*log)["x"].get<float>() == doctest::Approx(5.2f).epsilon(0.02));
+    CHECK(std::fabs((*log)["vx"].get<float>()) < 0.05f);
+}

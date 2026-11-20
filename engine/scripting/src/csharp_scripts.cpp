@@ -265,6 +265,32 @@ int32_t rt_character_water(noor_rt_entity e, float* feet, float* head) {
     return static_cast<int32_t>(w->state);
 }
 
+void rt_shape_cast(const char* shape_json, noor_rt_vec3 from, noor_rt_vec3 to, const noor_rt_entity* ignore, noor_rt_hit* out) {
+    if (!out) return;
+    *out = {};
+    auto* p = physics_of();
+    if (!p || !shape_json) return;
+    const Json shape = Json::parse(shape_json, nullptr, false);
+    const auto hit = p->shape_cast(shape, vec(from), vec(to), ignore ? std::optional(from_rt(*ignore)) : std::nullopt);
+    if (!hit) return;
+    *out = {1, to_rt(hit->entity), vec(hit->point), vec(hit->normal), hit->distance};
+}
+int32_t rt_overlap(const char* shape_json, noor_rt_vec3 at, const noor_rt_entity* ignore, noor_rt_entity* out, int32_t max) {
+    auto* p = physics_of();
+    if (!p || !shape_json) return 0;
+    const Json shape = Json::parse(shape_json, nullptr, false);
+    const auto found = p->overlap(shape, vec(at), ignore ? std::optional(from_rt(*ignore)) : std::nullopt);
+    for (std::size_t i = 0; out && i < found.size() && static_cast<int32_t>(i) < max; ++i) out[i] = to_rt(found[i]);
+    return static_cast<int32_t>(found.size());
+}
+int32_t rt_character_contacts(noor_rt_entity e, noor_rt_vec3* floor_normal) {
+    auto* p = physics_of();
+    const auto c = p ? p->character_contacts(from_rt(e)) : std::nullopt;
+    if (!c) return -1;
+    if (floor_normal) *floor_normal = vec(c->floor_normal);
+    return (c->floor ? 1 : 0) | (c->wall ? 2 : 0) | (c->ceiling ? 4 : 0);
+}
+
 int32_t rt_water_flow(float x, float z, noor_rt_vec3* flow) {
     if (!t_world) return 0;
     const auto s = t_world->water_at(x, z);
@@ -289,6 +315,7 @@ const noor_rt_api kApi = {
     rt_water,
     rt_character_water,
     rt_water_flow,
+    rt_shape_cast, rt_overlap, rt_character_contacts,
 };
 
 } // namespace

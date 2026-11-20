@@ -25,6 +25,12 @@
 //                "gravity_scale" (1); "coyote_time" (s: a jump still works this long after walking off a ledge);
 //                "jump_buffer" (s: a jump asked this long before landing happens on landing); "jump_cut" (0.5:
 //                letting go of jump while rising keeps this share of the upward speed: character_jump_release).
+//                "motion": "script" (2D part 2b): the script owns its velocity, Godot-style: set it with set_velocity
+//                (gravity included: none is added), each step it moves and slides along what it touches, and the
+//                velocity left after sliding is what velocity() reads next (landing stops the fall, a wall the run).
+//                is_on_floor / is_on_wall / is_on_ceiling tell what it touched. Without it ("walk", the default) the
+//                engine adds gravity and jumps, and set_velocity replaces its velocity for one step (a double jump, a
+//                dash, a knockback), after which gravity and walking carry on.
 //   "collider" + "one_way": true: a level platform characters stand on but jump up through from below and from the
 //                sides, and drop through with character_drop.
 //   "platformer": {"speed": 6, "jump_height": 1.5, "axis": "move_x", "jump": "jump", "down": "move_y",
@@ -92,6 +98,14 @@ struct RayHit {
     float distance = 0;
 };
 
+// What a character touched in its last step (2D part 2b): Godot's is_on_floor / is_on_wall / is_on_ceiling.
+struct CharacterContacts {
+    bool floor = false;    // something it can stand on (not steeper than its max_slope)
+    bool wall = false;     // something too steep to stand on
+    bool ceiling = false;  // something overhead
+    math::Vec3 floor_normal{0, 1, 0};
+};
+
 class PhysicsSystem final : public runtime::System {
 public:
     struct Options {
@@ -120,6 +134,13 @@ public:
     // ---- Queries and forces (the scripting API) ----
     [[nodiscard]] std::optional<RayHit> raycast(math::Vec3 origin, math::Vec3 direction, float max_distance,
                                                 std::optional<Guid> ignore = std::nullopt) const;
+    // A shape swept from `from` to `to` (2D part 2b): the first thing it would hit (distance along the way), or nothing.
+    // Shapes as JSON, like colliders: {"shape": "box", "size": [x, y, z]}, sphere (radius), capsule (radius, height),
+    // rectangle (size [w, h], depth), circle (radius). Unturned. `ignore`: one entity (often the caster itself).
+    [[nodiscard]] std::optional<RayHit> shape_cast(const asset::Json& shape, math::Vec3 from, math::Vec3 to,
+                                                   std::optional<Guid> ignore = std::nullopt) const;
+    // Every entity whose body overlaps the shape placed at `at` (sorted, each once).
+    [[nodiscard]] std::vector<Guid> overlap(const asset::Json& shape, math::Vec3 at, std::optional<Guid> ignore = std::nullopt) const;
     [[nodiscard]] bool has_body(const Guid& entity) const;
     [[nodiscard]] std::optional<math::Vec3> velocity(const Guid& entity) const;
     void set_velocity(const Guid& entity, math::Vec3 v);
@@ -140,6 +161,8 @@ public:
     void character_drop(const Guid& entity);
     // Its velocity as the controller last moved it (m/s, world).
     [[nodiscard]] std::optional<math::Vec3> character_velocity(const Guid& entity) const;
+    // What it touched in its last step (2D part 2b).
+    [[nodiscard]] std::optional<CharacterContacts> character_contacts(const Guid& entity) const;
     [[nodiscard]] bool is_grounded(const Guid& entity) const;
     // In the water (8D part 5): its state and the water's depth at its feet and at the top of its head (positive: under).
     enum class WaterState : std::uint8_t { Dry, Wading, Swimming, Under };

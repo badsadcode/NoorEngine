@@ -17,7 +17,9 @@
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
@@ -196,6 +198,13 @@ struct PhysicsSystem::Impl {
         bool cut = false;                               // this jump's rise has been cut already
         float drop_left = 0.0f;                         // ignoring one-way platforms this much longer
         math::Vec3 velocity{0, 0, 0};                   // what it moved with last step
+        // Script motion (2D part 2b): the velocity the script owns ("motion": "script"); otherwise a velocity a script
+        // set for the next step only (walk mode); what it touched last step.
+        bool script_motion = false;
+        math::Vec3 script_velocity{0, 0, 0};
+        std::optional<math::Vec3> override_velocity;
+        float floor_cos = 0.64f;  // cos(max_slope)
+        CharacterContacts contacts;
         // Built-in platformer controls ("platformer" component): the animation it last asked for, and its facing.
         std::string animation;
         bool facing_left = false;
@@ -560,6 +569,8 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         c.coyote_time = std::clamp(number(*ch, "coyote_time", 0.0f), 0.0f, 1.0f);
         c.jump_buffer = std::clamp(number(*ch, "jump_buffer", 0.0f), 0.0f, 1.0f);
         c.jump_cut = std::clamp(number(*ch, "jump_cut", 0.5f), 0.0f, 1.0f);
+        c.script_motion = ch->value("motion", std::string("walk")) == "script";
+        c.floor_cos = std::cos(math::radians(std::clamp(number(*ch, "max_slope", 50.0f), 0.0f, 89.0f)));
         c.controller->SetListener(&d.character_listener);
         d.characters[entity.id] = std::move(c);
     }
@@ -768,7 +779,19 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         const bool may_jump = on_ground || (!c.jumped && c.since_ground <= c.coyote_time + 1e-4f);
         bool jumping = false;
         JPH::Vec3 v;
-        if (swimming) {
+        if (c.script_motion) {
+            v = to_j(c.script_velocity);  // the script's own: no gravity, no jumps added
+        } else if (c.override_velocity) {
+            // Set by a script for this step (a double jump, a dash): it replaces the velocity, then walking carries on.
+            v = JPH::Vec3(0, c.override_velocity->y, 0);  // its horizontal part becomes what walking starts from
+            c.horizontal = {c.override_velocity->x, 0.0f, c.override_velocity->z};
+            if (c.override_velocity->y > 0.0f) {
+                c.jumped = true;  // so letting go of jump still shortens it, and no coyote jump follows
+                c.cut = false;
+            }
+            c.override_velocity.reset();
+            c.buffered_jump = 0.0f;
+        } else if (swimming) {
             // Held with its chest at the surface (feet swim_depth under it): pulled there, gently, no gravity.
             const float target = feet.y + (water.feet_depth - c.swim_depth);
             v = JPH::Vec3(0, std::clamp((target - feet.y) * 3.0f, -2.0f, 2.0f), 0);
@@ -796,18 +819,22 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
             if (c.buffer_left < 0.0f) c.buffered_jump = 0.0f;  // waited long enough (or there's no buffer)
         }
         c.release = false;
-        // Horizontal: straight to the asked speed, or towards it at the character's acceleration.
-        const math::Vec3 want{c.wanted.x * speed, 0.0f, c.plane ? 0.0f : c.wanted.z * speed};
-        const float rate = !on_ground ? c.air_acceleration : (math::length(want) > 1e-4f ? c.acceleration : c.deceleration);
-        if (rate <= 0.0f || swimming) {
-            c.horizontal = want;
-        } else {
-            const math::Vec3 diff = want - c.horizontal;
-            const float dl = math::length(diff), most = rate * step;
-            c.horizontal = dl <= most ? want : c.horizontal + diff * (most / dl);
+        if (!c.script_motion) {  // a script-owned velocity gets nothing added (Godot's CharacterBody)
+            // Horizontal: straight to the asked speed, or towards it at the character's acceleration.
+            const math::Vec3 want{c.wanted.x * speed, 0.0f, c.plane ? 0.0f : c.wanted.z * speed};
+            const float rate = !on_ground ? c.air_acceleration : (math::length(want) > 1e-4f ? c.acceleration : c.deceleration);
+            if (rate <= 0.0f || swimming) {
+                c.horizontal = want;
+            } else {
+                const math::Vec3 diff = want - c.horizontal;
+                const float dl = math::length(diff), most = rate * step;
+                c.horizontal = dl <= most ? want : c.horizontal + diff * (most / dl);
+            }
+            const JPH::Vec3 fall = swimming ? JPH::Vec3::sZero() : gravity * (step * c.gravity_scale);
+            v += fall + JPH::Vec3(c.horizontal.x, 0, c.horizontal.z);
+        } else if (c.plane) {
+            v.SetZ(0.0f);
         }
-        const JPH::Vec3 fall = swimming ? JPH::Vec3::sZero() : gravity * (step * c.gravity_scale);
-        v += fall + JPH::Vec3(c.horizontal.x, 0, c.horizontal.z);
         // A river's current (8D part 6): a swimmer drifts with it, a wader is pushed by part of it (more the deeper).
         const float drift = swimming ? 1.0f : water.state == WaterState::Wading ? 0.5f * std::clamp(water.feet_depth / c.swim_depth, 0.0f, 1.0f) : 0.0f;
         v += JPH::Vec3(current.x * drift, 0, current.z * drift);
@@ -827,7 +854,31 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
             lv.SetZ(0.0f);
             ch.SetLinearVelocity(lv);
         }
-        c.velocity = from_j(ch.GetLinearVelocity());
+        // What it touched (2D part 2b), and the velocity left after sliding along it: whatever it moved into is taken
+        // out (landing stops a fall, a wall stops a run, a ceiling stops a jump), as Godot's move_and_slide does.
+        c.contacts = {};
+        JPH::Vec3 slid = ch.GetLinearVelocity();
+        if (ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround) {
+            c.contacts.floor = true;
+            c.contacts.floor_normal = from_j(ch.GetGroundNormal());
+        }
+        for (const auto& k : ch.GetActiveContacts()) {
+            if (!k.mHadCollision || k.mIsSensorB || k.mWasDiscarded) continue;
+            const JPH::Vec3 n = k.mContactNormal;  // pointing towards the character
+            if (n.GetY() >= c.floor_cos) {
+                if (!c.contacts.floor) c.contacts.floor_normal = from_j(n);
+                c.contacts.floor = true;
+            } else if (n.GetY() <= -0.7f) {
+                c.contacts.ceiling = true;
+            } else {
+                c.contacts.wall = true;
+            }
+            const float into = slid.Dot(n);
+            if (into < 0.0f) slid -= into * n;
+        }
+        if (c.plane) slid.SetZ(0.0f);
+        if (c.script_motion) c.script_velocity = from_j(slid);
+        c.velocity = from_j(slid);
         if (auto* e = world.find(entity)) {
             const auto r = runtime::api::world_rotation(world, entity).value_or(math::Quat{});
             runtime::api::set_world_pose(world, entity, from_j(ch.GetPosition()), r);
@@ -927,14 +978,111 @@ bool PhysicsSystem::has_body(const Guid& entity) const { return impl_->bodies.co
 
 std::optional<math::Vec3> PhysicsSystem::velocity(const Guid& entity) const {
     const auto it = impl_->bodies.find(entity);
-    if (it == impl_->bodies.end()) return std::nullopt;
+    if (it == impl_->bodies.end()) {
+        // A character (2D part 2b): the script's own velocity ("motion": "script"), or how it last moved.
+        const auto c = impl_->characters.find(entity);
+        if (c == impl_->characters.end()) return std::nullopt;
+        return c->second.script_motion ? c->second.script_velocity : c->second.velocity;
+    }
     return from_j(impl_->system.GetBodyInterface().GetLinearVelocity(it->second.id));
 }
 
 void PhysicsSystem::set_velocity(const Guid& entity, math::Vec3 v) {
     const auto it = impl_->bodies.find(entity);
-    if (it == impl_->bodies.end() || it->second.type == Impl::Type::Static) return;
+    if (it == impl_->bodies.end()) {
+        // A character: its own velocity from now on ("motion": "script"), or the next step's (walk: then gravity and
+        // walking carry on from it: a double jump, a dash, a knockback).
+        if (const auto c = impl_->characters.find(entity); c != impl_->characters.end()) {
+            if (c->second.script_motion) c->second.script_velocity = v;
+            else c->second.override_velocity = v;
+        }
+        return;
+    }
+    if (it->second.type == Impl::Type::Static) return;
     impl_->system.GetBodyInterface().SetLinearVelocity(it->second.id, to_j(v));
+}
+
+std::optional<CharacterContacts> PhysicsSystem::character_contacts(const Guid& entity) const {
+    const auto it = impl_->characters.find(entity);
+    if (it == impl_->characters.end()) return std::nullopt;
+    return it->second.contacts;
+}
+
+namespace {
+// A query shape from JSON (2D part 2b): the collider shapes that need no model, unscaled and unturned.
+JPH::RefConst<JPH::Shape> query_shape(const Json& j) {
+    if (!j.is_object()) return nullptr;
+    const std::string shape = j.value("shape", std::string("box"));
+    JPH::ShapeSettings::ShapeResult r;
+    if (shape == "box" || shape == "rectangle") {
+        math::Vec3 size{1, 1, 1};
+        if (const auto sz = j.find("size"); sz != j.end() && sz->is_array() && sz->size() >= 2 && (*sz)[0].is_number() && (*sz)[1].is_number()) {
+            size.x = (*sz)[0].get<float>();
+            size.y = (*sz)[1].get<float>();
+            size.z = shape == "box" && sz->size() >= 3 && (*sz)[2].is_number() ? (*sz)[2].get<float>() : number(j, "depth", 1.0f);
+        }
+        const JPH::Vec3 half(std::max(0.005f, size.x * 0.5f), std::max(0.005f, size.y * 0.5f), std::max(0.005f, size.z * 0.5f));
+        r = JPH::BoxShapeSettings(half, std::min(JPH::cDefaultConvexRadius, 0.5f * half.ReduceMin())).Create();
+    } else if (shape == "sphere" || shape == "circle") {
+        r = JPH::SphereShapeSettings(std::max(0.005f, number(j, "radius", 0.5f))).Create();
+    } else if (shape == "capsule") {
+        const float radius = std::max(0.005f, number(j, "radius", 0.3f));
+        const float height = std::max(radius * 2.0f + 0.002f, number(j, "height", 1.8f));
+        r = JPH::CapsuleShapeSettings(height * 0.5f - radius, radius).Create();
+    } else {
+        return nullptr;
+    }
+    return r.HasError() ? nullptr : r.Get();
+}
+} // namespace
+
+std::optional<RayHit> PhysicsSystem::shape_cast(const Json& shape, math::Vec3 from, math::Vec3 to, std::optional<Guid> ignore) const {
+    auto& d = *impl_;
+    const auto s = query_shape(shape);
+    if (!s) return std::nullopt;
+    const math::Vec3 path = to - from;
+    const JPH::RShapeCast cast(s, JPH::Vec3::sReplicate(1.0f), JPH::RMat44::sTranslation(to_j(from)), to_j(path));
+    JPH::ShapeCastSettings settings;
+    settings.mBackFaceModeTriangles = JPH::EBackFaceMode::CollideWithBackFaces;
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> hit;
+    JPH::BodyID ignored;
+    if (ignore) {
+        if (const auto it = d.bodies.find(*ignore); it != d.bodies.end()) ignored = it->second.id;
+        else if (const auto c = d.characters.find(*ignore); c != d.characters.end()) ignored = c->second.controller->GetInnerBodyID();
+    }
+    const JPH::IgnoreSingleBodyFilter filter(ignored);
+    d.system.GetNarrowPhaseQuery().CastShape(cast, settings, JPH::RVec3::sZero(), hit, {}, {}, filter);
+    if (!hit.HadHit()) return std::nullopt;
+    const auto entity = d.entity_for(hit.mHit.mBodyID2);
+    if (!entity) return std::nullopt;
+    RayHit out;
+    out.entity = *entity;
+    out.distance = hit.mHit.mFraction * math::length(path);
+    out.point = from_j(hit.mHit.mContactPointOn2);
+    const JPH::Vec3 axis = hit.mHit.mPenetrationAxis;
+    out.normal = axis.LengthSq() > 1e-12f ? from_j(-axis.Normalized()) : math::Vec3{0, 1, 0};
+    return out;
+}
+
+std::vector<Guid> PhysicsSystem::overlap(const Json& shape, math::Vec3 at, std::optional<Guid> ignore) const {
+    auto& d = *impl_;
+    std::vector<Guid> out;
+    const auto s = query_shape(shape);
+    if (!s) return out;
+    JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> hits;
+    JPH::BodyID ignored;
+    if (ignore) {
+        if (const auto it = d.bodies.find(*ignore); it != d.bodies.end()) ignored = it->second.id;
+        else if (const auto c = d.characters.find(*ignore); c != d.characters.end()) ignored = c->second.controller->GetInnerBodyID();
+    }
+    const JPH::IgnoreSingleBodyFilter filter(ignored);
+    d.system.GetNarrowPhaseQuery().CollideShape(s, JPH::Vec3::sReplicate(1.0f), JPH::RMat44::sTranslation(to_j(at)), JPH::CollideShapeSettings{},
+                                                JPH::RVec3::sZero(), hits, {}, {}, filter);
+    for (const auto& h : hits.mHits)
+        if (const auto e = d.entity_for(h.mBodyID2)) out.push_back(*e);
+    std::ranges::sort(out, [](const Guid& a, const Guid& b) { return a.to_string() < b.to_string(); });
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
 }
 
 void PhysicsSystem::add_impulse(const Guid& entity, math::Vec3 impulse) {

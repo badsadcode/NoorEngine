@@ -4,6 +4,18 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — 2D foundations, part 2b: your own controllers
+**Added**
+- `character` `"motion": "script"`: the script owns the velocity (no gravity added), it slides, and its velocity is
+  what's left after sliding (Godot's CharacterBody + `move_and_slide`). `velocity` / `set_velocity` work on characters
+  (walking ones: for one step).
+- `is_on_floor`, `is_on_wall`, `is_on_ceiling`, `floor_normal` (Lua; C# `IsOnFloor`...); `PhysicsSystem::character_contacts`.
+- `noor.shape_cast`, `noor.overlap` (C# `Noor.ShapeCast`, `Noor.Overlap`); `PhysicsSystem::shape_cast`, `overlap`.
+- rt API v11. [docs/scripting/COMING_FROM_GODOT.md](docs/scripting/COMING_FROM_GODOT.md).
+
+**Tests:** a script-owned character (no gravity, stopped by a roof and a floor, velocity slid away); a double jump from
+a script; shape casts and overlaps; a Godot-style platformer written in Lua.
+
 ### 2026-11-20 — 2D foundations, part 2: a platformer character
 **Added**
 - `character`: `"plane": "xy"`, `acceleration`, `deceleration`, `air_acceleration`, `gravity_scale`, `coyote_time`,

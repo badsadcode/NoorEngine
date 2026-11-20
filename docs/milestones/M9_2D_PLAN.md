@@ -26,11 +26,12 @@ the bit; every existing golden and yardstick unchanged.
 |---|---|---|
 | 1 ✅ | **2D physics on Jolt**: a rigidbody can be locked to a plane (`"plane": "xy"`: moving in X and Y, turning about Z) or have any axis locked (`lock_position`, `lock_rotation`, for 3D too); 2D collider shapes: `rectangle`, `circle`, `polygon` (convex, from points), each a slab of a given depth | Bodies locked to the plane stay in it to the bit over a long tumbling pile, turning only about Z (unit); a circle rolls down a slope as a disc should (its speed against the formula); polygons land and rest; deterministic run to run; a golden of a 2D pile; existing physics tests unchanged |
 | 2 ✅ | **A 2D character controller**: walking, jumping with variable height, slopes, one-way platforms, ground snapping; coyote time and jump buffering as options; `on_ground` events for scripts | A scripted run over a test course (slope, gap, one-way platform) lands where the maths says; a built game identical |
+| 2b ✅ | **Your own controllers** (added 2026-11-20, Tom: "will the engine let me make my own controllers?"): a character whose velocity the script owns (`"motion": "script"`, Godot's CharacterBody), floor, wall and ceiling contacts, `set_velocity` on walking characters for one step, shape casts and overlaps, for Lua and C#; [Coming from Godot](../scripting/COMING_FROM_GODOT.md) | A script-owned character hangs where it's put, stops under a roof and on a floor with its velocity slid away; a double jump from a script; shape casts and overlaps by hand; a Godot-style platformer written in Lua lands, jumps and stops at a wall |
 | 3 | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
 | 4 | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
 | 5 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
 | 6 | **Cameras for 2D**: pixel-perfect (whole pixels at a chosen pixels per unit, integer scaling for retro resolutions), following with a dead zone and bounds, parallax layers | A moving pixel-perfect camera never draws a sprite between pixels (readback); parallax layers move by their factor (golden at two moments) |
-| 7 | **Samples and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks; the review | The gate |
+| 7 | **Samples, templates and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks. The first **project templates** (spec 24.1): Empty 2D, 2D Platformer, Top-Down 2D, each a small working start made only of public features; the review | The gate |
 
 ## Part 1 result (2026-11-20)
 Done. `"plane": "xy"` on a rigidbody (Jolt's `EAllowedDOFs::Plane2D`), `lock_position` / `lock_rotation` for any axes,
@@ -63,6 +64,22 @@ play; ground events for scripts (`is_grounded()` is there) wait for a game that 
 them) are a later part. **Found:** pixel-art sprites sample with `repeat`, so a frame's edge picks up the opposite edge
 or the next frame (a thin line under the hero's feet in a jump frame). Part 3 fixes it (frames sampled inside their
 own rectangle).
+
+## Part 2b result (2026-11-20)
+Done, after Tom asked whether he could write his own controllers. The answer was "mostly": scripts could only ask a
+character to walk or jump, so a double jump, a wall jump, a dash or a fully custom controller weren't possible, and no
+script could sweep a shape through the world. Now: `"motion": "script"` gives a character's velocity to its script
+(no gravity added; each step it slides and its velocity is what's left: Godot's `move_and_slide`); `is_on_floor`,
+`is_on_wall`, `is_on_ceiling`, `floor_normal`; `set_velocity` on a walking character replaces its velocity for one step;
+`noor.shape_cast` and `noor.overlap` (Lua; C# `Noor.ShapeCast`, `Noor.Overlap`, `IsOnFloor`..., rt API v11). And a
+guide for Godot users ([COMING_FROM_GODOT.md](../scripting/COMING_FROM_GODOT.md)) mapping what Tom's old game used to
+NoorEngine, with what's missing and when it's planned.
+
+Proved: a script-owned character hangs in the air untouched, rises to a roof and stops under it (`is_on_ceiling`, upward
+speed gone), drops to the floor and stops (`is_on_floor`, normal straight up); a double jump by `set_velocity` takes a
+1.50 m jump to 2.61 m; a circle swept at a box hits at 4.0 m with the face's normal, overlaps find exactly what's
+there; and a Godot-style platformer written in Lua lands, jumps 1.78 m, sees the wall ahead with a shape cast, and stops
+against it with its run speed slid away.
 
 ## Highest risks (settle early)
 

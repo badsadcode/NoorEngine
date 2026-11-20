@@ -60,6 +60,7 @@ line); the game keeps running.
 | `Noor.Time` | Seconds since play started |
 | `Noor.Find(name)` | `Entity?` |
 | `Noor.Raycast(origin, direction, maxDistance = 1000, ignore = null)` | `RaycastHit?` (`Entity`, `Point`, `Normal`, `Distance`) |
+| `Noor.ShapeCast(shapeJson, from, to, ignore = null)`, `Noor.Overlap(shapeJson, at, ignore = null)` | A swept shape's first hit; the entities a shape overlaps (rt API v11). Shapes as collider JSON, e.g. `{"shape":"circle","radius":0.3}` |
 | `Water.Height(x, z)` | `float?`: the water surface's height (world y) at world (x, z) now, waves included; null where there's no water (8D) |
 | `Water.Flow(x, z)` | `Vector3?`: the water's own velocity there (m/s: a river's current), null where there's no water (8D, rt API v9) |
 | `Water.Normal(x, z)` | `Vector3?`: its normal there |
@@ -84,7 +85,8 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `Translate(v)`, `TranslateLocal(v)`, `Rotate(axis, degrees)` | Moving |
 | `WorldPosition`, `Forward`, `Right`, `Up` | World space |
 | `Get(component)` → `JsonNode?`, `Set(component, JsonNode?)` | Component data (copies) |
-| `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies |
+| `Velocity` (get/set), `AddImpulse(v)`, `AddForce(v)` | Physics bodies; on a character, its velocity (with `"motion": "script"` the script owns it) |
+| `IsOnFloor`, `IsOnWall`, `IsOnCeiling`, `FloorNormal` | Character: what it touched in its last step |
 | `CharacterMove(v)`, `CharacterJump(speed)`, `IsGrounded` | Character controller |
 | `CharacterJumpRelease()`, `CharacterDrop()` | The jump button let go (a shorter jump); fall through a one-way platform (rt API v10) |
 | `WaterState`, `FeetDepth`, `HeadDepth` | Character controller in water (8D, rt API v8): "dry", "wading", "swimming", "under" (null: not a character); the water's depth at its feet and head |

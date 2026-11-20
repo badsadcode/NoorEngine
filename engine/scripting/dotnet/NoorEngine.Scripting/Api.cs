@@ -135,6 +135,19 @@ public sealed unsafe class Entity : IEquatable<Entity>
     /// <summary>Character controller: fall through the one-way platform it stands on.</summary>
     public void CharacterDrop() => Engine.A.Push(Id, 4, default);
     public bool IsGrounded => Engine.A.IsGrounded(Id) != 0;
+    /// <summary>Character (2D part 2b, Godot-style): what it touched in its last step.</summary>
+    public unsafe bool IsOnFloor => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 1) != 0;
+    public unsafe bool IsOnWall => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 2) != 0;
+    public unsafe bool IsOnCeiling => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 4) != 0;
+    public unsafe Vector3? FloorNormal
+    {
+        get
+        {
+            RtVec3 n;
+            var c = Engine.A.CharacterContacts(Id, &n);
+            return c > 0 && (c & 1) != 0 ? n.ToVector() : null;
+        }
+    }
     /// <summary>Character controller in the water: "dry", "wading", "swimming" or "under" (null: not a character).</summary>
     public unsafe string? WaterState => Engine.A.CharacterWater(Id, null, null) switch
     {
@@ -254,6 +267,37 @@ public static unsafe class Noor
         var ignored = ignore?.Id ?? default;
         Engine.A.Raycast(new RtVec3(origin), new RtVec3(direction), maxDistance, ignore is not null ? &ignored : null, &hit);
         return hit.Hit != 0 ? new RaycastHit(new Entity(hit.Entity), hit.Point.ToVector(), hit.Normal.ToVector(), hit.Distance) : null;
+    }
+
+    /// <summary>A shape (collider JSON, e.g. {"shape":"circle","radius":0.3}) swept from `from` to `to`: the first hit, or null.</summary>
+    public static RaycastHit? ShapeCast(string shapeJson, Vector3 from, Vector3 to, Entity? ignore = null)
+    {
+        RtHit hit;
+        var ignored = ignore?.Id ?? default;
+        fixed (byte* s = Engine.Utf8(shapeJson))
+            Engine.A.ShapeCast(s, new RtVec3(from), new RtVec3(to), ignore is not null ? &ignored : null, &hit);
+        return hit.Hit != 0 ? new RaycastHit(new Entity(hit.Entity), hit.Point.ToVector(), hit.Normal.ToVector(), hit.Distance) : null;
+    }
+
+    /// <summary>Every entity whose body overlaps the shape placed at `at`.</summary>
+    public static Entity[] Overlap(string shapeJson, Vector3 at, Entity? ignore = null)
+    {
+        var ignored = ignore?.Id ?? default;
+        var found = new RtEntity[64];
+        int count;
+        fixed (byte* s = Engine.Utf8(shapeJson))
+        fixed (RtEntity* o = found)
+            count = Engine.A.Overlap(s, new RtVec3(at), ignore is not null ? &ignored : null, o, found.Length);
+        if (count > found.Length)
+        {
+            found = new RtEntity[count];
+            fixed (byte* s = Engine.Utf8(shapeJson))
+            fixed (RtEntity* o = found)
+                count = Engine.A.Overlap(s, new RtVec3(at), ignore is not null ? &ignored : null, o, found.Length);
+        }
+        var result = new Entity[Math.Min(count, found.Length)];
+        for (var i = 0; i < result.Length; i++) result[i] = new Entity(found[i]);
+        return result;
     }
 }
 

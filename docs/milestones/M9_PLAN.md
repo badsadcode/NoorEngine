@@ -272,6 +272,7 @@ on that list need that the engine doesn't have yet?
 |---|---|
 | **Spawning things at runtime** (a bullet, an enemy, a pickup: prefabs from scripts), timers, scripts using other scripts (`require`), moving between levels | Every one of them (M4's review left these as exceptions "until the first game needs them") |
 | **Navigation and AI**: finding a path round walls, agents that follow it | FPS enemies, RPGs, dungeon crawlers, third-person action, isometric action RPGs, survival (animals), driving (traffic) |
+| **Animating anything** (Godot's AnimationPlayer: a door opening, a colour fading, a function called on a timeline), **tweens**, **timers**, **signals** between your own scripts, **groups** (tags) from scripts | Every genre; Tom's old Godot game used Timer 169 times, AnimationPlayer 76, signals 194 ([Coming from Godot](../scripting/COMING_FROM_GODOT.md)) |
 | **Game UI**: menus, buttons, inventory grids, dialogue boxes (today: text and rectangles drawn each frame) | Every game's main menu; RPGs, crawlers, survival and isometric RPGs above all |
 | **Saving and loading a game** | RPGs, adventures, crawlers, survival, open worlds |
 | **2D**: plane physics, sprite layers, tilemaps, a 2D editor view | 2D platformers, Diablo-1-style isometric games, The Uncounted |
@@ -286,8 +287,8 @@ So the order:
    first real NoorEngine game (The Uncounted, Chapter Two: sprites in zones). Note that **3D isometric games like
    Torchlight already work** with part 1's camera tilted (3D models, a fixed angled view); this group is for the 2D kind
    (Diablo 1 and 2: sprites, tiles, sorting) and for platformers.
-2. **Gameplay foundations** (proposed, a plan of its own): spawning and timers, game UI, saving and loading, level
-   changes, navigation and AI agents. **This is a change to the roadmap**: the spec has no milestone for these, and
+2. **Gameplay foundations** (proposed, a plan of its own): spawning, timers, tweens, signals and groups, animating any
+   property, game UI, saving and loading, level changes, navigation and AI agents. **This is a change to the roadmap**: the spec has no milestone for these, and
    Milestone 9 wouldn't add them. But they're what turns a scene into a game in nearly every genre Tom listed, and a big
    generated world with nothing that can walk round it, be saved, or show a menu isn't a game either.
 3. **Back to 9A, big worlds** (parts 2–8), then **9B–9E** and the showcase, as planned. Vehicles fit beside 9C (roads

@@ -65,6 +65,8 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.input.released(action)` | Action went up this frame |
 | `noor.input.axis(name)` | `-1..1` for key axes; mouse movement in pixels for `look_x` / `look_y` |
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
+| `noor.shape_cast(shape, from, to [, ignore])` | A shape swept from `from` to `to`: the first hit, as raycast (`distance` along the way). `shape` is a table like a collider: `{shape = "circle", radius = 0.3}`, box, sphere, capsule, rectangle |
+| `noor.overlap(shape, at [, ignore])` | A list of the entities whose bodies overlap `shape` placed at `at` |
 | `noor.water_height(x, z)` | The water surface's height (world y) at world (x, z) now, waves included; `nil` where there's no water (8D) |
 | `noor.water_flow(x, z)` | The water's own velocity there (m/s: a river's current; still water: zero), `nil` where there's no water (8D) |
 | `noor.water_normal(x, z)` | The water surface's normal there (a vector), or `nil` |
@@ -106,7 +108,8 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:get(component)` | The component's data as a table (a copy), or `nil` |
 | `e:set(component, table)` | Replaces the component's data (`nil` removes it) |
 | `e:destroy()` | Removes the entity and its children at the end of the frame |
-| `e:velocity()`, `e:set_velocity(v)` | Linear velocity of its physics body (m/s) |
+| `e:velocity()`, `e:set_velocity(v)` | Linear velocity of its physics body (m/s). On a character: with `"motion": "script"` it's the character's own velocity (see below); otherwise `set_velocity` replaces its velocity for the next step (a double jump, a dash, a knockback) |
+| `e:is_on_floor()`, `e:is_on_wall()`, `e:is_on_ceiling()`, `e:floor_normal()` | Character: what it touched in its last step (Godot's names) |
 | `e:add_impulse(v)` | Instant push (kg·m/s), e.g. a jump or a hit |
 | `e:add_force(v)` | Push during the next physics step (newtons) |
 | `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |
@@ -177,6 +180,21 @@ never leaves its plane. Its feel is set on the component (all off by default, so
   plays the named sprite animations. Without keys pressed, a script can steer the same character with
   `character_move` / `character_jump`, and the facing and animations still follow.
 - **One-way platforms** are level: they're stood on from above only.
+
+**Your own controller, Godot-style** (2D part 2b): give the character `"motion": "script"` and your script owns its
+velocity, like a CharacterBody in Godot: NoorEngine adds no gravity and no jumps. Set the velocity every fixed step; the
+character moves, slides along whatever it touches, and `e:velocity()` next step is what's left after sliding (landing
+stops a fall, a wall stops a run). [Coming from Godot](COMING_FROM_GODOT.md) maps the rest.
+
+```lua
+function Player:on_fixed_update(dt)
+    local e = self.entity
+    local v = e:velocity()                          -- velocity after last step's slide
+    v = vector.create(noor.input.axis("move_x") * 6, v.y - 29.4 * dt, 0)
+    if e:is_on_floor() and noor.input.pressed("jump") then v = vector.create(v.x, 12, 0) end
+    e:set_velocity(v)                               -- like move_and_slide: it moves at the next physics step
+end
+```
 
 A `character` is a capsule controller with its feet at the entity's origin: it slides along
 walls, walks up steps and slopes, stays on the ground going down, and jumps. While playing, the

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 10u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4) */
+#define NOOR_RT_API_VERSION 11u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -127,6 +127,15 @@ typedef struct noor_rt_api {
     /* v9 (8D part 6): the water's own velocity at world (x, z) now (m/s: a river's current; still water 0). 0 where
      * there's no water. */
     int32_t (*water_flow)(float x, float z, noor_rt_vec3* flow);
+
+    /* v11 (2D part 2b): a shape (collider JSON: box, sphere, capsule, rectangle, circle) swept from `from` to `to`: the
+     * first hit, like raycast. */
+    void (*shape_cast)(const char* shape_json, noor_rt_vec3 from, noor_rt_vec3 to, const noor_rt_entity* ignore, noor_rt_hit* out);
+    /* The entities overlapping the shape placed at `at`: up to `max` written to `out`; returns how many there are. */
+    int32_t (*overlap)(const char* shape_json, noor_rt_vec3 at, const noor_rt_entity* ignore, noor_rt_entity* out, int32_t max);
+    /* What a character touched in its last step: bit 0 floor, 1 wall, 2 ceiling; the floor's normal. -1: not a
+     * character. (Its velocity is the VELOCITY channel, as for bodies.) */
+    int32_t (*character_contacts)(noor_rt_entity e, noor_rt_vec3* floor_normal);
 } noor_rt_api;
 
 typedef struct noor_rt_host {
