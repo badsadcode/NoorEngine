@@ -4,6 +4,15 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — Milestone 9 plan
+**Docs**
+- [`docs/milestones/M9_PLAN.md`](docs/milestones/M9_PLAN.md), from Tom and Noor's answers to the proposal. Principle 0:
+  NoorEngine stays a general-purpose engine, and everything in Milestone 9 is optional. Groups 9A big worlds, 9B land
+  and water, 9C roads, 9D settlements (starting with an audit of NoorArchitect and NoorRoads), 9E vegetation ecology
+  and simulation, then the NoorWorldShowcase; GIS deferred, with the architecture kept ready for it. Rules for
+  provenance and manual overrides, headless automation, the generator file contract, and a regression set of
+  different kinds of projects (a cube, a 2D Pong, NoorFPS-lite, Hillside, a streamed world). 9A in eight parts.
+
 ### 2026-11-20 — Milestone 8D, part 8: the sample and the 8D review (Milestone 8 done)
 **Added**
 - `samples/Hillside/Scenes/Hillside_Water.noorscene` (`tools/samples/add_hillside_water.py`): the lake in the rain, a

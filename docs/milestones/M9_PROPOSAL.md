@@ -1,6 +1,6 @@
 # Milestone 9: a proposal (not a plan yet)
 
-**Status:** waiting for Tom's answers · **Date:** 2026-11-20 · **From:** Sage, after the
+**Status:** answered by Tom and Noor (2026-11-20); the plan is [M9_PLAN.md](M9_PLAN.md) · **Date:** 2026-11-20 · **From:** Sage, after the
 [Milestone 8D review](M8D_REVIEW.md) closed Milestone 8.
 
 ## What the roadmap says
