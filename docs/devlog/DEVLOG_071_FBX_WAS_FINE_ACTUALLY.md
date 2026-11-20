@@ -19,6 +19,15 @@ by Autodesk's FBX SDK); 18 of Synty's animation files from Maya; and a dozen big
 the largest 1.2 million triangles. Not one failed to import. The creatures agree with Blender to within a tenth of a
 millimetre, and our own characters to within a thousandth, once Blender is asked to export without its shortcuts.
 
+![Under blue water above a sandy floor: a grey hammerhead shark in the middle, two striped fish above it, a round blue-green fish on the left and a sea turtle on the right, each casting a shadow on the sand](img/devlog071_creatures.jpg)
+
+*Store-bought creatures from Tom's deep-sea project, imported from their FBX files and each swimming on its own
+separate clip file. The creatures aren't in the repository (their licence covers using them, not handing them out).*
+
+![A close-up of the hammerhead: the wrinkles along its body, the plates behind its head, its teeth and its eye on the end of the hammer, with a striped fish passing behind](img/devlog071_hammerhead.jpg)
+
+*Closer: the hammerhead's skin and normal maps, found next to the FBX where the file says they are.*
+
 **Clips in files of their own.** FBX packs ship a character as a mesh plus one file per animation. NoorEngine now plays
 those: give the character's animator the clip file, and if the skeleton is the same, the animation is copied over bone
 by bone, on any rig. All 79 of the creatures' clip files play on their creatures.
