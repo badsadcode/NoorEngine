@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, and **part 3, blending and the controller**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, and **part 4, root motion and characters**.
 
 ## Skinned meshes (part 1)
 
@@ -137,9 +137,36 @@ pose, bit for bit, in the project and in built games, from Lua and from C# (test
 **Measured** (RTX 3080): 100 characters on Ward's controller (a three-clip blend space, half of them waving on a masked
 layer, all leaning on an additive one) cost about 1.0 ms of game update a frame; GPU unchanged.
 
-## Not yet
+## Root motion, events and characters (part 4)
 
-- **Animation events** (named moments in a clip, such as footsteps): with root motion, part 4.
+**Root motion** lets a clip move the character instead of only its hips: `"root_motion": true` on the animator. The
+root bone (the topmost bone a clip moves: Ward's hips, a Mixamo or Rigify hips bone, a "root" bone) is held in place
+horizontally, and how far the clip would have moved it each frame moves the character:
+
+- inside a **character controller** (on the model or any entity above it: Create ▸ Player (third person) makes one),
+  as the controller's velocity, so walls stop the walk and slopes and steps work;
+- otherwise the model itself moves.
+
+A looping walk covers its clip's distance exactly, every cycle (tested: within a centimetre after several cycles, in
+any direction the character faces, and through a character controller until a wall). Up and down stays in the pose
+(the bob of a walk), and turning is the script's. It works with plain clips, cross-fades (both clips move it, by the
+fade), and controllers (the base layer; blend spaces mix their clips' movement by weight).
+
+**Animation events** name moments: `"events": [{"clip": "Walk", "at": 0.25, "name": "left"}]` on the animator (`at`:
+how far through the clip, 0 to 1), or `"events": [{"at": 0.25, "name": "left"}]` on a controller state. Scripts hear
+`on_animation_event(name)` (C#: `OnAnimationEvent`) each time one is passed: footsteps, a sword's swing landing.
+
+**Bones for scripts:** `entity:bone("DEF-hand.R")` (C#: `Entity.Bone`) finds a bone anywhere below the model. Bones are
+entities, so a prop parented to one follows it (a sword in a hand: in the `Root_Motion` golden), and its world position
+is where the hand is.
+
+**Create ▸ Player (third person)** makes a playable character: the player (a character controller and
+`Scripts/ThirdPersonPlayer.luau`), a camera rig that orbits with the mouse, and Ward on his controller, turning to face
+where he walks and blending idle, walk and run by speed (Shift runs). Ward's model and controller are copied into
+`Assets/Characters/Ward/` the first time. (The template moves him by script, which feels responsive; set
+`"root_motion": true` and drive him by his clips instead if you prefer.)
+
+## Not yet
 - **Root motion**, sockets and bone transforms for scripts: part 4. Clips that move the hips move them in place.
 - **Previewing clips in the editor** (a timeline to scrub): part 6, the Animation panel. Clips play when you press
   Play (and in games); in edit mode characters stand in their rest pose.

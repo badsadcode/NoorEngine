@@ -47,6 +47,7 @@ store on `self` belong to that entity. Engine-set fields: `self.entity`, `self.p
 | `on_collision_enter(other)`, `on_collision_exit(other)` | Physics bodies start / stop touching (before `on_late_update`) |
 | `on_trigger_enter(other)`, `on_trigger_exit(other)` | Something enters / leaves a trigger collider |
 | `on_animation_end(name)` | A non-looping animation has finished: a sprite's or a model clip this entity's script played, or a controller state (any layer) (before `on_late_update`) |
+| `on_animation_event(name)` | A named moment of the playing animation was passed (footsteps...: the animator's `"events"`, or a controller state's) |
 
 Errors stop that script for that entity (the Console shows file, line and stack); the game keeps
 running. A hook that runs longer than 0.25 s is stopped (endless loops).
@@ -89,6 +90,7 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 |---|---|
 | `e:name()`, `e:id()`, `e:exists()`, `e:parent()` | Identity |
 | `e:child(name)` | The first direct child with that name, or `nil` |
+| `e:bone(name)` | The first entity of that name anywhere below (a model's bone: read where a hand is, or parent a prop to it), or `nil` |
 | `e:position()`, `e:set_position(v)` | Local position |
 | `e:translate(v)` | Move in the parent's axes |
 | `e:translate_local(v)` | Move along the entity's own axes |

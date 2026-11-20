@@ -115,6 +115,16 @@ Result<AnimController> parse_anim_controller(const Json& json, std::string_view 
                 }
             }
             s.loop = sj.value("loop", true);
+            if (sj.contains("events")) {
+                if (!sj["events"].is_array()) return bad(swhere + ": \"events\" should be a list");
+                for (const auto& ev : sj["events"]) {
+                    const std::string name = ev.is_object() ? text(ev, "name") : std::string();
+                    if (name.empty()) return bad(swhere + ": an event without a \"name\"");
+                    const float at = ev.value("at", 0.0f);
+                    if (at < 0.0f || at > 1.0f) return bad(std::format("{}: event '{}' is at {} (0 to 1: how far through the state)", swhere, name, at));
+                    s.events.push_back({at, name});
+                }
+            }
             auto speed = anim_value(sj.value("speed", Json()), c, 1.0f, swhere + ", speed");
             if (!speed) return bad(speed.error().message);
             s.speed = *speed;
@@ -234,7 +244,29 @@ double AnimControllerPlayer::length(int layer, int state, const AnimParameters& 
     return len > 1e-6 ? len : 1.0;  // empty states (and single-key clips) count as a second long
 }
 
-void AnimControllerPlayer::step(double dt, const AnimParameters& params, std::vector<std::string>* consumed, std::vector<Ended>* ended) {
+math::Vec3 AnimControllerPlayer::root_delta_of(int layer, int state, double p0, double p1, const AnimParameters& params) const {
+    const AnimState& s = controller_->layers[static_cast<std::size_t>(layer)].states[static_cast<std::size_t>(state)];
+    const Bound& b = bound_[static_cast<std::size_t>(layer)][static_cast<std::size_t>(state)];
+    const NodePose& rest = rest_[static_cast<std::size_t>(root_)];
+    if (s.samples.empty()) {
+        if (b.clips.empty() || !b.clips[0]) return {0, 0, 0};
+        const double d = b.clips[0]->duration;
+        return root_delta(*b.clips[0], root_, rest, p0 * d, p1 * d, s.loop);
+    }
+    const auto w = sample_weights(s, params);
+    math::Vec3 sum{0, 0, 0};
+    for (std::size_t k = 0; k < w.size(); ++k) {
+        if (w[k] <= 0.0f || !b.clips[k]) continue;
+        const double d = b.clips[k]->duration;
+        const math::Vec3 m = root_delta(*b.clips[k], root_, rest, p0 * d, p1 * d, s.loop);
+        sum = {sum.x + m.x * w[k], sum.y + m.y * w[k], sum.z + m.z * w[k]};
+    }
+    return sum;
+}
+
+void AnimControllerPlayer::step(double dt, const AnimParameters& params, std::vector<std::string>* consumed, std::vector<Ended>* ended,
+                                std::vector<Ended>* events) {
+    moved_ = {0, 0, 0};
     for (std::size_t l = 0; l < layers_.size(); ++l) {
         const AnimLayer& layer = controller_->layers[l];
         Running& r = layers_[l];
@@ -270,16 +302,26 @@ void AnimControllerPlayer::step(double dt, const AnimParameters& params, std::ve
             }
         }
         // 2. Time moves on.
+        const bool root = l == 0 && root_ >= 0;
         auto advance = [&](int state, double& phase, bool report) {
             const AnimState& s = layer.states[static_cast<std::size_t>(state)];
             const double before = phase;
             phase += dt * value(s.speed, params) / length(static_cast<int>(l), state, params);
-            if (report && ended && !s.loop && before < 1.0 - 1e-9 && phase >= 1.0 - 1e-9) ended->push_back({static_cast<int>(l), s.name});
+            if (report && events)
+                for (const auto& ev : s.events)
+                    for (int n = crossings(before, phase, ev.at, 1.0, s.loop); n > 0; --n) events->push_back({static_cast<int>(l), s.name, ev.name});
+            if (report && ended && !s.loop && before < 1.0 - 1e-9 && phase >= 1.0 - 1e-9) ended->push_back({static_cast<int>(l), s.name, {}});
+            return root ? root_delta_of(static_cast<int>(l), state, before, phase, params) : math::Vec3{0, 0, 0};
         };
-        advance(r.state, r.phase, true);
+        const math::Vec3 now = advance(r.state, r.phase, true);
+        moved_ = root ? now : moved_;
         if (r.from >= 0) {
-            advance(r.from, r.from_phase, false);
+            const math::Vec3 old = advance(r.from, r.from_phase, false);
             r.faded += dt;
+            if (root) {  // both moving, weighted by how far the fade is
+                const float w = static_cast<float>(std::clamp(r.faded / r.fade, 0.0, 1.0));
+                moved_ = {old.x + (now.x - old.x) * w, old.y + (now.y - old.y) * w, old.z + (now.z - old.z) * w};
+            }
             if (r.faded >= r.fade - 1e-9) r.from = -1;
         }
     }
@@ -360,6 +402,11 @@ void AnimControllerPlayer::pose(const AnimParameters& params, std::span<NodePose
         for (float& m : weights) m *= w;
         if (layer.mode == AnimLayer::Mode::Additive) apply_additive(out, a_, weights);
         else blend(std::span<const NodePose>(out.data(), out.size()), a_, weights, out);
+    }
+    // Root motion: the root stays where it rests horizontally; its movement went to the character (root_motion()).
+    if (root_ >= 0 && static_cast<std::size_t>(root_) < out.size()) {
+        out[static_cast<std::size_t>(root_)].translation.x = rest_[static_cast<std::size_t>(root_)].translation.x;
+        out[static_cast<std::size_t>(root_)].translation.z = rest_[static_cast<std::size_t>(root_)].translation.z;
     }
 }
 

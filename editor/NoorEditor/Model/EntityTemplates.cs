@@ -168,6 +168,94 @@ public static class EntityTemplates
         ["audio_listener"] = new JsonObject(),  // the player's ears
     };
 
+    // ---- Create ▸ Player (third person) (Milestone 8C, part 4): Ward, our generated test character, on his controller.
+    public const string ThirdPersonTemplateName = "Player (_third person)";
+    public const string ThirdPersonScriptPath = "Scripts/ThirdPersonPlayer.luau";
+    public const string WardModelPath = "Assets/Characters/Ward/Ward.glb";
+    public const string WardControllerPath = "Assets/Characters/Ward/Ward.nooranim";
+
+    public static JsonObject ThirdPersonComponents() => new()
+    {
+        ["character"] = new JsonObject { ["radius"] = 0.3, ["height"] = 1.8, ["step_height"] = 0.4, ["max_slope"] = 50 },
+        ["script"] = new JsonObject
+        {
+            ["file"] = ThirdPersonScriptPath,
+            ["params"] = new JsonObject { ["walk_speed"] = 1.6, ["run_speed"] = 4, ["jump_speed"] = 5, ["look_sensitivity"] = 0.12 },
+        },
+    };
+    public static JsonObject ThirdPersonCamera() => new()
+    {
+        ["camera"] = new JsonObject { ["fov"] = 60, ["near"] = 0.05, ["ev100"] = 14 },
+        ["audio_listener"] = new JsonObject(),
+    };
+    public static JsonObject WardAnimator(string controller) => new()
+    {
+        ["controller"] = controller,
+        ["parameters"] = new JsonObject { ["speed"] = 0 },
+    };
+
+    public const string ThirdPersonScript = """
+        -- ThirdPersonPlayer: walking and running with a camera behind (a NoorEngine template).
+        -- The model (a child with an animator) turns to face where it goes; its controller's "speed" parameter
+        -- blends idle, walk and run. Click into the game view to orbit the camera with the mouse; Esc gives it back.
+        -- Params (Inspector): walk_speed, run_speed (Shift), jump_speed, look_sensitivity.
+        -- API: docs/scripting/LUA_API.md; animation: docs/animation/ANIMATION.md
+
+        local Player = {}
+
+        function Player:on_start()
+            self.rig = self.entity:child("CameraRig")
+            self.model = self.entity:child("Ward")
+            self.yaw, self.pitch, self.facing = 0, -10, 0
+        end
+
+        function Player:on_update(dt)
+            local p = self.params
+
+            -- The camera orbits while the mouse is captured.
+            if noor.input.pressed("fire") and not noor.input.mouse_captured() then
+                noor.input.capture_mouse(true)
+            end
+            if noor.input.mouse_captured() then
+                local look = p.look_sensitivity or 0.12
+                self.yaw -= noor.input.axis("look_x") * look
+                self.pitch = math.clamp(self.pitch - noor.input.axis("look_y") * look, -60, 30)
+            else
+                noor.ui.text("Click to look around · Esc gives the mouse back", 0, -40, { size = 20, anchor = "bottom", color = "#FFFFFFB0" })
+            end
+            if self.rig then
+                self.rig:set_euler(vector.create(self.pitch, self.yaw, 0))
+            end
+
+            -- Walking relative to where the camera looks (level), Shift to run.
+            local yaw = math.rad(self.yaw)
+            local forward = vector.create(-math.sin(yaw), 0, -math.cos(yaw))
+            local right = vector.create(math.cos(yaw), 0, -math.sin(yaw))
+            local move = forward * noor.input.axis("move_y") + right * noor.input.axis("move_x")
+            if vector.magnitude(move) > 1 then
+                move = vector.normalize(move)
+            end
+            local speed = if noor.input.down("sprint") then (p.run_speed or 4) else (p.walk_speed or 1.6)
+            self.entity:character_move(move * speed)
+            if noor.input.pressed("jump") then
+                self.entity:character_jump(p.jump_speed or 5)
+            end
+
+            -- The model faces where it's going (it faces +Z), and its walk keeps pace.
+            local moving = vector.magnitude(move)
+            if self.model then
+                if moving > 0.01 then
+                    self.facing = math.deg(math.atan2(move.x, move.z))
+                end
+                self.model:set_euler(vector.create(0, self.facing, 0))
+                self.model:set_animation_parameter("speed", moving * speed)
+            end
+        end
+
+        return Player
+
+        """;
+
     /// <summary>A sound emitter for an audio asset (Content Browser ▸ Add to scene).</summary>
     public static JsonObject AudioSource(string clip) => new()
     {

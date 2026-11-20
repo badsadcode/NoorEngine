@@ -19,7 +19,10 @@ Writes into tests/data/animation/Ward/ (and copies into tests/data/render_scenes
                     Run    a 0.6 s run cycle: bigger swings, knees high, leaning forward;
                     Raise  a 1 s wave hello: the right arm up, its forearm sweeping (for a masked layer);
                     Lean   spine 20 and chest 10 degrees forward over 1 s (for an additive layer: the change from its
-                           first key is what gets added).
+                           first key is what gets added);
+                  and for root motion (part 4):
+                    WalkForward  Walk's legs and arms, with the hips moving 1.4 m forward (+Z) each 1 s cycle: played
+                           with root motion it walks the character 1.4 m a second; without, it pops back each loop.
 
 Every body part is a tube along its bone; vertices near a joint blend between the two bones that meet there, so elbows
 and knees bend smoothly. Colours: a blue-grey tunic, light grey limbs, a warm head (vertex colours).
@@ -176,6 +179,15 @@ def clips():
             ('DEF-upper_arm.L', 'rotation', 'LINEAR', walk_t, arm_l),
             ('DEF-upper_arm.R', 'rotation', 'LINEAR', walk_t, arm_r),
             ('DEF-hips', 'translation', 'LINEAR', walk_t, [[0, y, 0] for y in (0.95, 0.93, 0.95, 0.93, 0.95)]),
+        ]),
+        ('WalkForward', [
+            ('DEF-thigh.L', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), -a) for a in swing]),
+            ('DEF-thigh.R', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), a) for a in swing]),
+            ('DEF-shin.L', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), b) for b in (0, 10, 40, 10, 0)]),
+            ('DEF-shin.R', 'rotation', 'LINEAR', walk_t, [quat((1, 0, 0), b) for b in (40, 10, 0, 10, 40)]),
+            ('DEF-upper_arm.L', 'rotation', 'LINEAR', walk_t, arm_l),
+            ('DEF-upper_arm.R', 'rotation', 'LINEAR', walk_t, arm_r),
+            ('DEF-hips', 'translation', 'LINEAR', walk_t, [[0, y, z] for y, z in zip((0.95, 0.93, 0.95, 0.93, 0.95), (0, 0.35, 0.7, 1.05, 1.4))]),
         ]),
         ('Idle', [
             ('DEF-chest', 'rotation', 'LINEAR', [0, 1, 2], [quat((1, 0, 0), b) for b in (0, -3, 0)]),

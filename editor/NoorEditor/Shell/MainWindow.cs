@@ -417,6 +417,9 @@ public sealed class MainWindow : Window
         var player = new MenuItem { Header = EntityTemplates.PlayerTemplateName };
         player.Click += async (_, _) => { if (await ReadyToEdit()) CreatePlayer(new Vec3(0, 0.05, 0)); };
         menu.Items.Add(player);
+        var thirdPerson = new MenuItem { Header = EntityTemplates.ThirdPersonTemplateName };
+        thirdPerson.Click += async (_, _) => { if (await ReadyToEdit()) CreateThirdPersonPlayer(new Vec3(0, 0.05, 0)); };
+        menu.Items.Add(thirdPerson);
         return menu;
     }
 
@@ -440,6 +443,65 @@ public sealed class MainWindow : Window
         {
             Doc.Create("Body", EntityTemplates.PlayerBody(), new Vec3(0, 0.9, 0), id);
             Doc.Create("Camera", EntityTemplates.PlayerCamera(), new Vec3(0, 1.6, 0), id);
+        }
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "end" });
+        if (id != null) Doc.Select(id);
+        return id;
+    }
+
+    /// <summary>
+    /// Create ▸ Player (third person) (8C part 4): the player entity (character controller and
+    /// Scripts/ThirdPersonPlayer.luau), a camera rig behind it, and Ward on his controller as its model. Ward's
+    /// model and controller go into Assets/Characters/Ward/ the first time (from the editor; ours, CC0), the script
+    /// into Scripts/. One undo step.
+    /// </summary>
+    public string? CreateThirdPersonPlayer(Vec3 feet)
+    {
+        if (!Doc.Scene.Open || Doc.Playing) return null;
+        void Write(string relative, Func<Stream?> content)
+        {
+            var path = Path.Combine(Doc.ProjectRoot, relative);
+            if (File.Exists(path)) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var from = content();
+            if (from == null) return;
+            using var to = File.Create(path);
+            from.CopyTo(to);
+        }
+        Stream? Resource(string name) => typeof(MainWindow).Assembly.GetManifestResourceStream(name);
+        Write(EntityTemplates.ThirdPersonScriptPath, () => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(EntityTemplates.ThirdPersonScript)));
+        Write(EntityTemplates.WardModelPath, () => Resource("NoorEditor.Characters.Ward.glb"));
+        Write(EntityTemplates.WardControllerPath, () => Resource("NoorEditor.Characters.Ward.nooranim"));
+        Doc.RefreshAssets(rescan: true);  // they get their ids
+        string? Asset(string relative) =>
+            Doc.Assets.FirstOrDefault(a => string.Equals(a.Path.Replace('\\', '/'), relative, StringComparison.OrdinalIgnoreCase))?.Guid;
+        if (Asset(EntityTemplates.WardModelPath) is not { } model || Asset(EntityTemplates.WardControllerPath) is not { } controller)
+        {
+            EngineLog.Error("Editor", "Create Player (third person): Ward's model or controller didn't make it into the project");
+            return null;
+        }
+
+        Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "begin", ["label"] = "Create Player (third person)" });
+        var id = Doc.Create("Player", EntityTemplates.ThirdPersonComponents(), feet);
+        if (id != null)
+        {
+            var rig = Doc.Create("CameraRig", new System.Text.Json.Nodes.JsonObject(), new Vec3(0, 1.5, 0), id);
+            if (rig != null) Doc.Create("Camera", EntityTemplates.ThirdPersonCamera(), new Vec3(0, 0.3, 4.0), rig);
+            var before = Doc.Scene.Entities.Select(e => e.Id).ToHashSet();
+            Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "add_asset", ["asset"] = model, ["position"] = feet.ToJson(), ["name"] = "Ward" });
+            if (Doc.Scene.Entities.FirstOrDefault(e => e.Name == "Ward" && e.Parent == null && !before.Contains(e.Id)) is { } ward)
+            {
+                Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "reparent", ["entity"] = ward.Id, ["parent"] = id });
+                Doc.Execute(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["op"] = "set_transform", ["entity"] = ward.Id,
+                    ["transform"] = new System.Text.Json.Nodes.JsonObject { ["position"] = new Vec3(0, 0, 0).ToJson() },
+                });
+                Doc.Execute(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["op"] = "set_component", ["entity"] = ward.Id, ["type"] = "animator", ["value"] = EntityTemplates.WardAnimator(controller),
+                });
+            }
         }
         Doc.Execute(new System.Text.Json.Nodes.JsonObject { ["op"] = "end" });
         if (id != null) Doc.Select(id);

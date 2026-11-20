@@ -22,6 +22,8 @@ namespace noor::runtime::api {
 [[nodiscard]] std::optional<Guid> find(World& w, std::string_view name);  // first match
 [[nodiscard]] std::optional<Guid> parent(World& w, const Guid& e);
 [[nodiscard]] std::optional<Guid> child(World& w, const Guid& e, std::string_view name);  // first direct child
+// The first entity of that name anywhere below e (a model's bone, 8C part 4: attach props to it, read where it is).
+[[nodiscard]] std::optional<Guid> bone(World& w, const Guid& e, std::string_view name);
 void destroy(World& w, const Guid& e);  // at the end of the frame, with its children
 
 // ---- Transform (local) ----

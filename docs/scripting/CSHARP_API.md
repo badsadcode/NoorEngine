@@ -47,6 +47,7 @@ params (`JsonObject`); `Param(name, fallback)` reads a number.
 | `OnDestroy()` | When the entity is destroyed, or play stops |
 | `OnCollisionEnter/Exit(Entity other)`, `OnTriggerEnter/Exit(Entity other)` | Physics contacts and triggers |
 | `OnAnimationEnd(string animation)` | A non-looping animation has finished: a sprite's or a model clip this script played, or a controller state (any layer) |
+| `OnAnimationEvent(string name)` | A named moment of the playing animation was passed (footsteps...) |
 
 An exception stops that script for that entity (the Console shows the exception, the hook and the
 line); the game keeps running.
@@ -75,7 +76,7 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 
 | | |
 |---|---|
-| `Name`, `IdText`, `Exists`, `Parent`, `Child(name)`, `Destroy()` | Identity |
+| `Name`, `IdText`, `Exists`, `Parent`, `Child(name)`, `Bone(name)`, `Destroy()` | Identity; `Bone` finds a model's bone anywhere below |
 | `Position`, `Euler`, `Scale` (get/set) | Local transform |
 | `Translate(v)`, `TranslateLocal(v)`, `Rotate(axis, degrees)` | Moving |
 | `WorldPosition`, `Forward`, `Right`, `Up` | World space |

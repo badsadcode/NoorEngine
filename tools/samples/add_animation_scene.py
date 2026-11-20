@@ -20,7 +20,14 @@ Part 3 (blending and the controller, Ward.nooranim):
   tests/data/animation_scripts/Scenes/Ward_Controller(_CSharp).noorscene  a script speeds Ward up from standing to a
       run, triggers a nod, waves, and leans on when the nod has ended: in Lua and in C#.
 
-    python tools/samples/add_animation_scene.py [part2] [part3]   (both when neither is named)
+Part 4 (root motion, events, props on bones):
+  tests/data/render_scenes/Scenes/Root_Motion.noorscene      the golden: Ward walking across on root motion with a
+      sword in his right hand (an entity parented to the hand's bone), and Ward inside a character controller walking
+      into a wall that stops him.
+  tests/data/animation_scripts/Scenes/Ward_Walk(_CSharp).noorscene  Ward in a character controller on root motion,
+      hearing his footsteps (animation events), walking faster after four of them, until a wall stops him.
+
+    python tools/samples/add_animation_scene.py [part2] [part3] [part4]   (all when none is named)
 """
 import ctypes
 import json
@@ -102,7 +109,62 @@ def main():
                 run(doc, {'op': 'set_component', 'entity': e['id'], 'type': 'animator', 'value': animator})
             return e['id']
 
-        parts = set(sys.argv[1:]) or {'part2', 'part3'}
+        parts = set(sys.argv[1:]) or {'part2', 'part3', 'part4'}
+
+        def subtree_entity(root, name):
+            scene = json.loads(dll.noor_doc_scene(doc))['entities']
+            below = {root}
+            for e in scene:
+                if e.get('parent') in below:
+                    if e['name'] == name:
+                        return e['id']
+                    below.add(e['id'])
+            sys.exit(f'no {name} under {root}')
+
+        def ground():
+            run(doc, {'op': 'create', 'name': 'Ground (collision)', 'transform': {'position': [0, -0.5, 0]},
+                      'components': {'collider': {'shape': 'box', 'size': [60, 1, 60]}}})
+
+        def character_ward(name, feet, turn, animator):
+            # A player-like entity with a character controller, Ward inside it (as Create > Player (third person) does).
+            pid = name + ' (player)'
+            run(doc, {'op': 'create', 'name': pid, 'transform': {'position': feet, 'rotation': yaw(turn)},
+                      'components': {'character': {'radius': 0.3, 'height': 1.8, 'step_height': 0.4}}})
+            player = entity(doc, pid)['id']
+            run(doc, {'op': 'add_asset', 'asset': guid['Ward_Anim.glb'], 'position': feet, 'name': name})
+            ward = entity(doc, name)['id']
+            run(doc, {'op': 'reparent', 'entity': ward, 'parent': player})
+            run(doc, {'op': 'set_transform', 'entity': ward, 'transform': {'position': [0, 0, 0], 'rotation': [0, 0, 0, 1]}})
+            run(doc, {'op': 'set_component', 'entity': ward, 'type': 'animator', 'value': animator})
+            return ward
+
+        def wall(name, position, size):
+            run(doc, {'op': 'create', 'name': name, 'transform': {'position': position},
+                      'components': {'primitive': {'shape': 'box', 'size': size, 'color': '#9A8F80'},
+                                     'collider': {'shape': 'box', 'size': size}}})
+
+        if 'part4' in parts:
+            new_scene('Scenes/Root_Motion.noorscene', 'Root_Motion', {'position': [0, 2.2, 8.5], 'rotation': [-0.1305262, 0, 0, 0.9914449]})
+            ground()
+            sword_ward = place('Ward_Anim.glb', 'Ward (sword)', -3.0, 0.8, turn=90, animator={'animation': 'WalkForward', 'root_motion': True})
+            hand = subtree_entity(sword_ward, 'DEF-hand.R')
+            run(doc, {'op': 'create', 'name': 'Sword', 'parent': hand, 'transform': {'position': [-0.05, 0, 0.35]},
+                      'components': {'primitive': {'shape': 'box', 'size': [0.03, 0.07, 0.8], 'color': '#C8D0D8'}}})
+            character_ward('Ward (wall)', [1.0, 0.05, -1.2], 90, {'animation': 'WalkForward', 'root_motion': True})
+            wall('Wall', [3.3, 1, -1.2], [0.2, 2, 2.5])
+            save('Scenes/Root_Motion.noorscene')
+            (SCRIPTS / 'Scenes').mkdir(parents=True, exist_ok=True)
+            for name, script in (('Ward_Walk', 'Scripts/ward_walk.luau'), ('Ward_Walk_CSharp', 'Scripts/WardWalk.cs')):
+                path = f'Scenes/{name}.noorscene'
+                new_scene(path, name, {'position': [4, 2, 2], 'rotation': [-0.0868241, 0.3420201, 0.0318190, 0.9351131]})
+                ground()
+                ward = character_ward('Ward', [0, 0.05, 0], 0, {
+                    'animation': 'WalkForward', 'root_motion': True,
+                    'events': [{'clip': 'WalkForward', 'at': 0.25, 'name': 'left'}, {'clip': 'WalkForward', 'at': 0.75, 'name': 'right'}]})
+                run(doc, {'op': 'set_component', 'entity': ward, 'type': 'script', 'value': {'file': script}})
+                wall('Wall', [0, 1, 5.1], [3, 2, 0.2])
+                save(path)
+                shutil.move(PROJECT / path, SCRIPTS / path)
 
         def scripted(name, script, x, animator):
             path = f'Scenes/{name}.noorscene'

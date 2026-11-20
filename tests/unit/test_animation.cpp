@@ -54,7 +54,7 @@ asset::NodePose at(const asset::ImportedModel& m, const char* clip, double t, co
 
 TEST_CASE("animation: Ward's clips come in with their channels, keys and lengths") {
     const auto m = ward();
-    REQUIRE(m.animations.size() == 8);  // Wave, Nod, Glide, Walk; Idle, Run, Raise, Lean (part 3)
+    REQUIRE(m.animations.size() == 9);  // Wave, Nod, Glide, Walk; WalkForward (part 4); Idle, Run, Raise, Lean (part 3)
     CHECK(asset::find_animation(m, "Walk")->channels.size() == 7);
     CHECK(asset::find_animation(m, "Walk")->duration == doctest::Approx(1.0f));
     CHECK(asset::find_animation(m, "Glide")->channels[0].interpolation == asset::AnimationChannel::Interpolation::CubicSpline);

@@ -31,6 +31,8 @@ public abstract class NoorScript
     public virtual void OnTriggerExit(Entity other) { }
     /// <summary>A non-looping animation (a sprite's, or a model's clip) this script played (Entity.PlayAnimation) has finished.</summary>
     public virtual void OnAnimationEnd(string animation) { }
+    /// <summary>A named moment of the playing animation was passed (a controller state's "events": footsteps...).</summary>
+    public virtual void OnAnimationEvent(string name) { }
 }
 
 /// <summary>
@@ -61,6 +63,13 @@ public sealed unsafe class Entity : IEquatable<Entity>
     {
         RtEntity c;
         fixed (byte* n = Engine.Utf8(name)) return Engine.A.Child(Id, n, &c) != 0 ? new Entity(c) : null;
+    }
+
+    /// <summary>The first entity of that name anywhere below this one: a model's bone (parent props to it).</summary>
+    public Entity? Bone(string name)
+    {
+        RtEntity c;
+        fixed (byte* n = Engine.Utf8(name)) return Engine.A.Bone(Id, n, &c) != 0 ? new Entity(c) : null;
     }
 
     public void Destroy() => Engine.A.Destroy(Id);

@@ -401,7 +401,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | 1 ✅ | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
 | 2 ✅ | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
 | 3 ✅ | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
-| 4 | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
+| 4 ✅ | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
 | 5 | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
 | 6 | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
 | 7 | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
@@ -476,6 +476,25 @@ driving the controller: Lua project, Lua and C# built game, equal bone fingerpri
 frame after their last pose (now the same frame); in a test, scripts added after the animator ran a frame late, the
 opposite of `make_world`'s order; part 2 hadn't updated the Lua and C# API pages (done now). Not done: animation events
 (part 4); no editor for controllers yet (part 6: text until then); transitions can't interrupt a fade in progress.
+
+## Part 4 result (2026-11-20)
+Done. Root motion (`asset::root_motion_node`, `root_delta`: whole cycles across a loop, clamped one-shots; the
+animator's `"root_motion"` for clips, cross-fades and controllers), given to the nearest character controller as
+velocity or to the model; animation events (`asset::crossings`; on the animator per clip and on controller states;
+`on_animation_event` / `OnAnimationEvent`); `bone(name)` for scripts (props on bones were already free: bones are
+entities); Create ▸ Player (third person) (Ward and his controller embedded in the editor, an orbiting camera rig,
+`Scripts/ThirdPersonPlayer.luau`); the player report gives each animated character's position. Proven: unit tests
+(root movement by hand: 1.4 m a cycle across the wrap, 3.15 m over two and a quarter, a one-shot's 1 m clamped;
+event crossings; a walk covering 3.5 m within a centimetre facing +Z and turned to +X, the hips held over the
+origin; through a character controller 4.2 m within a centimetre, and a wall stopping it at its face; footstep events
+counted by a script; a controller's root motion and events at double speed; a sword on the hand bone exactly where
+the hand puts it); golden `Root_Motion` (the sword in his hand mid-walk; Ward against a wall);
+`cli.root_motion_build_identically` (a walk on a character controller, sped up by its fourth footstep, stopped by a
+wall: Lua project, Lua and C# built game: the same pose and the same place to the millimetre); the editor smoke test
+creates the third-person player, walks him with W (1.55 m in about a second), sees him turn and his walk play.
+Found on the way: the smoke test's picture first looked through the first-person player's camera (Play takes the
+first camera); the check now takes that player out for the moment. Not done: root motion turning (yaw); jumping
+and falling animation states are the game's to wire; the template's movement is script-driven by default.
 
 ## Open questions
 

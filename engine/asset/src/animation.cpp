@@ -91,6 +91,46 @@ void sample(const ImportedAnimation& clip, double seconds, std::span<NodePose> p
     }
 }
 
+int root_motion_node(const ImportedModel& model) {
+    int best = -1, best_depth = 0;
+    for (const auto& clip : model.animations)
+        for (const auto& ch : clip.channels) {
+            if (ch.path != AnimationChannel::Path::Translation || ch.node < 0 || static_cast<std::size_t>(ch.node) >= model.nodes.size()) continue;
+            int depth = 0;
+            for (int n = model.nodes[static_cast<std::size_t>(ch.node)].parent; n >= 0; n = model.nodes[static_cast<std::size_t>(n)].parent) ++depth;
+            if (best < 0 || depth < best_depth || (depth == best_depth && ch.node < best)) best = ch.node, best_depth = depth;
+        }
+    return best;
+}
+
+namespace {
+math::Vec3 translation_at(const ImportedAnimation& clip, int node, const NodePose& rest, double t) {
+    std::vector<NodePose> pose(static_cast<std::size_t>(node) + 1);
+    pose[static_cast<std::size_t>(node)] = rest;
+    sample(clip, t, pose);
+    return pose[static_cast<std::size_t>(node)].translation;
+}
+math::Vec3 minus(math::Vec3 a, math::Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+} // namespace
+
+math::Vec3 root_delta(const ImportedAnimation& clip, int node, const NodePose& rest, double t0, double t1, bool loop) {
+    const double d = clip.duration;
+    if (node < 0 || d <= 0.0 || t1 <= t0) return {0, 0, 0};
+    if (!loop) return minus(translation_at(clip, node, rest, std::clamp(t1, 0.0, d)), translation_at(clip, node, rest, std::clamp(t0, 0.0, d)));
+    const double c0 = std::floor(t0 / d), c1 = std::floor(t1 / d);
+    const math::Vec3 within = minus(translation_at(clip, node, rest, t1 - c1 * d), translation_at(clip, node, rest, t0 - c0 * d));
+    if (c1 == c0) return within;
+    const math::Vec3 cycle = minus(translation_at(clip, node, rest, d), translation_at(clip, node, rest, 0.0));
+    const float n = static_cast<float>(c1 - c0);
+    return {within.x + cycle.x * n, within.y + cycle.y * n, within.z + cycle.z * n};
+}
+
+int crossings(double t0, double t1, double at, double duration, bool loop) {
+    if (t1 <= t0 || duration <= 0.0) return 0;
+    if (!loop) return at > t0 && at <= t1 && at >= 0.0 && at <= duration ? 1 : 0;
+    return static_cast<int>(std::floor((t1 - at) / duration) - std::floor((t0 - at) / duration));
+}
+
 const ImportedAnimation* find_animation(const ImportedModel& model, std::string_view name) {
     for (const auto& a : model.animations)
         if (a.name == name) return &a;

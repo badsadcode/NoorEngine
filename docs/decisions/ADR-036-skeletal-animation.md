@@ -71,6 +71,11 @@ main asset path.
   between frames (states, phases, fades), stepped in `update` so a state's end reaches scripts that frame; replays are
   identical because steps are. Blend spaces play their clips at one shared phase (feet in step). The script ABI went
   to v5 (cross-fades, controller parameters). 100 characters on a three-layer controller: 1.0 ms of game update.
+- *Part 4:* root motion is translation only (yaw stays with scripts), horizontal (the vertical bob stays in the pose),
+  measured per frame as the root bone's movement over that frame's clock (a looping clip adds a whole cycle each time
+  it wraps, so nothing drifts) and given to the nearest character controller at or above the model as velocity, or
+  to the model's position. Events are named moments on clips (the animator) or controller states. Bones-as-entities
+  made sockets free: a prop is a child of a bone; `bone(name)` finds one. Script ABI v6 (bones, events).
 - Crowds cost CPU per bone (gathering the scene) and per character (sampling); the crowd benchmark in part 8 says
   where the limit is. GPU sampling and a hidden pose stay later options.
 - The device must support buffer device addresses and 64-bit shader integers (every desktop GPU we target does); one

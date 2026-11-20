@@ -37,6 +37,7 @@ add_executable(noor_unit_tests
     unit/test_skinning.cpp
     unit/test_animation.cpp
     unit/test_anim_controller.cpp
+    unit/test_root_motion.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -236,6 +237,16 @@ foreach(frame IN ITEMS 20 50 80)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_Blending_${frame} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Root motion (8C part 4): Ward walking across on root motion with a sword in his hand (a prop on a bone), and Ward in a
+# character controller stopped by a wall, 2.5 s in.
+add_test(NAME render.golden_Root_Motion
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Root_Motion.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Root_Motion.png -DFRAMES=150
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Root_Motion
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Root_Motion PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 add_test(NAME render.animation_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_cost_check.cmake)
@@ -255,6 +266,13 @@ if(TARGET noor_scripting_managed)
             -DSCENE=Ward_Controller -DEXPECT_ANIMATION=Move -DEXPECT_ENDED=2
             -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_controller_build -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_build_check.cmake)
     set_tests_properties(cli.animation_controller_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
+    # 8C part 4: root motion through a character controller, footstep events, a wall.
+    add_test(NAME cli.root_motion_build_identically
+        COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCRIPTS=${CMAKE_CURRENT_SOURCE_DIR}/data/animation_scripts
+            -DSCENE=Ward_Walk -DEXPECT_ANIMATION=WalkForward -DEXPECT_ENDED=0 -DSAME_PLACE=ON
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/root_motion_build -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_build_check.cmake)
+    set_tests_properties(cli.root_motion_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
 endif()
 # Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
 # from Lua in the project and in a built game (the same moments), and from C# in the built game.

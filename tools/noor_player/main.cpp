@@ -34,6 +34,7 @@
 #include "noor/platform/window.h"
 #include "noor/render/renderer.h"
 #include "noor/runtime/input.h"
+#include "noor/runtime/script_api.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
@@ -522,7 +523,12 @@ int run(const Options& o) {
                             if (!e.has("animator") || !e.components.at("animator").is_object()) continue;
                             const auto& c = e.components.at("animator");
                             animators.push_back({{"name", e.name}, {"animation", c.value("state", c.value("animation", std::string()))},  // a controller: its state
-                                                 {"started", c.contains("started") ? c["started"] : Json(nullptr)}});
+                                                 {"started", c.contains("started") ? c["started"] : Json(nullptr)},
+                                                 // where it is (root motion moves characters, part 4), to the millimetre
+                                                 {"position", [&] {
+                                                      const auto w = noor::runtime::api::world_position(**world, e.id).value_or(noor::math::Vec3{});
+                                                      return std::format("{:.3f} {:.3f} {:.3f}", w.x, w.y, w.z);
+                                                  }()}});
                         }
                         const auto* anim = (*world)->system<noor::game::AnimatorSystem>();
                         const auto st = anim ? anim->stats() : noor::game::AnimatorSystem::Stats{};

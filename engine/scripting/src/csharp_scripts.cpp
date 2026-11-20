@@ -233,6 +233,12 @@ const char* rt_sprite_animation(noor_rt_entity e) {
 }
 int32_t rt_burst(noor_rt_entity e, int32_t count) { return t_world && api::emitter_burst(*t_world, from_rt(e), count) ? 1 : 0; }
 const char* rt_event_name() { return t_event_name.c_str(); }
+int32_t rt_bone(noor_rt_entity e, const char* name, noor_rt_entity* out) {
+    if (!t_world || !name || !out) return 0;
+    const auto b = api::bone(*t_world, from_rt(e), name);
+    if (b) *out = to_rt(*b);
+    return b ? 1 : 0;
+}
 int32_t rt_animation_parameter(noor_rt_entity e, const char* name, float value, int32_t kind) {
     if (!t_world || !name) return 0;
     const asset::Json v = kind == NOOR_RT_PARAM_BOOL ? asset::Json(value != 0.0f) : asset::Json(value);
@@ -251,6 +257,7 @@ const noor_rt_api kApi = {
     rt_ui_text, rt_ui_rect,
     rt_sprite, rt_sprite_animation, rt_burst, rt_event_name,
     rt_animation_parameter,
+    rt_bone,
 };
 
 } // namespace

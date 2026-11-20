@@ -3,6 +3,8 @@
 #include "noor/foundation/log.h"
 #include "noor/asset/pose_blend.h"
 #include "noor/game/sprite_animation.h"
+#include "noor/physics/physics.h"
+#include "noor/runtime/script_api.h"
 
 #include <algorithm>
 #include <bit>
@@ -44,6 +46,7 @@ const AnimatorSystem::Model* AnimatorSystem::model(const Guid& id) {
             if (auto m = asset::import_gltf(*file)) {
                 Model data{std::move(*m), {}, {}};
                 data.rest = asset::rest_pose(data.model);
+                data.root = asset::root_motion_node(data.model);
                 std::vector<bool> moved(data.model.nodes.size(), false);
                 for (const auto& clip : data.model.animations)
                     for (const auto& ch : clip.channels)
@@ -141,6 +144,26 @@ asset::AnimParameters AnimatorSystem::parameters(const Json& c, const asset::Ani
     return params;
 }
 
+// Root motion: `moved` is in the model root's own space (the root bone's parent). A character controller at or above
+// the model takes it as this frame's velocity; without one the model itself moves.
+void AnimatorSystem::move_character(runtime::World& world, scene::Entity& model_root, math::Vec3 moved, double dt) {
+    if (dt <= 0.0) return;
+    moved.y = 0.0f;  // up and down stays in the pose
+    auto* physics = world.system<physics::PhysicsSystem>();
+    for (const scene::Entity* e = &model_root; e; e = e->parent ? world.find(*e->parent) : nullptr) {
+        if (!e->has("character") || !physics || !physics->has_character(e->id)) continue;
+        const auto m = runtime::api::world_matrix(world, model_root.id);
+        if (!m) return;
+        const math::Vec4 w = *m * math::Vec4{moved.x, moved.y, moved.z, 0.0f};
+        const float inv = static_cast<float>(1.0 / dt);
+        physics->character_move(e->id, {w.x * inv, 0.0f, w.z * inv});
+        return;
+    }
+    const auto& t = model_root.transform;
+    const math::Vec3 d = math::rotate(t.rotation, {moved.x * t.scale.x, 0.0f, moved.z * t.scale.z});
+    model_root.transform.position = {t.position.x + d.x, t.position.y + d.y, t.position.z + d.z};
+}
+
 void AnimatorSystem::attached(runtime::World& world) {
     // Scripts (runtime::api::play_animation, cross_fade) reach a character's controller through this.
     world.handle("animator.play", [this](runtime::World& w, const Guid& id, const Json& args) {
@@ -169,7 +192,13 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
             std::vector<std::string> consumed;
             std::vector<asset::AnimControllerPlayer::Ended> ended;
             const double speed = c.contains("speed") && c["speed"].is_number() ? std::max(0.0, c["speed"].get<double>()) : 1.0;
-            p->step(dt * speed, parameters(c, *ctrl), &consumed, &ended);
+            const Model* data = model(running_[e.id].model);
+            const bool root_motion = c.value("root_motion", false) && data && data->root >= 0;
+            p->set_root_motion(root_motion ? data->root : -1);
+            std::vector<asset::AnimControllerPlayer::Ended> events;
+            p->step(dt * speed, parameters(c, *ctrl), &consumed, &ended, &events);
+            for (const auto& ev : events) world.post({runtime::Event::Kind::AnimationEvent, e.id, e.id, ev.event});
+            if (root_motion) move_character(world, e, p->root_motion(), dt);
             for (const auto& name : consumed) c["parameters"][name] = false;
             if (const std::string_view state = p->state(); c.value("state", std::string()) != state) c["state"] = std::string(state);
             for (const auto& end : ended) {
@@ -178,7 +207,37 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
             }
             continue;
         }
-        // A plain clip: a finished cross-fade forgets what it faded from.
+        // A plain clip: its events and root motion over this frame (from the clock at its start to its end).
+        if (c.contains("animation") && c["animation"].is_string()) {
+            const auto mid = asset::guid_field(e.components.at("model"), "asset");
+            const Model* data = mid ? model(*mid) : nullptr;
+            const asset::ImportedAnimation* clip = data ? asset::find_animation(data->model, c["animation"].get<std::string>()) : nullptr;
+            if (clip) {
+                const double t0 = sprite_time(c, world.time()), t1 = sprite_time(c, now), d = clip->duration;
+                const bool loop = c.value("loop", true);
+                if (c.contains("events") && c["events"].is_array())
+                    for (const auto& ev : c["events"]) {
+                        if (!ev.is_object() || ev.value("clip", std::string()) != clip->name) continue;
+                        for (int n = asset::crossings(t0, t1, ev.value("at", 0.0) * d, d, loop); n > 0; --n)
+                            world.post({runtime::Event::Kind::AnimationEvent, e.id, e.id, ev.value("name", std::string())});
+                    }
+                if (c.value("root_motion", false) && data->root >= 0) {
+                    math::Vec3 moved = asset::root_delta(*clip, data->root, data->rest[static_cast<std::size_t>(data->root)], t0, t1, loop);
+                    // Cross-fading: both clips move it, weighted by how far the fade is.
+                    if (c.contains("from") && c["from"].is_object() && c.contains("started") && c["started"].is_number() && c.value("fade", 0.0) > 0.0) {
+                        const Json& f = c["from"];
+                        if (const auto* old = asset::find_animation(data->model, f.value("animation", std::string()))) {
+                            const math::Vec3 o = asset::root_delta(*old, data->root, data->rest[static_cast<std::size_t>(data->root)],
+                                                                   sprite_time(f, world.time()), sprite_time(f, now), f.value("loop", true));
+                            const float w = static_cast<float>(std::clamp((now - c["started"].get<double>()) / c["fade"].get<double>(), 0.0, 1.0));
+                            moved = {o.x + (moved.x - o.x) * w, o.y + (moved.y - o.y) * w, o.z + (moved.z - o.z) * w};
+                        }
+                    }
+                    move_character(world, e, moved, dt);
+                }
+            }
+        }
+        // A finished cross-fade forgets what it faded from.
         if (c.contains("from") && c.contains("started") && c["started"].is_number()) {
             const double fade = c.value("fade", 0.0);
             if (fade <= 0.0 || now - c["started"].get<double>() >= fade - 1e-9) {
@@ -244,6 +303,12 @@ void AnimatorSystem::late_update(runtime::World& world, double dt) {
                     asset::sample(*old, animator_time(f, now, old->duration), from_);
                     asset::blend(from_, pose_, static_cast<float>(w), pose_);
                 }
+            }
+            // Root motion: the root bone stays put horizontally (its movement moved the character in update).
+            if (c.value("root_motion", false) && data->root >= 0) {
+                auto& rp = pose_[static_cast<std::size_t>(data->root)].translation;
+                rp.x = data->rest[static_cast<std::size_t>(data->root)].translation.x;
+                rp.z = data->rest[static_cast<std::size_t>(data->root)].translation.z;
             }
         }
         const std::vector<Guid>& ids = bind(world, root);

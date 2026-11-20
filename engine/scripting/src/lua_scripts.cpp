@@ -211,6 +211,11 @@ struct LuaScriptSystem::Impl {
                  else lua_pushnil(L);
                  return 1;
              }},
+            {"bone", [](lua_State* L) {
+                 if (auto b = api::bone(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2))) push_entity(L, *b);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
             {"parent", [](lua_State* L) {
                  if (auto p = api::parent(world_of(L), check_entity(L, 1))) push_entity(L, *p);
                  else lua_pushnil(L);
@@ -671,9 +676,9 @@ void LuaScriptSystem::late_update(runtime::World& world, double dt) {
     for (const auto& e : world.events()) {
         if (!d.instances.contains(e.entity)) continue;
         using K = runtime::Event::Kind;
-        if (e.kind == K::AnimationEnd) {
+        if (e.kind == K::AnimationEnd || e.kind == K::AnimationEvent) {
             lua_pushstring(d.L, e.name.c_str());
-            d.call(e.entity, "on_animation_end", 1);
+            d.call(e.entity, e.kind == K::AnimationEnd ? "on_animation_end" : "on_animation_event", 1);
             continue;
         }
         const char* hook = e.kind == K::CollisionEnter ? "on_collision_enter"

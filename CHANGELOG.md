@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 4: root motion and characters
+**Added**
+- **Root motion:** `asset::root_motion_node`, `asset::root_delta`; the animator's `"root_motion"` (clips, cross-fades,
+  controllers' base layer) moves the nearest character controller (as velocity: walls stop it) or the model.
+- **Animation events:** `asset::crossings`; `"events"` on the animator (per clip) and on controller states;
+  `on_animation_event(name)` (Lua), `OnAnimationEvent` (C#); `runtime::Event::Kind::AnimationEvent`.
+- `bone(name)` for scripts (Lua `e:bone`, C# `Entity.Bone`, `runtime::api::bone`).
+- **Create ▸ Player (third person):** Ward on his controller as the player's model, an orbiting camera rig,
+  `Scripts/ThirdPersonPlayer.luau`; Ward's model and controller embedded in the editor.
+- Ward's WalkForward clip (1.4 m a cycle); the player report's animators carry their position.
+
+**Changed:** the script ABI is v6 (`bone`; the `ANIMATION_EVENT` event kind).
+
+**Tests:** unit tests "root motion" (3) and "animation events" and the controller/bone case; golden `Root_Motion`;
+`cli.root_motion_build_identically`; the editor smoke test's third-person player.
+
 ### 2026-11-20 — Milestone 8C, part 3: blending and the controller
 **Added**
 - `asset/pose_blend.h`: `nlerp`, `blend` (whole or per bone), `mix` (weighted), `additive_delta`/`apply_additive`,

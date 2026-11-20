@@ -25,6 +25,8 @@
 // "greater", "less", "equals", "not_equals" compare), "exit_time" (how far through "from" it must be: 1 = once
 // through), "fade" (seconds, default 0.2). The first that holds, in file order, fires; triggers it tested are reset.
 // A layer mid-fade doesn't start another transition (scripts can still cross-fade it).
+// States can name moments ("events": [{"at": 0.5, "name": "step"}], how far through: scripts hear
+// on_animation_event(name) each time it's passed; part 4).
 // Layers: the first is the base (whole body, full weight). Others: "mode" "override" (default) or "additive", "weight"
 // (a number or a parameter's name, 0..1), "mask" (bone names: each with everything below it; none: every bone).
 // Additive layers add how their state's pose differs from its first moment.
@@ -72,6 +74,11 @@ struct AnimState {
     std::string x, y;             // its parameters (y empty: 1D)
     bool loop = true;
     AnimValue speed;
+    struct Event {
+        float at = 0.0f;  // how far through the state (0..1), each time through
+        std::string name;
+    };
+    std::vector<Event> events;  // part 4: scripts hear on_animation_event(name)
 };
 
 struct AnimCondition {
@@ -122,10 +129,18 @@ public:
     struct Ended {
         int layer;
         std::string state;
+        std::string event;  // in `events`: the event's name
     };
     // One step: transitions whose conditions hold fire (their triggers are named in `consumed`), then time moves on
-    // by dt. Non-looping states that reached their end this step are named in `ended`.
-    void step(double dt, const AnimParameters& params, std::vector<std::string>* consumed = nullptr, std::vector<Ended>* ended = nullptr);
+    // by dt. Non-looping states that reached their end this step are named in `ended`; states' events passed this
+    // step (the current state of each layer, not one fading out) in `events`, in order.
+    void step(double dt, const AnimParameters& params, std::vector<std::string>* consumed = nullptr, std::vector<Ended>* ended = nullptr,
+              std::vector<Ended>* events = nullptr);
+
+    // Root motion (part 4): `node` (asset::root_motion_node) is the character's root. The base layer's movement of it
+    // over each step is measured (root_motion()), and pose() holds it in place horizontally. -1: off.
+    void set_root_motion(int node) { root_ = node; }
+    [[nodiscard]] math::Vec3 root_motion() const noexcept { return moved_; }
 
     // Goes to a state now (fade 0) or fading over `fade` seconds; false if the layer has no such state. The base layer
     // if `layer` is empty or unknown.
@@ -155,7 +170,11 @@ private:
     float value(const AnimValue& v, const AnimParameters& params) const;
     std::vector<float> sample_weights(const AnimState& s, const AnimParameters& params) const;
 
+    math::Vec3 root_delta_of(int layer, int state, double p0, double p1, const AnimParameters& params) const;
+
     const AnimController* controller_;
+    int root_ = -1;
+    math::Vec3 moved_{0, 0, 0};
     const ImportedModel* model_;
     std::vector<NodePose> rest_;
     std::vector<std::vector<Bound>> bound_;           // [layer][state]

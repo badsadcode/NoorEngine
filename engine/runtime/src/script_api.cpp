@@ -1,6 +1,7 @@
 #include "noor/runtime/script_api.h"
 
 #include <algorithm>
+#include <unordered_set>
 #include <cmath>
 
 namespace noor::runtime::api {
@@ -57,6 +58,16 @@ std::optional<Guid> parent(World& w, const Guid& e) {
 std::optional<Guid> child(World& w, const Guid& e, std::string_view n) {
     for (const auto& x : w.scene().entities)
         if (x.parent == e && x.name == n) return x.id;
+    return std::nullopt;
+}
+
+std::optional<Guid> bone(World& w, const Guid& e, std::string_view n) {
+    std::unordered_set<Guid> below{e};  // entities come parents first: one pass finds every descendant
+    for (const auto& x : w.scene().entities) {
+        if (!x.parent || !below.contains(*x.parent)) continue;
+        if (x.name == n) return x.id;
+        below.insert(x.id);
+    }
     return std::nullopt;
 }
 

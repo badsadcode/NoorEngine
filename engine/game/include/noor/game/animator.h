@@ -19,6 +19,13 @@
 // state's end reaches scripts that frame) and writes the base layer's state into "state" when it changes. A controller
 // carries state from frame to frame: replays are identical because steps are (the same dt, the same parameters).
 //
+// Part 4: "root_motion": true. The clip's own movement of the character's root bone (asset::root_motion_node: Ward's
+// hips) moves the character instead of the bone: the bone is held in place horizontally, and what it would have moved
+// this frame goes to the nearest character controller at or above the model (as its velocity, so walls stop it and
+// slopes and steps work), or else to the model's own position. Up and down stays in the pose; turning is the script's.
+// "events": [{"clip": "Walk", "at": 0.5, "name": "step"}] names moments of plain clips (controllers name them on
+// their states); scripts hear on_animation_event(name) each time one is passed.
+//
 // Playback is a pure function of time (asset::sample): the same game time gives the same pose, in the editor, in a
 // built game and on any machine. Clips move the nodes they name; the model's other nodes are left alone. Which entity
 // each node became comes from the root's "model": {"nodes": [...]} (written by scene::instantiate_model); a model
@@ -66,6 +73,7 @@ private:
         asset::ImportedModel model;
         std::vector<int> animated;  // nodes any of its clips move, in node order
         std::vector<asset::NodePose> rest;
+        int root = -1;  // asset::root_motion_node
     };
     struct Running {  // a controller running for one character
         Guid controller, model;
@@ -77,6 +85,7 @@ private:
     asset::AnimParameters parameters(const asset::Json& component, const asset::AnimController& controller) const;
     const std::vector<Guid>& bind(runtime::World& world, const scene::Entity& root);
     void say_once(const std::string& message);
+    void move_character(runtime::World& world, scene::Entity& model_root, math::Vec3 moved, double dt);
 
     Resolver resolve_;
     std::unordered_map<Guid, std::optional<Model>> models_;  // by asset id; nullopt: failed to load

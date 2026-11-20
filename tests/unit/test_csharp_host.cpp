@@ -112,7 +112,8 @@ TEST_CASE("csharp host: sprites through the ABI, and the animation end event car
     w.frame(1.0 / 60.0, {});
     CHECK(std::ranges::find(Fake::calls, "event 4") != Fake::calls.end());
     CHECK(std::ranges::find(Fake::calls, "animation attack") != Fake::calls.end());
-    CHECK(api->version == 5u);  // v5 (8C part 3): cross-fades and animation parameters
+    CHECK(api->version == 6u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events
+    REQUIRE(api->bone != nullptr);
     CHECK(api->sprite(e, NOOR_RT_SPRITE_PLAY, "walk", 1.0f) == 0);  // no world outside a hook: refused, not a crash
     REQUIRE(api->animation_parameter != nullptr);
     CHECK(api->animation_parameter(e, "speed", 1.0f, NOOR_RT_PARAM_NUMBER) == 0);

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 5u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters */
+#define NOOR_RT_API_VERSION 6u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -51,9 +51,10 @@ enum { NOOR_RT_SOUND_PLAY = 0, NOOR_RT_SOUND_STOP = 1, NOOR_RT_SOUND_IS_PLAYING 
 enum { NOOR_RT_DOWN = 0, NOOR_RT_PRESSED = 1, NOOR_RT_RELEASED = 2 };
 /* hooks (noor_rt_host.call) */
 enum { NOOR_RT_START = 0, NOOR_RT_UPDATE = 1, NOOR_RT_FIXED_UPDATE = 2, NOOR_RT_LATE_UPDATE = 3, NOOR_RT_DESTROY = 4 };
-/* events (noor_rt_host.event), same order as runtime::Event::Kind. ANIMATION_END: `other` is the entity itself and
- * noor_rt_api.event_name() gives the animation. */
-enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3, NOOR_RT_ANIMATION_END = 4 };
+/* events (noor_rt_host.event), same order as runtime::Event::Kind. ANIMATION_END, ANIMATION_EVENT (v6): `other` is the
+ * entity itself and noor_rt_api.event_name() gives the animation, or the event's name. */
+enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3, NOOR_RT_ANIMATION_END = 4,
+       NOOR_RT_ANIMATION_EVENT = 5 };
 /* sprite(): ops (an animator's clips too, since 8C part 2: the name stayed for the ABI) */
 enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2, NOOR_RT_SPRITE_CROSS_FADE = 3 /* v5: speed = seconds */ };
 /* animation_parameter(): kinds */
@@ -111,6 +112,9 @@ typedef struct noor_rt_api {
     /* v5: skeletal animation (Milestone 8C, part 3): an animator's controller parameter (a number, or a bool: 0/1).
      * 0 if the entity has no animator. */
     int32_t (*animation_parameter)(noor_rt_entity e, const char* name, float value, int32_t kind);
+
+    /* v6 (8C part 4): the first entity of that name anywhere below e (a model's bone). */
+    int32_t (*bone)(noor_rt_entity e, const char* name, noor_rt_entity* out);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

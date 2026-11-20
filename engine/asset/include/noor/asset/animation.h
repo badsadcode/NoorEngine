@@ -32,4 +32,18 @@ void sample(const ImportedAnimation& clip, double seconds, std::span<NodePose> p
 // A clip by name; nullptr if the model has none of that name.
 [[nodiscard]] const ImportedAnimation* find_animation(const ImportedModel& model, std::string_view name);
 
+// ---- Root motion and events (part 4) ----
+// The node whose movement is the character's: the topmost node (fewest ancestors; then the first) that any clip moves
+// the translation of (a Rigify or Mixamo hips bone, a "root" bone). -1 if no clip moves any translation.
+[[nodiscard]] int root_motion_node(const ImportedModel& model);
+
+// How far `node` moves (its translation) while the clip's clock goes from t0 to t1 seconds (t0 <= t1, not wrapped).
+// Looping: each time the clip wraps round, a whole cycle's distance is added (last key minus first), so a walk that
+// moves 1.4 m a cycle covers 1.4 m every cycle exactly. Not looping: clamped to the clip.
+[[nodiscard]] math::Vec3 root_delta(const ImportedAnimation& clip, int node, const NodePose& rest, double t0, double t1, bool loop);
+
+// How many times the moment `at` seconds into a clip of `duration` seconds is passed when its clock goes from t0 to t1
+// (after t0, up to and including t1): every cycle if it loops, at most once if not.
+[[nodiscard]] int crossings(double t0, double t1, double at, double duration, bool loop);
+
 } // namespace noor::asset

@@ -163,6 +163,7 @@ internal static class SmokeTest
         await PlayReloadAndWindows(window, id, results, Check, Shot);
         await PhysicsChecks(window, id, results, Check, Shot);
         await PlayerChecks(window, results, Check, Shot);
+        await ThirdPersonChecks(window, results, Check, Shot);
         await CSharpChecks(window, results, Check, Shot);
         await NoorCodeChecks(window, results, Check, Shot);
         await AudioChecks(window, results, Check);
@@ -1962,6 +1963,74 @@ internal static class SmokeTest
         doc.Refresh();
         check(P().Z == 3 && !doc.Playing, "stop: the player is back at the start");
         check(EngineLog.Lines.All(l => l.Category != "Script" || l.Level < 4), "the PlayerController template runs without script errors");
+    }
+
+    // Milestone 8C, part 4: Create > Player (third person): Ward on his controller as the player's model. In play, W walks
+    // the player away from the camera, Ward turns to face that way and his controller's walk plays (bones move).
+    private static async Task ThirdPersonChecks(MainWindow window, Dictionary<string, object> results,
+                                                Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        // Play looks through the first camera in the scene: the first-person player steps out for this (undone at the end).
+        var firstPerson = doc.Scene.Entities.FirstOrDefault(e => e.Name == "Player" && doc.Scene.Entities.Any(c => c.Parent == e.Id && c.Name == "Body"));
+        var removed = firstPerson != null && doc.Remove(firstPerson.Id);
+        var player = window.CreateThirdPersonPlayer(new Vec3(-21, 0.05, 3));  // on PhysicsChecks' floor
+        var kids = doc.Scene.Entities.Where(e => e.Parent == player).Select(e => e.Name).ToHashSet();
+        var ward = doc.Scene.Entities.FirstOrDefault(e => e.Parent == player && e.Name == "Ward");
+        check(player != null && kids.SetEquals(["CameraRig", "Ward"]) && ward?.Components["animator"]?["controller"] != null &&
+              File.Exists(Path.Combine(doc.ProjectRoot, EntityTemplates.ThirdPersonScriptPath)) &&
+              File.Exists(Path.Combine(doc.ProjectRoot, EntityTemplates.WardModelPath)) &&
+              File.Exists(Path.Combine(doc.ProjectRoot, EntityTemplates.WardControllerPath)),
+              "Create > Player (third person): player, camera rig, Ward with an animator on his controller, and their files");
+        check(doc.Scene.UndoLabel == "Create Player (third person)", "Create > Player (third person) is one undo step");
+        if (player == null || ward == null) return;
+        var thigh = doc.Subtree(ward.Id).Select(id => doc.Scene.Entities.First(e => e.Id == id)).FirstOrDefault(e => e.Name == "DEF-thigh.L");
+        check(thigh != null, "third person: Ward's bones are entities under him");
+
+        var vp = window.ViewportView!.Viewport;
+        var hwnd = vp.NativeWindow;
+        var stats = vp.Stats!.Value;
+        _testViewport = vp.EngineHandle;
+        await Pointer(stats.Width / 2.0, stats.Height / 2.0, 0);
+        window.TogglePlay();
+        for (var attempt = 0; attempt < 5 && !window.ViewportHasFocus(); attempt++)
+        {
+            window.Activate();
+            await Task.Delay(50);
+            SetFocus(hwnd);
+            await Task.Delay(50);
+        }
+        await Task.Delay(400);
+        doc.Refresh();
+        EntityInfo E(string id) => doc.Scene.Entities.First(e => e.Id == id);
+        var p0 = E(player).Transform.Position;
+        PostMessageW(hwnd, WmKeyDown, 'W', 1);
+        await Task.Delay(900);
+        doc.Refresh();
+        var walking = E(thigh!.Id).Transform.Rotation;
+        var facing = E(ward.Id).Transform.Rotation;
+        shot(window, "editor_35_third_person.png");
+        PostMessageW(hwnd, WmKeyUp, 'W', unchecked((IntPtr)0xC0000001));
+        await Task.Delay(150);
+        doc.Refresh();
+        var p1 = E(player).Transform.Position;
+        results["third_person_walk_m"] = Math.Round(p0.Z - p1.Z, 2);
+        check(p1.Z < p0.Z - 0.5 && Math.Abs(p1.X - p0.X) < 0.05, $"third person: W walks the player away from the camera (moved {p0.Z - p1.Z:0.00} m)");
+        check(Math.Abs(facing.Y) > 0.99, $"third person: Ward turns to face where he walks (yaw quaternion y {facing.Y:0.000})");
+        check(Math.Abs(walking.X) > 0.01 || Math.Abs(walking.W) < 0.9999, "third person: his walk plays (the thigh has turned)");
+        var animator = E(ward.Id).Components["animator"];
+        check(animator?["state"]?.GetValue<string>() == "Move", "third person: his controller runs (state Move)");
+
+        window.TogglePlay();
+        doc.Refresh();
+        check(E(player).Transform.Position.Z == 3 && !doc.Playing, "stop: the third-person player is back at the start");
+        check(EngineLog.Lines.All(l => (l.Category != "Script" && l.Category != "Animation") || l.Level < 4),
+              "the ThirdPersonPlayer template and Ward's controller run without errors");
+        Native.noor_viewport_test_pointer(_testViewport, 0, 0, 0, 0);
+        doc.Undo();  // the third-person player...
+        if (removed) doc.Undo();  // ...and the first-person one back
+        check(!doc.Scene.Entities.Any(e => e.Id == player) && (!removed || doc.Scene.Entities.Any(e => e.Id == firstPerson!.Id)),
+              "third person: undo takes it away and brings the first-person player back");
     }
 
     // Milestone 4, part 3: physics in play mode.
