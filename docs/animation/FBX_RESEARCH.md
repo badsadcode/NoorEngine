@@ -51,6 +51,8 @@ Maya and store-pack files above, so the risk is small, but it is untested. Also 
   take's absolute start, so its clip holds still until the take begins (a fish's 4-second swim was 15.9 s in Blender).
   Keys outside the take are reported.
 - **Names:** Blender's "Armature|Walk" takes are called "Walk".
+- **A texture on the colour replaces the colour's value** (found rendering the creatures: their exporter left the value
+  black, and the creatures came out black).
 - **Clips from a file of their own** (an armature and its takes, no mesh: how FBX packs and Mixamo ship them) play on a
   character with the same skeleton, on any rig: `"retarget_from"` copies them by bone name when the clip file's bones
   sit at the same offsets under the same unanimated parents (and, if it's skinned, with the same rest rotations);

@@ -15,6 +15,9 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
   reading of any FBX) and `tools/samples/fbx_research.py`.
 - The research note, `docs/animation/FBX_RESEARCH.md`: 133 files tried, a go.
 
+**Fixed (after the first push):** an FBX material's texture on the base colour now replaces the colour's value, as FBX
+defines it (store-pack creatures came out black: their exporter left the value black).
+
 **Tests:** unit tests "fbx" (4); test files in `tests/data/animation/FBX` (Blender 5.2 and 3.3 exports of our characters).
 
 ### 2026-11-20 — Milestone 8C, part 6: the Animation panel

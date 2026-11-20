@@ -140,8 +140,10 @@ Result<ImportedModel> import_fbx(const stdfs::path& path, std::uint64_t max_file
         Material& m = out.material;
         const auto& pbr = src.pbr;
         Vec3 color{1, 1, 1};
-        if (pbr.base_color.has_value) color = {static_cast<float>(pbr.base_color.value_vec4.x), static_cast<float>(pbr.base_color.value_vec4.y),
-                                               static_cast<float>(pbr.base_color.value_vec4.z)};
+        // A texture on the colour replaces its value in FBX (exporters often leave that value black); the factor stays.
+        if (pbr.base_color.has_value && !pbr.base_color.texture)
+            color = {static_cast<float>(pbr.base_color.value_vec4.x), static_cast<float>(pbr.base_color.value_vec4.y),
+                     static_cast<float>(pbr.base_color.value_vec4.z)};
         if (pbr.base_factor.has_value) color = color * static_cast<float>(pbr.base_factor.value_real);
         float alpha = 1.0f;
         if (pbr.opacity.has_value) alpha = static_cast<float>(std::clamp(pbr.opacity.value_real, 0.0, 1.0));
