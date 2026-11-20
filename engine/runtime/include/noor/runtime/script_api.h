@@ -52,12 +52,18 @@ void set_component(World& w, const Guid& e, std::string_view type, asset::Json v
 
 // ---- Animations: sprites (Milestone 8B, part 6) and skeletal animators (8C, part 2) ----
 // They work on the entity's "animator" component (a model's clips), or else its "sprite" (a sheet's animations); both
-// keep the same fields. Plays an animation from its start at `speed` ("animation", "started" and "speed"); a
+// keep the same fields. An animator running a controller: play goes to a state of its base layer, speed and stop scale
+// its time, and current_animation is its base layer's state. Plays an animation from its start at `speed` ("animation", "started" and "speed"); a
 // non-looping one sends on_animation_end(name) when it has finished. False if the entity has neither component.
 bool play_animation(World& w, const Guid& e, std::string_view animation, float speed = 1.0f);
 void stop_animation(World& w, const Guid& e);                // freezes it where it is
 void set_animation_speed(World& w, const Guid& e, float speed);  // from here on, without jumping (0 freezes it)
 [[nodiscard]] std::optional<std::string> current_animation(World& w, const Guid& e);  // what it's playing (or showing)
+// Part 3: from what's playing to `animation` over `seconds` (a sprite just plays it). With a controller, `animation`
+// is a state of its base layer, as for play_animation.
+bool cross_fade(World& w, const Guid& e, std::string_view animation, float seconds, float speed = 1.0f);
+// A controller's parameter (a number, or a bool: triggers are bools a transition resets). False without an animator.
+bool set_animation_parameter(World& w, const Guid& e, std::string_view name, const asset::Json& value);
 
 // ---- Effects (Milestone 8B, part 6) ----
 // `count` particles from the entity's emitter at the next fixed step. False if nothing handles emitters.

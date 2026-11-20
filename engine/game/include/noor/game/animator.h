@@ -11,12 +11,20 @@
 //   "started"      set by scripts (runtime::api::play_animation): the game time it was played at
 //   "paused_at"    set by scripts (stop_animation, speed 0): seconds into the clip where it froze
 // Without "started" a clip plays on the scene's clock (seconds x speed + time_offset): a looping idle needs no script.
+// Cross-fades (part 3, runtime::api::cross_fade): "fade" (seconds) and "from" (the clip it's leaving, with its own
+// clock fields); the two are blended by how far into the fade it is, still a pure function of time.
+//
+// Or it runs a controller (part 3, asset/anim_controller.h): {"controller": "<.nooranim id>", "parameters": {...},
+// "speed": 1}. Scripts set the parameters (set_animation_parameter); the system steps the controller in update (so a
+// state's end reaches scripts that frame) and writes the base layer's state into "state" when it changes. A controller
+// carries state from frame to frame: replays are identical because steps are (the same dt, the same parameters).
 //
 // Playback is a pure function of time (asset::sample): the same game time gives the same pose, in the editor, in a
 // built game and on any machine. Clips move the nodes they name; the model's other nodes are left alone. Which entity
 // each node became comes from the root's "model": {"nodes": [...]} (written by scene::instantiate_model); a model
 // placed before 8C part 2 lacks it, so its nodes are matched by name below the root (said once).
 
+#include "noor/asset/anim_controller.h"
 #include "noor/asset/animation.h"
 #include "noor/runtime/world.h"
 
@@ -40,7 +48,8 @@ public:
     using Resolver = std::function<std::optional<std::filesystem::path>(const Guid&)>;
     explicit AnimatorSystem(Resolver resolve) : resolve_(std::move(resolve)) {}
     [[nodiscard]] std::string_view name() const override { return "Animation"; }
-    void update(runtime::World& world, double dt) override;       // end events of script-played clips
+    void attached(runtime::World& world) override;                // the "animator.play" command
+    void update(runtime::World& world, double dt) override;       // controllers step; end events
     void late_update(runtime::World& world, double dt) override;  // poses the bones (after scripts and physics)
     void entity_destroyed(runtime::World& world, const scene::Entity& entity) override;
 
@@ -58,15 +67,24 @@ private:
         std::vector<int> animated;  // nodes any of its clips move, in node order
         std::vector<asset::NodePose> rest;
     };
+    struct Running {  // a controller running for one character
+        Guid controller, model;
+        std::unique_ptr<asset::AnimControllerPlayer> player;
+    };
     const Model* model(const Guid& id);
+    const asset::AnimController* controller(const Guid& id);
+    asset::AnimControllerPlayer* running(const scene::Entity& root);
+    asset::AnimParameters parameters(const asset::Json& component, const asset::AnimController& controller) const;
     const std::vector<Guid>& bind(runtime::World& world, const scene::Entity& root);
     void say_once(const std::string& message);
 
     Resolver resolve_;
     std::unordered_map<Guid, std::optional<Model>> models_;  // by asset id; nullopt: failed to load
+    std::unordered_map<Guid, std::optional<asset::AnimController>> controllers_;  // by asset id
+    std::unordered_map<Guid, Running> running_;               // root entity -> its controller
     std::unordered_map<Guid, std::vector<Guid>> nodes_;      // root entity -> the entity of each node (nil: none)
     std::unordered_map<Guid, double> reported_;              // root entity -> the "started" whose end was posted
-    std::vector<asset::NodePose> pose_;                      // scratch
+    std::vector<asset::NodePose> pose_, from_;               // scratch
     std::unordered_map<std::string, bool> said_;
     Stats stats_;
 };

@@ -400,7 +400,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 |---|---|---|
 | 1 ✅ | **Skinned meshes:** skins from glTF (joints, inverse bind matrices, `JOINTS_0`/`WEIGHTS_0`), the skinned vertex path (GPU skinning, shadows), the bind pose and a posed skeleton drawn; import warnings (more than 4 influences, unnormalised weights, scaled bones) | Skinning against a CPU reference to the last bit of a vertex (unit); goldens of a character in bind pose and posed, with its shadow; 100 skinned characters measured |
 | 2 ✅ | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
-| 3 | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
+| 3 ✅ | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
 | 4 | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
 | 5 | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
 | 6 | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
@@ -457,6 +457,25 @@ walking characters: +0.43 ms game update, +0.2 ms GPU, gathering 1.24 ms). Found
 frame's start time while sprites showed its end (a frame behind; a loose test tolerance had hidden it); the test
 scripts summed `dt` in doubles (Lua) and floats (C#) and acted a frame apart (counted in frames now, and documented).
 Not done: no edit-mode preview (part 6); changing clip snaps (part 3).
+
+## Part 3 result (2026-11-20)
+Done. `asset/pose_blend.h` (nlerp, weighted mixes, additive deltas, 1D and gradient-band 2D blend-space weights), the
+`.nooranim` controller (`asset/anim_controller.h`: parameters, layers with masks and override or additive modes, states
+with a clip, a blend space or nothing, transitions with conditions, exit times and fades) and its player, run by the
+`AnimatorSystem` (stepped in `update`, posed in `late_update`); cross-fades for plain clips; scripts set parameters and
+triggers and cross-fade (Lua, and C# through the script ABI's v5). Ward got Idle, Run, a wave hello (Raise) and Lean,
+and `Ward.nooranim`. Proven: unit tests (blend maths by hand: nlerp's midpoint, cancelling rotations, weighted
+translations, additive deltas adding back exactly and by half, blend-space weights exact at samples and summing to 1;
+parse errors in plain words; a 1D blend equal to its two clips mixed at the shared phase; a trigger's transition on its
+frame, a 0.1 s fade in exactly 6 frames, Nod ending on frame 60 and returning on 61; a masked layer moving only the
+arm; an additive lean of 20 degrees, and 10 at half weight; a 2D space exact at a sample; two players bit-identical
+after 200 frames; a Lua script setting a trigger and a bool and hearing the state end; a script cross-fade at 40 %
+equal to the two clips blended); goldens `Blending_20/50/80`; `cli.animation_controller_build_identically` (a script
+driving the controller: Lua project, Lua and C# built game, equal bone fingerprints); `render.animation_cost` with
+100 characters on the controller (+1.0 ms of game update, budget 3). Found on the way: one-shots' ends were noticed a
+frame after their last pose (now the same frame); in a test, scripts added after the animator ran a frame late, the
+opposite of `make_world`'s order; part 2 hadn't updated the Lua and C# API pages (done now). Not done: animation events
+(part 4); no editor for controllers yet (part 6: text until then); transitions can't interrupt a fade in progress.
 
 ## Open questions
 

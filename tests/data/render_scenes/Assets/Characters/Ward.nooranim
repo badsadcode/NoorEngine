@@ -1,0 +1,49 @@
+{
+  "noor_anim": 1,
+  "parameters": {
+    "speed": { "type": "float", "default": 0 },
+    "waving": { "type": "bool", "default": false },
+    "lean": { "type": "float", "default": 0 },
+    "nod": { "type": "trigger" }
+  },
+  "layers": [
+    {
+      "name": "Base",
+      "entry": "Move",
+      "states": [
+        { "name": "Move", "blend": { "x": "speed", "samples": [
+          { "clip": "Idle", "x": 0 },
+          { "clip": "Walk", "x": 1.4 },
+          { "clip": "Run", "x": 4 } ] } },
+        { "name": "Nod", "clip": "Nod", "loop": false }
+      ],
+      "transitions": [
+        { "from": "Move", "to": "Nod", "when": [ { "parameter": "nod" } ], "fade": 0.1 },
+        { "from": "Nod", "to": "Move", "exit_time": 1, "fade": 0.25 }
+      ]
+    },
+    {
+      "name": "Arm",
+      "mode": "override",
+      "mask": [ "DEF-upper_arm.R" ],
+      "entry": "Off",
+      "states": [
+        { "name": "Off" },
+        { "name": "Wave", "clip": "Raise" }
+      ],
+      "transitions": [
+        { "from": "Off", "to": "Wave", "when": [ { "parameter": "waving", "equals": true } ], "fade": 0.3 },
+        { "from": "Wave", "to": "Off", "when": [ { "parameter": "waving", "equals": false } ], "fade": 0.3 }
+      ]
+    },
+    {
+      "name": "Lean",
+      "mode": "additive",
+      "weight": "lean",
+      "entry": "Lean",
+      "states": [
+        { "name": "Lean", "clip": "Lean", "loop": false }
+      ]
+    }
+  ]
+}

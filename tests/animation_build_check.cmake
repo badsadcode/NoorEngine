@@ -3,7 +3,18 @@
 # on when the nod has: in Lua, and in C#). Each runs 240 frames: the Lua scene in the project and in a game built by
 # noor_cli, the C# scene in the built game (C# runs in built games). All three must get through both end events at the
 # same moments and leave every bone in the same place (the animation fingerprint: the last frame's poses, bit for bit).
+# Part 3 runs Ward_Controller the same way (a script driving Ward.nooranim): -DSCENE=Ward_Controller -DEXPECT_ANIMATION=Move.
 #   -DCLI=<noor_cli> -DPLAYER=<noor_player> -DPROJECT=<render_scenes> -DSCRIPTS=<animation_scripts> -DWORK=<folder>
+#   [-DSCENE=<name: Scenes/<name>.noorscene and <name>_CSharp>] [-DEXPECT_ANIMATION=<at the end>] [-DEXPECT_ENDED=<count>]
+if(NOT SCENE)
+    set(SCENE Ward_Script)
+endif()
+if(NOT EXPECT_ANIMATION)
+    set(EXPECT_ANIMATION Walk)
+endif()
+if(NOT EXPECT_ENDED)
+    set(EXPECT_ENDED 2)
+endif()
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
 file(COPY "${PROJECT}/" DESTINATION "${WORK}/project")
@@ -35,14 +46,14 @@ function(read_report file prefix)
     endforeach()
 endfunction()
 
-run_player("${PLAYER}" Scenes/Ward_Script.noorscene "${WORK}/project" "${WORK}/project")
+run_player("${PLAYER}" Scenes/${SCENE}.noorscene "${WORK}/project" "${WORK}/project")
 execute_process(COMMAND "${CLI}" build "${WORK}/project" "${WORK}/game" RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(NOT code EQUAL 0)
     message(FATAL_ERROR "noor_cli build failed (${code}): ${out}${err}")
 endif()
 file(GLOB exe "${WORK}/game/*.exe")
-run_player("${exe}" Scenes/Ward_Script.noorscene "${WORK}/game")
-run_player("${exe}" Scenes/Ward_Script_CSharp.noorscene "${WORK}/game_csharp")
+run_player("${exe}" Scenes/${SCENE}.noorscene "${WORK}/game")
+run_player("${exe}" Scenes/${SCENE}_CSharp.noorscene "${WORK}/game_csharp")
 
 read_report("${WORK}/project.json" p)
 read_report("${WORK}/game.json" g)
@@ -54,11 +65,12 @@ if(NOT p_errors EQUAL 0 OR NOT g_errors EQUAL 0 OR NOT c_errors EQUAL 0)
     message(FATAL_ERROR "errors were logged: see the .log files in ${WORK}")
 endif()
 foreach(run IN ITEMS p g c)
-    if(NOT ${run}_anim STREQUAL "Walk" OR NOT ${run}_ended EQUAL 2)
-        message(FATAL_ERROR "Ward didn't get through wave, nod and walking on (${run}: ${${run}_anim}, ${${run}_ended} ended; 2 expected)")
+    if(NOT ${run}_anim STREQUAL "${EXPECT_ANIMATION}" OR NOT ${run}_ended EQUAL ${EXPECT_ENDED})
+        message(FATAL_ERROR "${SCENE}: Ward didn't get to the end (${run}: ${${run}_anim}, ${${run}_ended} ended; "
+                            "${EXPECT_ANIMATION} and ${EXPECT_ENDED} expected)")
     endif()
 endforeach()
-if(NOT p_started STREQUAL g_started OR NOT p_started STREQUAL c_started)
+if(NOT p_started STREQUAL g_started OR NOT p_started STREQUAL c_started)  # (null for a controller: its state has no start time)
     message(FATAL_ERROR "the walk restarted at different moments (project ${p_started}, game ${g_started}, C# ${c_started})")
 endif()
 if(NOT p_print STREQUAL g_print OR NOT p_print STREQUAL c_print)

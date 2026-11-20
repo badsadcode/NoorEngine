@@ -54,7 +54,7 @@ asset::NodePose at(const asset::ImportedModel& m, const char* clip, double t, co
 
 TEST_CASE("animation: Ward's clips come in with their channels, keys and lengths") {
     const auto m = ward();
-    REQUIRE(m.animations.size() == 4);
+    REQUIRE(m.animations.size() == 8);  // Wave, Nod, Glide, Walk; Idle, Run, Raise, Lean (part 3)
     CHECK(asset::find_animation(m, "Walk")->channels.size() == 7);
     CHECK(asset::find_animation(m, "Walk")->duration == doctest::Approx(1.0f));
     CHECK(asset::find_animation(m, "Glide")->channels[0].interpolation == asset::AnimationChannel::Interpolation::CubicSpline);
@@ -168,9 +168,9 @@ TEST_CASE("animator: a placed Ward's bones follow the clip on the scene's clock,
         for (int i = 0; i < 30; ++i) p.world->frame(1.0 / 60.0, {});  // 0.5 s
         CHECK(p.world->time() == doctest::Approx(0.5));
         CHECK(same(p.rotation("DEF-upper_arm.R"), about({0, 0, 1}, 45)));
-        // Every bone any of Ward's clips moves is posed (8), so changing clip puts the last one's bones back to rest;
+        // Every bone any of Ward's clips moves is posed (11), so changing clip puts the last one's bones back to rest;
         // the others (the mesh, his spine, hands...) are left alone.
-        CHECK(p.world->system<game::AnimatorSystem>()->stats().nodes == 8);
+        CHECK(p.world->system<game::AnimatorSystem>()->stats().nodes == 11);
         for (int i = 0; i < 60; ++i) p.world->frame(1.0 / 60.0, {});
         CHECK(same(p.rotation("DEF-upper_arm.R"), about({0, 0, 1}, 90)));  // not looping: holds the end
         CHECK(p.world->system<game::AnimatorSystem>()->stats().ended == 0);   // the scene's clock sends no end events
@@ -188,7 +188,7 @@ TEST_CASE("animator: looping wraps, speed and time_offset shift the clock, equal
         auto p = place_ward({{"animation", "Walk"}, {"time_offset", 0.3}});
         for (int i = 0; i < 47; ++i) p.world->frame(1.0 / 60.0, {});
         f = p.world->system<game::AnimatorSystem>()->stats().fingerprint;
-        CHECK(p.world->system<game::AnimatorSystem>()->stats().nodes == 8);
+        CHECK(p.world->system<game::AnimatorSystem>()->stats().nodes == 11);
     }
     CHECK(prints[0] == prints[1]);
 }

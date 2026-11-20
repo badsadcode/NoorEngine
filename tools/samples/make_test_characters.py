@@ -14,6 +14,12 @@ Writes into tests/data/animation/Ward/ (and copies into tests/data/render_scenes
                     Glide  CUBICSPLINE translation: the hips 1 m forward (+Z) over 1 s, leaving at 2 m/s and arriving
                            still (0.4375 m at 0.25 s, 0.75 m at 0.5 s);
                     Walk   a 1 s walk cycle, first key = last (loops): legs and arms swing (arms down), hips bob.
+                  and for blending (part 3):
+                    Idle   a 2 s breath: arms down, the chest rising 3 degrees;
+                    Run    a 0.6 s run cycle: bigger swings, knees high, leaning forward;
+                    Raise  a 1 s wave hello: the right arm up, its forearm sweeping (for a masked layer);
+                    Lean   spine 20 and chest 10 degrees forward over 1 s (for an additive layer: the change from its
+                           first key is what gets added).
 
 Every body part is a tube along its bone; vertices near a joint blend between the two bones that meet there, so elbows
 and knees bend smoothly. Colours: a blue-grey tunic, light grey limbs, a warm head (vertex colours).
@@ -154,6 +160,8 @@ def clips():
     swing = [30, 0, -30, 0, 30]
     arm_l = [qmul(quat((1, 0, 0), -a * 0.6), quat((0, 0, 1), -70)) for a in swing]  # down, then swinging against the leg
     arm_r = [qmul(quat((1, 0, 0), a * 0.6), quat((0, 0, 1), 70)) for a in swing]
+    run_t = [0, 0.15, 0.3, 0.45, 0.6]
+    run_swing = [50, 0, -50, 0, 50]
     return [
         ('Wave', [('DEF-upper_arm.R', 'rotation', 'LINEAR', [0, 1], [quat((0, 0, 1), 0), quat((0, 0, 1), 90)])]),
         ('Nod', [('DEF-head', 'rotation', 'STEP', [0, 0.5, 1.0], [quat((0, 1, 0), 0), quat((0, 1, 0), 30), quat((0, 1, 0), 30)])]),
@@ -168,6 +176,30 @@ def clips():
             ('DEF-upper_arm.L', 'rotation', 'LINEAR', walk_t, arm_l),
             ('DEF-upper_arm.R', 'rotation', 'LINEAR', walk_t, arm_r),
             ('DEF-hips', 'translation', 'LINEAR', walk_t, [[0, y, 0] for y in (0.95, 0.93, 0.95, 0.93, 0.95)]),
+        ]),
+        ('Idle', [
+            ('DEF-chest', 'rotation', 'LINEAR', [0, 1, 2], [quat((1, 0, 0), b) for b in (0, -3, 0)]),
+            ('DEF-upper_arm.L', 'rotation', 'LINEAR', [0, 1, 2], [qmul(quat((1, 0, 0), b), quat((0, 0, 1), -72)) for b in (0, 3, 0)]),
+            ('DEF-upper_arm.R', 'rotation', 'LINEAR', [0, 1, 2], [qmul(quat((1, 0, 0), b), quat((0, 0, 1), 72)) for b in (0, 3, 0)]),
+            ('DEF-hips', 'translation', 'LINEAR', [0, 1, 2], [[0, y, 0] for y in (0.95, 0.947, 0.95)]),
+        ]),
+        ('Run', [
+            ('DEF-thigh.L', 'rotation', 'LINEAR', run_t, [quat((1, 0, 0), -a) for a in run_swing]),
+            ('DEF-thigh.R', 'rotation', 'LINEAR', run_t, [quat((1, 0, 0), a) for a in run_swing]),
+            ('DEF-shin.L', 'rotation', 'LINEAR', run_t, [quat((1, 0, 0), b) for b in (10, 40, 95, 40, 10)]),
+            ('DEF-shin.R', 'rotation', 'LINEAR', run_t, [quat((1, 0, 0), b) for b in (95, 40, 10, 40, 95)]),
+            ('DEF-upper_arm.L', 'rotation', 'LINEAR', run_t, [qmul(quat((1, 0, 0), -a * 0.7), quat((0, 0, 1), -75)) for a in run_swing]),
+            ('DEF-upper_arm.R', 'rotation', 'LINEAR', run_t, [qmul(quat((1, 0, 0), a * 0.7), quat((0, 0, 1), 75)) for a in run_swing]),
+            ('DEF-chest', 'rotation', 'LINEAR', run_t, [quat((1, 0, 0), 10)] * 5),
+            ('DEF-hips', 'translation', 'LINEAR', run_t, [[0, y, 0] for y in (0.92, 0.89, 0.92, 0.89, 0.92)]),
+        ]),
+        ('Raise', [
+            ('DEF-upper_arm.R', 'rotation', 'LINEAR', walk_t, [quat((0, 0, 1), -60)] * 5),
+            ('DEF-forearm.R', 'rotation', 'LINEAR', walk_t, [quat((0, 0, 1), b) for b in (-20, -50, -20, 10, -20)]),
+        ]),
+        ('Lean', [
+            ('DEF-spine', 'rotation', 'LINEAR', [0, 1], [quat((1, 0, 0), 0), quat((1, 0, 0), 20)]),
+            ('DEF-chest', 'rotation', 'LINEAR', [0, 1], [quat((1, 0, 0), 0), quat((1, 0, 0), 10)]),
         ]),
     ]
 

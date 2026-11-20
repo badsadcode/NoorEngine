@@ -72,6 +72,8 @@ public unsafe struct RtApi
     public delegate* unmanaged<RtEntity, byte*> SpriteAnimation;
     public delegate* unmanaged<RtEntity, int, int> Burst;
     public delegate* unmanaged<byte*> EventName;
+    // v5: skeletal animation
+    public delegate* unmanaged<RtEntity, byte*, float, int, int> AnimationParameter;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -87,7 +89,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 4;
+    public const uint ExpectedVersion = 5;
     public static RtApi* Api;
 
     public static ref RtApi A

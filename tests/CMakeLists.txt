@@ -36,6 +36,7 @@ add_executable(noor_unit_tests
     unit/test_sprite_animation.cpp
     unit/test_skinning.cpp
     unit/test_animation.cpp
+    unit/test_anim_controller.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp
@@ -223,6 +224,18 @@ add_test(NAME render.golden_Animation
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Animation
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Animation PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# Blending and the controller (8C part 3): four Wards on Ward.nooranim (idle-walk, walk-run, walking and waving on a
+# masked layer, running and leaning on an additive one) at three moments of a sequence.
+foreach(frame IN ITEMS 20 50 80)
+    add_test(NAME render.golden_Blending_${frame}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Blending.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Blending_${frame}.png -DFRAMES=${frame}
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Blending_${frame}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_Blending_${frame} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
 add_test(NAME render.animation_cost
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_cost -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_cost_check.cmake)
@@ -235,6 +248,13 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCRIPTS=${CMAKE_CURRENT_SOURCE_DIR}/data/animation_scripts
             -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_scripts_build -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_build_check.cmake)
     set_tests_properties(cli.animation_scripts_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
+    # 8C part 3: a script drives Ward's controller (speed, a trigger, a bool, a parameter on an end event).
+    add_test(NAME cli.animation_controller_build_identically
+        COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCRIPTS=${CMAKE_CURRENT_SOURCE_DIR}/data/animation_scripts
+            -DSCENE=Ward_Controller -DEXPECT_ANIMATION=Move -DEXPECT_ENDED=2
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/animation_controller_build -P ${CMAKE_CURRENT_SOURCE_DIR}/animation_build_check.cmake)
+    set_tests_properties(cli.animation_controller_build_identically PROPERTIES LABELS "gpu;cli" TIMEOUT 240)
 endif()
 # Sprite animations from scripts (Milestone 8B, part 6): Coth walks, attacks and falls down on the attack's end event,
 # from Lua in the project and in a built game (the same moments), and from C# in the built game.

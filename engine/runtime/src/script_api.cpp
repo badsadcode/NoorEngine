@@ -178,7 +178,13 @@ const char* animated(World& w, const Guid& e) {
     return "sprite";
 }
 
+bool controlled(World& w, const Guid& e) {
+    const auto* a = component(w, e, "animator");
+    return a && a->is_object() && a->contains("controller");
+}
+
 bool play_animation(World& w, const Guid& e, std::string_view animation, float speed) {
+    if (controlled(w, e)) return w.command("animator.play", e, asset::Json{{"state", std::string(animation)}, {"fade", 0.0}});
     const char* type = animated(w, e);
     const auto* c = component(w, e, type);
     if (!c || !c->is_object()) return false;
@@ -187,11 +193,43 @@ bool play_animation(World& w, const Guid& e, std::string_view animation, float s
     s["started"] = w.time();
     s["speed"] = speed;
     s.erase("paused_at");
+    s.erase("from");
+    s.erase("fade");
     set_component(w, e, type, std::move(s));
     return true;
 }
 
+bool cross_fade(World& w, const Guid& e, std::string_view animation, float seconds, float speed) {
+    if (controlled(w, e))
+        return w.command("animator.play", e, asset::Json{{"state", std::string(animation)}, {"fade", std::max(0.0f, seconds)}});
+    const auto* c = component(w, e, "animator");
+    if (!c || !c->is_object() || seconds <= 0.0f || !c->contains("animation")) return play_animation(w, e, animation, speed);
+    asset::Json s = *c;
+    asset::Json from = asset::Json::object();  // the clip it's leaving, with its own clock
+    for (const char* key : {"animation", "started", "speed", "loop", "paused_at", "time_offset"})
+        if (s.contains(key)) from[key] = s[key];
+    s["from"] = std::move(from);
+    s["fade"] = seconds;
+    s["animation"] = std::string(animation);
+    s["started"] = w.time();
+    s["speed"] = speed;
+    s.erase("paused_at");
+    s.erase("time_offset");
+    set_component(w, e, "animator", std::move(s));
+    return true;
+}
+
+bool set_animation_parameter(World& w, const Guid& e, std::string_view name, const asset::Json& value) {
+    const auto* c = component(w, e, "animator");
+    if (!c || !c->is_object()) return false;
+    asset::Json s = *c;
+    s["parameters"][std::string(name)] = value;
+    set_component(w, e, "animator", std::move(s));
+    return true;
+}
+
 void stop_animation(World& w, const Guid& e) {
+    if (controlled(w, e)) return set_animation_speed(w, e, 0.0f);
     const char* type = animated(w, e);
     const auto* c = component(w, e, type);
     if (!c || !c->is_object() || c->contains("paused_at")) return;
@@ -201,6 +239,12 @@ void stop_animation(World& w, const Guid& e) {
 }
 
 void set_animation_speed(World& w, const Guid& e, float speed) {
+    if (controlled(w, e)) {  // a controller's time just runs slower or faster from the next step
+        asset::Json s = *component(w, e, "animator");
+        s["speed"] = std::max(0.0f, speed);
+        set_component(w, e, "animator", std::move(s));
+        return;
+    }
     const char* type = animated(w, e);
     const auto* c = component(w, e, type);
     if (!c || !c->is_object()) return;
@@ -219,6 +263,11 @@ void set_animation_speed(World& w, const Guid& e, float speed) {
 }
 
 std::optional<std::string> current_animation(World& w, const Guid& e) {
+    if (controlled(w, e)) {
+        const auto* c = component(w, e, "animator");
+        if (c->contains("state") && (*c)["state"].is_string()) return (*c)["state"].get<std::string>();
+        return std::nullopt;
+    }
     const auto* c = component(w, e, animated(w, e));
     if (!c || !c->is_object() || !c->contains("animation") || !(*c)["animation"].is_string()) return std::nullopt;
     return (*c)["animation"].get<std::string>();

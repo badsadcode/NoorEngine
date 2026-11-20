@@ -11,6 +11,16 @@ Run tools/samples/make_test_characters.py first (Ward_Anim.glb). Needs a build. 
   tests/data/animation_scripts/Scenes/Ward_Script(.CSharp).noorscene  Ward walking until a script waves (a one-shot,
       at double speed), nods when the wave ends, and notes when the nod ends: in Lua and in C#. The built-game check
       (cli.animation_scripts_build_identically) runs them in the project and in a built game.
+Part 3 (blending and the controller, Ward.nooranim):
+  tests/data/render_scenes/Scenes/Blending.noorscene         the golden sequence: four Wards on one controller with
+      different parameters: between idle and walk, between walk and run, walking and waving (a masked layer), running
+      and leaning (an additive layer). render.golden_Blending_<frame> captures three moments.
+  tests/data/render_scenes/Scenes/Blending_Crowd.noorscene   100 Wards on the controller, speeds from idle to run, half
+      of them waving, all leaning a little (render.animation_cost).
+  tests/data/animation_scripts/Scenes/Ward_Controller(_CSharp).noorscene  a script speeds Ward up from standing to a
+      run, triggers a nod, waves, and leans on when the nod has ended: in Lua and in C#.
+
+    python tools/samples/add_animation_scene.py [part2] [part3]   (both when neither is named)
 """
 import ctypes
 import json
@@ -61,7 +71,7 @@ def main():
         sys.exit(dll.noor_last_error().decode())
     try:
         guid = {}
-        for f in ('Ward_Anim.glb', 'RobotExpressive.glb'):
+        for f in ('Ward_Anim.glb', 'RobotExpressive.glb', 'Ward.nooranim'):
             guid[f] = json.loads((PROJECT / 'Assets' / 'Characters' / (f + '.noormeta')).read_text(encoding='utf-8'))['guid']
         sprites = json.loads((PROJECT / 'Scenes' / 'Sprites_Sun.noorscene').read_text(encoding='utf-8'))
 
@@ -92,6 +102,37 @@ def main():
                 run(doc, {'op': 'set_component', 'entity': e['id'], 'type': 'animator', 'value': animator})
             return e['id']
 
+        parts = set(sys.argv[1:]) or {'part2', 'part3'}
+
+        def scripted(name, script, x, animator):
+            path = f'Scenes/{name}.noorscene'
+            new_scene(path, name, {'position': [0, 1.4, 5.0], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
+            root = place('Ward_Anim.glb', 'Ward', x, animator=animator)
+            run(doc, {'op': 'set_component', 'entity': root, 'type': 'script', 'value': {'file': script}})
+            save(path)
+            shutil.move(PROJECT / path, SCRIPTS / path)
+
+        if 'part3' in parts:
+            ctrl = guid['Ward.nooranim']
+            new_scene('Scenes/Blending.noorscene', 'Blending', {'position': [0.1, 1.5, 6.2], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
+            for name, x, turn, params in (('Ward (idle to walk)', -2.4, 30, {'speed': 0.7}), ('Ward (walk to run)', -0.8, 30, {'speed': 2.7}),
+                                          ('Ward (walking, waving)', 0.8, 0, {'speed': 1.4, 'waving': True}),
+                                          ('Ward (running, leaning)', 2.4, -30, {'speed': 4, 'lean': 1})):
+                place('Ward_Anim.glb', name, x, turn=turn, animator={'controller': ctrl, 'parameters': params})
+            save('Scenes/Blending.noorscene')
+            new_scene('Scenes/Blending_Crowd.noorscene', 'Blending_Crowd',
+                      {'position': [0, 7, 16], 'rotation': [-0.2164396, 0, 0, 0.9762960]})
+            for k in range(100):
+                place('Ward_Anim.glb', f'Ward {k}', (k % 10 - 4.5) * 1.6, (k // 10 - 4.5) * 1.6, turn=k * 37 % 360,
+                      animator={'controller': ctrl, 'parameters': {'speed': round(k * 0.04, 2), 'waving': k % 2 == 0, 'lean': 0.3}})
+            save('Scenes/Blending_Crowd.noorscene')
+            (SCRIPTS / 'Scenes').mkdir(parents=True, exist_ok=True)
+            for name, script, x in (('Ward_Controller', 'Scripts/ward_controller.luau', -0.9),
+                                    ('Ward_Controller_CSharp', 'Scripts/WardController.cs', 0.9)):
+                scripted(name, script, x, {'controller': ctrl})
+        if 'part2' not in parts:
+            return
+
         # The golden: four characters, each on the scene's clock.
         new_scene('Scenes/Animation.noorscene', 'Animation', {'position': [0.1, 1.5, 6.2], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
         place('Ward_Anim.glb', 'Ward (walking)', -2.4, turn=35, animator={'animation': 'Walk'})
@@ -112,12 +153,7 @@ def main():
         # The scripted ones: made here (where Ward_Anim's id is known), kept beside their scripts.
         (SCRIPTS / 'Scenes').mkdir(parents=True, exist_ok=True)
         for name, script, x in (('Ward_Script', 'Scripts/ward_wave.luau', -0.9), ('Ward_Script_CSharp', 'Scripts/WardWave.cs', 0.9)):
-            path = f'Scenes/{name}.noorscene'
-            new_scene(path, name, {'position': [0, 1.4, 5.0], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
-            root = place('Ward_Anim.glb', 'Ward', x, animator={'animation': 'Walk'})
-            run(doc, {'op': 'set_component', 'entity': root, 'type': 'script', 'value': {'file': script}})
-            save(path)
-            shutil.move(PROJECT / path, SCRIPTS / path)
+            scripted(name, script, x, {'animation': 'Walk'})
     finally:
         dll.noor_doc_close(doc)
 

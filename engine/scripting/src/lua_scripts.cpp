@@ -326,6 +326,20 @@ struct LuaScriptSystem::Impl {
                  else lua_pushnil(L);
                  return 1;
              }},
+            {"cross_fade", [](lua_State* L) {
+                 lua_pushboolean(L, api::cross_fade(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2), static_cast<float>(luaL_checknumber(L, 3)),
+                                                    static_cast<float>(luaL_optnumber(L, 4, 1.0))));
+                 return 1;
+             }},
+            {"set_animation_parameter", [](lua_State* L) {
+                 asset::Json v = lua_isboolean(L, 3) ? asset::Json(static_cast<bool>(lua_toboolean(L, 3))) : asset::Json(luaL_checknumber(L, 3));
+                 lua_pushboolean(L, api::set_animation_parameter(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2), v));
+                 return 1;
+             }},
+            {"set_animation_trigger", [](lua_State* L) {
+                 lua_pushboolean(L, api::set_animation_parameter(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2), asset::Json(true)));
+                 return 1;
+             }},
             // ---- Effects (needs an emitter component) ----
             {"burst", [](lua_State* L) {
                  lua_pushboolean(L, api::emitter_burst(world_of(L), check_entity(L, 1), static_cast<int>(luaL_checkinteger(L, 2))));

@@ -65,6 +65,12 @@ main asset path.
 - *Part 2:* sprites and skeletal animators share one script API (`play_animation`, `stop_animation`,
   `set_animation_speed`, `on_animation_end`) and the same component fields; 100 walking characters cost 0.43 ms of
   game update (sampling and writing 800 bones).
+- *Part 3:* blending is normalised lerp (exact at the midpoint, no trigonometry), so it's bit-stable as decided; the
+  part-2 sampler's slerp (one clip's own keys) uses the standard library's `acos` and `sin`, which the built-game
+  checks have so far found identical; if a platform ever differs, it moves to the same nlerp. Controllers carry state
+  between frames (states, phases, fades), stepped in `update` so a state's end reaches scripts that frame; replays are
+  identical because steps are. Blend spaces play their clips at one shared phase (feet in step). The script ABI went
+  to v5 (cross-fades, controller parameters). 100 characters on a three-layer controller: 1.0 ms of game update.
 - Crowds cost CPU per bone (gathering the scene) and per character (sampling); the crowd benchmark in part 8 says
   where the limit is. GPU sampling and a hidden pose stay later options.
 - The device must support buffer device addresses and 64-bit shader integers (every desktop GPU we target does); one

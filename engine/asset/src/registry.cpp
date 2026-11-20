@@ -81,6 +81,7 @@ bool is_graph(const stdfs::path& path) { return lower_extension(path) == ".noorg
 bool is_environment(const stdfs::path& path) { return lower_extension(path) == ".noorenv"; }  // environments (Milestone 8A)
 bool is_fx(const stdfs::path& path) { return lower_extension(path) == ".noorfx"; }                // effects (noor/fx, Milestone 8B)
 bool is_sprite(const stdfs::path& path) { return lower_extension(path) == ".noorsprite"; }       // sprite sheets (8B part 5)
+bool is_anim(const stdfs::path& path) { return lower_extension(path) == ".nooranim"; }           // animation controllers (8C part 3)
 
 // Formats miniaudio decodes out of the box (ADR-011). Ogg Vorbis would need stb_vorbis: later.
 bool is_audio(const stdfs::path& path) {
@@ -101,7 +102,7 @@ std::optional<Guid> prefab_guid(const stdfs::path& source) {
 
 bool AssetRegistry::is_importable(const stdfs::path& path) {
     if (is_prefab(path) || is_audio(path) || is_texture_file(path) || is_material(path) || is_sculpt(path) || is_paint(path) || is_graph(path) ||
-        is_environment(path) || is_fx(path) || is_sprite(path))
+        is_environment(path) || is_fx(path) || is_sprite(path) || is_anim(path))
         return true;
     const std::string ext = lower_extension(path);
     if (ext != ".glb" && ext != ".gltf") return false;
@@ -207,14 +208,16 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                 const bool environment = is_environment(source);
                 const bool fx = is_fx(source);
                 const bool sprite = is_sprite(source);
-                const auto from_manifest =
-                    prefab || audio || texture || material || sculpt || paint || graph || environment || fx || sprite ? std::nullopt : interchange_guid(source);
+                const bool anim = is_anim(source);
+                const auto from_manifest = prefab || audio || texture || material || sculpt || paint || graph || environment || fx || sprite || anim
+                                               ? std::nullopt
+                                               : interchange_guid(source);
                 const auto embedded = prefab ? prefab_guid(source) : from_manifest;
                 meta.json = Json::object();
                 meta.json["noor_meta"] = kMetaFormat;
                 meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
                 meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : texture ? "texture" : material ? "material" : sculpt ? "terrain_sculpt" : paint ? "terrain_paint" : graph ? "procgraph" :
-                                         environment ? "environment" : fx ? "fx" : sprite ? "sprite" : "gltf";
+                                         environment ? "environment" : fx ? "fx" : sprite ? "sprite" : anim ? "anim_controller" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
                 // Textures: the first guess at their settings, from the name (ADR-029); edit them later.

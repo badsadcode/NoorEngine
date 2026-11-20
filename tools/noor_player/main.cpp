@@ -521,7 +521,7 @@ int run(const Options& o) {
                         for (const auto& e : (*world)->scene().entities) {
                             if (!e.has("animator") || !e.components.at("animator").is_object()) continue;
                             const auto& c = e.components.at("animator");
-                            animators.push_back({{"name", e.name}, {"animation", c.value("animation", std::string())},
+                            animators.push_back({{"name", e.name}, {"animation", c.value("state", c.value("animation", std::string()))},  // a controller: its state
                                                  {"started", c.contains("started") ? c["started"] : Json(nullptr)}});
                         }
                         const auto* anim = (*world)->system<noor::game::AnimatorSystem>();

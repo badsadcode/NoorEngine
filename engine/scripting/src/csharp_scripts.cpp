@@ -222,6 +222,7 @@ int32_t rt_sprite(noor_rt_entity e, int32_t op, const char* animation, float spe
     case NOOR_RT_SPRITE_PLAY: return animation && api::play_animation(*t_world, from_rt(e), animation, speed) ? 1 : 0;
     case NOOR_RT_SPRITE_STOP: api::stop_animation(*t_world, from_rt(e)); return 1;
     case NOOR_RT_SPRITE_SPEED: api::set_animation_speed(*t_world, from_rt(e), speed); return 1;
+    case NOOR_RT_SPRITE_CROSS_FADE: return animation && api::cross_fade(*t_world, from_rt(e), animation, speed) ? 1 : 0;
     default: return 0;
     }
 }
@@ -232,6 +233,11 @@ const char* rt_sprite_animation(noor_rt_entity e) {
 }
 int32_t rt_burst(noor_rt_entity e, int32_t count) { return t_world && api::emitter_burst(*t_world, from_rt(e), count) ? 1 : 0; }
 const char* rt_event_name() { return t_event_name.c_str(); }
+int32_t rt_animation_parameter(noor_rt_entity e, const char* name, float value, int32_t kind) {
+    if (!t_world || !name) return 0;
+    const asset::Json v = kind == NOOR_RT_PARAM_BOOL ? asset::Json(value != 0.0f) : asset::Json(value);
+    return api::set_animation_parameter(*t_world, from_rt(e), name, v) ? 1 : 0;
+}
 
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
@@ -244,6 +250,7 @@ const noor_rt_api kApi = {
     rt_sound, rt_play_one_shot, rt_set_bus_volume,
     rt_ui_text, rt_ui_rect,
     rt_sprite, rt_sprite_animation, rt_burst, rt_event_name,
+    rt_animation_parameter,
 };
 
 } // namespace

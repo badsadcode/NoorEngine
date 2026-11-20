@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 3: blending and the controller
+**Added**
+- `asset/pose_blend.h`: `nlerp`, `blend` (whole or per bone), `mix` (weighted), `additive_delta`/`apply_additive`,
+  `blend_weights_1d` and `blend_weights_2d` (gradient band).
+- **Animation controllers** (`.nooranim`, importer `anim_controller`; `asset/anim_controller.h`): parameters (float,
+  bool, trigger), layers (masks; override or additive; weights from parameters), states (a clip, a 1D or 2D blend
+  space played in step, or empty), transitions (conditions, exit time, fade); `AnimControllerPlayer`.
+- The `animator` component runs one (`"controller"`, `"parameters"`, `"speed"`; `"state"` written back); plain clips
+  cross-fade (`"from"`, `"fade"`). The player's report shows a controller's state.
+- Scripts: `cross_fade`, `set_animation_parameter`, `set_animation_trigger` (Lua); `CrossFade`,
+  `SetAnimationParameter`, `SetAnimationTrigger` (C#).
+- Ward's Idle, Run, Raise and Lean clips; `Ward.nooranim`; Blending scenes (`add_animation_scene.py part3`).
+
+**Changed:** the script ABI is v5 (`animation_parameter`; sprite op `CROSS_FADE`). A one-shot's end is reported the
+frame its last pose is shown (was a frame later). The Lua and C# API pages now cover animators.
+
+**Tests:** unit tests "blend maths" (3), "controller files", "controller" (5), "animator with/without a controller";
+goldens `Blending_20`, `Blending_50`, `Blending_80`; `cli.animation_controller_build_identically`;
+`render.animation_cost` measures controllers too.
+
 ### 2026-11-20 — Milestone 8C, part 2: clips and the player
 **Added**
 - **Clips from glTF** (`asset::ImportedAnimation`, `AnimationChannel`): translation, rotation and scale; step, linear

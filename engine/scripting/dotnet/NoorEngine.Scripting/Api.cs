@@ -139,6 +139,23 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public void SetAnimationSpeed(float speed) => Engine.A.Sprite(Id, 2, null, speed);
     /// <summary>The animation it's playing (or showing), or null.</summary>
     public string? Animation => Engine.Str(Engine.A.SpriteAnimation(Id));
+    /// <summary>From what's playing to <paramref name="animation"/> over <paramref name="seconds"/> (with a controller: a state).</summary>
+    public bool CrossFade(string animation, float seconds)
+    {
+        fixed (byte* a = Engine.Utf8(animation)) return Engine.A.Sprite(Id, 3, a, seconds) != 0;
+    }
+    /// <summary>A parameter of the animator's controller.</summary>
+    public bool SetAnimationParameter(string name, float value)
+    {
+        fixed (byte* n = Engine.Utf8(name)) return Engine.A.AnimationParameter(Id, n, value, 0) != 0;
+    }
+    /// <summary>A bool parameter of the animator's controller.</summary>
+    public bool SetAnimationParameter(string name, bool value)
+    {
+        fixed (byte* n = Engine.Utf8(name)) return Engine.A.AnimationParameter(Id, n, value ? 1 : 0, 1) != 0;
+    }
+    /// <summary>Sets a trigger: the controller's next transition that tests it fires, and resets it.</summary>
+    public bool SetAnimationTrigger(string name) => SetAnimationParameter(name, true);
 
     // ---- Effects (needs an emitter component) ----
     /// <summary>Spawns <paramref name="count"/> particles from the entity's emitter at the next fixed step.</summary>

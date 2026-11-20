@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, and **part 2, clips and the player**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, and **part 3, blending and the controller**.
 
 ## Skinned meshes (part 1)
 
@@ -93,9 +93,53 @@ matched by name under the root, and the Console says so once. Placing it again f
 **Measured** (RTX 3080): 100 walking characters (8 bones each moved) cost +0.43 ms of game update a frame and
 +0.2 ms of GPU; gathering the scene stays at about 1.2 ms (`render.animation_cost`).
 
+## Blending and the controller (part 3)
+
+**Cross-fades without a controller.** `entity:cross_fade("Run", 0.25)` (C#: `Entity.CrossFade("Run", 0.25f)`) blends
+from what's playing to the new clip over a quarter of a second, each clip on its own clock. The component remembers
+what it's leaving (`"from"`, `"fade"`) until the fade is over: still a pure function of time.
+
+**Controllers** (`.nooranim`, an asset like any other) are for characters with more than one thing going on. Give the
+animator one, with the parameters it starts with:
+
+```json
+"animator": { "controller": "<Ward.nooranim's id>", "parameters": { "speed": 1.4, "waving": true } }
+```
+
+A controller has **parameters** (float, bool, trigger) that scripts set, and **layers**, each a little state machine:
+
+- **States** play one clip, a **blend space** (1D: clips along one parameter, such as Idle at 0, Walk at 1.4 and Run
+  at 4 by speed; 2D: clips on a plane of two parameters), or nothing (an empty state: fading to it fades the layer
+  out). The clips of a blend space play **in step**: a walk and a run blended halfway put their feet down together.
+- **Transitions** go from a state (or any, `"*"`) to another when all their conditions hold (a trigger or bool is
+  set; a number is greater, less, equal...), and optionally not before the state has played through (`exit_time`: 1 =
+  once). They cross-fade over `fade` seconds. Checked every frame before time moves on, so a fade of F seconds takes
+  exactly F x 60 frames at 60 frames a second, and a trigger set in `on_update` changes the state that same frame.
+- **Layers** stack on the first (the base, the whole body): an **override** layer replaces the bones in its **mask**
+  (bone names, each with everything below it: `["DEF-upper_arm.R"]` is the whole right arm), by its weight; an
+  **additive** layer adds how its clip differs from the clip's own first moment (a lean, a breath, a flinch) on top
+  of whatever is playing, by its weight. A weight can be a parameter.
+
+Ward's controller (`tests/data/render_scenes/Assets/Characters/Ward.nooranim`) is a complete small example: walk-run
+by speed, a nod on a trigger that returns by itself, a waving arm on a masked layer, a lean on an additive one. The
+file format is described at the top of `engine/asset/include/noor/asset/anim_controller.h`; until the Animation panel
+(part 6) it's edited as text, and its mistakes are reported in plain words ("layer 'Arm', transition 'Off' -> 'Wav':
+no such "to" state").
+
+From scripts: `set_animation_parameter("speed", 3)`, `set_animation_trigger("nod")`, `play_animation("Nod")` (go to a
+state now), `cross_fade("Nod", 0.2)`, `animation()` (the base layer's state), `set_animation_speed` and
+`stop_animation` (the controller's time). `on_animation_end(name)` hears any layer's non-looping state finishing.
+
+**Deterministic:** blending uses normalised linear interpolation (no trigonometry), mixes several poses in a fixed
+order, and a controller's state moves only by the steps it's given: the same frames and parameters give the same
+pose, bit for bit, in the project and in built games, from Lua and from C# (tested).
+
+**Measured** (RTX 3080): 100 characters on Ward's controller (a three-clip blend space, half of them waving on a masked
+layer, all leaning on an additive one) cost about 1.0 ms of game update a frame; GPU unchanged.
+
 ## Not yet
 
-- **Blending** (cross-fades, blend spaces, layers) and the `.nooranim` controller: part 3. Changing clip now snaps.
+- **Animation events** (named moments in a clip, such as footsteps): with root motion, part 4.
 - **Root motion**, sockets and bone transforms for scripts: part 4. Clips that move the hips move them in place.
 - **Previewing clips in the editor** (a timeline to scrub): part 6, the Animation panel. Clips play when you press
   Play (and in games); in edit mode characters stand in their rest pose.

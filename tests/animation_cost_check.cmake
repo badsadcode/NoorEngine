@@ -1,7 +1,8 @@
 # What skeletal animation costs (Milestone 8C, part 2, ADR-036): render_scenes/Animation_Crowd (100 Wards walking,
-# each sampled every frame and his 8 animated bones written as entity transforms, then skinned on the GPU) against
-# Skinning_Empty (the same floor, sun and camera). GPU judged on each run's fastest frame, like the other GPU cost tests;
-# the game update (scripts and systems, the animator among them) and gathering the scene on their medians.
+# each sampled every frame and his 11 animated bones written as entity transforms, then skinned on the GPU) against
+# Skinning_Empty (the same floor, sun and camera). Part 3: Blending_Crowd, the same 100 on Ward.nooranim (a three-clip
+# blend space, half of them waving on a masked layer, all leaning on an additive one). GPU judged on each run's fastest
+# frame, like the other GPU cost tests; the game update (scripts and systems, the animator among them) and gathering the scene on their medians.
 #   -DPLAYER=<noor_player> -DPROJECT=<render_scenes> -DWORK=<folder>
 file(MAKE_DIRECTORY "${WORK}")
 function(run scene report)
@@ -21,8 +22,10 @@ function(microseconds value out)  # "1.234" ms -> 1234
 endfunction()
 run(Scenes/Skinning_Empty.noorscene "${WORK}/empty.json")
 run(Scenes/Animation_Crowd.noorscene "${WORK}/crowd.json")
+run(Scenes/Blending_Crowd.noorscene "${WORK}/blending.json")
 file(READ "${WORK}/empty.json" empty)
 file(READ "${WORK}/crowd.json" crowd)
+file(READ "${WORK}/blending.json" blending)
 string(JSON empty_gpu GET "${empty}" timing_ms gpu min)
 string(JSON crowd_gpu GET "${crowd}" timing_ms gpu min)
 string(JSON empty_game GET "${empty}" timing_ms game median)
@@ -43,8 +46,8 @@ message(STATUS "animation: 100 walking characters (${posed} posed, ${bones} bone
 if(NOT errors EQUAL 0)
     message(FATAL_ERROR "errors were logged: see ${WORK}/crowd.json.log")
 endif()
-if(NOT posed EQUAL 100 OR NOT bones EQUAL 800)
-    message(FATAL_ERROR "expected 100 animators moving 800 bones, got ${posed} and ${bones}")
+if(NOT posed EQUAL 100 OR NOT bones EQUAL 1100)
+    message(FATAL_ERROR "expected 100 animators moving 1100 bones (11 each), got ${posed} and ${bones}")
 endif()
 if(extra GREATER 1000)
     message(FATAL_ERROR "100 animated characters cost ${extra} us of GPU a frame (budget 1000)")
@@ -54,4 +57,23 @@ if(game GREATER 2000)
 endif()
 if(collect_us GREATER 4000)
     message(FATAL_ERROR "gathering the 100-character scene took ${collect_us} us (budget 4000)")
+endif()
+
+string(JSON blend_gpu GET "${blending}" timing_ms gpu min)
+string(JSON blend_game GET "${blending}" timing_ms game median)
+string(JSON blend_posed GET "${blending}" animation posed)
+string(JSON blend_errors GET "${blending}" errors)
+microseconds(${blend_gpu} blend_us)
+microseconds(${blend_game} blend_game_us)
+math(EXPR blend_extra "${blend_us} - ${empty_us}")
+math(EXPR blend_cpu "${blend_game_us} - ${empty_game_us}")
+message(STATUS "blending: 100 characters on a controller (${blend_posed} posed) +${blend_extra} us of GPU, +${blend_cpu} us of game update")
+if(NOT blend_errors EQUAL 0)
+    message(FATAL_ERROR "errors were logged: see ${WORK}/blending.json.log")
+endif()
+if(NOT blend_posed EQUAL 100)
+    message(FATAL_ERROR "expected 100 characters on controllers, got ${blend_posed}")
+endif()
+if(blend_cpu GREATER 3000)
+    message(FATAL_ERROR "100 characters on controllers took ${blend_cpu} us of game update a frame (budget 3000)")
 endif()
