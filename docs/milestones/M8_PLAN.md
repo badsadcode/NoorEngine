@@ -13,7 +13,7 @@ each ending in its own review, like Milestone 7 ended in one.
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
 | **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Done** ([review](M8C_REVIEW.md)) |
-| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** ([parts below](#8d-water), proposed) |
+| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** ([parts below](#8d-water)) |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
 Assets for all of it come mainly from **Blender** (plain glTF), with trees, grass and rocks from NoorMD
@@ -595,7 +595,7 @@ skinning, network replication of animation state.
   cost). It says plainly that an art-directed approximation is fine if it's consistent and disclosed: 8D is not a
   fluid simulation.
 
-## Decisions (ADR-037, proposed with this plan)
+## Decisions (ADR-037, accepted 2026-11-20)
 
 - **A `water` component on an entity**, with a shape: a **box** (lakes, ponds, pools: a level surface inside a
   footprint, and a volume under it), an **endless sea** (a surface to the horizon, following the camera), and later
@@ -607,7 +607,7 @@ skinning, network replication of animation state.
   foam gathers where it's shallow, and what's under it is bent a little (refraction by offsetting the lookup).
 - **Reflections: the sky and sun always, nearby things by screen-space reflection** where the screen has them,
   falling back to the sky where it hasn't. Planar reflections (a mirror-perfect lake, at the cost of drawing the scene
-  a second time) are not in 8D (open question 1).
+  a second time) are not in 8D (Tom, 2026-11-20).
 - **Waves are a formula, not a simulation**: a handful of Gerstner waves set by the wind and the preset, plus
   scrolling detail normals. One formula, evaluated in the vertex shader for drawing and on the CPU for gameplay
   (`water_height(x, z)` for scripts, buoyancy, swimming), a pure function of position and game time, so built games
@@ -639,7 +639,7 @@ skinning, network replication of animation state.
    nothing when it isn't. Part 1 measures it before anything is built on it.
 2. **Reflections people expect.** A calm lake that reflects only the sky looks wrong; screen-space reflections miss
    whatever is off screen (the far shore at the top of the picture, the underside of a bridge). Settled in part 3
-   with before/after pictures; planar reflections stay possible later for mirror lakes (open question 1).
+   with before/after pictures; planar reflections stay possible later for mirror lakes.
 3. **One wave formula on two processors.** The shader's floats and the CPU's must agree closely enough that a
    floating crate sits on the drawn surface; gameplay uses only the CPU's answer, drawing only the GPU's, and a test
    measures the gap.
@@ -650,17 +650,16 @@ skinning, network replication of animation state.
 
 ## Open questions
 
-1. **Reflections:** screen-space plus the sky (recommended: no second scene render, good on rippled water), or also
-   planar reflections for mirror-calm lakes (sharp, but the scene drawn twice where they're used)?
-2. **Which water first, for the look:** a calm Hillside lake (recommended, part 1), a sea coast, or the deep sea
-   (Tom's deep-sea project)? All three come, but the first gets the most tuning.
-3. **Rivers in 8D** (part 6, a spline surface over the existing ground), **or later with terrain carving** (the spec's
-   13.5: rivers as typed terrain modifications, with NoorRoads)? Recommended: the surface in 8D, carving later.
-4. **Swimming:** a simple generated swim clip for Alden (like his walk, from make_alden.py), or no swim animation in
-   8D (characters float upright)?
+All four settled by Tom on 2026-11-20, each as recommended:
+1. ~~**Reflections**~~ **the sky plus screen-space reflections**; planar reflections stay possible later.
+2. ~~**Which water first**~~ **the calm Hillside lake** gets the first tuning (part 1); the sea and the deep sea follow.
+3. ~~**Rivers**~~ **a spline surface over the existing ground in 8D** (part 6); carving river beds comes later, with
+   NoorRoads.
+4. ~~**Swimming**~~ **a generated swim clip for Alden** (made by `make_alden.py`, like his walk), for part 5 and the
+   sample.
 
 ## Not in 8D (planned later)
 Fluid simulation (Thornwake's local water simulation, D22, is the reference when it comes), terrain carving by rivers
-and roads (with NoorRoads), planar reflections (open question 1), wakes behind moving boats, interactive ripples from
+and roads (with NoorRoads), planar reflections, wakes behind moving boats, interactive ripples from
 every footstep, waterfalls as their own effect, ice and frozen water, volumetric light shafts underwater (with NoorSky
 phase C's volumetrics), boats and vehicles as gameplay templates.

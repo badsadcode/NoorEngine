@@ -1,6 +1,6 @@
 # ADR-037: Water
 
-**Status:** Proposed (Milestone 8D, with its [plan](../milestones/M8_PLAN.md#8d-water); open questions there)
+**Status:** Accepted (Milestone 8D, 2026-11-20, with its [plan](../milestones/M8_PLAN.md#8d-water); Tom settled the open questions)
 
 ## Context
 NoorEngine has no water. The spec's NoorWater (17.1) asks for distinct bodies (ocean, lake, river, pool, underwater
@@ -21,7 +21,7 @@ gameplay (floating, swimming) must be too.
    surface knows how deep it is at every pixel, the environment for underwater, buoyancy worked out on the CPU.
 
 ## Decision
-Option 3 (proposed).
+Option 3.
 - **The `water` component** with a shape: a box (lakes, ponds, pools: a level surface over a footprint, the volume
   under it), an endless sea (to the horizon, following the camera), a river (a spline, part 6). Its look in a
   `.noorwater` asset (presets, overrides on the component), like `.noorenv` and `.noorfx`.
@@ -44,6 +44,6 @@ Option 3 (proposed).
 - Water bodies are data (component and asset), so procedural graphs can place them later (lakes in hollows, rivers
   from drainage).
 
-## Open questions
-In the plan: planar reflections; which water gets tuned first; rivers in 8D or with terrain carving later; a swim
-animation for Alden.
+## Settled with Tom (2026-11-20)
+Reflections: the sky plus screen-space (no planar reflections in 8D). The calm Hillside lake is tuned first. Rivers: a
+spline surface in 8D, carving later with NoorRoads. Alden gets a generated swim clip.
