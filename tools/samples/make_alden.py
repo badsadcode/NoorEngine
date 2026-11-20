@@ -11,10 +11,12 @@ for Ward is his too. Each body part is a box riding on one bone (blocky, as on t
 
 Writes samples/Hillside/Assets/Characters/Alden/:
   Alden.glb   Alden with his clips: Idle, Walk, Run and Raise (Ward's), and, for root motion, WalkForward (1.4 m/s)
-              and RunForward (4 m/s: Run's legs and arms with the hips carried 2.4 m each 0.6 s cycle).
+              and RunForward (4 m/s: Run's legs and arms with the hips carried 2.4 m each 0.6 s cycle); and (8D part 8)
+              SwimForward (0.6 m/s: his body tipped forward, a front crawl with the arms, a flutter kick, 1.2 s a stroke).
   Staff.glb   his staff: a wooden pole with a knob, its origin at his grip (a prop for a socket on his right hand).
-  Alden.nooranim  his controller: one "Move" state blending Idle, WalkForward and RunForward by "speed" (0, 1.4 and
-              4 m/s: the speeds his clips carry him at, so with root motion the speed parameter is how fast he goes).
+  Alden.nooranim  his controller: a "Move" state blending Idle, WalkForward and RunForward by "speed" (0, 1.4 and
+              4 m/s: the speeds his clips carry him at, so with root motion the speed parameter is how fast he goes),
+              and a "Swim" state (SwimForward) while the bool "swimming" is set (8D: his script sets it from on_water).
 """
 import json
 import math
@@ -110,7 +112,28 @@ def alden_clips():
     run_forward = [c for c in keep['Run'] if not (c[0] == 'DEF-hips' and c[1] == 'translation')]
     run_forward.append(('DEF-hips', 'translation', 'LINEAR', run_t,
                         [[0, y, z] for y, z in zip((0.92, 0.89, 0.92, 0.89, 0.92), (0, 0.6, 1.2, 1.8, 2.4))]))
-    return [(n, keep[n]) for n in ('Idle', 'Walk', 'WalkForward', 'Run', 'Raise')] + [('RunForward', run_forward)]
+    return [(n, keep[n]) for n in ('Idle', 'Walk', 'WalkForward', 'Run', 'Raise')] + [('RunForward', run_forward), ('SwimForward', swim_forward())]
+
+
+def swim_forward():
+    """A front crawl, 1.2 s a stroke: the body tipped 65 degrees forward from the hips, the head lifted to look ahead,
+    each arm turning a full circle half a stroke apart, a flutter kick (two beats a stroke), the hips carried 0.72 m
+    forward (0.6 m/s, for root motion)."""
+    t = [0, 0.3, 0.6, 0.9, 1.2]
+    q, qm = mtc.quat, mtc.qmul
+    circle = [0, -90, -180, -270, -360]
+    return [
+        ('DEF-hips', 'rotation', 'LINEAR', t, [q((1, 0, 0), 65)] * 5),
+        ('DEF-hips', 'translation', 'LINEAR', t, [[0, y, z] for y, z in zip((0.95, 0.96, 0.95, 0.96, 0.95), (0, 0.18, 0.36, 0.54, 0.72))]),
+        ('DEF-neck', 'rotation', 'LINEAR', t, [q((1, 0, 0), -25)] * 5),
+        ('DEF-head', 'rotation', 'LINEAR', t, [q((1, 0, 0), b) for b in (-30, -25, -30, -25, -30)]),
+        ('DEF-upper_arm.L', 'rotation', 'LINEAR', t, [qm(q((1, 0, 0), a), q((0, 0, 1), -72)) for a in circle]),
+        ('DEF-upper_arm.R', 'rotation', 'LINEAR', t, [qm(q((1, 0, 0), a - 180), q((0, 0, 1), 72)) for a in circle]),
+        ('DEF-thigh.L', 'rotation', 'LINEAR', t, [q((1, 0, 0), b) for b in (-15, 15, -15, 15, -15)]),
+        ('DEF-thigh.R', 'rotation', 'LINEAR', t, [q((1, 0, 0), b) for b in (15, -15, 15, -15, 15)]),
+        ('DEF-shin.L', 'rotation', 'LINEAR', t, [q((1, 0, 0), b) for b in (10, 25, 10, 25, 10)]),
+        ('DEF-shin.R', 'rotation', 'LINEAR', t, [q((1, 0, 0), b) for b in (25, 10, 25, 10, 25)]),
+    ]
 
 
 def write_staff(path):
@@ -174,10 +197,13 @@ def write_staff(path):
 
 CONTROLLER = {
     "noor_anim": 1,
-    "parameters": {"speed": {"type": "float", "default": 0}},
+    "parameters": {"speed": {"type": "float", "default": 0}, "swimming": {"type": "bool", "default": False}},
     "layers": [{"name": "Base", "entry": "Move",
                 "states": [{"name": "Move", "blend": {"x": "speed", "samples": [
-                    {"clip": "Idle", "x": 0}, {"clip": "WalkForward", "x": 1.4}, {"clip": "RunForward", "x": 4}]}}]}],
+                    {"clip": "Idle", "x": 0}, {"clip": "WalkForward", "x": 1.4}, {"clip": "RunForward", "x": 4}]}},
+                           {"name": "Swim", "clip": "SwimForward"}],
+                "transitions": [{"from": "Move", "to": "Swim", "when": [{"parameter": "swimming", "equals": True}], "fade": 0.4},
+                                {"from": "Swim", "to": "Move", "when": [{"parameter": "swimming", "equals": False}], "fade": 0.4}]}],
 }
 
 

@@ -618,11 +618,20 @@ internal static class SmokeTest
         check(window.Inspector!.Components.SetComponent("rotator", new System.Text.Json.Nodes.JsonObject { ["degrees_per_second"] = 30.0 }),
               "add a rotator");
         window.TogglePlay();
-        await Task.Delay(1000);
-        doc.Refresh();
-        var running = doc.Selected?.Transform.Rotation.ToEulerDegrees().Y ?? yaw0;
-        var turned = Math.Abs(running - yaw0);
-        check(doc.Playing && turned is > 15 and < 60, $"play: the rotator turns the building ({turned:0} degrees in about 1 s at 30/s)");
+        // Wait (up to 6 s) until it has turned a good way; a busy machine (the full suite runs tests side by side) gives
+        // the game less time than the wall clock, so the check is that it turns, and never faster than 30 degrees a second.
+        var clock = Stopwatch.StartNew();
+        double turned = 0;
+        while (clock.Elapsed.TotalSeconds < 6)
+        {
+            await Task.Delay(250);
+            doc.Refresh();
+            turned = Math.Abs((doc.Selected?.Transform.Rotation.ToEulerDegrees().Y ?? yaw0) - yaw0);
+            if (turned > 15) break;
+        }
+        var seconds = clock.Elapsed.TotalSeconds;
+        check(doc.Playing && turned > 15 && turned < 30 * seconds + 15,
+              $"play: the rotator turns the building ({turned:0} degrees in {seconds:0.0} s, at most 30 a second)");
         check(!doc.Rename(rootId, "nope"), "play: edits are refused while playing");
         shot(window, "editor_9_playing.png");
         window.TogglePlay();

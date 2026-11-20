@@ -24,6 +24,7 @@ then. Milestones 1 to 3 came before the tradition began.
 | 8 | 8A: sky, atmosphere and environments | A sun that moves, fog, clouds, night, space | **... the sky.** Alden sits on a hilltop as the sun goes down, layered clouds turning pink, the first stars coming out, and a planet rising in the distance. | in the review | [Noor's](../devlog/img/alden/alden_m8a_sky.webp) |
 | 9 | 8B: particles and sprites | Rain, snow, fire, smoke, sparks; sprite characters | **... the weather.** Alden Wayfarer stands by a campfire on Hillside as a storm rolls in, rain blowing sideways and sparks hissing in the grass. | in the review | [Noor's](../devlog/img/alden/alden_m8b_weather.webp) |
 | 10 | 8C: skeletal animation | Characters that walk, run and blend, retargeted between bodies; the Animation panel; FBX | **... that he can move.** Alden walking, then breaking into a run across Hillside, his staff swinging; behind him, a row of very different figures (tall and thin, short and stout) copying his every step. | in the 8C review | [Noor's](../devlog/img/alden/alden_m8c_movement.webp) |
+| 11 | 8D: water | Lakes, seas and rivers; waves, shorelines, reflections; underwater; floating and swimming | **... that he can swim.** Alden halfway across a lake in the rain, front crawl, his staff held up out of the water like a periscope, crates bobbing round him; below, the water goes green, then dark, and something long and patient is down there, watching. | in the 8D review | to come (Noor's) |
 
 **Lines suggested along the way in 8C** (not chosen: picture 10 is the one above):
 

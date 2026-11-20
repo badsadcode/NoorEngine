@@ -5,6 +5,8 @@
 -- params: points ([[x, z], ...], a loop), speeds (m/s per leg; 0: rest there for `rest` seconds, then on at the next
 -- leg's speed), turn (degrees a second), accel (m/s a second)
 -- Counted in frames, not summed seconds, so a built game takes every decision on the same frame (ANIMATION.md).
+-- In deep water (8D part 8) his controller's "swimming" switches him to his swim stroke (on_water from his character
+-- controller); his pace is still his script's, and the water slows it.
 local Alden = {}
 
 function Alden:on_start()
@@ -51,6 +53,12 @@ function Alden:on_update(dt)
     if self.model then
         self.model:set_euler(vector.create(0, self.facing, 0))  -- Alden faces +Z
         self.model:set_animation_parameter("speed", self.speed)
+    end
+end
+
+function Alden:on_water(state)
+    if self.model then
+        self.model:set_animation_parameter("swimming", state == "swimming" or state == "under")
     end
 end
 

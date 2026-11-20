@@ -2,7 +2,20 @@
 
 Technical, honest, newest first. "Works" means tested; anything else says what it is.
 
-## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
+## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
+
+### 2026-11-20 — Milestone 8D, part 8: the sample and the 8D review (Milestone 8 done)
+**Added**
+- `samples/Hillside/Scenes/Hillside_Water.noorscene` (`tools/samples/add_hillside_water.py`): the lake in the rain, a
+  carved stream, floating crates, Alden swimming. `Assets/Terrain/Hillside_Water.noorsculpt`.
+- Alden's `SwimForward` clip and his controller's Swim state on the bool `swimming` (`make_alden.py`); his script sets
+  it from `on_water`.
+- `tools/samples/measure_hillside_water.py`. The [8D review](docs/milestones/M8D_REVIEW.md).
+
+**Measured:** the water 0.22 ms over the dry valley; floating about 20 µs a body a frame (100 crates: +1.9 ms).
+
+**Tests:** golden `Hillside_Water`; `player.hillside_water` (the built game to the bit, Alden swimming); the Alden check
+counts 11 posed bones (his swim stroke moves his neck and head).
 
 ### 2026-11-20 — Milestone 8D, part 7: the Water panel and debug views
 **Added**

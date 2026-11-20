@@ -13,7 +13,7 @@ each ending in its own review, like Milestone 7 ended in one.
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
 | **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Done** ([review](M8C_REVIEW.md)) |
-| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** ([parts below](#8d-water)) |
+| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Done** ([review](M8D_REVIEW.md)) |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
 Assets for all of it come mainly from **Blender** (plain glTF), with trees, grass and rocks from NoorMD
@@ -630,7 +630,7 @@ skinning, network replication of animation state.
 | 5 ✅ | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
 | 6 ✅ | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
 | 7 ✅ | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
-| 8 | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
+| 8 ✅ | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
 
 ## Highest risks (settle early)
 
@@ -763,6 +763,13 @@ every frame since part 2). Proven: API tests (presets, apply in one undo step on
 reaching what a game reads, duplicate, reset, debug, bad commands); the smoke test edits a lake and sees the viewport
 change. Not done: no sliders or colour pickers (text fields), no river spline tool, the pictures show every look on
 the same coast.
+
+## Part 8 result (2026-11-20)
+Done: `Hillside_Water` (the lake in the rain, a stream carved into it, four floating crates, Alden wading in and swimming
+across on his new generated `SwimForward` stroke), a golden, `player.hillside_water` (the built game to the bit), the
+cost table (`measure_hillside_water.py`: the water 0.22 ms over the dry valley; floating about 20 µs a body), and the
+[8D review](M8D_REVIEW.md). The deep sea and the seaside are test scenes (`Water_DeepSea`, `Water_Shore`, `Water_Float`),
+not samples. **Milestone 8 is complete.**
 
 ## Open questions
 

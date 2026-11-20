@@ -506,6 +506,17 @@ set_tests_properties(render.golden_Hillside_Storm PROPERTIES LABELS "gpu;render;
                      FIXTURES_REQUIRED hillside_cooked)
 # The 8C sample (Milestone 8C, part 8): Alden Wayfarer wandering about Hillside on root motion, his staff on a
 # socket (tools/samples/add_hillside_alden.py). Five seconds in: walking towards the camera.
+# The 8D sample (tools/samples/add_hillside_water.py): the lake in light rain, a stream carved down into it, four crates
+# floating, Alden swimming across. Ten seconds in: he's swimming between the crates.
+add_test(NAME render.golden_Hillside_Water
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Water.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Water.png -DFRAMES=600
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Water
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Water PROPERTIES LABELS "gpu;render;sample" TIMEOUT 240 RESOURCE_LOCK "hillside_cache;gpu_timing"
+                     FIXTURES_REQUIRED hillside_cooked)
 add_test(NAME render.golden_Hillside_Alden
     COMMAND ${CMAKE_COMMAND}
         -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
@@ -719,6 +730,13 @@ add_test(NAME player.hillside_alden
         -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside_alden
         -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_alden_check.cmake)
 set_tests_properties(player.hillside_alden PROPERTIES LABELS "gpu;player;sample" TIMEOUT 240 FIXTURES_REQUIRED "built_hillside_game;hillside_cooked"
+                     RESOURCE_LOCK "hillside_cache;gpu_timing")
+# The 8D sample (Milestone 8D, part 8): the lake, its stream, crates and Alden swimming play the same in the built game.
+add_test(NAME player.hillside_water
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game/Hillside.exe"
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside_water
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_water_check.cmake)
+set_tests_properties(player.hillside_water PROPERTIES LABELS "gpu;player;sample" TIMEOUT 240 FIXTURES_REQUIRED "built_hillside_game;hillside_cooked"
                      RESOURCE_LOCK "hillside_cache;gpu_timing")
 # The judge must notice a different picture: today's daylight against the sunset reference fails.
 add_test(NAME render.golden_catches_a_change

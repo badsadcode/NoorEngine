@@ -4,6 +4,10 @@
     "speed": {
       "type": "float",
       "default": 0
+    },
+    "swimming": {
+      "type": "bool",
+      "default": false
     }
   },
   "layers": [
@@ -30,6 +34,34 @@
               }
             ]
           }
+        },
+        {
+          "name": "Swim",
+          "clip": "SwimForward"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "Move",
+          "to": "Swim",
+          "when": [
+            {
+              "parameter": "swimming",
+              "equals": true
+            }
+          ],
+          "fade": 0.4
+        },
+        {
+          "from": "Swim",
+          "to": "Move",
+          "when": [
+            {
+              "parameter": "swimming",
+              "equals": false
+            }
+          ],
+          "fade": 0.4
         }
       ]
     }

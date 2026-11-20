@@ -2,8 +2,8 @@
 
 Milestone 8D ([plan](../milestones/M8_PLAN.md#8d-water), [ADR-037](../decisions/ADR-037-water.md)). What works so
 far: **part 1, the water surface**, **part 2, waves**, **part 3, shorelines and reflections**, **part 4, underwater**,
-**part 5, water in the game**, **part 6, rivers**, and **part 7, the Water panel and debug views**. The sample is planned
-(part 8); nothing below claims it.
+**part 5, water in the game**, **part 6, rivers**, **part 7, the Water panel and debug views**, and **part 8, the sample**
+(8D is done: [review](../milestones/M8D_REVIEW.md)).
 
 ## The `water` component (part 1)
 
@@ -269,6 +269,14 @@ as cards with a picture (`tools/samples/render_water_thumbnails.py` renders them
   `noor_player --water-debug <view>` draws the same.
 
 The editor API: `noor_doc_water` (list, read, apply, duplicate, reset, save, debug; API v29).
+
+## The sample (part 8)
+
+`samples/Hillside/Scenes/Hillside_Water.noorscene` (`tools/samples/add_hillside_water.py`, through the editor API): the
+Hillside lake in light rain; a stream down a channel carved in the scene's own sculpt layer, into the lake; four crates
+of different densities floating; Alden Wayfarer wading in, swimming across (his `SwimForward` stroke, switched on from
+`on_water` by his script, `Scripts/alden_wander.luau`) and walking out. A golden ten seconds in; `player.hillside_water`
+checks the built game plays it to the bit. Its costs are in the review (`tools/samples/measure_hillside_water.py`).
 
 ## How it's drawn
 
