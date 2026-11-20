@@ -108,7 +108,7 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         const math::Mat4& w = md.world;
         const float scale = std::max({math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), math::length(math::Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
                                       math::length(math::Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
-        const int level = choose_lod(lods, math::length(w.transform_point({0, 0, 0}) - eye), cam.fov_y, scale);
+        const int level = choose_lod(lods, cam.lod_distance(math::length(w.transform_point({0, 0, 0}) - eye)), cam.fov_y, scale);
         if (level <= 0) continue;
         const Model* lm = model(lods.levels[static_cast<std::size_t>(level)].file);
         if (!lm) continue;  // the level failed to load: keep drawing level 0
@@ -137,7 +137,7 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
                 int level = 0;
                 if (lods.switches()) {
                     const float scale = math::length(math::Vec3{w.m[0].x, w.m[0].y, w.m[0].z});
-                    level = choose_lod(lods, std::sqrt(dist2), cam.fov_y, scale);
+                    level = choose_lod(lods, cam.lod_distance(std::sqrt(dist2)), cam.fov_y, scale);
                 }
                 const Model* lm = model(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file : group.asset_path);
                 if (!lm) continue;
@@ -227,7 +227,8 @@ std::vector<render::DrawItem> SceneRenderer::draws(const SceneView& view) {
         item.material = material(p, materials_);
         out.push_back(item);
     }
-    sprites_.add_draws(view.sprites, eye, static_cast<double>(view.lighting.time), out);
+    const math::Vec3 look = math::normalize(math::transform_vector(math::inverse(cam.view), {0, 0, -1}));
+    sprites_.add_draws(view.sprites, eye, static_cast<double>(view.lighting.time), out, cam.orthographic() ? &look : nullptr);
     return out;
 }
 
@@ -241,6 +242,8 @@ render::Camera SceneRenderer::camera(const SceneView& view) {
         cam.view = camera_view(view.camera->world);
         cam.fov_y = math::radians(view.camera->fov_degrees);
         cam.near_plane = view.camera->near_plane;
+        cam.ortho_height = view.camera->ortho_height;
+        cam.far_plane = view.camera->far_plane;
     } else {
         cam.view = math::look_at({0, 6, 12}, {0, 0, 0}, {0, 1, 0});
         cam.fov_y = math::radians(60.0f);

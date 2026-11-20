@@ -4,6 +4,7 @@ noor_add_module(platform
         src/window.cpp
         src/window_vulkan.cpp
         $<$<PLATFORM_ID:Windows>:src/native_child_window_win32.cpp>
+        $<$<PLATFORM_ID:Windows>:src/process_win32.cpp>
     PUBLIC_DEPS
         noor::foundation
         Vulkan::Headers

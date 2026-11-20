@@ -182,7 +182,8 @@ float4 PSMain(VertexOutput input) : SV_Target
 {
     // The view ray through this pixel: unproject a point on the near plane.
     const float4 p = mul(frame.world_from_clip, float4(input.ndc, 1.0, 1.0));
-    float3 d = normalize(p.xyz / p.w - frame.camera_position.xyz);
+    // An orthographic camera (9A part 1) looks one way everywhere: its forward.
+    float3 d = frame.camera_forward.w > 0.5 ? frame.camera_forward.xyz : normalize(p.xyz / p.w - frame.camera_position.xyz);
     const float3 world_d = d;
     const float pixel_angle = length(fwidth(world_d));  // how much sky one pixel covers (clouds' detail)
     // The environment's turn about +Y.

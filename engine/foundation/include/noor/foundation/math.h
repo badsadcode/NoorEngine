@@ -168,6 +168,18 @@ struct Quat {
     return r;
 }
 
+// Vulkan orthographic projection (Milestone 9A, part 1): reverse-Z like the perspective one, Y flipped. `height` is the
+// whole height the view shows (metres); depth 1 at `near_plane`, 0 at `far_plane` (finite: parallel views need one).
+[[nodiscard]] inline Mat4 orthographic_reverse_z(float height, float aspect, float near_plane, float far_plane) noexcept {
+    const float hh = 0.5f * height, range = far_plane - near_plane;
+    Mat4 r;
+    r.m[0] = {1.0f / (hh * aspect), 0, 0, 0};
+    r.m[1] = {0, -1.0f / hh, 0, 0};
+    r.m[2] = {0, 0, 1.0f / range, 0};
+    r.m[3] = {0, 0, far_plane / range, 1};
+    return r;
+}
+
 // Direction transform: the 3x3 part only (no translation).
 [[nodiscard]] constexpr Vec3 transform_vector(const Mat4& m, Vec3 v) noexcept {
     return {m.at(0, 0) * v.x + m.at(0, 1) * v.y + m.at(0, 2) * v.z, m.at(1, 0) * v.x + m.at(1, 1) * v.y + m.at(1, 2) * v.z,

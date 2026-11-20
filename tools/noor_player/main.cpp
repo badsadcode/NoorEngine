@@ -32,6 +32,7 @@
 #include "noor/game/water.h"
 #include "noor/platform/input.h"
 #include "noor/platform/platform.h"
+#include "noor/platform/process.h"
 #include "noor/platform/window.h"
 #include "noor/render/renderer.h"
 #include "noor/runtime/input.h"
@@ -74,6 +75,7 @@ struct Options {
     bool trace_environment = false;
     std::uint32_t water_probes = 0;  // N: the last frame's depth read back at N x N pixels, compared with water_height
     std::uint32_t water_debug = 0;   // 8D part 7: none, depth, flow, waves, normals, cost (render::FrameDesc::water_debug)
+    double stall_ms = 0;             // 9A part 1: a deliberate stall in every game update, to prove the yardstick check catches it
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -91,6 +93,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--validation") o.validation = true;
         else if (a == "--msaa" && more) o.msaa = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (a == "--cpu-sky") o.cpu_sky = true;
+        else if (a == "--stall-ms" && more) o.stall_ms = std::stod(argv[++i]);
         else if (a == "--trace-environment") o.trace_environment = true;
         else if (a == "--water-probes" && more) o.water_probes = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (a == "--water-debug" && more) {
@@ -333,7 +336,9 @@ int run(const Options& o) {
                 struct Timing {
                     double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1, particles = -1;
                     double scene = -1, scene_copy = -1, see_through = -1;  // GPU passes (8D: what water costs)
+                    double cpu = 0;  // 9A part 1: the game, the view and recording together (what a frame costs the CPU, vsync aside)
                 };
+                double first_frame_at = -1;  // 9A part 1: seconds from the process starting to its first frame drawn
                 std::vector<Timing> timings;
                 Json environment_trace = Json::array();
                 double frame_start = noor::platform::time_seconds();
@@ -370,6 +375,8 @@ int run(const Options& o) {
                     }
                     const double t_game = noor::platform::time_seconds();
                     (*world)->frame(dt, game_in);
+                    if (o.stall_ms > 0)  // spin, not sleep: a sleep's length is up to the OS's timer
+                        while ((noor::platform::time_seconds() - t_game) * 1000.0 < o.stall_ms) {}
                     const double t_game_done = noor::platform::time_seconds();
                     if (now - last_refresh > 0.5) {  // materials and textures edited while the game runs
                         scene_renderer.refresh();
@@ -411,6 +418,7 @@ int run(const Options& o) {
                         break;
                     }
                     if (*frame == noor::render::FrameResult::Skipped && (*window)->is_minimized()) noor::platform::wait_for_events(50);
+                    if (first_frame_at < 0 && *frame != noor::render::FrameResult::Skipped) first_frame_at = noor::platform::process_stats().seconds_alive;
                     {
                         const double t_end = noor::platform::time_seconds();
                         const auto& fs = (*renderer)->last_frame_stats();
@@ -427,6 +435,7 @@ int run(const Options& o) {
                             else if (name == "Scene copy") timings.back().scene_copy = pass.ms;
                             else if (name == "See-through") timings.back().see_through = pass.ms;
                         }
+                        timings.back().cpu = timings.back().game + timings.back().view + std::max(0.0, timings.back().record);
                         frame_start = t_end;
                     }
                     if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
@@ -474,7 +483,7 @@ int run(const Options& o) {
                         const auto& cam = last_frame_desc.camera;
                         const float aspect = static_cast<float>(last_capture->width) / static_cast<float>(std::max(1u, last_capture->height));
                         const auto world_from_clip =
-                            noor::math::inverse(noor::math::perspective_reverse_z(cam.fov_y, aspect, cam.near_plane) * cam.view);
+                            noor::math::inverse(cam.projection(aspect) * cam.view);
                         Json probes = Json::array();
                         double worst = 0.0;
                         int on_water = 0;
@@ -557,7 +566,8 @@ int run(const Options& o) {
                                 if (timings[i].*field >= 0) v.push_back(timings[i].*field);
                             if (v.empty()) return Json(nullptr);
                             std::ranges::sort(v);
-                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]}, {"max", v.back()},
+                            return Json{{"median", v[v.size() / 2]}, {"p95", v[std::min(v.size() - 1, v.size() * 95 / 100)]},
+                                        {"p99", v[std::min(v.size() - 1, v.size() * 99 / 100)]}, {"max", v.back()},
                                         {"min", v.front()}};
                         };
                         report["timing_ms"] = {{"frames", timings.size() - 60},
@@ -571,7 +581,8 @@ int run(const Options& o) {
                                                {"scene_gpu", stat(&Timing::scene)},
                                                {"scene_copy_gpu", stat(&Timing::scene_copy)},
                                                {"see_through_gpu", stat(&Timing::see_through)},
-                                               {"particles", stat(&Timing::particles)}};
+                                               {"particles", stat(&Timing::particles)},
+                                               {"cpu", stat(&Timing::cpu)}};
                     }
                     // Effect particles (Milestone 8B): how many, and a fingerprint of every one (equal runs, equal fingerprints).
                     if (const auto* particles = (*world)->system<noor::fx::ParticleSystem>()) {
@@ -616,6 +627,14 @@ int run(const Options& o) {
                     report["ev100"] = last_frame_desc.lighting.ev100;  // what the camera exposed with (automatic exposure: metered)
                     if (o.trace_environment) report["environment_trace"] = std::move(environment_trace);
                     report["sky_builds"] = {{"tables", (*renderer)->atmosphere_table_builds()}, {"sky", (*renderer)->atmosphere_sky_builds()}};
+                    // What the process costs (9A part 1, the yardsticks): memory, threads, and how long it took to show its first frame.
+                    {
+                        const auto ps = noor::platform::process_stats();
+                        constexpr double mb = 1.0 / (1024.0 * 1024.0);
+                        report["process"] = {{"working_set_mb", ps.working_set * mb}, {"peak_working_set_mb", ps.peak_working_set * mb},
+                                             {"private_mb", ps.private_bytes * mb}, {"threads", ps.threads}, {"first_frame_s", first_frame_at},
+                                             {"gpu_resident_mb", ((*renderer)->texture_memory() + (*renderer)->mesh_memory() + (*renderer)->render_target_memory()) * mb}};
+                    }
                     report["errors"] = noor::log::count(noor::LogLevel::Error) + noor::log::count(noor::LogLevel::Fatal);
                     if (auto w = noor::fs::write_file_atomic(o.report, report.dump(2)); !w) NOOR_LOG_ERROR("Player", "{}", w.error().describe());
                 }

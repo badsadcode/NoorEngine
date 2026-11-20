@@ -223,7 +223,7 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     const math::Vec3 sky = l.sky_color * (l.sky_luminance * exposure);
     const math::Vec3 ground = l.ground_color * (l.sky_luminance * exposure);
     const math::Mat4 clip_from_world =
-        math::perspective_reverse_z(frame.camera.fov_y, aspect_ratio, frame.camera.near_plane) * frame.camera.view;
+        frame.camera.projection(aspect_ratio) * frame.camera.view;
     FrameUniforms u{};
     u.clip_from_world = clip_from_world;
     u.camera_position = {eye.x, eye.y, eye.z, 1};
@@ -236,7 +236,7 @@ void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
     u.cascade_texel = {cascades[0].texel_world, cascades[1].texel_world, cascades[2].texel_world, cascades[3].texel_world};
     u.shadow_params = {shadows_on ? 1.0f : 0.0f, static_cast<float>(shadow_size), frame.lighting.shadow_distance, 0};
     const math::Vec3 fwd = math::normalize(math::transform_vector(math::inverse(frame.camera.view), {0, 0, -1}));
-    u.camera_forward = {fwd.x, fwd.y, fwd.z, 0};
+    u.camera_forward = {fwd.x, fwd.y, fwd.z, frame.camera.orthographic() ? 1.0f : 0.0f};  // w: a parallel view (frame.hlsli view_ray)
 
     // Local lights: the ones nearest the camera (that reach it at all first), up to kMaxLocalLights.
     std::vector<const LocalLight*> lights;

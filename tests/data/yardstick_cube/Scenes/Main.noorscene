@@ -1,0 +1,107 @@
+{
+  "noor_scene": 2,
+  "id": "9a01c0be-0001-4000-8000-000000000000",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "9a01c0be-0001-4000-8000-000000000001",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.5,
+          2.0,
+          3.5
+        ],
+        "rotation": [
+          -0.1590249855772303,
+          0.3008922464907421,
+          0.050961950496297086,
+          0.9389237400159446
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.05,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "9a01c0be-0001-4000-8000-000000000002",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          -0.3535534,
+          0.3535534,
+          0.1464466,
+          0.8535534
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "9a01c0be-0001-4000-8000-000000000003",
+      "name": "Cube",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "color": "#7C4DFF"
+        }
+      }
+    }
+  ]
+}

@@ -20,6 +20,7 @@ struct CameraBasis {
     math::Vec3 right;    // unit
     math::Vec3 up;       // unit
     float fov_y = math::radians(50.0f);
+    float ortho_height = 0.0f;  // > 0: an orthographic view this many metres high (a game camera, 9A part 1)
 };
 
 // Ray through pixel (px, py) of a width x height viewport (origin top-left), unit direction.

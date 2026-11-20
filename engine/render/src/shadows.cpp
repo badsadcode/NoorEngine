@@ -33,8 +33,9 @@ std::array<ShadowCascade, kShadowCascades> compute_cascades(const Camera& camera
 
         // The slice's bounding sphere: its centre lies on the view axis, so the radius depends only
         // on the slice's depths, fov and aspect, never on where the camera looks.
-        const float h0 = previous * tan_half, w0 = h0 * aspect;
-        const float h1 = split * tan_half, w1 = h1 * aspect;
+        // A parallel view (9A part 1): every slice is the same box, the view's height and width all the way.
+        const float h0 = camera.orthographic() ? 0.5f * camera.ortho_height : previous * tan_half, w0 = h0 * aspect;
+        const float h1 = camera.orthographic() ? 0.5f * camera.ortho_height : split * tan_half, w1 = h1 * aspect;
         const float d0 = previous, d1 = split;
         const float r0 = w0 * w0 + h0 * h0, r1 = w1 * w1 + h1 * h1;  // squared corner offsets from the axis
         // Centre at distance c minimising the max distance to both rings: (d1² + r1 - d0² - r0) / (2(d1 - d0)), clamped.

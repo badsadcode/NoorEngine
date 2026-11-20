@@ -969,15 +969,21 @@ void render_thread_main(noor_viewport* vp) {
         // While playing with a camera entity, the viewport is the game view.
         auto basis = camera.basis();
         float view_near = std::max(0.05f, camera.distance * 0.002f);
+        float view_far = 1000.0f;  // an orthographic game camera's (9A part 1)
         if (shown && shown->camera) {
             const Mat4& m = shown->camera->world;
             const Vec3 eye = m.transform_point({0, 0, 0});
             const Vec3 fwd = noor::math::normalize(noor::math::transform_vector(m, {0, 0, -1}));
             Vec3 right = noor::math::cross(fwd, {0, 1, 0});
             right = noor::math::length(right) < 1e-4f ? noor::math::normalize(noor::math::transform_vector(m, {1, 0, 0})) : noor::math::normalize(right);
-            basis = {eye, fwd, right, noor::math::cross(right, fwd), noor::math::radians(shown->camera->fov_degrees)};
+            basis = {eye, fwd, right, noor::math::cross(right, fwd), noor::math::radians(shown->camera->fov_degrees), shown->camera->ortho_height};
             view_near = shown->camera->near_plane;
+            view_far = shown->camera->far_plane;
         }
+        // Distances for choosing levels of detail: an orthographic game camera shows everything at one size (render::Camera).
+        const auto lod_distance = [&basis](float d) {
+            return basis.ortho_height > 0.0f ? 0.5f * basis.ortho_height / std::tan(std::clamp(basis.fov_y, 0.01f, 3.0f) * 0.5f) : d;
+        };
         const ed::Ray ray = ed::screen_ray(basis, static_cast<float>(size.width), static_cast<float>(size.height),
                                            static_cast<float>(pointer.x), static_cast<float>(pointer.y));
 
@@ -991,7 +997,7 @@ void render_thread_main(noor_viewport* vp) {
         if (target) {
             const Mat4 world = preview ? preview->delta * target->world : target->world;
             gizmo_center = world.transform_point({0, 0, 0});
-            gizmo_size = std::max(0.05f, noor::math::length(gizmo_center - basis.eye) * ed::kGizmoScreenScale * options.gizmo_scale);
+            gizmo_size = std::max(0.05f, (basis.ortho_height > 0.0f ? basis.ortho_height : noor::math::length(gizmo_center - basis.eye)) * ed::kGizmoScreenScale * options.gizmo_scale);
         }
         // Scale handles follow the entity's own axes; move and rotate are world-aligned.
         const Quat gizmo_orientation = target && gizmo_mode == ed::GizmoMode::Scale ? target->world_rotation : Quat{};
@@ -1180,7 +1186,7 @@ void render_thread_main(noor_viewport* vp) {
                 const Mat4& w = vm.world;
                 const float scale = std::max({noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), noor::math::length(Vec3{w.m[1].x, w.m[1].y, w.m[1].z}),
                                               noor::math::length(Vec3{w.m[2].x, w.m[2].y, w.m[2].z})});
-                const int level = noor::game::choose_lod(*vm.lods, noor::math::length(w.transform_point({0, 0, 0}) - basis.eye), basis.fov_y, scale);
+                const int level = noor::game::choose_lod(*vm.lods, lod_distance(noor::math::length(w.transform_point({0, 0, 0}) - basis.eye)), basis.fov_y, scale);
                 if (level <= 0) continue;
                 const CachedAsset& la = load_asset(vm.lods->levels[static_cast<std::size_t>(level)].file.generic_string(), vm.version);
                 if (!la.meshes) continue;  // failed: keep level 0
@@ -1216,7 +1222,7 @@ void render_thread_main(noor_viewport* vp) {
                         if (sc.draw_distance > 0.0f && dist2 > limit2) continue;  // grass beyond its draw distance
                         int level = 0;
                         if (lods.switches())
-                            level = noor::game::choose_lod(lods, std::sqrt(dist2), basis.fov_y, noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}));
+                            level = noor::game::choose_lod(lods, lod_distance(std::sqrt(dist2)), basis.fov_y, noor::math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}));
                         const CachedAsset& ca = load_asset(level > 0 ? lods.levels[static_cast<std::size_t>(level)].file.generic_string() : sc.asset_path, sc.asset_version);
                         if (!ca.meshes) continue;
                         for (const auto& [mesh_index, local] : ca.nodes) {
@@ -1296,6 +1302,8 @@ void render_thread_main(noor_viewport* vp) {
             frame.camera.view = noor::math::look_at(basis.eye, basis.eye + basis.forward, basis.up);
             frame.camera.fov_y = basis.fov_y;
             frame.camera.near_plane = view_near;
+            frame.camera.ortho_height = basis.ortho_height;
+            frame.camera.far_plane = view_far;
             if (shown) frame.lighting = shown->lighting;
             // The clouds drift and sprites animate in the editor too: seconds since the viewport opened, or the game's time
             // while playing (so animations scripts play line up).
@@ -1321,7 +1329,8 @@ void render_thread_main(noor_viewport* vp) {
                     if (moving.contains(sp.entity)) sp.world = preview->delta * sp.world;
                 for (const auto& sp : placed) {
                     const std::size_t before = frame_draws.size();
-                    sprites->add_draws({&sp, 1}, basis.eye, static_cast<double>(frame.lighting.time), frame_draws);
+                    sprites->add_draws({&sp, 1}, basis.eye, static_cast<double>(frame.lighting.time), frame_draws,
+                                       basis.ortho_height > 0.0f ? &basis.forward : nullptr);
                     for (std::size_t i = before; i < frame_draws.size(); ++i) {
                         sprite_quads.emplace_back(sp.entity, frame_draws[i].world_from_object);
                         if (selected.contains(sp.entity)) frame_draws[i].tint = {highlight.x, highlight.y, highlight.z, 0.45f};

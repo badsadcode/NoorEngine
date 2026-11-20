@@ -1,0 +1,110 @@
+{
+  "about": "Milestone 9's yardsticks (9A part 1): what small projects cost before big worlds arrive. Written by tools/samples/measure_yardsticks.py; checked by tests/yardstick_check.cmake.",
+  "machine": "NVIDIA RTX 3080, Windows 10, 1280x720, RelWithDebInfo",
+  "projects": {
+    "cube": {
+      "about": "A single cube in an otherwise empty scene",
+      "project": "tests/data/yardstick_cube",
+      "scene": "Scenes/Main.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 0.191,
+        "cpu_p95_ms": 0.268,
+        "gpu_median_ms": 2.075,
+        "working_set_mb": 195.656,
+        "private_mb": 420.215,
+        "gpu_resident_mb": 116.832,
+        "threads": 30,
+        "first_frame_s": 0.675
+      },
+      "limits": {
+        "cpu_median_ms": 0.448,
+        "cpu_p95_ms": 0.802,
+        "gpu_median_ms": 2.797,
+        "working_set_mb": 249.005,
+        "private_mb": 507.247,
+        "gpu_resident_mb": 130.673,
+        "threads": 32,
+        "first_frame_s": 1.512
+      }
+    },
+    "pong": {
+      "about": "NoorPong: 2D, an orthographic camera, a sprite, Lua",
+      "project": "samples/NoorPong",
+      "scene": "Scenes/Pong.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 0.284,
+        "cpu_p95_ms": 0.37,
+        "gpu_median_ms": 1.23,
+        "working_set_mb": 197.035,
+        "private_mb": 418.465,
+        "gpu_resident_mb": 116.832,
+        "threads": 30,
+        "first_frame_s": 0.647
+      },
+      "limits": {
+        "cpu_median_ms": 0.569,
+        "cpu_p95_ms": 0.954,
+        "gpu_median_ms": 1.698,
+        "working_set_mb": 250.59,
+        "private_mb": 505.235,
+        "gpu_resident_mb": 130.673,
+        "threads": 32,
+        "first_frame_s": 1.47
+      }
+    },
+    "fps": {
+      "about": "NoorFPS-lite: a compact hand-made 3D level, physics, Lua",
+      "project": "samples/NoorFPS-lite",
+      "scene": "Scenes/Main_Lua.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 0.427,
+        "cpu_p95_ms": 0.603,
+        "gpu_median_ms": 2.156,
+        "working_set_mb": 198.961,
+        "private_mb": 417.633,
+        "gpu_resident_mb": 120.832,
+        "threads": 30,
+        "first_frame_s": 0.705
+      },
+      "limits": {
+        "cpu_median_ms": 0.755,
+        "cpu_p95_ms": 1.304,
+        "gpu_median_ms": 2.902,
+        "working_set_mb": 252.805,
+        "private_mb": 504.278,
+        "gpu_resident_mb": 134.874,
+        "threads": 32,
+        "first_frame_s": 1.558
+      }
+    },
+    "hillside": {
+      "about": "Hillside: a procedural landscape (graph terrain, scatter)",
+      "project": "samples/Hillside",
+      "scene": "Scenes/Hillside.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 6.214,
+        "cpu_p95_ms": 7.128,
+        "gpu_median_ms": 4.797,
+        "working_set_mb": 218.891,
+        "private_mb": 506.859,
+        "gpu_resident_mb": 199.007,
+        "threads": 30,
+        "first_frame_s": 1.267
+      },
+      "limits": {
+        "cpu_median_ms": 8.278,
+        "cpu_p95_ms": 11.091,
+        "gpu_median_ms": 6.336,
+        "working_set_mb": 275.724,
+        "private_mb": 606.888,
+        "gpu_resident_mb": 216.957,
+        "threads": 32,
+        "first_frame_s": 2.401
+      }
+    }
+  }
+}

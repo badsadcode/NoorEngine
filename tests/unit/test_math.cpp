@@ -59,6 +59,18 @@ TEST_CASE("math: projection flips Y for Vulkan (world up is screen up)") {
     CHECK(proj.transform_point({1, 0, -1}).x > 0.0f);
 }
 
+TEST_CASE("math: orthographic projection is reverse-Z between its planes, Y flipped, sizes by height (9A part 1)") {
+    const Mat4 proj = orthographic_reverse_z(20.0f, 16.0f / 9.0f, 0.1f, 50.1f);
+    CHECK(near(proj.transform_point({0, 0, -0.1f}).z, 1.0f));
+    CHECK(near(proj.transform_point({0, 0, -50.1f}).z, 0.0f));
+    CHECK(near(proj.transform_point({0, 0, -25.1f}).z, 0.5f));  // linear in depth: no perspective
+    CHECK(near(proj.transform_point({0, 10, -5}).y, -1.0f));     // the top edge: half the height up, Vulkan's -1
+    CHECK(near(proj.transform_point({10.0f * 16.0f / 9.0f, 0, -5}).x, 1.0f));
+    // Parallel: the same point further away lands on the same pixel.
+    CHECK(near(proj.transform_point({3, 2, -1}).x, proj.transform_point({3, 2, -40}).x));
+    CHECK(near(proj.transform_point({3, 2, -1}).y, proj.transform_point({3, 2, -40}).y));
+}
+
 TEST_CASE("math: quaternion rotation matches axis-angle rotation") {
     const auto axis = Vec3{0.3f, 1.0f, 0.2f};
     const float angle = 1.1f;

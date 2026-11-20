@@ -1,0 +1,3 @@
+# Derived data and editor leftovers (NoorEditor and noor_cli recreate them)
+.noor/
+*.bak

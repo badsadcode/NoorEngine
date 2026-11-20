@@ -585,6 +585,10 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             const auto& cam = e.components["camera"];
             view.camera = SceneView::Camera{world, std::clamp(number(cam, "fov", 70.0f), 10.0f, 150.0f),
                                             std::max(0.001f, number(cam, "near", 0.05f)), e.id};
+            if (cam.value("projection", std::string("perspective")) == "orthographic") {
+                view.camera->ortho_height = std::clamp(number(cam, "height", 10.0f), 0.01f, 1.0e5f);
+                view.camera->far_plane = std::clamp(number(cam, "far", 1000.0f), view.camera->near_plane * 2.0f, 1.0e6f);
+            }
             view.lighting.ev100 = std::clamp(number(cam, "ev100", view.lighting.ev100), -10.0f, 25.0f);
             auto_exposure = cam.contains("ev100") && cam["ev100"].is_string() && cam["ev100"].get<std::string>() == "auto";
             const std::string tm = cam.value("tonemapper", std::string("neutral"));

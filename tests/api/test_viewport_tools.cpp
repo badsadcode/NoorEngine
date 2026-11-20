@@ -30,6 +30,26 @@ TEST_CASE("viewport tools: the centre pixel's ray goes straight ahead, screen up
     CHECK(right.dir.x > 0.3f);
 }
 
+TEST_CASE("viewport tools: an orthographic camera's rays are parallel, from the pixel's place (9A part 1)") {
+    CameraBasis c = front_camera();
+    c.ortho_height = 20.0f;
+    const Ray centre = screen_ray(c, 200, 100, 99.5f, 49.5f);
+    CHECK(near(centre.origin, {0, 0, 10}));
+    CHECK(near(centre.dir, {0, 0, -1}));
+    const Ray corner = screen_ray(c, 200, 100, -0.5f, -0.5f);  // the top-left corner of the view
+    CHECK(near(corner.origin, {-20, 10, 10}));
+    CHECK(near(corner.dir, {0, 0, -1}));
+    // And back: a point on the screen's plane far away lands on the same pixel as one near.
+    const auto a = world_to_screen(c, 200, 100, {5, -3, 0});
+    const auto b = world_to_screen(c, 200, 100, {5, -3, -30});
+    REQUIRE(a);
+    REQUIRE(b);
+    CHECK(a->x == doctest::Approx(b->x));
+    CHECK(a->y == doctest::Approx(b->y));
+    const Ray back = screen_ray(c, 200, 100, a->x, a->y);
+    CHECK(near(back.origin, {5, -3, 10}));
+}
+
 TEST_CASE("viewport tools: ray/triangle hits inside, misses outside, either winding") {
     const Ray r{{0.2f, 0.2f, 5}, {0, 0, -1}};
     const auto t = ray_triangle(r, {0, 0, 0}, {1, 0, 0}, {0, 1, 0});

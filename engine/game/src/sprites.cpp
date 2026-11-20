@@ -145,9 +145,12 @@ int SpriteLibrary::frame_of(const SpriteInstance& sprite, Vec3 eye, double secon
     return sprite_frame(s->sheet, sprite.component, sprite.world, eye, seconds);
 }
 
-void SpriteLibrary::add_draws(std::span<const SpriteInstance> sprites, Vec3 eye, double seconds, std::vector<render::DrawItem>& out) {
+void SpriteLibrary::add_draws(std::span<const SpriteInstance> sprites, Vec3 eye, double seconds, std::vector<render::DrawItem>& out,
+                              const Vec3* parallel) {
     if (!quad_.valid()) return;
     for (const SpriteInstance& sp : sprites) {
+        // A parallel view looks at every sprite from the same direction: an eye just behind it along that direction.
+        if (parallel) eye = sp.world.transform_point({0, 0, 0}) - *parallel;
         const int frame = frame_of(sp, eye, seconds);
         if (frame < 0) continue;
         Sheet& s = *sheet(sp.sheet);

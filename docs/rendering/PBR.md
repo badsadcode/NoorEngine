@@ -69,6 +69,26 @@ step is twice or half the light, like one stop on a camera.
 The sun shines along its entity's **forward** (−Z): rotate the entity to move the sun.
 **Create ▸ Sun (directional light)** makes one. A scene without a sun gets the defaults above.
 
+### Orthographic cameras (2D, top-down, isometric)
+
+Milestone 9A, part 1. A camera can look **in parallel** instead of in perspective: things stay the same size however far
+away they are, as 2D games, top-down maps and isometric views want.
+
+```json
+"camera": { "projection": "orthographic", "height": 20, "near": 0.1, "far": 100, "ev100": 14 }
+```
+
+- `height` is how much of the world the view shows from top to bottom, in metres (the width follows the window's
+  shape). `far` is where the view ends: a parallel view needs one (a perspective view goes on for ever).
+- It looks along its entity's forward (−Z) like any camera. Turn the entity for isometric views (for the classic look:
+  pitch −30°, yaw 45°).
+- **Create ▸ Camera (2D)** makes one looking at the XY plane, 10 m high. [NoorPong](../../samples/NoorPong) is a whole
+  game on one.
+- Shadows, culling, levels of detail, picking in the editor, the sky and fog all follow it. Sprites face the view's
+  direction (not a point), so a sprite looks the same anywhere on screen.
+- **Not yet for parallel views:** water's reflections and underwater fog, rain and snow volumes, and volumetric
+  clouds are drawn but were built for perspective cameras and haven't been tested here.
+
 ## Environments (image-based lighting)
 
 Everything around the scene lights it: the sky, the ground, distant buildings. NoorEngine takes

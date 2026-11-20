@@ -56,6 +56,9 @@ struct Frustum {
     math::Mat4 view;
     math::Vec3 side[4];  // outward normals through the eye
     float near_plane = 0.1f;
+    // A parallel view (9A part 1): a box, half `half_w` wide and `half_h` high, from the near to the far plane.
+    bool ortho = false;
+    float half_w = 0, half_h = 0, far_plane = 0;
 
     Frustum(const Camera& camera, float aspect) : view(camera.view), near_plane(camera.near_plane) {
         const float ty = std::tan(camera.fov_y * 0.5f);
@@ -64,10 +67,15 @@ struct Frustum {
         side[1] = math::normalize(math::Vec3{-1, 0, tx});
         side[2] = math::normalize(math::Vec3{0, 1, ty});
         side[3] = math::normalize(math::Vec3{0, -1, ty});
+        ortho = camera.orthographic();
+        half_h = 0.5f * camera.ortho_height;
+        half_w = half_h * aspect;
+        far_plane = camera.far_plane;
     }
     [[nodiscard]] bool visible(math::Vec3 world_centre, float radius) const {
         const math::Vec3 c = view.transform_point(world_centre);
         if (c.z - radius > -near_plane) return false;  // wholly behind the near plane
+        if (ortho) return c.z + radius >= -far_plane && std::abs(c.x) <= half_w + radius && std::abs(c.y) <= half_h + radius;
         for (const auto& n : side)
             if (math::dot(n, c) > radius) return false;
         return true;

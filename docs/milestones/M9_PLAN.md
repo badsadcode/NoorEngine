@@ -222,9 +222,9 @@ Milestone 9 can't quietly make NoorEngine worse for small games:
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **The yardsticks**: the regression set above (the cube, **NoorPong** with an **orthographic camera** on the `camera` component, NoorFPS-lite, Hillside). `noor_player --report` gains memory (process and GPU), thread count, load time and frame-time percentiles. Baseline numbers are recorded in `docs/milestones/M9_YARDSTICKS.md`, plus a check that fails when a small project gets slower or bigger beyond a stated tolerance | NoorPong plays in the player and as a built game identically (a scripted rally, the ball's path to the bit); an orthographic golden; the baseline table, measured; the check catches a deliberately added 1 ms stall |
+| 1 ✅ | **The yardsticks**: the regression set above (the cube, **NoorPong** with an **orthographic camera** on the `camera` component, NoorFPS-lite, Hillside). `noor_player --report` gains memory (process and GPU), thread count, load time and frame-time percentiles. Baseline numbers are recorded in `docs/milestones/M9_YARDSTICKS.md`, plus a check that fails when a small project gets slower or bigger beyond a stated tolerance | NoorPong plays in the player and as a built game identically (a scripted rally, the ball's path to the bit); an orthographic golden; the baseline table, measured; the check catches a deliberately added 1 ms stall |
 | 2 | **Large-world coordinates** (ADR-013): double positions in the scene and runtime, camera-relative rendering, the physics moving origin (measured against Jolt's double build first), script APIs, the editor's gizmos and grid far from the origin | A scene repeated at the origin and at (30 km, 0, 30 km) renders the same picture, with no shake (consecutive frames of a still camera identical), and objects resting and colliding identically; precision checked out to 64 km; **every existing golden still passes**; a built game identical; the yardsticks unchanged |
-| 3 | **The cached gather**: the `SceneView` kept between frames and updated only from what changed (moved, added, removed, edited); a spatial grid for CPU culling and range queries; the same pictures | Every golden identical; 8C's 250-Alden crowd's gather cost measured before and after (target: under a third); a static Hillside frame gathers in microseconds; the yardsticks equal or faster |
+| 3 | **The cached gather**: the `SceneView` **and the draw list built from it** kept between frames and updated only from what changed (moved, added, removed, edited); a spatial grid for CPU culling and range queries; the same pictures. (Part 1 measured where the time goes: Hillside's gather is 0.17 ms, its draw list 5.1 ms, mostly the scattered forest) | Every golden identical; 8C's 250-Alden crowd's gather cost measured before and after (target: under a third); a static Hillside frame gathers in microseconds; the yardsticks equal or faster |
 | 4 | **Worlds and cells** (ADR-038): `.noorworld`, cell files, the persistent scene, the world index, cross-cell handles, ownership changes; `noor_cli world split` (scene → world), `merge` (world → scene), `validate` (every reference, every asset, JSON diagnostics) | A scene split into cells and merged back is identical to the original; `validate` finds every planted broken reference (a deleted target, a missing cell, a duplicated GUID) and nothing in a good world; a world loaded all at once plays like the scene it came from (built-game check) |
 | 5 | **Streaming**: background loading and unloading of cells (files, models, textures, terrain pieces) with a per-frame budget for activation and uploads; streaming sources, rings and hysteresis; a first streamed test world (terrain from a graph, cooked per cell, plus scattered models), generated headlessly | A camera flown across the world for minutes: no frame over budget from loading (worst frame and percentiles measured), memory back to its level after 100 load–unload cycles (no leaks), terrain seams closed (a golden across a cell edge), no corrupt references; deterministic mode identical in a built game |
 | 6 | **Saving and restoring**: a cell's runtime changes kept when it unloads and restored when it loads (a moved crate stays moved); saving and loading a game in a streamed world; lifecycle hooks for scripts (`on_load`, `on_unload`, spec 9.4); physics bodies crossing cell edges | A crate pushed, its cell unloaded and reloaded: it's where it was, to the bit; a save made mid-stream and loaded in a fresh process gives the same world (fingerprints); a body sliding across a cell edge keeps moving without a hitch; scripts get each hook exactly once |
@@ -233,6 +233,49 @@ Milestone 9 can't quietly make NoorEngine worse for small games:
 
 **9A's acceptance (Tom and Noor):** large worlds stream reliably, while small scenes stay simple to create and run.
 A simple hand-made level works without configuring any world grid.
+
+## Part 1 result (2026-11-20)
+Done. **The orthographic camera**: `"projection": "orthographic"` on the `camera` component with a `height` (metres
+shown top to bottom) and a `far` plane; `render::Camera::projection()` chooses between `math::perspective_reverse_z`
+and the new `math::orthographic_reverse_z` everywhere a projection is built (the frame, shadow cascades, which become
+boxes, culling, levels of detail, the player's readbacks). Shaders get a view direction that is the same for every
+pixel (`view_ray` in `frame.hlsli`: lighting, particles, the sky, volumetric clouds); sprites face the view's direction;
+the editor picks and sizes its gizmos with parallel rays; **Create ▸ Camera (2D)**. **NoorPong** (`samples/NoorPong`,
+`tools/samples/make_noorpong.py`): bat and ball in Lua on that camera, a pixel-art sprite ball, the computer playing a
+side until someone presses its keys, deterministic at the fixed step. **The yardsticks**: `noor_player --report` gains
+`process` (working set, private memory, GPU-resident memory, threads, seconds to the first frame), CPU per frame and p99
+timings, and `--stall-ms`; four yardsticks with a measured baseline and limits (`tests/yardsticks.json`,
+[M9_YARDSTICKS.md](M9_YARDSTICKS.md)).
+
+Proved: orthographic projection and parallel picking by hand (unit and API tests); a NoorPong golden; the built NoorPong
+plays the same twenty seconds to the bit, with points scored (`player.noorpong`); every yardstick within its limits, and
+the cube with a deliberate 1 ms stall caught (`yardstick.catches_a_stall`); every existing golden unchanged.
+
+**What the baseline found** (written down, not fixed here): every game carries about 117 MB of GPU render targets,
+shadow maps included even with shadows off; an empty see-through pass costs about 0.3 ms; and Hillside's 6 ms of CPU a
+frame is the draw list (5.1 ms, the scattered forest), not the gather (0.17 ms), so part 3's cache now covers the draw
+list too.
+
+## Proposed next: foundations for 2D, 2.5D and isometric games (Tom, 2026-11-20)
+
+Tom asked for 2D, 2.5D and isometric games to be possible too, before going back to big 3D worlds. Part 1 laid the first
+stone (the orthographic camera, NoorPong). This is what I'd build next, as its own small group between 9A part 1 and
+part 2, because none of it depends on big worlds and all of it is additive (the yardsticks and every golden guard 3D):
+
+| # | What | Why |
+|---|---|---|
+| 1 | **2D physics on Jolt**: bodies locked to a plane (Jolt's allowed degrees of freedom: move in X and Y, turn about Z), 2D shapes (box, circle, capsule, polygon) as thin 3D ones, a 2D character controller (platformer: ground, slopes, one-way platforms, coyote time as script options) | A platformer needs physics that never drifts out of its plane. Locking Jolt keeps **one** physics engine (determinism, built-game checks, tooling) instead of adding Box2D beside it |
+| 2 | **Sprite sorting and see-through sprites**: sorting layers and order in layer, sorting by Y for top-down and isometric views, soft-edged (alpha) sprites, unlit sprites (their own colours, no sun needed) | Today sprites are lit cutouts sorted by depth, right for 2.5D in a 3D world, wrong for most 2D art: a 2D game decides what's in front by layer, not distance |
+| 3 | **Tilemaps**: a tileset asset (from a sprite sheet), a `tilemap` component in square, isometric and hexagonal layouts, tiles drawn in batches, colliders made from solid tiles, auto-tiling rules later | The backbone of platformers, top-down RPGs (The Uncounted's zones?) and isometric games; drawing thousands of tiles one sprite at a time would be slow |
+| 4 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom, no orbit), grid snapping in pixels or tiles, tile painting, sprite placement by drag and drop | Principle 0, item 6: a small 2D scene must be as comfortable to make as a 3D one |
+| 5 | **Pixel-perfect cameras and parallax**: snapping to whole pixels at a chosen pixels-per-unit, integer scaling for retro resolutions, camera follow with dead zones and bounds, parallax layers | Pixel art shimmers when a camera moves by fractions of a pixel; every 2D game needs a following camera |
+| 6 | **A sample and a review**: a small platformer (our own art) and an isometric scene, both yardsticks | The proof, and two more yardsticks guarding 2D from then on |
+
+**2.5D** comes mostly from these plus what exists: a 3D world played on a plane (part 1's locked physics with 3D
+models), 8-direction sprites in a 3D world (8B, The Uncounted's style), or an isometric camera over 3D models. **2D
+lighting** (normal-mapped sprites, 2D lights and shadows) and **skeletal 2D animation** are worth their own later step.
+
+Waiting for Tom's yes (and any reordering) before it becomes a plan with parts and proofs.
 
 ## Highest risks (settle early)
 

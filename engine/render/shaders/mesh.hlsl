@@ -286,7 +286,7 @@ float4 PSMain(VertexOutput input, bool front : SV_IsFrontFace) : SV_Target
     }
     n = surf.normal;
     const float alpha = surf.alpha;
-    const float3 v = normalize(frame.camera_position.xyz - input.world_position);
+    const float3 v = -view_ray(input.world_position);
     const float3 base_color = input.color * surf.base_color;
     const float roughness = surf.roughness;
     const float metallic = surf.metallic;

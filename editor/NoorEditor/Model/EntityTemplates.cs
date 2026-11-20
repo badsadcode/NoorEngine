@@ -56,6 +56,12 @@ public static class EntityTemplates
         // The sun (Milestone 5): shines along the entity's forward (-Z); rotate it to move the sun.
         // Illuminance in lux (100000 = bright sunshine); its sky too, until environments (part 5).
         new(SunTemplateName, () => new JsonObject { ["light"] = Sun() }, new Vec3(0, 10, 0), new Vec3(-50, 30, 0)),
+        // Camera (2D) (Milestone 9A, part 1): an orthographic game camera looking down -Z at the XY plane, 10 m high; for 2D
+        // and side-on games (NoorPong). Perspective cameras come with the player templates.
+        new("Camera (2D)", () => new JsonObject
+        {
+            ["camera"] = new JsonObject { ["projection"] = "orthographic", ["height"] = 10, ["near"] = 0.1, ["far"] = 100, ["ev100"] = 14 },
+        }, new Vec3(0, 0, 10)),
         // Lamps (Milestone 5, part 4): intensity in lumens (a 60 W-equivalent bulb is ~800 lm),
         // range in metres. Indoors or at night use a lower camera exposure (ev100 6..9) to see them.
         new("Point light", () => new JsonObject

@@ -1,0 +1,667 @@
+{
+  "noor_scene": 2,
+  "id": "d89d2d71-cfca-5b74-bb44-59f0ff860954",
+  "name": "Pong",
+  "entities": [
+    {
+      "id": "50591452-c08c-5985-ae65-e6256a5e87d5",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 20,
+          "near": 0.1,
+          "far": 50,
+          "ev100": 14
+        },
+        "audio_listener": {}
+      }
+    },
+    {
+      "id": "60c60f28-1db0-5f1b-9fed-b70ebf0a5856",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 90000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "aaa36b7f-390d-508e-acf9-79cdfe1f5d3e",
+      "name": "Table",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -0.6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            40,
+            24,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "55be6cbc-5ff1-5c85-8863-226e49aef30e",
+      "name": "Wall Top",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          9.25,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            36,
+            0.5,
+            0.5
+          ],
+          "color": "#E8E4F8",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "345bd6ad-04b2-530f-bf03-c63ac9a216c5",
+      "name": "Wall Bottom",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -9.25,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            36,
+            0.5,
+            0.5
+          ],
+          "color": "#E8E4F8",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "37dec10b-e5e1-561d-a31c-42a0330a3e9f",
+      "name": "Left Bat",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -16,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.5,
+            3,
+            0.5
+          ],
+          "color": "#A07CFF",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "1ae384ff-30c6-5804-af0d-32612e88bd04",
+      "name": "Right Bat",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          16,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.5,
+            3,
+            0.5
+          ],
+          "color": "#FFC857",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "8efe3dad-cb56-5914-a03e-c6c38f1c3b62",
+      "name": "Ball",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0.1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "33c6c284-5fb8-5b4a-81eb-afcfaa7d7f79",
+          "frame": 0,
+          "billboard": "camera",
+          "cast_shadows": false
+        }
+      }
+    },
+    {
+      "id": "7a70e351-00f9-5e4c-8a38-12c4c22e50a3",
+      "name": "Game",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/Pong.luau",
+          "params": {
+            "serve_speed": 12,
+            "speed_up": 1.08,
+            "max_speed": 30,
+            "bat_speed": 14,
+            "computer_speed": 10,
+            "computer_error": 0.12,
+            "seed": 2026
+          }
+        }
+      }
+    },
+    {
+      "id": "fb38a1bb-1e83-524e-8a78-1034fb96827a",
+      "name": "Net 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -8,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "e5818a6f-9652-5912-aea7-fb5917e59f61",
+      "name": "Net 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -6,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "53dbe085-517f-5021-9bb6-95bade0a7d3e",
+      "name": "Net 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -4,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "5c65f6cb-f1f9-5d80-a6ae-b80a8d1548fd",
+      "name": "Net 4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -2,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "b49b685e-3138-5c27-ae54-5bc26ed664f9",
+      "name": "Net 5",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "1cc35da5-bc46-5611-9134-dffddb5e292f",
+      "name": "Net 6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "d4265246-906e-5881-a4d9-b701681568fd",
+      "name": "Net 7",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          4,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "23b913d9-c72b-5191-94b1-3e106ce73374",
+      "name": "Net 8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          6,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    },
+    {
+      "id": "d4fd07e0-de2a-5e75-befc-d65efcb0da2a",
+      "name": "Net 9",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          8,
+          -0.4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.2,
+            1,
+            0.1
+          ],
+          "color": "#4A4370",
+          "roughness": 0.6
+        }
+      }
+    }
+  ]
+}

@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — Milestone 9A, part 1: orthographic cameras, NoorPong and the yardsticks
+**Added**
+- Orthographic cameras: `"projection": "orthographic"`, `"height"`, `"far"` on the `camera` component;
+  `math::orthographic_reverse_z`, `render::Camera::{ortho_height, far_plane, projection(), lod_distance()}`. Shadow
+  cascades, culling, levels of detail, sprites (they face the view direction), the sky, lighting, particles, volumetric
+  clouds and editor picking and gizmos follow a parallel view. **Create ▸ Camera (2D)**.
+- `samples/NoorPong` (`tools/samples/make_noorpong.py`): a 2D bat-and-ball game in Lua on an orthographic camera.
+- The yardsticks: `tests/data/yardstick_cube`, `tests/yardsticks.json`, `tools/samples/measure_yardsticks.py`,
+  [M9_YARDSTICKS.md](docs/milestones/M9_YARDSTICKS.md). `noor_player --report` gains `process` (memory, threads, time to
+  the first frame), CPU-per-frame and p99 timings; `--stall-ms` adds a deliberate stall. `platform::process_stats()`.
+
+**Measured:** the baseline of four yardsticks. Every game carries ~117 MB of GPU render targets (shadow maps even with
+shadows off); an empty see-through pass costs ~0.3 ms; Hillside's 6 ms of CPU a frame is its draw list (5.1 ms), not
+its gather (0.17 ms). In the ideas inbox and the 9A plan.
+
+**Tests:** orthographic projection and parallel picking (unit, API); golden `NoorPong`; `player.noorpong` (the built
+game to the bit); `yardstick.cube`, `.pong`, `.fps`, `.hillside`, and `yardstick.catches_a_stall`.
+
 ### 2026-11-20 — Milestone 9 plan
 **Docs**
 - [`docs/milestones/M9_PLAN.md`](docs/milestones/M9_PLAN.md), from Tom and Noor's answers to the proposal. Principle 0:

@@ -184,7 +184,7 @@ float3 view_ray(float2 pixel, float2 size)
 {
     const float2 ndc = (pixel + 0.5) / size * 2.0 - 1.0;  // the sky pass's full-screen ndc, at this pixel's centre
     const float4 p = mul(frame.world_from_clip, float4(ndc, 1.0, 1.0));
-    return normalize(p.xyz / p.w - frame.camera_position.xyz);
+    return frame.camera_forward.w > 0.5 ? frame.camera_forward.xyz : normalize(p.xyz / p.w - frame.camera_position.xyz);
 }
 
 [numthreads(8, 8, 1)]

@@ -77,6 +77,13 @@ float cloud_shadow(float3 world)
 
 static const float kPi = 3.14159265;
 
+// The direction the camera looks along to see `world` (unit): from the eye, or, for an orthographic camera (camera_forward.w
+// = 1, Milestone 9A part 1), the camera's forward everywhere.
+float3 view_ray(float3 world)
+{
+    return frame.camera_forward.w > 0.5 ? frame.camera_forward.xyz : normalize(world - frame.camera_position.xyz);
+}
+
 // How much sunlight reaches `world` (1 lit, 0 in shadow): the cascade for this distance, a normal
 // offset against acne, 3x3 hardware-filtered PCF (a soft edge about two texels wide), and a fade
 // over the last 10% of the shadow distance so shadows don't end in a hard line.

@@ -13,9 +13,15 @@ using math::normalize;
 
 Ray screen_ray(const CameraBasis& c, float width, float height, float px, float py) {
     const float aspect = height > 0 ? width / height : 1.0f;
+    const float nx = 2.0f * (px + 0.5f) / std::max(width, 1.0f) - 1.0f;
+    const float ny = 1.0f - 2.0f * (py + 0.5f) / std::max(height, 1.0f);
+    if (c.ortho_height > 0.0f) {  // parallel rays, from the pixel's place on the eye's plane
+        const float hh = 0.5f * c.ortho_height;
+        return {c.eye + c.right * (nx * hh * aspect) + c.up * (ny * hh), c.forward};
+    }
     const float t = std::tan(c.fov_y * 0.5f);
-    const float x = (2.0f * (px + 0.5f) / std::max(width, 1.0f) - 1.0f) * t * aspect;
-    const float y = (1.0f - 2.0f * (py + 0.5f) / std::max(height, 1.0f)) * t;
+    const float x = nx * t * aspect;
+    const float y = ny * t;
     return {c.eye, normalize(c.forward + c.right * x + c.up * y)};
 }
 
@@ -23,6 +29,11 @@ std::optional<ScreenPoint> world_to_screen(const CameraBasis& c, float width, fl
     const Vec3 v = p - c.eye;
     const float z = dot(v, c.forward);
     if (z <= 1e-6f || width <= 0 || height <= 0) return std::nullopt;
+    if (c.ortho_height > 0.0f) {
+        const float hh = 0.5f * c.ortho_height;
+        const float x = dot(v, c.right) / (hh * (width / height)), y = dot(v, c.up) / hh;
+        return ScreenPoint{(x + 1.0f) * 0.5f * width - 0.5f, (1.0f - y) * 0.5f * height - 0.5f, math::length(v)};
+    }
     const float t = std::tan(c.fov_y * 0.5f);
     const float x = dot(v, c.right) / (z * t * (width / height));
     const float y = dot(v, c.up) / (z * t);

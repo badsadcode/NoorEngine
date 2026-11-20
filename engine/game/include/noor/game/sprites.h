@@ -44,7 +44,10 @@ public:
     // Sheets whose files changed load again (call a few times a second, not every frame). Returns how many.
     std::size_t refresh();
     // Draw items for `sprites`, facing `eye`, animated at `seconds`. Sheets that fail to load are reported once.
-    void add_draws(std::span<const SpriteInstance> sprites, math::Vec3 eye, double seconds, std::vector<render::DrawItem>& out);
+    // `parallel`: the view direction of an orthographic camera (9A part 1): every sprite then faces against it, and
+    // 8-direction sprites pick their view from it, instead of from the line to the eye.
+    void add_draws(std::span<const SpriteInstance> sprites, math::Vec3 eye, double seconds, std::vector<render::DrawItem>& out,
+                   const math::Vec3* parallel = nullptr);
     // The frame a sprite shows to a viewer at `eye` at `seconds` (sprite_frame); -1 if its sheet won't load.
     [[nodiscard]] int frame_of(const SpriteInstance& sprite, math::Vec3 eye, double seconds);
 

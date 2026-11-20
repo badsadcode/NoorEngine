@@ -1,0 +1,20 @@
+{
+  "axes": {
+    "left_bat": {
+      "negative": [
+        "S"
+      ],
+      "positive": [
+        "W"
+      ]
+    },
+    "right_bat": {
+      "negative": [
+        "Down"
+      ],
+      "positive": [
+        "Up"
+      ]
+    }
+  }
+}

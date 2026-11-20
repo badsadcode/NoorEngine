@@ -801,6 +801,56 @@ if(TARGET noor_scripting_managed)
     endforeach()
 endif()
 
+# ---- Milestone 9A, part 1: the yardsticks -------------------------------------
+# Milestone 9 adds big worlds; small games must not pay for them (M9_PLAN.md, principle 0). NoorPong is the 2D yardstick:
+# an orthographic camera, a sprite, Lua. A golden two seconds in, and the built game plays the same game.
+if(WIN32)
+    add_test(NAME render.golden_NoorPong
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${PROJECT_SOURCE_DIR}/samples/NoorPong -DSCENE=Scenes/Pong.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/NoorPong.png -DFRAMES=150
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_NoorPong
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_NoorPong PROPERTIES LABELS "gpu;render;sample" TIMEOUT 120)
+    add_test(NAME cli.build_noorpong
+        COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/NoorPong ${CMAKE_CURRENT_BINARY_DIR}/built_noorpong)
+    set_tests_properties(cli.build_noorpong PROPERTIES LABELS "cli;sample" TIMEOUT 120 FIXTURES_SETUP built_noorpong
+                         PASS_REGULAR_EXPRESSION "Built 'NoorPong'")
+    add_test(NAME player.noorpong
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_noorpong/NoorPong.exe"
+            -DPROJECT=${PROJECT_SOURCE_DIR}/samples/NoorPong -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_noorpong
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/noorpong_check.cmake)
+    set_tests_properties(player.noorpong PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120 FIXTURES_REQUIRED built_noorpong)
+
+    # Each yardstick against its baseline (tests/yardsticks.json, tools/samples/measure_yardsticks.py). Timing tests: run
+    # alone, so a busy machine doesn't fail them.
+    foreach(entry IN ITEMS "cube|tests/data/yardstick_cube|Scenes/Main.noorscene"
+                           "pong|samples/NoorPong|Scenes/Pong.noorscene"
+                           "fps|samples/NoorFPS-lite|Scenes/Main_Lua.noorscene"
+                           "hillside|samples/Hillside|Scenes/Hillside.noorscene")
+        string(REPLACE "|" ";" parts "${entry}")
+        list(GET parts 0 name)
+        list(GET parts 1 project)
+        list(GET parts 2 scene)
+        add_test(NAME yardstick.${name}
+            COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${PROJECT_SOURCE_DIR}/${project}
+                -DSCENE=${scene} -DNAME=${name} -DBASELINE=${CMAKE_CURRENT_SOURCE_DIR}/yardsticks.json
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/yardstick_${name}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/yardstick_check.cmake)
+        set_tests_properties(yardstick.${name} PROPERTIES LABELS "gpu;yardstick" TIMEOUT 120 RUN_SERIAL TRUE)
+    endforeach()
+    set_tests_properties(yardstick.hillside PROPERTIES FIXTURES_REQUIRED hillside_cooked RESOURCE_LOCK hillside_cache)
+    # The check must catch a small game getting slower: the cube with a deliberate 1 ms stall in every update fails it.
+    add_test(NAME yardstick.catches_a_stall
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${PROJECT_SOURCE_DIR}/tests/data/yardstick_cube
+            -DSCENE=Scenes/Main.noorscene -DNAME=cube -DBASELINE=${CMAKE_CURRENT_SOURCE_DIR}/yardsticks.json
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/yardstick_stall -DSTALL_MS=1
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/yardstick_check.cmake)
+    set_tests_properties(yardstick.catches_a_stall PROPERTIES LABELS "gpu;yardstick" TIMEOUT 120 RUN_SERIAL TRUE
+                         PASS_REGULAR_EXPRESSION "cpu_median_ms [0-9.]+ [(]baseline [0-9.]+, limit [0-9.]+[)] OVER")
+endif()
+
 # The runtime boundary (Milestone 6 gate, ADR-016): games must not carry editor-only code. Walks
 # the link graph of the player and the runtime modules at configure time; the test fails if the
 # CSG module or Manifold is anywhere in it.

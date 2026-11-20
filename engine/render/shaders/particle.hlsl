@@ -47,7 +47,7 @@ VertexOutput VSMain(VertexInput input)
     const float2 c = corners[input.vertex % 6u];
     const float3 centre = input.position_size.xyz;
     const float half_size = input.position_size.w * 0.5;
-    const float3 to_eye = normalize(frame.camera_position.xyz - centre);
+    const float3 to_eye = -view_ray(centre);
     // The camera's right and up (cameras don't roll here); a camera looking straight up or down uses its forward.
     float3 right = cross(float3(0, 1, 0), to_eye);
     right = dot(right, right) > 1e-6 ? normalize(right) : float3(1, 0, 0);
@@ -102,7 +102,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     {
         // A small cloud lit like a matte sphere: the sun (through its shadows and the clouds') and the sky above and
         // in front, each irradiance over pi.
-        const float3 to_eye = normalize(frame.camera_position.xyz - input.world);
+        const float3 to_eye = -view_ray(input.world);
         const float sun = sun_shadow(input.world, to_eye) * cloud_shadow(input.world);
         const float3 sky = 0.5 * (environment_irradiance(float3(0, 1, 0)) + environment_irradiance(to_eye));
         light += albedo * (frame.sun_radiance.rgb * sun + sky) / kPi;

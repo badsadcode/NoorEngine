@@ -11,6 +11,7 @@
 #include "noor/render/clouds.h"
 #include "noor/render/fog.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -155,6 +156,21 @@ struct Camera {
     math::Mat4 view = math::Mat4::identity();  // world -> view (see math::look_at)
     float fov_y = math::radians(60.0f);
     float near_plane = 0.1f;                   // reverse-Z infinite far plane
+    // Orthographic (Milestone 9A, part 1: 2D games, top-down and isometric views): the whole height shown, in metres;
+    // 0 = perspective. A parallel view has a far plane.
+    float ortho_height = 0.0f;
+    float far_plane = 1000.0f;
+    [[nodiscard]] bool orthographic() const noexcept { return ortho_height > 0.0f; }
+    // How far away something `distance` metres off looks, for choosing levels of detail: a parallel view shows everything
+    // at one size, as a perspective view of fov_y would at the distance where it shows ortho_height.
+    [[nodiscard]] float lod_distance(float distance) const noexcept {
+        return orthographic() ? 0.5f * ortho_height / std::tan(std::clamp(fov_y, 0.01f, 3.0f) * 0.5f) : distance;
+    }
+    // Clip from view for this camera at `aspect` (width / height).
+    [[nodiscard]] math::Mat4 projection(float aspect) const noexcept {
+        return orthographic() ? math::orthographic_reverse_z(ortho_height, aspect, near_plane, std::max(far_plane, near_plane * 2.0f))
+                              : math::perspective_reverse_z(fov_y, aspect, near_plane);
+    }
 };
 
 // How the scene is lit and exposed (ADR-012). Physical units: the sun in lux, the sky in nits
