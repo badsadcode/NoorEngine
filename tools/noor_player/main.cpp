@@ -478,8 +478,14 @@ int run(const Options& o) {
                                 const noor::math::Vec3 p{h.x / h.w, h.y / h.w, h.z / h.w};
                                 const auto water = (*world)->water_at(p.x, p.z);
                                 const noor::math::Vec3 eye = noor::math::inverse(cam.view).transform_point({0, 0, 0});
+                                // The still water's depth over the ground there (8D part 3: the body's depth map;
+                                // kDeepWater without one), so a check can tell the shallows from a beach.
+                                Json depth = nullptr;
+                                if (const auto* ws = (*world)->system<noor::game::WaterSystem>(); ws && water)
+                                    for (const auto& b : ws->bodies())
+                                        if (b.entity == water->entity) depth = noor::game::depth_at(b.depth.get(), {p.x, p.z});
                                 Json probe{{"pixel", {px, py}}, {"world", {p.x, p.y, p.z}}, {"distance", noor::math::length(p - eye)},
-                                           {"water", water ? Json(water->height) : Json(nullptr)},
+                                           {"water", water ? Json(water->height) : Json(nullptr)}, {"depth", depth},
                                            {"error", water ? Json(std::abs(p.y - water->height)) : Json(nullptr)}};
                                 if (water && std::abs(p.y - water->height) < 0.5f) {  // a pixel showing the water (not a post in it)
                                     ++on_water;

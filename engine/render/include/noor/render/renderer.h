@@ -88,6 +88,7 @@ enum class TextureFormat : std::uint8_t {
     Bc7Srgb,      // block-compressed colour (16 bytes per 4x4 block)
     Bc7Unorm,     // block-compressed data (ORM, masks)
     Bc5Unorm,     // block-compressed normal maps: X and Y only (the shader rebuilds Z)
+    R32Float,     // one float a texel (water's depth maps, 8D): read exactly with Load, never filtered
 };
 
 struct TextureMipData {
@@ -368,6 +369,17 @@ struct ParticleDraw {
 
 // ---- Water (Milestone 8D, part 1, ADR-037) ----------------------------------------------------
 
+// How deep a water body is over its ground (8D part 3; game/water.h builds it from the terrains under it): a grid of
+// samples in world x and z, `depth` = the water level minus the ground's height (negative: dry land), row by row (z
+// outer). Read bilinearly between samples, the same arithmetic on the CPU and in the shader; off the grid the water is
+// deep. Shared and immutable: the renderer keeps one texture per map it is given.
+struct WaterDepthMap {
+    math::Vec2 origin;          // world (x, z) of sample (0, 0)
+    float cell = 1.0f;          // metres between samples
+    std::uint32_t nx = 0, nz = 0;
+    std::vector<float> depth;   // nx * nz
+};
+
 // One water surface: a level rectangle (a lake's, a pond's), drawn over a copy of the opaque scene so it knows how deep
 // it is at every pixel. Radiometric settings are physical-ish and art-directed (docs/water/WATER.md).
 struct WaterDraw {
@@ -392,6 +404,16 @@ struct WaterDraw {
     float wave_direction = 0.0f;
     float choppiness = 0.5f;
     std::array<float, 4> wave_phase{};
+    // Shorelines and reflections (8D part 3): the depth over the ground (waves calm where it's shallow; null: deep
+    // everywhere), foam (overall, the shallow depth it gathers in, on steep crests), wet ground (how much darker, and
+    // how high above the waterline), and the share of screen-space reflections (0: the sky only).
+    std::shared_ptr<const WaterDepthMap> depth_map;
+    float foam = 0.5f;
+    float foam_depth = 0.3f;
+    float crest_foam = 0.0f;
+    float wet = 0.35f;
+    float wet_height = 0.12f;
+    float reflections = 1.0f;
 };
 
 struct FrameDesc {

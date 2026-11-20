@@ -41,7 +41,8 @@ Option 3.
   1280×720, 4× MSAA): the copy 0.02 ms, a lake 0.035 ms, the split pass about 0.03 ms more. It also gives later effects
   (soft particles, decals) the scene's depth.
 - Waves are art-directed, deterministic and cheap; they don't flow round obstacles or pile up. Disclosed in the docs.
-- Screen-space reflections miss what's off screen; the sky stands in for it.
+- Screen-space reflections miss what's off screen; the sky stands in for it. Measured in part 3 (2026-11-20, 1280×720):
+  about 0.14 ms on a wavy sea filling most of the screen, the dominant part of water's cost.
 - Water bodies are data (component and asset), so procedural graphs can place them later (lakes in hollows, rivers
   from drainage).
 

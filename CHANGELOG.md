@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 3: shorelines and reflections
+**Added**
+- **Depth maps** (`docs/water/WATER.md`): each water body's depth over the terrains under it (`game::water_depth_map`);
+  waves calm where it's shallow (`tanh(k depth)` per wave), the same on the CPU (`noor.water_height`) and drawn.
+- **Foam** at the shore and round things in the water, and on folding crests; **wet ground** near the waterline;
+  **screen-space reflections** of nearby things, fading to the sky where the screen has nothing.
+- Look fields `foam`, `foam_depth`, `crest_foam`, `wet`, `wet_height`, `reflections`; the Lake and Sea presets use them.
+- `noor_player --water-probes` reports each point's still-water depth. `render::TextureFormat::R32Float`.
+
+**Changed:** the texture table is visible to vertex shaders; the frame set has a binding 9 (water draws' settings).
+
+**Measured:** drawn and gameplay surfaces within 7.4 mm over a beach; the wavy sea's water 0.32 ms of GPU (was 0.11).
+
+**Tests:** unit tests "water" (12); `render.water_readback_shore`; goldens `Water_Shore`, `Water_Reflection`; the
+other water goldens redrawn.
+
 ### 2026-11-20 — Milestone 8D, part 2: waves
 **Added**
 - **Waves** (`docs/water/WATER.md`): four Gerstner waves from the look's `wave_height`, `wave_length`,

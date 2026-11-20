@@ -1,0 +1,284 @@
+{
+  "noor_scene": 2,
+  "id": "a7e50000-5408-4000-8000-000000000000",
+  "name": "Water_Shore",
+  "entities": [
+    {
+      "id": "a7e50000-5408-4000-8000-000000000001",
+      "name": "Sea",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "water": {
+          "shape": "sea",
+          "preset": "Sea"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000002",
+      "name": "Coast",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -16.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "terrain": {
+          "tiles": [
+            1,
+            1
+          ],
+          "cell_size": 1,
+          "base": "noise",
+          "seed": 11,
+          "height": 30,
+          "scale": 110,
+          "octaves": 5,
+          "material": "7e5d0000-3a70-4000-8000-000000000020"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000003",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          30,
+          0
+        ],
+        "rotation": [
+          -0.276209969,
+          0.269869891,
+          0.081123389,
+          0.918856513
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFF5E6",
+          "illuminance": 100000
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000004",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -24.0,
+          6.0,
+          18.0
+        ],
+        "rotation": [
+          -0.103471335,
+          0.430324662,
+          0.049730895,
+          0.895344183
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "near": 0.1
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000005",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "environment": {
+          "sky": "atmosphere",
+          "time_of_day": 15.5,
+          "latitude": 50,
+          "day_of_year": 172,
+          "north": 200,
+          "ev100": "auto"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000010",
+      "name": "Post 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -36.0,
+          0.2,
+          8.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000011",
+      "name": "Post 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -33.0,
+          0.2,
+          4.0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    },
+    {
+      "id": "a7e50000-5408-4000-8000-000000000012",
+      "name": "Post 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -38.5,
+          0.2,
+          0.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.3,
+            3.0,
+            0.3
+          ],
+          "color": "#6B4A2E"
+        }
+      }
+    }
+  ]
+}

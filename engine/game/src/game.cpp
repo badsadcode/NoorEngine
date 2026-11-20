@@ -197,11 +197,13 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
     };
     // Colliding particles (part 7) stand on the scene's terrains: the same heights as drawing and physics (live ones
     // while sculpting in the editor). Rebuilt only when a terrain's component or place changes.
+    // Water (8D part 3) reads the same terrains for its depth maps.
     struct GroundCache {
         std::unordered_map<Guid, std::pair<std::string, ParticleGround::Piece>> pieces;
         ParticleGround ground;
     };
-    fx_options.ground = [&project, &registry, live = options.terrain_heights, cache = std::make_shared<GroundCache>()](runtime::World& w) {
+    const auto refresh_ground = [&project, &registry, live = options.terrain_heights,
+                                 cache = std::make_shared<GroundCache>()](runtime::World& w) -> const ParticleGround& {
         bool changed = false;
         std::unordered_set<Guid> seen;
         for (const auto& e : w.scene().entities) {
@@ -228,14 +230,16 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
             });
             cache->ground.set(std::move(list));
         }
-        return cache->ground.query();
+        return cache->ground;
     };
+    fx_options.ground = [refresh_ground](runtime::World& w) { return refresh_ground(w).query(); };
     // Their wind is the one the weather has: the scene's environment with its weather zones blended in (a storm
     // rolling in blows the smoke about, not just the rain).
     fx_options.wind = [asset_path = registry_asset_path(project, registry)](runtime::World& w) { return effect_wind(w, asset_path); };
     world->add_system(std::make_unique<fx::ParticleSystem>(std::move(fx_options)));
     // Water for gameplay (Milestone 8D, part 2): the bodies and their waves, answering water_height for scripts.
-    world->add_system(std::make_unique<WaterSystem>(registry_asset_path(project, registry)));
+    world->add_system(std::make_unique<WaterSystem>(registry_asset_path(project, registry),
+                                                    [refresh_ground](runtime::World& w) { return refresh_ground(w).pieces(); }));
     // Sprite animations played by scripts: their end events (Milestone 8B, part 6).
     world->add_system(std::make_unique<SpriteAnimationSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
         const auto* rec = registry.find(id);
@@ -926,7 +930,21 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
         body.waves = make_waves(look, water_wind);
         view.water.push_back(water_draw(body, look));
     }
+    if (!view.water.empty()) set_water_depths(view.water, view.terrains);
     return view;
+}
+
+void set_water_depths(std::span<render::WaterDraw> draws, const std::vector<SceneView::Terrain>& terrains) {
+    if (draws.empty()) return;
+    std::vector<ParticleGround::Piece> ground;
+    for (const auto& t : terrains) {
+        std::shared_ptr<const terrain::Heights> h = t.heights;
+        if (!h)
+            if (auto shared = terrain::Heights::shared(t.settings)) h = *shared;
+        if (h) ground.push_back({t.position, h});
+    }
+    std::ranges::sort(ground, [](const auto& a, const auto& b) { return std::tie(a.position.x, a.position.z) < std::tie(b.position.x, b.position.z); });
+    set_water_depths(draws, ground);
 }
 
 asset::AssetFileResolver file_resolver(const AssetPath& asset_path) {

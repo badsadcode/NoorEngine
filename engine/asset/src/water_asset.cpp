@@ -73,6 +73,12 @@ void WaterLook::apply(const Json& s) {
     number(s, "wave_direction", wave_direction, -3600.0f, 3600.0f);
     number(s, "choppiness", choppiness, 0.0f, 0.9f);
     number(s, "wind", wind, 0.0f, 1.0f);
+    number(s, "foam", foam, 0.0f, 1.0f);
+    number(s, "foam_depth", foam_depth, 0.01f, 10.0f);
+    number(s, "crest_foam", crest_foam, 0.0f, 1.0f);
+    number(s, "wet", wet, 0.0f, 1.0f);
+    number(s, "wet_height", wet_height, 0.0f, 5.0f);
+    number(s, "reflections", reflections, 0.0f, 1.0f);
 }
 
 const Json& water_presets() {
@@ -80,12 +86,14 @@ const Json& water_presets() {
         {{"name", "Lake"},
          {"description", "A calm, clear green lake: you see the bottom near the shore, deep green further out"},
          {"water", {{"tint", "#6FB7A8"}, {"clarity", 4.0}, {"scatter", "#1F4A48"}, {"refraction", 0.06}, {"shore_fade", 0.12},
-                    {"roughness", 0.06}, {"ripple", 1.0}, {"ripple_scale", 1.2}, {"wave_height", 0.0}}}},
+                    {"roughness", 0.06}, {"ripple", 1.0}, {"ripple_scale", 1.2}, {"wave_height", 0.0},
+                    {"foam", 0.35}, {"foam_depth", 0.2}, {"crest_foam", 0.0}, {"wet", 0.35}, {"wet_height", 0.08}}}},
         {{"name", "Sea"},
          {"description", "Open sea: a long swell with smaller waves on it, blue-green and deep, rougher in the wind"},
          {"water", {{"tint", "#4F9FB0"}, {"clarity", 6.0}, {"scatter", "#0E3A4A"}, {"refraction", 0.05}, {"shore_fade", 0.2},
                     {"roughness", 0.08}, {"ripple", 0.8}, {"ripple_scale", 1.5}, {"wave_height", 0.6}, {"wave_length", 14.0},
-                    {"wave_direction", 160.0}, {"choppiness", 0.55}, {"wind", 0.3}}}},
+                    {"wave_direction", 160.0}, {"choppiness", 0.55}, {"wind", 0.3},
+                    {"foam", 1.0}, {"foam_depth", 0.9}, {"crest_foam", 0.45}, {"wet", 0.4}, {"wet_height", 0.25}}}},
     });
     return presets;
 }

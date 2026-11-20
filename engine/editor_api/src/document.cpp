@@ -1202,6 +1202,8 @@ void Document::publish(const scene::Scene& expanded, const std::unordered_set<Gu
             t.tile_versions = edit->tile_versions;
         }
     }
+    // Water's depth maps over the live heights (the same ones play mode's gameplay reads).
+    game::set_water_depths(snap->water, snap->terrains);
     snap->lighting = view.lighting;
     snap->environment = view.environment;
     for (const auto& lm : view.light_markers) snap->markers.push_back({math::translation(lm.position), lm.entity, lm.color});

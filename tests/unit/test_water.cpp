@@ -12,6 +12,7 @@
 #include <ostream>
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -271,4 +272,123 @@ TEST_CASE("water: scripts read the surface through the World, the highest body w
     // Without a water system nobody answers.
     runtime::World dry(scene::Scene{});
     CHECK_FALSE(runtime::api::water_height(dry, 0.0f, 0.0f).has_value());
+}
+
+// ---- Shorelines (part 3) ----------------------------------------------------------------------------------------
+
+namespace {
+
+// A hand-made depth map: `depth(x, z)` sampled every half metre over 20 x 20 m round the origin.
+template <typename F>
+std::shared_ptr<render::WaterDepthMap> depth_map(F depth) {
+    auto m = std::make_shared<render::WaterDepthMap>();
+    m->origin = {-10.0f, -10.0f};
+    m->cell = 0.5f;
+    m->nx = m->nz = 41;
+    for (std::uint32_t z = 0; z < m->nz; ++z)
+        for (std::uint32_t x = 0; x < m->nx; ++x) m->depth.push_back(depth(-10.0f + 0.5f * static_cast<float>(x), -10.0f + 0.5f * static_cast<float>(z)));
+    return m;
+}
+
+} // namespace
+
+TEST_CASE("water: waves calm where the water is shallow for them, and stop where the ground is above it") {
+    // What's left of a wave: tanh(k depth), as a Pade fit: 0 at 0 (and over dry ground), 1 from 3 on, close to tanh.
+    CHECK(game::shoal(0.0f) == 0.0f);
+    CHECK(game::shoal(-2.0f) == 0.0f);
+    CHECK(game::shoal(3.0f) == 1.0f);
+    CHECK(game::shoal(7.0f) == 1.0f);
+    for (float x = 0.05f; x < 3.0f; x += 0.05f) {
+        CHECK(std::abs(game::shoal(x) - std::tanh(x)) < 0.025f);
+        float slope = 0.0f;
+        (void)game::shoal(x, &slope);
+        const float e = 1e-3f;
+        CHECK(slope == doctest::Approx((game::shoal(x + e) - game::shoal(x - e)) / (2 * e)).epsilon(0.01).scale(1.0));
+    }
+
+    const auto w = sea_waves();
+    const float k_main = 2.0f * std::numbers::pi_v<float> / w.length;
+    const float k_small = k_main / game::kWaveLength[3];
+    // Long waves feel the bottom first.
+    CHECK(game::shoal(k_main * 0.5f) < game::shoal(k_small * 0.5f));
+
+    // Half a metre of water everywhere: every wave is cut to its share, so the surface stays within their sum.
+    const auto shallow = depth_map([](float, float) { return 0.5f; });
+    float limit = 0.0f;
+    for (int i = 0; i < game::kWaveCount; ++i) {
+        const float k = 2.0f * std::numbers::pi_v<float> / (w.length * game::kWaveLength[static_cast<std::size_t>(i)]);
+        limit += 0.5f * w.height * game::kWaveAmplitude[static_cast<std::size_t>(i)] * game::shoal(k * 0.5f);
+    }
+    CHECK(limit < 0.3f);  // the deep sea's sum is 0.582 m
+    float highest = 0.0f;
+    for (const double t : {0.0, 0.8, 1.9, 2.6})
+        for (float x = -6.0f; x <= 6.0f; x += 1.5f) highest = std::max(highest, std::abs(w.height_at({x, 1.0f}, w.phases(t), nullptr, shallow.get())));
+    CHECK(highest > 0.02f);  // still moving
+    CHECK(highest <= limit + 1e-4f);
+
+    // Dry ground: nothing moves at all, the surface is level (under the ground, so never seen).
+    const auto dry = depth_map([](float, float) { return -0.5f; });
+    math::Vec3 n;
+    CHECK(w.height_at({1.0f, 2.0f}, w.phases(1.3), &n, dry.get()) == 0.0f);
+    CHECK(n.y == 1.0f);
+    // Off the map: deep water, the full waves.
+    CHECK(game::depth_at(shallow.get(), {30.0f, 0.0f}) == game::kDeepWater);
+    CHECK(w.height_at({30.0f, 2.0f}, w.phases(1.3), nullptr, shallow.get()) == w.height_at({30.0f, 2.0f}, w.phases(1.3)));
+}
+
+TEST_CASE("water: over a shelving bottom the normal is still the surface's slope, and the depth is read bilinearly") {
+    // A bottom shelving from 0.1 m deep at x = -10 to 4.1 m at x = 10.
+    const auto shelf = depth_map([](float x, float) { return 0.1f + 0.2f * (x + 10.0f); });
+    math::Vec2 grad;
+    CHECK(game::depth_at(shelf.get(), {0.25f, 3.3f}, &grad) == doctest::Approx(2.15f).epsilon(1e-5));
+    CHECK(grad.x == doctest::Approx(0.2f).epsilon(1e-4));
+    CHECK(grad.y == doctest::Approx(0.0f).scale(1.0));
+    const auto w = sea_waves();
+    for (const double t : {0.4, 2.2})
+        for (const math::Vec2 xz : {math::Vec2{-8.0f, 1.0f}, math::Vec2{-4.3f, -2.2f}, math::Vec2{0.6f, 5.1f}, math::Vec2{6.0f, -6.0f}}) {
+            const auto ph = w.phases(t);
+            math::Vec3 n;
+            (void)w.height_at(xz, ph, &n, shelf.get());
+            const float e = 0.05f;
+            const float dx = (w.height_at({xz.x + e, xz.y}, ph, nullptr, shelf.get()) - w.height_at({xz.x - e, xz.y}, ph, nullptr, shelf.get())) / (2 * e);
+            const float dz = (w.height_at({xz.x, xz.y + e}, ph, nullptr, shelf.get()) - w.height_at({xz.x, xz.y - e}, ph, nullptr, shelf.get())) / (2 * e);
+            CHECK(-n.x / n.y == doctest::Approx(dx).epsilon(0.02).scale(1.0));
+            CHECK(-n.z / n.y == doctest::Approx(dz).epsilon(0.02).scale(1.0));
+        }
+}
+
+TEST_CASE("water: a body's depth map comes from the terrain under it") {
+    terrain::Settings flat;
+    flat.tiles_x = flat.tiles_z = 1;
+    flat.base = terrain::Settings::Base::Flat;
+    flat.flat_height = 0.0f;
+    auto heights = terrain::Heights::shared(flat);
+    REQUIRE(heights);
+    const std::vector<game::ParticleGround::Piece> ground{{{0.0f, -2.0f, 0.0f}, *heights}};  // 256 m square, 2 m under the water
+
+    // A 20 x 16 m pond at the water level 0: two metres deep everywhere, samples a quarter metre apart over its bounds.
+    const auto pond = game::water_depth_map(false, {3.0f, 0.0f, -1.0f}, {10.0f, 8.0f}, 0.0f, ground);
+    REQUIRE(pond);
+    CHECK(pond->cell == 0.25f);
+    CHECK(pond->nx == 81);
+    CHECK(pond->nz == 65);
+    CHECK(pond->origin.x == -7.0f);
+    CHECK(pond->origin.y == -9.0f);
+    CHECK(pond->depth.size() == 81u * 65u);
+    CHECK(std::ranges::all_of(pond->depth, [](float d) { return d == 2.0f; }));
+    // Asked again (gameplay and drawing both do, every frame): the same map.
+    CHECK(game::water_depth_map(false, {3.0f, 0.0f, -1.0f}, {10.0f, 8.0f}, 0.0f, ground) == pond);
+    // Turned 30 degrees: it covers the turned footprint's bounds.
+    const auto turned = game::water_depth_map(false, {0.0f, 0.0f, 0.0f}, {10.0f, 8.0f}, std::numbers::pi_v<float> / 6.0f, ground);
+    REQUIRE(turned);
+    CHECK(turned->origin.x == doctest::Approx(-(10.0f * std::cos(std::numbers::pi_v<float> / 6.0f) + 8.0f * 0.5f)));
+    // A sea: the terrain's square (beyond it, deep). A pond off the terrain, or no terrain at all: none.
+    const auto sea = game::water_depth_map(true, {0.0f, 0.0f, 0.0f}, {}, 0.0f, ground);
+    REQUIRE(sea);
+    CHECK(sea->origin.x == -128.0f);
+    CHECK(sea->nx == 256);
+    CHECK(game::depth_at(sea.get(), {0.0f, 0.0f}) == 2.0f);
+    CHECK(game::depth_at(sea.get(), {200.0f, 0.0f}) == game::kDeepWater);
+    CHECK(!game::water_depth_map(false, {1000.0f, 0.0f, 0.0f}, {10.0f, 10.0f}, 0.0f, ground));
+    CHECK(!game::water_depth_map(true, {0.0f, 0.0f, 0.0f}, {}, 0.0f, {}));
 }

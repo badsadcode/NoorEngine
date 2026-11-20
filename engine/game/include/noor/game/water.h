@@ -16,9 +16,16 @@
 // agrees with the editor to the bit. The wind (the same ground wind particles feel, game::effect_wind) raises the
 // waves by `wind` x the fully developed sea's height for that wind (0.21 U^2 / g); it leaves their lengths and
 // directions alone, so a storm rolling in grows the waves without making them jump.
+//
+// Shallows (part 3): each body has a depth map (the water level minus the ground's height, from the scene's terrains
+// under it). A wave feels the bottom where the water is shallow for its length: what's left of it is tanh(k depth) (a
+// Pade fit, shoal() below), so long waves calm first, and nothing moves where the ground is above the water. The
+// depth is read at the point at rest, bilinearly between samples, with the same arithmetic in the shader. Waves keep
+// their deep-water pace and direction (they don't slow or turn towards the shore: disclosed in WATER.md).
 
 #include "noor/asset/water_asset.h"
 #include "noor/foundation/math.h"
+#include "noor/game/particle_ground.h"
 #include "noor/render/renderer.h"
 #include "noor/runtime/world.h"
 #include "noor/scene/scene.h"
@@ -26,6 +33,7 @@
 #include <array>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <vector>
@@ -38,6 +46,14 @@ inline constexpr float kGravity = 9.81f;
 inline constexpr std::array<float, kWaveCount> kWaveLength{1.0f, 0.62f, 0.38f, 0.24f};
 inline constexpr std::array<float, kWaveCount> kWaveAmplitude{1.0f, 0.5f, 0.28f, 0.16f};
 inline constexpr std::array<float, kWaveCount> kWaveTurn{0.0f, 0.42f, -0.55f, 0.95f};
+inline constexpr float kDeepWater = 1000.0f;  // off a depth map (or without one): deep (water.hlsl kDeep)
+
+// How much of a wave is left where the water is `kh` deep (its wavenumber times the depth): tanh(kh), as a Pade fit
+// that is exactly 0 at 0 and 1 (with no slope) from 3 on; `slope` its derivative.
+[[nodiscard]] float shoal(float kh, float* slope = nullptr) noexcept;
+
+// How deep the water is at world (x, z) on a depth map (bilinear; kDeepWater off it or without one), and its slope.
+[[nodiscard]] float depth_at(const render::WaterDepthMap* map, math::Vec2 xz, math::Vec2* gradient = nullptr) noexcept;
 
 // One water body's waves: what the look and the wind make of them.
 struct Waves {
@@ -49,10 +65,13 @@ struct Waves {
     [[nodiscard]] bool flat() const noexcept { return height <= 0.0f; }
     // Each wave's phase at `time` (radians, in [0, 2 pi)).
     [[nodiscard]] std::array<float, kWaveCount> phases(double time) const noexcept;
-    // How a point of the surface at rest at `rest` (x, z) moves: {sideways x, up, sideways z}.
-    [[nodiscard]] math::Vec3 offset(math::Vec2 rest, const std::array<float, kWaveCount>& phases) const noexcept;
+    // How a point of the surface at rest at `rest` (x, z) moves: {sideways x, up, sideways z}, calmed by the depth there
+    // (no map: deep water).
+    [[nodiscard]] math::Vec3 offset(math::Vec2 rest, const std::array<float, kWaveCount>& phases,
+                                    const render::WaterDepthMap* depth = nullptr) const noexcept;
     // The surface's height above the water level at world (x, z), and its normal there.
-    [[nodiscard]] float height_at(math::Vec2 xz, const std::array<float, kWaveCount>& phases, math::Vec3* normal = nullptr) const noexcept;
+    [[nodiscard]] float height_at(math::Vec2 xz, const std::array<float, kWaveCount>& phases, math::Vec3* normal = nullptr,
+                                  const render::WaterDepthMap* depth = nullptr) const noexcept;
 };
 
 // The waves of a look in a wind (m/s, the ground wind's speed).
@@ -66,8 +85,18 @@ struct WaterBody {
     math::Vec2 half_size{5.0f, 5.0f};  // a box's footprint, along its own axes
     float yaw = 0.0f;
     Waves waves;
+    std::shared_ptr<const render::WaterDepthMap> depth;  // over the terrains under it (null: deep everywhere)
     [[nodiscard]] bool covers(math::Vec2 xz) const noexcept;
 };
+
+// A body's depth map over the ground's terrains (the highest one at each point, as ParticleGround): a box's samples
+// cover its footprint, a sea's the terrains (beyond them it is deep). At most 256 samples a side, at least 0.25 m
+// apart. Null when no terrain is under it. The same footprint and ground give the same map, bit for bit (gameplay and
+// drawing each build it); recent ones are kept, so asking again every frame is cheap.
+[[nodiscard]] std::shared_ptr<const render::WaterDepthMap> water_depth_map(bool endless, math::Vec3 center, math::Vec2 half_size, float yaw,
+                                                                           std::span<const ParticleGround::Piece> ground);
+// The renderer's water draws' depth maps over this ground.
+void set_water_depths(std::span<render::WaterDraw> draws, std::span<const ParticleGround::Piece> ground);
 
 using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid&)>;
 
@@ -94,7 +123,9 @@ void set_water_time(std::span<render::WaterDraw> draws, double time);
 // (runtime::api::water_height, Lua noor.water_height, C# Water.Height) at the world's time.
 class WaterSystem final : public runtime::System {
 public:
-    explicit WaterSystem(AssetPath asset_path) : asset_path_(std::move(asset_path)) {}
+    // `ground`: the scene's terrains this frame (game.cpp shares them with the particles); none: deep everywhere.
+    using Ground = std::function<std::vector<ParticleGround::Piece>(runtime::World&)>;
+    explicit WaterSystem(AssetPath asset_path, Ground ground = {}) : asset_path_(std::move(asset_path)), ground_(std::move(ground)) {}
     [[nodiscard]] std::string_view name() const override { return "water"; }
     void attached(runtime::World& world) override;
     void update(runtime::World& world, double dt) override;
@@ -104,6 +135,7 @@ public:
 
 private:
     AssetPath asset_path_;
+    Ground ground_;
     std::vector<WaterBody> bodies_;
 };
 

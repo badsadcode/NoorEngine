@@ -18,6 +18,7 @@ VkFormat vk_format(TextureFormat f) {
     case TextureFormat::Bc7Srgb: return VK_FORMAT_BC7_SRGB_BLOCK;
     case TextureFormat::Bc7Unorm: return VK_FORMAT_BC7_UNORM_BLOCK;
     case TextureFormat::Bc5Unorm: return VK_FORMAT_BC5_UNORM_BLOCK;
+    case TextureFormat::R32Float: return VK_FORMAT_R32_SFLOAT;
     }
     return VK_FORMAT_R8G8B8A8_SRGB;
 }
@@ -58,7 +59,8 @@ Status Renderer::Impl::ensure_texture_table() {
     set_name(VK_OBJECT_TYPE_SAMPLER, nearest_sampler, "Texture sampler (nearest, repeat)");
 
     const VkDescriptorSetLayoutBinding bindings[4] = {
-        {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        // Vertex shaders too: water reads its depth maps per vertex (8D part 3).
+        {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &texture_sampler},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // materials
         {3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &nearest_sampler},

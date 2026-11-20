@@ -326,6 +326,17 @@ struct Renderer::Impl {
     VkSampler scene_depth_sampler = VK_NULL_HANDLE;  // nearest (depth)
     VkPipelineLayout water_layout = VK_NULL_HANDLE;
     VkPipeline water_pipeline = VK_NULL_HANDLE;
+    VkPipeline water_wet_pipeline = VK_NULL_HANDLE;  // part 3: wet ground at the waterline (multiplies, before the water)
+    // Part 3: each water draw's settings that don't fit its push constants (frame set binding 9), per frame in flight,
+    // and a texture per depth map (game/water.h builds them), kept while drawn.
+    std::array<GpuBuffer, kFramesInFlight> water_buffers{};
+    struct WaterMapTexture {
+        std::shared_ptr<const WaterDepthMap> map;  // kept alive: the key is its address
+        TextureHandle texture;
+        std::uint64_t last_used = 0;
+    };
+    std::vector<WaterMapTexture> water_maps;
+    std::uint64_t water_frame = 0;
 
     // Sun shadows (vulkan_shadows.cpp): a 2D array, one layer per cascade
     VkImage shadow_image = VK_NULL_HANDLE;
@@ -580,6 +591,10 @@ struct Renderer::Impl {
     Status ensure_water_pipeline();
     void destroy_water_pipeline();
     void record_water(VkCommandBuffer cmd, const FrameDesc& frame);
+    Status create_water_buffers();
+    void destroy_water_resources();
+    // Before recording: this frame's depth maps uploaded (kept while drawn) and the draws' settings written.
+    void prepare_water(const FrameDesc& frame);
     Status create_msaa_targets();
     void destroy_msaa_targets();
     void destroy_scene_pipelines();  // the ones drawn into the (multisampled) scene: rebuilt when samples change

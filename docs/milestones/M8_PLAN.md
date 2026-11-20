@@ -625,7 +625,7 @@ skinning, network replication of animation state.
 |---|---|---|
 | 1 ✅ | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
 | 2 ✅ | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
-| 3 | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
+| 3 ✅ | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
 | 4 | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
 | 5 | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
 | 6 | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
@@ -688,6 +688,26 @@ each point against `water_height`: 416 pixels within 20 m, at most 6.2 mm apart,
 `Water_Waves_1s` and `_4s`; the part 1 goldens unchanged. **Measured:** the wavy sea 0.1 ms (670,000 vertices). Not done:
 far out the drawn waves are calmer than gameplay's; waves ignore depth until part 3. Tom asked for crisp, stylised
 waves later (IDEAS inbox: crest glow, foam on steep crests, more waves).
+
+## Part 3 result (2026-11-20)
+Done. Each water body's depth map from the terrains under it (`game::water_depth_map`: a box's footprint, a sea's
+terrains; up to 256 samples a side; built identically by gameplay and drawing, kept while unchanged; uploaded as an R32
+float texture in the texture table). Each wave keeps `tanh(k depth)` of itself (a Padé fit, `shoal()`), read at the
+point at rest with the same bilinear arithmetic on the CPU and in the vertex shader (exact texel loads), the normal
+including the shelving term. Foam at the shore and round things in the water (shallower than `foam_depth`, from the
+copied depth), on folding crests (the Jacobian of the waves' sideways motion, `crest_foam`), laced with drifting noise.
+Wet ground: a band drawn before the surface multiplies what's under it, and the water darkens what's seen through it.
+Screen-space reflections: 20 growing steps through the copied depth, narrowed down by 5 halvings, fading to the sky at
+the screen's edges, the march's end and on rough water, skipped where Fresnel makes them invisible. Per-draw settings in
+a storage buffer (set 0, binding 9). New look fields `foam`, `foam_depth`, `crest_foam`, `wet`, `wet_height`,
+`reflections`; the Lake and Sea presets use them. Proven: unit tests (3 new, 12 in all: the fit, dry ground, the normal
+over a shelf, depth maps from a flat terrain); `render.water_readback_shore` (over a beach: 322 pixels within 20 m, 309
+over shallow water, at most 7.4 mm from `water_height`); goldens `Water_Shore` and `Water_Reflection` (the house in the
+pond, its roof off the top of the screen fading to sky); the part 1 and 2 goldens redrawn. **Measured:** the wavy sea's
+water 0.32 ms (was 0.11: reflections 0.14, foam 0.03). **Changed from the plan:** "the house in the lake": the
+Hillside house is 80 m from the lake behind a rise, so the far shore hides its reflection from every camera that sees
+the lake; the proof is a test pond with a house on its bank, and the Hillside lake reflects its trees. Not done: only
+terrains count as ground; waves don't slow, turn or break in the shallows; the wet band is fixed.
 
 ## Open questions
 

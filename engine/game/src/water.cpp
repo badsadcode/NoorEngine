@@ -7,7 +7,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <mutex>
 #include <numbers>
+#include <string>
 
 namespace noor::game {
 namespace {
@@ -33,6 +36,30 @@ std::array<Wave, kWaveCount> waves_of(const Waves& w) noexcept {
 
 } // namespace
 
+float shoal(float kh, float* slope) noexcept {
+    if (slope) *slope = 0.0f;
+    if (kh <= 0.0f) return 0.0f;
+    if (kh >= 3.0f) return 1.0f;
+    const float x2 = kh * kh, num = kh * (27.0f + x2), den = 27.0f + 9.0f * x2;
+    if (slope) *slope = ((27.0f + 3.0f * x2) * den - num * 18.0f * kh) / (den * den);
+    return num / den;
+}
+
+float depth_at(const render::WaterDepthMap* map, math::Vec2 p, math::Vec2* gradient) noexcept {
+    if (gradient) *gradient = {0.0f, 0.0f};
+    if (!map || map->nx < 2 || map->nz < 2) return kDeepWater;
+    const float ux = (p.x - map->origin.x) / map->cell, uz = (p.y - map->origin.y) / map->cell;
+    const float lx = static_cast<float>(map->nx) - 1.0f, lz = static_cast<float>(map->nz) - 1.0f;
+    if (ux < 0.0f || uz < 0.0f || ux > lx || uz > lz) return kDeepWater;
+    const float ix = std::min(std::floor(ux), lx - 1.0f), iz = std::min(std::floor(uz), lz - 1.0f);
+    const float fx = ux - ix, fz = uz - iz;
+    const std::size_t i = static_cast<std::size_t>(iz) * map->nx + static_cast<std::size_t>(ix);
+    const float d00 = map->depth[i], d10 = map->depth[i + 1], d01 = map->depth[i + map->nx], d11 = map->depth[i + map->nx + 1];
+    const float a = d00 + (d10 - d00) * fx, b = d01 + (d11 - d01) * fx;
+    if (gradient) *gradient = {((d10 - d00) + ((d11 - d01) - (d10 - d00)) * fz) / map->cell, (b - a) / map->cell};
+    return a + (b - a) * fz;
+}
+
 std::array<float, kWaveCount> Waves::phases(double time) const noexcept {
     std::array<float, kWaveCount> out{};
     for (int i = 0; i < kWaveCount; ++i) {
@@ -43,22 +70,25 @@ std::array<float, kWaveCount> Waves::phases(double time) const noexcept {
     return out;
 }
 
-math::Vec3 Waves::offset(math::Vec2 rest, const std::array<float, kWaveCount>& phases) const noexcept {
+math::Vec3 Waves::offset(math::Vec2 rest, const std::array<float, kWaveCount>& phases, const render::WaterDepthMap* depth_map) const noexcept {
     if (flat()) return {0, 0, 0};
     math::Vec3 out{0, 0, 0};
     const auto waves = waves_of(*this);
+    const float depth = depth_at(depth_map, rest);
     for (int i = 0; i < kWaveCount; ++i) {
         const Wave& w = waves[i];
+        const float amp = w.amplitude * shoal(w.k * depth);
         const float theta = w.k * (w.dir.x * rest.x + w.dir.y * rest.y) - phases[i];
         const float c = fx::det_cos(theta), s = fx::det_sin(theta);
-        out.x += w.steepness * w.amplitude * w.dir.x * c;
-        out.y += w.amplitude * s;
-        out.z += w.steepness * w.amplitude * w.dir.y * c;
+        out.x += w.steepness * amp * w.dir.x * c;
+        out.y += amp * s;
+        out.z += w.steepness * amp * w.dir.y * c;
     }
     return out;
 }
 
-float Waves::height_at(math::Vec2 xz, const std::array<float, kWaveCount>& phases, math::Vec3* normal) const noexcept {
+float Waves::height_at(math::Vec2 xz, const std::array<float, kWaveCount>& phases, math::Vec3* normal,
+                       const render::WaterDepthMap* depth_map) const noexcept {
     if (flat()) {
         if (normal) *normal = {0, 1, 0};
         return 0.0f;
@@ -67,27 +97,33 @@ float Waves::height_at(math::Vec2 xz, const std::array<float, kWaveCount>& phase
     // waves' total steepness stays under 1).
     math::Vec2 rest = xz;
     for (int step = 0; step < 12; ++step) {
-        const math::Vec3 o = offset(rest, phases);
+        const math::Vec3 o = offset(rest, phases, depth_map);
         rest = {xz.x - o.x, xz.y - o.z};
     }
-    const math::Vec3 o = offset(rest, phases);
+    const math::Vec3 o = offset(rest, phases, depth_map);
     if (normal) {
         // The surface's two tangents at that point (d/dx and d/dz of where the waves move it), crossed: its exact normal.
-        // (GPU Gems' shorter formula drops the waves' cross terms: centimetres a metre off on choppy crests.)
+        // (GPU Gems' shorter formula drops the waves' cross terms: centimetres a metre off on choppy crests.) Where the
+        // bottom shelves, each wave's height changes along the way too (amp_grad).
         math::Vec3 tx{1, 0, 0}, tz{0, 0, 1};
         const auto waves = waves_of(*this);
+        math::Vec2 dgrad;
+        const float depth = depth_at(depth_map, rest, &dgrad);
         for (int i = 0; i < kWaveCount; ++i) {
             const Wave& w = waves[i];
+            float slope = 0.0f;
+            const float amp = w.amplitude * shoal(w.k * depth, &slope);
+            const math::Vec2 amp_grad{w.amplitude * slope * w.k * dgrad.x, w.amplitude * slope * w.k * dgrad.y};
             const float theta = w.k * (w.dir.x * rest.x + w.dir.y * rest.y) - phases[i];
-            const float wa = w.k * w.amplitude;
             const float c = fx::det_cos(theta), s = fx::det_sin(theta);
-            const float qs = w.steepness * wa * s;
-            tx.x -= qs * w.dir.x * w.dir.x;
-            tx.y += wa * w.dir.x * c;
-            tx.z -= qs * w.dir.x * w.dir.y;
-            tz.x -= qs * w.dir.x * w.dir.y;
-            tz.y += wa * w.dir.y * c;
-            tz.z -= qs * w.dir.y * w.dir.y;
+            const float q = w.steepness;
+            const float sx = amp_grad.x * c - amp * w.k * w.dir.x * s, sz = amp_grad.y * c - amp * w.k * w.dir.y * s;
+            tx.x += q * w.dir.x * sx;
+            tx.y += amp_grad.x * s + amp * w.k * w.dir.x * c;
+            tx.z += q * w.dir.y * sx;
+            tz.x += q * w.dir.x * sz;
+            tz.y += amp_grad.y * s + amp * w.k * w.dir.y * c;
+            tz.z += q * w.dir.y * sz;
         }
         *normal = math::normalize(math::cross(tz, tx));
     }
@@ -129,7 +165,7 @@ std::optional<WaterSurface> water_surface(const std::vector<WaterBody>& bodies, 
     for (const WaterBody& b : bodies) {
         if (!b.covers(xz)) continue;
         WaterSurface s;
-        s.height = b.center.y + b.waves.height_at(xz, b.waves.phases(time), &s.normal);
+        s.height = b.center.y + b.waves.height_at(xz, b.waves.phases(time), &s.normal, b.depth.get());
         s.entity = b.entity;
         if (!best || s.height > best->height) best = s;
     }
@@ -164,12 +200,108 @@ void WaterSystem::refresh(runtime::World& world) {
         if (e.has("water") && e.components.at("water").is_object()) any = true;
     if (!any) return;
     const float wind = math::length(effect_wind(world, asset_path_));
+    const std::vector<ParticleGround::Piece> ground = ground_ ? ground_(world) : std::vector<ParticleGround::Piece>{};
     for (const auto& e : world.scene().entities) {
         if (!e.has("water") || !e.components.at("water").is_object()) continue;
         const auto m = runtime::api::world_matrix(world, e.id);
-        bodies_.push_back(water_body(e.components.at("water"), m ? *m : math::Mat4::identity(), make_waves(water_look(e.components.at("water"), asset_path_), wind)));
-        bodies_.back().entity = e.id;
+        WaterBody b = water_body(e.components.at("water"), m ? *m : math::Mat4::identity(), make_waves(water_look(e.components.at("water"), asset_path_), wind));
+        b.entity = e.id;
+        b.depth = water_depth_map(b.endless, b.center, b.half_size, b.yaw, ground);
+        bodies_.push_back(std::move(b));
     }
+}
+
+namespace {
+
+// The highest terrain at world (x, z) (as ParticleGround::at, without the normal).
+std::optional<float> ground_height(std::span<const ParticleGround::Piece> ground, float x, float z) {
+    std::optional<float> best;
+    for (const auto& p : ground) {
+        if (!p.heights) continue;
+        const terrain::Heights& h = *p.heights;
+        const float lx = x - p.position.x, lz = z - p.position.z;
+        const math::Vec2 o = h.origin();
+        if (lx < o.x || lz < o.y || lx > -o.x || lz > -o.y) continue;
+        const float y = p.position.y + h.height(lx, lz);
+        if (!best || y > *best) best = y;
+    }
+    return best;
+}
+
+struct DepthCacheEntry {
+    std::string key;
+    std::vector<std::shared_ptr<const terrain::Heights>> heights;  // kept alive: the key has their addresses
+    std::shared_ptr<const render::WaterDepthMap> map;
+};
+
+} // namespace
+
+std::shared_ptr<const render::WaterDepthMap> water_depth_map(bool endless, math::Vec3 center, math::Vec2 half_size, float yaw,
+                                                             std::span<const ParticleGround::Piece> ground) {
+    if (ground.empty()) return nullptr;
+    // The region: a box's footprint (its bounds in x and z), a sea's terrains.
+    float x0 = 0, x1 = 0, z0 = 0, z1 = 0;
+    bool any = false;
+    const auto take = [&](float ax, float az, float bx, float bz) {
+        if (!any) {
+            x0 = ax, z0 = az, x1 = bx, z1 = bz;
+            any = true;
+        } else {
+            x0 = std::min(x0, ax), z0 = std::min(z0, az), x1 = std::max(x1, bx), z1 = std::max(z1, bz);
+        }
+    };
+    if (!endless) {
+        const float c = std::cos(yaw), s = std::sin(yaw);
+        const float ex = std::abs(c) * half_size.x + std::abs(s) * half_size.y, ez = std::abs(s) * half_size.x + std::abs(c) * half_size.y;
+        take(center.x - ex, center.z - ez, center.x + ex, center.z + ez);
+    }
+    std::string key = std::format("{} {} {} {} {} {} {}", endless, center.x, center.y, center.z, half_size.x, half_size.y, yaw);
+    bool under = false;
+    for (const auto& p : ground) {
+        if (!p.heights) continue;
+        const math::Vec2 o = p.heights->origin();
+        const float ax = p.position.x + o.x, az = p.position.z + o.y, bx = p.position.x - o.x, bz = p.position.z - o.y;
+        if (endless) take(ax, az, bx, bz);
+        else if (bx < x0 || ax > x1 || bz < z0 || az > z1) continue;
+        under = true;
+        key += std::format(" {} {} {} {}", static_cast<const void*>(p.heights.get()), p.position.x, p.position.y, p.position.z);
+    }
+    if (!under || !any || x1 <= x0 || z1 <= z0) return nullptr;
+
+    static std::mutex mutex;
+    static std::vector<DepthCacheEntry> cache;  // most recent last
+    {
+        const std::lock_guard lock(mutex);
+        for (auto it = cache.begin(); it != cache.end(); ++it)
+            if (it->key == key) {
+                auto map = it->map;
+                std::rotate(it, it + 1, cache.end());
+                return map;
+            }
+    }
+    auto map = std::make_shared<render::WaterDepthMap>();
+    const float span = std::max(x1 - x0, z1 - z0);
+    map->cell = std::max(0.25f, span / 255.0f);
+    map->nx = std::min(256u, static_cast<std::uint32_t>(std::ceil((x1 - x0) / map->cell)) + 1u);
+    map->nz = std::min(256u, static_cast<std::uint32_t>(std::ceil((z1 - z0) / map->cell)) + 1u);
+    map->origin = {x0, z0};
+    map->depth.resize(std::size_t{map->nx} * map->nz);
+    for (std::uint32_t z = 0; z < map->nz; ++z)
+        for (std::uint32_t x = 0; x < map->nx; ++x) {
+            const float px = x0 + static_cast<float>(x) * map->cell, pz = z0 + static_cast<float>(z) * map->cell;
+            const auto g = ground_height(ground, px, pz);
+            map->depth[std::size_t{z} * map->nx + x] = g ? std::clamp(center.y - *g, -100.0f, kDeepWater) : kDeepWater;
+        }
+    DepthCacheEntry entry{std::move(key), {}, map};
+    for (const auto& p : ground) entry.heights.push_back(p.heights);
+    const std::lock_guard lock(mutex);
+    cache.push_back(std::move(entry));
+    if (cache.size() > 16) cache.erase(cache.begin());
+    return map;
+}
+
+void set_water_depths(std::span<render::WaterDraw> draws, std::span<const ParticleGround::Piece> ground) {
+    for (auto& d : draws) d.depth_map = water_depth_map(d.endless, d.center, d.half_size, d.yaw, ground);
 }
 
 WaterBody water_body(const asset::Json& wc, const math::Mat4& world, const Waves& waves) {
@@ -203,6 +335,13 @@ render::WaterDraw water_draw(const WaterBody& b, const asset::WaterLook& look) {
     d.wave_length = b.waves.length;
     d.wave_direction = b.waves.direction;
     d.choppiness = b.waves.choppiness;
+    d.depth_map = b.depth;
+    d.foam = look.foam;
+    d.foam_depth = look.foam_depth;
+    d.crest_foam = look.crest_foam;
+    d.wet = look.wet;
+    d.wet_height = look.wet_height;
+    d.reflections = look.reflections;
     return d;
 }
 

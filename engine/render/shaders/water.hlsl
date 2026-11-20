@@ -1,15 +1,20 @@
-// Water surfaces (Milestone 8D, part 1, ADR-037). Drawn in the see-through pass over a copy of the opaque scene (its
-// colour and depth, set 0 bindings 7 and 8), so every pixel knows how much water lies between the surface and what's
-// under it:
+// Water surfaces (Milestone 8D, ADR-037). Drawn in the see-through pass over a copy of the opaque scene (its colour and
+// depth, set 0 bindings 7 and 8), so every pixel knows how much water lies between the surface and what's under it:
 //   - light passing through is absorbed per colour (red first, then green: Beer-Lambert, `absorption` per metre),
 //     along the view ray under the surface plus the depth the light came down from;
 //   - light scattered back from inside the water (`scatter`, lit by the sun and the sky) fills in what's absorbed;
 //   - what's under the surface is seen bent (the lookup offset by the surface's slope, `refraction`), unless the
 //     offset lands on something in front of the water;
 //   - at the shore the water fades in over `shore_fade` metres of depth: no hard line where it meets the ground;
-//   - the sky is reflected (the environment's cube, blurred by roughness) by Fresnel, and the sun glints (GGX);
-//   - waves (part 2: four Gerstner waves, game/water.h's formula) move the surface in the vertex shader; small ripples
-//     (a few sine waves in world space, moving with time) bend the normal on top.
+//   - the sky is reflected (the environment's cube, blurred by roughness) by Fresnel, and the sun glints (GGX); part 3:
+//     nearby things are reflected by marching the reflected ray through the copied scene (screen-space reflection),
+//     the sky standing in where the screen has nothing;
+//   - waves (part 2: four Gerstner waves, game/water.h's formula) move the surface in the vertex shader; part 3: each
+//     calms where the water is shallow for it (the body's depth map, tanh(k depth)); small ripples (a few sine waves
+//     in world space, moving with time) bend the normal on top;
+//   - part 3: foam where the water is shallow (round the shore and anything standing in it, surging with the waves)
+//     and on crests steep enough to fold (where the waves squeeze the surface together), and wet ground: a flat band
+//     just above the water (VSWet/PSWet, drawn before the surface) darkens what's under it near the waterline.
 // The atmosphere and fog between the camera and the surface apply to the water's own light (reflected, scattered); what's
 // seen through already had its own (an approximation: the stretch from the surface down counts as air). A sea is the same
 // surface, drawn under the camera out to the horizon. Writes depth and alpha 1.
@@ -21,20 +26,33 @@
 [[vk::combinedImageSampler]] [[vk::binding(8, 0)]] Texture2D<float> scene_depth;
 [[vk::combinedImageSampler]] [[vk::binding(8, 0)]] SamplerState scene_depth_sampler;
 
+// Each draw's settings beyond its push constants (vulkan_water.cpp's WaterGpu), indexed by grid.w.
+struct WaterSettings
+{
+    float4 map;       // xy: world (x, z) of the depth map's sample (0, 0), z: metres between samples
+    uint4 map_info;   // xy: samples across, z: texture slot, w: 1 = has a map
+    float4 foam;      // x: foam, y: foam depth (m), z: crest foam, w: wet (how much darker)
+    float4 shore;     // x: wet height (m), y: reflections, z: the wet band's height above the level (m)
+};
+[[vk::binding(9, 0)]] StructuredBuffer<WaterSettings> water_settings;
+// The texture table (set 1): depth maps are R32 float textures in it.
+[[vk::binding(0, 1)]] Texture2D<float4> textures[];
+
 struct PushConstants
 {
     float4 center_yaw;  // xyz: the surface's middle (y: the level), w: yaw
-    float4 size;        // xy: half size (m), z: ripple strength, w: metres per ripple
+    float4 size;        // xy: half size (m; the wet band of a sea: metres round the camera), z: ripple strength, w: metres per ripple
     float4 absorption;  // rgb: per metre, w: refraction
     float4 scatter;     // rgb, w: shore fade (m)
     float4 params;      // x: roughness, y: time (s), zw: 1 / screen size
     float4 waves;       // the main wave: x: height (crest to trough, m), y: length (m), z: direction (rad), w: choppiness
     float4 phases;      // the four waves' phases (rad), worked out on the CPU in double precision
-    uint4 grid;         // a box: x: cells per side; a sea (z = 1): x: segments round, y: rings out
+    uint4 grid;         // a box: x: cells per side; a sea (z = 1): x: segments round, y: rings out; w: this draw's settings
 };
 [[vk::push_constant]] PushConstants pc;
 
 static const float kSeaInner = 0.4;  // the sea's first ring (m); the rings then grow by 1 + 2 pi / segments each
+static const float kDeep = 1000.0;   // off the depth map: deep water (game/water.h kDeepWater)
 
 struct VertexOutput
 {
@@ -43,19 +61,56 @@ struct VertexOutput
     [[vk::location(1)]] float2 rest : TEXCOORD0;  // the surface point at rest (x, z) that the waves moved here
 };
 
+WaterSettings settings() { return water_settings[pc.grid.w]; }
+
+// How deep the water is at world (x, z) over the body's ground, and its slope (d depth / dx, dz): the depth map read
+// bilinearly, the same arithmetic as game/water.h's depth_at (exact texel loads, never the sampler's filtering).
+float water_depth(float2 p, WaterSettings s, out float2 grad)
+{
+    grad = 0.0;
+    if (s.map_info.w == 0u) return kDeep;
+    const float2 u = (p - s.map.xy) / s.map.z;
+    const float2 last = float2(s.map_info.xy) - 1.0;
+    if (u.x < 0.0 || u.y < 0.0 || u.x > last.x || u.y > last.y) return kDeep;
+    const float2 i = min(floor(u), last - 1.0);
+    const float2 f = u - i;
+    const int2 c = int2(i);
+    const Texture2D<float4> map = textures[s.map_info.z];
+    const float d00 = map.Load(int3(c, 0)).r, d10 = map.Load(int3(c + int2(1, 0), 0)).r;
+    const float d01 = map.Load(int3(c + int2(0, 1), 0)).r, d11 = map.Load(int3(c + int2(1, 1), 0)).r;
+    const float a = d00 + (d10 - d00) * f.x, b = d01 + (d11 - d01) * f.x;
+    grad = float2((d10 - d00) + ((d11 - d01) - (d10 - d00)) * f.y, b - a) / s.map.z;
+    return a + (b - a) * f.y;
+}
+
+// How much of a wave is left where the water is `kh` (wavenumber x depth) deep: tanh(kh) (a Pade fit, exactly 1 with
+// no slope from 3 on; game/water.h shoal()), and its slope.
+float shoal(float kh, out float slope)
+{
+    slope = 0.0;
+    if (kh <= 0.0) return 0.0;
+    if (kh >= 3.0) return 1.0;
+    const float x2 = kh * kh, num = kh * (27.0 + x2), den = 27.0 + 9.0 * x2;
+    slope = ((27.0 + 3.0 * x2) * den - num * 18.0 * kh) / (den * den);
+    return num / den;
+}
+
 // The four Gerstner waves (game/water.h: the same derivation, keep the tables in step). `cell`: metres between the
 // grid's vertices (or a pixel's footprint): a wave shorter than about four of them can't be drawn and fades out.
 static const float kWaveLength[4] = {1.0, 0.62, 0.38, 0.24};
 static const float kWaveAmplitude[4] = {1.0, 0.5, 0.28, 0.16};
 static const float kWaveTurn[4] = {0.0, 0.42, -0.55, 0.95};
 
-// The point at rest `p` moved by the waves (xyz offset); `normal` the surface's normal there.
-float3 gerstner(float2 p, float cell, out float3 normal)
+// The point at rest `p` moved by the waves (xyz offset); `normal` the surface's normal there; `squeeze` how much the
+// waves squeeze the surface together there (the sideways motion's Jacobian: 1 flat, towards 0 on folding crests).
+float3 gerstner(float2 p, float cell, WaterSettings s, out float3 normal, out float squeeze)
 {
     float3 offset = 0.0;
     float3 tx = float3(1.0, 0.0, 0.0), tz = float3(0.0, 0.0, 1.0);  // the surface's tangents (game/water.h)
     if (pc.waves.x > 0.0)
     {
+        float2 dgrad;
+        const float depth = water_depth(p, s, dgrad);
         [unroll] for (int i = 0; i < 4; ++i)
         {
             const float angle = pc.waves.z + kWaveTurn[i];
@@ -64,22 +119,66 @@ float3 gerstner(float2 p, float cell, out float3 normal)
             const float k = 6.2831853 / (pc.waves.y * kWaveLength[i]);
             const float q = pc.waves.w / (k * a * 4.0);
             const float fade = saturate(2.0 - cell * k / 1.5707963);  // full at 4 cells a wave, gone at 2
+            float slope;
+            const float damp = shoal(k * depth, slope);
+            const float amp = a * fade * damp;
+            const float2 amp_grad = a * fade * slope * k * dgrad;  // where the bottom shelves, the wave's height changes
             const float theta = k * dot(d, p) - pc.phases[i];
-            const float c = cos(theta), s = sin(theta);
-            const float af = a * fade;
-            offset += float3(q * af * d.x * c, af * s, q * af * d.y * c);
-            const float wa = k * af;
-            const float qs = q * wa * s;
-            tx += float3(-qs * d.x * d.x, wa * d.x * c, -qs * d.x * d.y);
-            tz += float3(-qs * d.x * d.y, wa * d.y * c, -qs * d.y * d.y);
+            const float c = cos(theta), sn = sin(theta);
+            offset += float3(q * amp * d.x * c, amp * sn, q * amp * d.y * c);
+            const float sx = amp_grad.x * c - amp * k * d.x * sn, sz = amp_grad.y * c - amp * k * d.y * sn;
+            tx += float3(q * d.x * sx, amp_grad.x * sn + amp * k * d.x * c, q * d.y * sx);
+            tz += float3(q * d.x * sz, amp_grad.y * sn + amp * k * d.y * c, q * d.y * sz);
         }
     }
     normal = normalize(cross(tz, tx));
+    squeeze = tx.x * tz.z - tx.z * tz.x;
     return offset;
+}
+
+// The highest the waves lift the water at world (x, z) (their amplitudes, calmed by the depth there).
+float wave_reach(float2 p, WaterSettings s)
+{
+    if (pc.waves.x <= 0.0) return 0.0;
+    float2 dgrad;
+    const float depth = water_depth(p, s, dgrad);
+    float reach = 0.0;
+    [unroll] for (int i = 0; i < 4; ++i)
+    {
+        const float k = 6.2831853 / (pc.waves.y * kWaveLength[i]);
+        float slope;
+        reach += 0.5 * pc.waves.x * kWaveAmplitude[i] * shoal(k * depth, slope);
+    }
+    return reach;
+}
+
+// A box's footprint: where (x, z) is in its own axes (-1..1 inside).
+float2 box_local(float2 xz)
+{
+    const float2 d = xz - pc.center_yaw.xz;
+    const float cy = cos(pc.center_yaw.w), sy = sin(pc.center_yaw.w);
+    return float2(cy * d.x - sy * d.y, sy * d.x + cy * d.y) / pc.size.xy;
+}
+
+// World position of the opaque scene at a pixel (reverse-Z: depth 0 is infinitely far: the sky).
+float3 scene_world(float2 uv, float depth)
+{
+    const float4 p = mul(frame.world_from_clip, float4(uv * 2.0 - 1.0, depth, 1.0));
+    return p.xyz / p.w;
+}
+
+// How much of the colour wet ground at `p` keeps (1: dry): wet up to where the waves reach, drying over `wet_height`.
+float wet_factor(float3 p, WaterSettings s)
+{
+    if (p.y <= pc.center_yaw.y) return 1.0 - s.foam.w;  // under the still water: wet
+    const float above = p.y - (pc.center_yaw.y + wave_reach(p.xz, s));
+    const float wet = 1.0 - saturate(above / max(s.shore.x, 1e-3));
+    return 1.0 - s.foam.w * wet;
 }
 
 VertexOutput VSMain(uint vertex : SV_VertexID)
 {
+    const WaterSettings s = settings();
     const uint2 corners[6] = {uint2(0, 0), uint2(1, 0), uint2(1, 1), uint2(0, 0), uint2(1, 1), uint2(0, 1)};
     float2 rest;
     float cell;
@@ -109,7 +208,8 @@ VertexOutput VSMain(uint vertex : SV_VertexID)
         cell = 2.0 * max(pc.size.x, pc.size.y) / float(n);
     }
     float3 normal;
-    const float3 world = float3(rest.x, pc.center_yaw.y, rest.y) + gerstner(rest, cell, normal);
+    float squeeze;
+    const float3 world = float3(rest.x, pc.center_yaw.y, rest.y) + gerstner(rest, cell, s, normal, squeeze);
     VertexOutput o;
     o.world = world;
     o.rest = rest;
@@ -144,11 +244,31 @@ float2 ripple_slope(float2 p, float t, float footprint, out float lost)
     return slope * pc.size.z;
 }
 
-// World position of the opaque scene at a pixel (reverse-Z: depth 0 is infinitely far: the sky).
-float3 scene_world(float2 uv, float depth)
+// Foam's lace: value noise in world space, two sizes drifting different ways, 0..1 (flattened to its average where a
+// pixel covers more than its detail).
+float hash12(float2 p)
 {
-    const float4 p = mul(frame.world_from_clip, float4(uv * 2.0 - 1.0, depth, 1.0));
-    return p.xyz / p.w;
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float value_noise(float2 p)
+{
+    const float2 i = floor(p);
+    float2 f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
+    const float a = hash12(i), b = hash12(i + float2(1.0, 0.0)), c = hash12(i + float2(0.0, 1.0)), d = hash12(i + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+
+float foam_lace(float2 p, float t, float footprint)
+{
+    const float a = value_noise(p * 1.7 + float2(t * 0.13, -t * 0.09));
+    const float b = value_noise(p * 4.3 + float2(-t * 0.21, t * 0.17));
+    const float c = value_noise(p * 11.1 + float2(t * 0.31, t * 0.23));
+    const float lace = a * 0.5 + b * 0.3 + c * 0.2;
+    return lerp(lace, 0.5, saturate(footprint * 3.0 - 0.3));
 }
 
 float d_ggx(float n_dot_h, float alpha)
@@ -158,8 +278,64 @@ float d_ggx(float n_dot_h, float alpha)
     return a2 / (kPi * d * d);
 }
 
+// Screen-space reflection: the reflected ray marched through the copied scene in growing steps (20, out to about 75 m),
+// then narrowed down where it first goes behind something. `confidence` fades to 0 towards the screen's edges and the
+// march's end, where the sky takes over.
+bool reflected_hit(float3 origin, float3 dir, float2 inv_size, out float2 hit_uv, out float confidence)
+{
+    hit_uv = 0.0;
+    confidence = 0.0;
+    const float3 eye = frame.camera_position.xyz;
+    // Clip space is linear in the world: a point t along the ray is c0 + cd t (no matrix per step).
+    const float4 c0 = mul(frame.clip_from_world, float4(origin, 1.0));
+    const float4 cd = mul(frame.clip_from_world, float4(dir, 0.0));
+    float t_prev = 0.0, t = 0.25;
+    [loop] for (int i = 0; i < 20; ++i)
+    {
+        const float3 p = origin + dir * t;
+        const float4 clip = c0 + cd * t;
+        if (clip.w <= 1e-4) return false;
+        const float3 ndc = clip.xyz / clip.w;
+        const float2 uv = ndc.xy * 0.5 + 0.5;
+        if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return false;
+        const float d = scene_depth.Load(int3(uint2(uv / inv_size), 0));
+        if (d > ndc.z)  // reverse-Z: the scene is nearer than the ray here, so the ray has gone behind it
+        {
+            const float behind = distance(eye, p) - distance(eye, scene_world(uv, d));
+            if (behind < max(0.3, 2.0 * (t - t_prev)))
+            {
+                // Narrow it down between the last step in front and this one.
+                float lo = t_prev, hi = t;
+                float2 best = uv;
+                [unroll] for (int j = 0; j < 5; ++j)
+                {
+                    const float mid = 0.5 * (lo + hi);
+                    const float4 mc = c0 + cd * mid;
+                    const float3 mn = mc.xyz / mc.w;
+                    const float2 muv = saturate(mn.xy * 0.5 + 0.5);
+                    if (scene_depth.Load(int3(uint2(muv / inv_size), 0)) > mn.z)
+                    {
+                        hi = mid;
+                        best = muv;
+                    }
+                    else
+                        lo = mid;
+                }
+                hit_uv = best;
+                const float2 edge = min(best, 1.0 - best);
+                confidence = saturate(min(edge.x, edge.y) / 0.08) * saturate((20.0 - float(i)) / 4.0);
+                return true;
+            }
+        }
+        t_prev = t;
+        t *= 1.33;
+    }
+    return false;
+}
+
 float4 PSMain(VertexOutput input) : SV_Target0
 {
+    const WaterSettings s = settings();
     const float2 inv_size = pc.params.zw;
     const float2 uv = input.position.xy * inv_size;
     const float3 world = input.world;
@@ -173,7 +349,8 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float2 slope = ripple_slope(world.xz, t, footprint, lost);
     // The waves' normal at this pixel's point, tilted by the ripples.
     float3 wave_n;
-    gerstner(input.rest, footprint, wave_n);
+    float squeeze;
+    gerstner(input.rest, footprint, s, wave_n, squeeze);
     const float3 n = normalize(float3(wave_n.x - slope.x * wave_n.y, wave_n.y, wave_n.z - slope.y * wave_n.y));
 
     // How deep the water is here: what the scene has under this pixel.
@@ -197,7 +374,9 @@ float4 PSMain(VertexOutput input) : SV_Target0
     }
     const float view_depth = depth_r <= 0.0 ? 1e4 : distance(world, floor_r);
     const float vertical = depth_r <= 0.0 ? 1e4 : max(world.y - floor_r.y, 0.0);
-    const float3 below = scene_color.SampleLevel(scene_color_sampler, uv_r, 0).rgb;
+    // Ground under water is wet (as the wet band left it round the waterline).
+    float3 below = scene_color.SampleLevel(scene_color_sampler, uv_r, 0).rgb;
+    if (depth_r > 0.0) below *= wet_factor(floor_r, s);
 
     // Through the water: absorbed along the way down (the light) and back up the view ray.
     const float3 transmittance = exp(-pc.absorption.rgb * (view_depth + vertical));
@@ -206,13 +385,23 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float3 ambient = environment_irradiance(float3(0, 1, 0)) / kPi;
     const float3 inside = pc.scatter.rgb * (frame.sun_radiance.rgb * sun_light * shadow / kPi + ambient);
 
-    // The sky reflected, and the sun's glint.
+    // The sky reflected, and nearby things where the screen has them; the sun's glint.
     const float n_dot_v = saturate(dot(n, v));
     const float fresnel = 0.02 + 0.98 * pow(1.0 - n_dot_v, 5.0);
     float3 r = reflect(-v, n);
     r.y = abs(r.y);  // ripples can tip a reflection below the horizon: keep it in the sky
     const float rough = saturate(pc.params.x + lost * pc.size.z * 0.12);  // ripples too small to draw still blur it
-    const float3 sky = environment_map.SampleLevel(environment_sampler, environment_direction(r), rough * frame.environment.w).rgb * frame.environment.x;
+    float3 sky = environment_map.SampleLevel(environment_sampler, environment_direction(r), rough * frame.environment.w).rgb * frame.environment.x;
+    if (s.shore.y * fresnel > 0.03 && rough < 0.5)  // where the reflection is too faint to see, the sky will do
+    {
+        float2 hit_uv;
+        float confidence;
+        if (reflected_hit(world + float3(0.0, 0.02, 0.0), r, inv_size, hit_uv, confidence))
+        {
+            const float3 seen = scene_color.SampleLevel(scene_color_sampler, hit_uv, 0).rgb;
+            sky = lerp(sky, seen, confidence * s.shore.y * saturate(1.0 - rough / 0.5));
+        }
+    }
     const float3 l = frame.to_sun.xyz;
     const float3 h = normalize(l + v);
     const float alpha = max(rough * rough, 0.0025);
@@ -228,8 +417,74 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float3 own = (inside * (1.0 - exp(-pc.absorption.rgb * view_depth)) * (1.0 - fresnel) + sky * fresnel + glint) * air_t;
     float3 color = below * below_share + own + air_in * (1.0 - below_share);
 
+    // Foam: in shallow water (round the shore and anything standing in it), surging in as the waves lift the water,
+    // and on crests the waves squeeze steep enough to fold. Lit by the sun and the sky like a rough white surface.
+    if (s.foam.x > 0.0)
+    {
+        // Each kind is a strength (0..1) laced by the noise: weak foam shows only where the lace is high, so it breaks
+        // up into specks and streaks before it fades, strong foam is solid with holes.
+        const float lace = foam_lace(world.xz, t, footprint);
+        const float shallow = saturate(1.0 - vertical0 / s.foam.y);
+        const float lift = pc.waves.x > 0.0 ? saturate(0.5 + (world.y - pc.center_yaw.y) / pc.waves.x) : 0.5;
+        const float shore = saturate((shallow * (0.6 + 0.6 * lift) + lace - 1.05) * 3.0);
+        float crest = 0.0;
+        if (s.foam.z > 0.0 && pc.waves.w > 0.0)
+        {
+            const float fold = 1.0 - pc.waves.w * (1.0 - s.foam.z);  // the squeeze where foam starts
+            const float strength = saturate((fold - squeeze) / (0.35 * pc.waves.w));
+            crest = saturate((strength * 1.1 + lace - 1.15) * 3.0);
+        }
+        const float foam = saturate(max(shore, crest)) * s.foam.x * 0.92;
+        const float3 foam_light = 0.85 * (frame.sun_radiance.rgb * saturate(dot(wave_n, l)) * shadow / kPi + environment_irradiance(wave_n) / kPi);
+        color = lerp(color, foam_light * air_t + air_in, foam);
+    }
+
     // The shore: fade in over the first few centimetres of depth.
-    const float3 plain = scene_color.SampleLevel(scene_color_sampler, uv, 0).rgb;
+    float3 plain = scene_color.SampleLevel(scene_color_sampler, uv, 0).rgb;
+    if (depth0 > 0.0) plain *= wet_factor(floor0, s);
     color = lerp(plain, color, saturate(vertical0 / pc.scatter.w));
     return float4(color, 1.0);
+}
+
+// ---- Wet ground (part 3) ----------------------------------------------------------------------------------------
+// A flat band over the body (a sea: round the camera), just above where the waves reach; drawn before the surface with
+// the scene's colour multiplied by what it returns, so the ground under it near the waterline comes out darker. What
+// the water then covers is drawn over again (from the copy, made wet the same way).
+
+VertexOutput VSWet(uint vertex : SV_VertexID)
+{
+    const WaterSettings s = settings();
+    const float2 corners[6] = {float2(-1, -1), float2(1, -1), float2(1, 1), float2(-1, -1), float2(1, 1), float2(-1, 1)};
+    const float2 c = corners[vertex % 6u];
+    float2 xz;
+    if (pc.grid.z != 0u)
+        xz = frame.camera_position.xz + c * pc.size.x;
+    else
+    {
+        const float2 local = c * pc.size.xy;
+        const float cy = cos(pc.center_yaw.w), sy = sin(pc.center_yaw.w);
+        xz = pc.center_yaw.xz + float2(cy * local.x + sy * local.y, -sy * local.x + cy * local.y);
+    }
+    VertexOutput o;
+    o.world = float3(xz.x, pc.center_yaw.y + s.shore.z, xz.y);
+    o.rest = xz;
+    o.position = mul(frame.clip_from_world, float4(o.world, 1.0));
+    return o;
+}
+
+float4 PSWet(VertexOutput input) : SV_Target0
+{
+    const WaterSettings s = settings();
+    const float depth0 = scene_depth.Load(int3(uint2(input.position.xy), 0));
+    if (depth0 <= 0.0) return 1.0;
+    const float3 ground = scene_world(input.position.xy * pc.params.zw, depth0);
+    // Only ground inside the body (the band's quad covers whatever is behind it on screen too).
+    if (pc.grid.z == 0u)
+    {
+        const float2 local = box_local(ground.xz);
+        if (abs(local.x) > 1.0 || abs(local.y) > 1.0) return 1.0;
+    }
+    else if (distance(ground.xz, frame.camera_position.xz) > pc.size.x)
+        return 1.0;
+    return float4(wet_factor(ground, s).xxx, 1.0);
 }

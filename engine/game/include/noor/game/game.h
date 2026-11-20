@@ -219,6 +219,10 @@ using AssetPath = std::function<std::optional<std::filesystem::path>(const Guid&
 // m/s, world space, blowing towards the direction (0 = -Z, 90 = +X).
 [[nodiscard]] math::Vec3 effect_wind(runtime::World& world, const AssetPath& asset_path);
 
+// The water draws' depth maps over these terrains (their live heights where set, else generated from their settings):
+// collect_view does it; the editor again once its live heights are in (8D part 3).
+void set_water_depths(std::span<render::WaterDraw> draws, const std::vector<SceneView::Terrain>& terrains);
+
 // `scene` must be expanded (no prefab instances left), e.g. World::scene(). `render_poses`
 // (World::render_poses()) replaces the world matrices of entities physics moves with where to draw
 // them this frame; their children (a player's camera) follow.

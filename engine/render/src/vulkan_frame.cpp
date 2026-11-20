@@ -133,7 +133,7 @@ void Renderer::Impl::write_aerial_descriptor(std::uint32_t frame_slot, VkImageVi
 
 Status Renderer::Impl::ensure_frame_uniforms() {
     if (frame_set_layout != VK_NULL_HANDLE) return {};
-    const VkDescriptorSetLayoutBinding bindings[9] = {
+    const VkDescriptorSetLayoutBinding bindings[10] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         // Shadows, the sky's light and the air are read per vertex too (rain and snow light each drop once, 8B part 3).
         {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // sun shadow map
@@ -144,14 +144,15 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the cloud volume (part 7b)
         {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the opaque scene's colour (8D)
         {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // the opaque scene's depth (8D)
+        {9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // water draws' settings (8D part 3)
     };
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    layout_info.bindingCount = 9;
+    layout_info.bindingCount = 10;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &frame_set_layout));
     const VkDescriptorPoolSize pool_sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, kFramesInFlight},
                                                 {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFramesInFlight * 6},
-                                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 2}};
+                                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, kFramesInFlight * 3}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.maxSets = kFramesInFlight;
     pool_info.poolSizeCount = 3;
@@ -200,6 +201,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
         write.pBufferInfo = &buffer_info;
         vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
     }
+    if (auto s = create_water_buffers(); !s) return s;
     write_scene_copy_descriptors();  // if the copies were made first
     return {};
 }
@@ -490,6 +492,7 @@ void Renderer::Impl::destroy_frame_resources() {
         if (ubo.buffer != VK_NULL_HANDLE) destroy_buffer(ubo);
     if (frame_pool) vkDestroyDescriptorPool(device, frame_pool, nullptr);
     destroy_water_pipeline();
+    destroy_water_resources();
     if (water_layout) vkDestroyPipelineLayout(device, water_layout, nullptr);
     water_layout = VK_NULL_HANDLE;
     if (scene_copy_sampler) vkDestroySampler(device, scene_copy_sampler, nullptr);

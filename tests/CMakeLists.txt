@@ -548,11 +548,30 @@ foreach(moment IN ITEMS 1s:60 4s:240)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_Water_Waves_${label} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Shorelines and reflections (Milestone 8D, part 3): the Sea preset round a sandy coast (a noise terrain sunk into it:
+# waves calmed by the depth map, foam along the shore and round three posts, wet sand), and a calm pond with a house on
+# its far bank, reflected by screen-space reflection (its roof runs off the top of the screen, where the sky takes over).
+foreach(scene Water_Shore Water_Reflection)
+    add_test(NAME render.golden_${scene}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/${scene}.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${scene}.png -DFRAMES=60
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${scene}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_${scene} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
 # What gameplay reads is what's drawn: the depth read back under the waves against water_height (within 1 cm, 20 m).
 add_test(NAME render.water_readback
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/water_readback -P ${CMAKE_CURRENT_SOURCE_DIR}/water_waves_check.cmake)
 set_tests_properties(render.water_readback PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# 8D part 3: the same over a beach, where the depth map calms the waves (drawn and gameplay alike).
+add_test(NAME render.water_readback_shore
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DSCENE=Scenes/Water_Shore_Probe.noorscene -DSHALLOW=2.5
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/water_readback_shore -P ${CMAKE_CURRENT_SOURCE_DIR}/water_waves_check.cmake)
+set_tests_properties(render.water_readback_shore PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 # ... and a built game reads the same: the buoys float identically in the project and in the built render-scenes game.
 add_test(NAME cli.build_render_scenes
     COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes ${CMAKE_CURRENT_BINARY_DIR}/built_render_scenes_game)

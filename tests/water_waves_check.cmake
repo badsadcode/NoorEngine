@@ -1,15 +1,21 @@
 # Waves (Milestone 8D, part 2): what gameplay reads is what's drawn, and a built game reads the same.
 #   -DPLAYER=<noor_player> -DPROJECT=<tests/data/render_scenes> -DWORK=<folder> [-DGAME=<the built render_scenes game>]
-# Without GAME: Water_Waves_Probe (the Sea preset, nothing else in view) is drawn without MSAA and its depth read back
-#   at 24 x 24 pixels (noor_player --water-probes): each pixel, turned back into a world point, must lie on
-#   water_height at its (x, z) within a centimetre out to 20 m (further out the drawn grid is coarser and its shortest
-#   waves fade: docs/water/WATER.md).
+#   [-DSCENE=<probe scene>] [-DSHALLOW=<metres>]
+# Without GAME: SCENE (Water_Waves_Probe by default: the Sea preset, nothing else in view) is drawn without MSAA and its
+#   depth read back at 24 x 24 pixels (noor_player --water-probes): each pixel, turned back into a world point, must lie
+#   on water_height at its (x, z) within a centimetre out to 20 m (further out the drawn grid is coarser and its
+#   shortest waves fade: docs/water/WATER.md). With SHALLOW (part 3, Water_Shore_Probe: waves calmed over a beach): only
+#   pixels where the still water is at least 0.3 m deep count (the beach and the waterline are not water), and at least
+#   60 of them must be shallower than SHALLOW metres, where the waves are calmed.
 # With GAME: Water_Waves (four buoys floated by Lua on noor.water_height) runs 300 frames in the project and in the
 #   built game: each buoy in the same place to the bit, and riding the waves (not at the still water's level).
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
+if(NOT DEFINED SCENE)
+    set(SCENE Scenes/Water_Waves_Probe.noorscene)
+endif()
 if(NOT DEFINED GAME)
-    execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene Scenes/Water_Waves_Probe.noorscene --frames 90 --no-audio --no-input --msaa 1
+    execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene ${SCENE} --frames 90 --no-audio --no-input --msaa 1
                             --water-probes 24 --report "${WORK}/probe.json" --log "${WORK}/probe.log"
                     RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
     if(NOT code EQUAL 0 OR NOT EXISTS "${WORK}/probe.json")
@@ -18,6 +24,7 @@ if(NOT DEFINED GAME)
     file(READ "${WORK}/probe.json" report)
     string(JSON count LENGTH "${report}" water_probes probes)
     set(near 0)
+    set(shallow 0)
     set(worst 0)
     math(EXPR last "${count} - 1")
     foreach(i RANGE ${last})
@@ -27,6 +34,15 @@ if(NOT DEFINED GAME)
         endif()
         string(JSON distance GET "${report}" water_probes probes ${i} distance)
         string(JSON error GET "${report}" water_probes probes ${i} error)
+        if(DEFINED SHALLOW)
+            string(JSON depth GET "${report}" water_probes probes ${i} depth)
+            if(depth LESS 0.3)
+                continue()
+            endif()
+            if(depth LESS SHALLOW AND distance LESS 20)
+                math(EXPR shallow "${shallow} + 1")
+            endif()
+        endif()
         if(distance LESS 20)
             math(EXPR near "${near} + 1")
             if(error GREATER worst)
@@ -34,9 +50,12 @@ if(NOT DEFINED GAME)
             endif()
         endif()
     endforeach()
-    message(STATUS "${near} pixels of water within 20 m; the drawn surface is at most ${worst} m from water_height")
+    message(STATUS "${near} pixels of water within 20 m (${shallow} shallow); the drawn surface is at most ${worst} m from water_height")
     if(near LESS 200)
         message(FATAL_ERROR "too few pixels of water near the camera (${near}): is the sea drawn?")
+    endif()
+    if(DEFINED SHALLOW AND shallow LESS 60)
+        message(FATAL_ERROR "too few pixels over shallow water (${shallow}): is the beach in view?")
     endif()
     if(NOT worst LESS 0.01)
         message(FATAL_ERROR "the drawn waves are ${worst} m from what gameplay reads (more than 1 cm)")

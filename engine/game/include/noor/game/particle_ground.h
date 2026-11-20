@@ -19,6 +19,7 @@ public:
     };
     void set(std::vector<Piece> pieces) { pieces_ = std::move(pieces); }
     [[nodiscard]] bool empty() const noexcept { return pieces_.empty(); }
+    [[nodiscard]] const std::vector<Piece>& pieces() const noexcept { return pieces_; }
     // The highest terrain over (x, z), with its normal there; nullopt off every terrain.
     [[nodiscard]] std::optional<fx::GroundHit> at(float x, float z) const;
     // A query that keeps these pieces alive (a copy of the list; the heights are shared).

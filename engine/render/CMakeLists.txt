@@ -38,6 +38,8 @@ noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl VS
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/particle.hlsl PSMain ps_6_0 particle_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl VSMain vs_6_0 water_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl PSMain ps_6_0 water_ps)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl VSWet vs_6_0 water_wet_vs)
+noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/water.hlsl PSWet ps_6_0 water_wet_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl VSMain vs_6_0 weather_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/weather.hlsl PSMain ps_6_0 weather_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/clouds_volume.hlsl CSNoise cs_6_0 clouds_volume_noise)

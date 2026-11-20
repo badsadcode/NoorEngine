@@ -18,6 +18,10 @@
 // "wave_direction" (degrees towards which they travel, 0 = -Z, 90 = +X, as the wind), "choppiness" (0 round .. 0.9
 // sharp crests) and "wind" (0..1: how much the environment's ground wind raises them). Three smaller waves come with
 // the main one (game/water.h).
+// Shorelines and reflections (part 3): "foam" (0..1: how much foam there is at all), "foam_depth" (metres of shallow
+// water where foam gathers at the shore and round things standing in it), "crest_foam" (0..1: how readily steep wave
+// crests foam; 0: never), "wet" (0..1: how much darker wet ground is) and "wet_height" (metres above the water's reach
+// that are still wet), "reflections" (0..1: nearby things reflected by screen-space reflection; 0: the sky only).
 
 #include "noor/asset/json.h"
 #include "noor/foundation/error.h"
@@ -44,6 +48,12 @@ struct WaterLook {
     float wave_direction = 0.0f;  // degrees
     float choppiness = 0.5f;
     float wind = 0.0f;
+    float foam = 0.5f;
+    float foam_depth = 0.3f;   // metres
+    float crest_foam = 0.0f;
+    float wet = 0.35f;
+    float wet_height = 0.12f;  // metres
+    float reflections = 1.0f;
 
     // Fields present in `settings` replace these (unknown fields are ignored; bad values keep the default).
     void apply(const Json& settings);
