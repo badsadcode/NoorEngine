@@ -18,6 +18,7 @@ noor_add_module(asset
         src/anim_controller.cpp
         src/animation.cpp
         src/pose_blend.cpp
+        src/retarget.cpp
         src/skinning.cpp
         src/sprite_asset.cpp
     PUBLIC_DEPS

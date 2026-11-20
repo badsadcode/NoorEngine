@@ -178,7 +178,8 @@ Result<AnimController> load_anim_controller(const std::filesystem::path& path) {
 
 // ---- The player ----
 
-AnimControllerPlayer::AnimControllerPlayer(const AnimController& controller, const ImportedModel& model)
+AnimControllerPlayer::AnimControllerPlayer(const AnimController& controller, const ImportedModel& model,
+                                           const std::unordered_map<std::string, int>* aliases)
     : controller_(&controller), model_(&model), rest_(rest_pose(model)) {
     const std::size_t nodes = model.nodes.size();
     for (const auto& layer : controller.layers) {
@@ -200,8 +201,15 @@ AnimControllerPlayer::AnimControllerPlayer(const AnimController& controller, con
             std::fill(mask.begin(), mask.end(), 0.0f);
             for (const auto& name : layer.mask) {
                 const auto it = std::ranges::find_if(model.nodes, [&](const ImportedNode& n) { return n.name == name; });
-                if (it == model.nodes.end()) warnings_.push_back(std::format("layer '{}': the mask's bone '{}' isn't in the model", layer.name, name));
-                else mask[static_cast<std::size_t>(it - model.nodes.begin())] = 1.0f;
+                if (it != model.nodes.end()) {
+                    mask[static_cast<std::size_t>(it - model.nodes.begin())] = 1.0f;
+                } else {
+                    int alias = -1;
+                    if (aliases)
+                        if (const auto a = aliases->find(name); a != aliases->end()) alias = a->second;
+                    if (alias >= 0 && static_cast<std::size_t>(alias) < nodes) mask[static_cast<std::size_t>(alias)] = 1.0f;
+                    else warnings_.push_back(std::format("layer '{}': the mask's bone '{}' isn't in the model", layer.name, name));
+                }
             }
             for (std::size_t i = 0; i < nodes; ++i)
                 if (model.nodes[i].parent >= 0 && mask[static_cast<std::size_t>(model.nodes[i].parent)] > 0.0f) mask[i] = 1.0f;

@@ -38,15 +38,48 @@ void AnimatorSystem::say_once(const std::string& message) {
     if (said_.emplace(message, true).second) NOOR_LOG_WARN("Animation", "{}", message);
 }
 
-const AnimatorSystem::Model* AnimatorSystem::model(const Guid& id) {
-    auto it = models_.find(id);
+const AnimatorSystem::Model* AnimatorSystem::model(const Guid& id, const Guid& clips) {
+    const std::string key = clips.is_nil() ? id.to_string() : id.to_string() + "<" + clips.to_string();
+    auto it = models_.find(key);
     if (it == models_.end()) {
         std::optional<Model> loaded;
         if (const auto file = resolve_ ? resolve_(id) : std::nullopt) {
             if (auto m = asset::import_gltf(*file)) {
                 Model data{std::move(*m), {}, {}};
+                const asset::BoneMap own = asset::bone_map_for(data.model, *file);
+                for (std::size_t b = 0; b < asset::kHumanBones; ++b)
+                    if (own.nodes[b] >= 0) data.aliases.emplace(asset::human_bone_name(static_cast<asset::HumanBone>(b)), own.nodes[b]);
+                if (!clips.is_nil()) {
+                    // Another model's clips, retargeted onto this one (once per pair).
+                    const auto source_file = resolve_(clips);
+                    auto source = source_file ? asset::import_gltf(*source_file) : decltype(asset::import_gltf(*file)){};
+                    if (!source_file) {
+                        say_once(std::format("an animator's retarget_from {} isn't in the project", clips.to_string()));
+                        data.model.animations.clear();
+                    } else if (!source) {
+                        say_once(source.error().message);
+                        data.model.animations.clear();
+                    } else {
+                        const asset::BoneMap theirs = asset::bone_map_for(*source, *source_file);
+                        const asset::Retargeter retargeter(*source, theirs, data.model, own);
+                        // A controller written for the clips' model names its bones: they mean this model's.
+                        for (std::size_t b = 0; b < asset::kHumanBones; ++b)
+                            if (theirs.nodes[b] >= 0 && own.nodes[b] >= 0)
+                                data.aliases.emplace(source->nodes[static_cast<std::size_t>(theirs.nodes[b])].name, own.nodes[b]);
+                        for (const auto& w : retargeter.warnings())
+                            say_once(std::format("retargeting {}'s clips onto {}: {}", source_file->filename().string(),
+                                                 file->filename().string(), w));
+                        std::vector<asset::ImportedAnimation> baked;
+                        if (retargeter.usable())
+                            for (const auto& clip : source->animations) baked.push_back(retargeter.bake(clip));
+                        data.model.animations = std::move(baked);
+                    }
+                }
                 data.rest = asset::rest_pose(data.model);
                 data.root = asset::root_motion_node(data.model);
+                if (data.root >= 0)
+                    if (const int parent = data.model.nodes[static_cast<std::size_t>(data.root)].parent; parent >= 0)
+                        data.root_space = data.model.world_matrix(static_cast<std::size_t>(parent));
                 std::vector<bool> moved(data.model.nodes.size(), false);
                 for (const auto& clip : data.model.animations)
                     for (const auto& ch : clip.channels)
@@ -60,17 +93,23 @@ const AnimatorSystem::Model* AnimatorSystem::model(const Guid& id) {
         } else {
             say_once(std::format("an animator's model {} isn't in the project", id.to_string()));
         }
-        it = models_.emplace(id, std::move(loaded)).first;
+        it = models_.emplace(key, std::move(loaded)).first;
     }
     return it->second ? &*it->second : nullptr;
+}
+
+const AnimatorSystem::Model* AnimatorSystem::model_of(const scene::Entity& root) {
+    const auto id = asset::guid_field(root.components.at("model"), "asset");
+    if (!id) return nullptr;
+    const auto clips = root.has("animator") ? asset::guid_field(root.components.at("animator"), "retarget_from") : std::nullopt;
+    return model(*id, clips.value_or(Guid{}));
 }
 
 const std::vector<Guid>& AnimatorSystem::bind(runtime::World& world, const scene::Entity& root) {
     if (const auto it = nodes_.find(root.id); it != nodes_.end()) return it->second;
     std::vector<Guid> ids;
     const Json& m = root.components.at("model");
-    const auto id = asset::guid_field(m, "asset");
-    const Model* data = id ? model(*id) : nullptr;
+    const Model* data = model_of(root);
     if (data && m.contains("nodes") && m["nodes"].is_array()) {
         for (const auto& n : m["nodes"]) {
             Guid g{};
@@ -120,16 +159,18 @@ asset::AnimControllerPlayer* AnimatorSystem::running(const scene::Entity& root) 
     const Json& c = root.components.at("animator");
     const auto cid = asset::guid_field(c, "controller");
     const auto mid = asset::guid_field(root.components.at("model"), "asset");
+    const Guid clips = asset::guid_field(c, "retarget_from").value_or(Guid{});
     if (!cid || !mid) return nullptr;
-    if (const auto it = running_.find(root.id); it != running_.end() && it->second.controller == *cid && it->second.model == *mid)
+    if (const auto it = running_.find(root.id);
+        it != running_.end() && it->second.controller == *cid && it->second.model == *mid && it->second.clips == clips)
         return it->second.player.get();
     const asset::AnimController* ctrl = controller(*cid);
-    const Model* data = model(*mid);
+    const Model* data = model(*mid, clips);
     if (!ctrl || !data) return nullptr;
-    auto player = std::make_unique<asset::AnimControllerPlayer>(*ctrl, data->model);
+    auto player = std::make_unique<asset::AnimControllerPlayer>(*ctrl, data->model, &data->aliases);
     for (const auto& w : player->warnings()) say_once(std::format("'{}': {}", root.name, w));
     auto* raw = player.get();
-    running_[root.id] = {*cid, *mid, std::move(player)};
+    running_[root.id] = {*cid, *mid, clips, std::move(player)};
     return raw;
 }
 
@@ -144,7 +185,7 @@ asset::AnimParameters AnimatorSystem::parameters(const Json& c, const asset::Ani
     return params;
 }
 
-// Root motion: `moved` is in the model root's own space (the root bone's parent). A character controller at or above
+// Root motion: `moved` is in the model root's own space (callers bring it there from the root bone's parent's). A character controller at or above
 // the model takes it as this frame's velocity; without one the model itself moves.
 void AnimatorSystem::move_character(runtime::World& world, scene::Entity& model_root, math::Vec3 moved, double dt) {
     if (dt <= 0.0) return;
@@ -192,13 +233,13 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
             std::vector<std::string> consumed;
             std::vector<asset::AnimControllerPlayer::Ended> ended;
             const double speed = c.contains("speed") && c["speed"].is_number() ? std::max(0.0, c["speed"].get<double>()) : 1.0;
-            const Model* data = model(running_[e.id].model);
+            const Model* data = model_of(e);
             const bool root_motion = c.value("root_motion", false) && data && data->root >= 0;
             p->set_root_motion(root_motion ? data->root : -1);
             std::vector<asset::AnimControllerPlayer::Ended> events;
             p->step(dt * speed, parameters(c, *ctrl), &consumed, &ended, &events);
             for (const auto& ev : events) world.post({runtime::Event::Kind::AnimationEvent, e.id, e.id, ev.event});
-            if (root_motion) move_character(world, e, p->root_motion(), dt);
+            if (root_motion) move_character(world, e, math::transform_vector(data->root_space, p->root_motion()), dt);
             for (const auto& name : consumed) c["parameters"][name] = false;
             if (const std::string_view state = p->state(); c.value("state", std::string()) != state) c["state"] = std::string(state);
             for (const auto& end : ended) {
@@ -209,8 +250,7 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
         }
         // A plain clip: its events and root motion over this frame (from the clock at its start to its end).
         if (c.contains("animation") && c["animation"].is_string()) {
-            const auto mid = asset::guid_field(e.components.at("model"), "asset");
-            const Model* data = mid ? model(*mid) : nullptr;
+            const Model* data = model_of(e);
             const asset::ImportedAnimation* clip = data ? asset::find_animation(data->model, c["animation"].get<std::string>()) : nullptr;
             if (clip) {
                 const double t0 = sprite_time(c, world.time()), t1 = sprite_time(c, now), d = clip->duration;
@@ -233,7 +273,7 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
                             moved = {o.x + (moved.x - o.x) * w, o.y + (moved.y - o.y) * w, o.z + (moved.z - o.z) * w};
                         }
                     }
-                    move_character(world, e, moved, dt);
+                    move_character(world, e, math::transform_vector(data->root_space, moved), dt);
                 }
             }
         }
@@ -251,8 +291,7 @@ void AnimatorSystem::update(runtime::World& world, double dt) {
             continue;
         const double started = c["started"].get<double>();
         if (const auto r = reported_.find(e.id); r != reported_.end() && r->second == started) continue;  // already told
-        const auto id = asset::guid_field(e.components.at("model"), "asset");
-        const Model* data = id ? model(*id) : nullptr;
+        const Model* data = model_of(e);
         const std::string name = c["animation"].get<std::string>();
         const asset::ImportedAnimation* clip = data ? asset::find_animation(data->model, name) : nullptr;
         if (!clip || clip->duration <= 0.0f) continue;
@@ -276,8 +315,7 @@ void AnimatorSystem::late_update(runtime::World& world, double dt) {
         if (!root.has("animator") || !root.has("model")) continue;
         const Json& c = root.components.at("animator");
         if (!c.is_object()) continue;
-        const auto id = asset::guid_field(root.components.at("model"), "asset");
-        const Model* data = id ? model(*id) : nullptr;
+        const Model* data = model_of(root);
         if (!data) continue;
         pose_.assign(data->rest.begin(), data->rest.end());
         if (c.contains("controller")) {

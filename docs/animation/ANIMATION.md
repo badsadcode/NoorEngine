@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, and **part 4, root motion and characters**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, **part 4, root motion and characters**, and **part 5, retargeting**.
 
 ## Skinned meshes (part 1)
 
@@ -166,8 +166,60 @@ where he walks and blending idle, walk and run by speed (Shift runs). Ward's mod
 `Assets/Characters/Ward/` the first time. (The template moves him by script, which feels responsive; set
 `"root_motion": true` and drive him by his clips instead if you prefer.)
 
+## Retargeting (part 5)
+
+One character's clips can play on another humanoid: a different height, different proportions, bones named by a
+different tool, built in a T-pose or an A-pose. Put `"retarget_from": "<model id>"` on the animator:
+
+```json
+"animator": {"controller": "<Ward.nooranim>", "retarget_from": "<Ward_Anim.glb>", "parameters": {"speed": 1.4}}
+```
+
+The other model's clips then are this model's own: play them by name, run a controller written for them (its masks
+may keep naming the other model's bones), use root motion and events as usual.
+
+**Bone maps.** Both models get a humanoid bone map (22 bones: hips, spine, chest, upper chest, neck, head, and each
+side's shoulder, upper arm, lower arm, hand, upper leg, lower leg, foot and toes; fingers aren't mapped yet). It's
+detected from the bone names:
+
+| Preset | Recognised by | For example |
+|---|---|---|
+| Rigify | its deform bones | `DEF-spine` (hips), `DEF-spine.001`... `.006` (head), `DEF-upper_arm.L`, `DEF-shin.R` |
+| Mixamo | any `prefix:` (or `mixamorig_`) | `mixamorig:Hips`, `mixamorig1:LeftArm`, `LeftUpLeg`, `RightToeBase` |
+| Unreal mannequin | | `pelvis`, `spine_01`, `clavicle_l`, `upperarm_l`, `calf_r`, `ball_r` |
+| Blender metarig | | `spine`, `spine.001`, `upper_arm.L`, `shin.R` |
+| names | common words, either side's spelling | `Hips`/`pelvis`, `UpperArm_L`, `L_Hand`, `Calf.R`, `DEF-upper_arm.L` |
+
+The 15 bones a body needs (hips, spine, head, both arms' upper, lower and hand, both legs' upper, lower and foot) must
+all be found; the rest are optional. When something's wrong (a bone missing, a forearm that isn't below its upper
+arm, one bone used twice), the log says so in those words. Correct a map in the model's `.noormeta`:
+
+```json
+"settings": {"bone_map": {"LeftHand": "Hand_L_custom", "LeftToes": null}}
+```
+
+**How it moves the bones.** Directions, relative to each rig's rest pose: each mapped bone is first turned so it points
+where the source's bone points at rest (an A-pose arm is lifted to a T-pose source's), then gets the same turn, in the
+model's space, as the source bone makes from its rest. So at every moment the target's bones point where the
+source's point (tested: within two degrees, at keys and between them); twist around a bone is the target's own. Head,
+hands and toes (nothing mapped to point at) take their parent's correction. The hips also move: by the source's
+movement scaled by leg length (hips height above the feet), so a shorter character takes shorter steps and root
+motion carries him less far.
+
+The clips are retargeted once, when a character first needs them, into ordinary clips of the target (keys at every
+source key and at least 60 a second). Only bones a clip moves, or whose parents it turns, are written: Ward's Raise
+lifts Bollard's right arm and leaves his left in his own A-pose.
+
+Controllers' masks may name humanoid bones (`"mask": ["RightUpperArm"]`) on any model with a bone map, and, when
+retargeting, the clips' model's bones (Ward.nooranim's `DEF-upper_arm.R` means Mast's `mixamorig:RightArm`).
+
+The test bodies: **Mast** (2.0 m, Mixamo names, T-pose, bones in centimetres under an armature scaled 0.01) and
+**Bollard** (1.45 m, Rigify's names with twist bones, A-pose, Blender's rolled bone frames), made by
+`tools/samples/make_test_characters.py`; the `Retargeting` golden shows them beside Ward on his controller.
+
 ## Not yet
-- **Root motion**, sockets and bone transforms for scripts: part 4. Clips that move the hips move them in place.
+- Retargeting fingers, and correcting feet to the ground (IK): later. A target much stockier than the source may see
+  hands pass through hips.
 - **Previewing clips in the editor** (a timeline to scrub): part 6, the Animation panel. Clips play when you press
   Play (and in games); in edit mode characters stand in their rest pose.
 - Morph-target (face shape) channels are skipped, with a warning.

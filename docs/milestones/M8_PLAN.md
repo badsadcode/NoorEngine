@@ -402,7 +402,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | 2 ✅ | **Clips and the player:** animations from glTF (translation, rotation, scale; step, linear and cubic-spline), the deterministic sampler, the `animator` component (clip, loop, speed, time offset), scripts (play, stop, speed, events, end) | Sampled poses equal glTF's own keys and interpolation (unit); a golden at fixed times; a built game samples identically; Lua and C# play a clip and hear its end |
 | 3 ✅ | **Blending and the controller:** cross-fades, 1D and 2D blend spaces, layers with bone masks, additive layers, the `.nooranim` controller (parameters, states, transitions with conditions) | Blend maths (quaternion sign, normalisation, weights summing to 1) in unit tests; transition timing exact to the frame; an idle-walk-run blend golden sequence |
 | 4 ✅ | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
-| 5 | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
+| 5 ✅ | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
 | 6 | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
 | 7 | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
 | 8 | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
@@ -495,6 +495,23 @@ creates the third-person player, walks him with W (1.55 m in about a second), se
 Found on the way: the smoke test's picture first looked through the first-person player's camera (Play takes the
 first camera); the check now takes that player out for the moment. Not done: root motion turning (yaw); jumping
 and falling animation states are the game's to wire; the template's movement is script-driven by default.
+
+## Part 5 result (2026-11-20)
+Done. `asset/retarget.h`: the humanoid bone map (22 bones, 15 required), detected by the Rigify, Mixamo, Unreal
+mannequin and Blender metarig presets or by common names, corrected in a model's `.noormeta`
+(`settings.bone_map`), with warnings in plain words; the Retargeter (per-bone rest corrections by direction, the
+source's turn from rest in model space, hips moved by leg length) and `bake` (an ordinary clip of the target). The
+animator's `"retarget_from"`; controllers' masks may name humanoid bones or, retargeted, the clips' model's bones.
+Two new generated bodies: Mast (2.0 m, Mixamo, T-pose, a 0.01 armature) and Bollard (1.45 m, Rigify with twist
+bones, A-pose, rolled Blender bone frames). Proven: unit tests (each preset and common names detected, corrections
+and warnings; both bodies skin to themselves at rest; Walk, Run and Raise on both: limb directions within two degrees
+of Ward's at keys and between them; an A-pose arm lifted only where the clip moves it; the hips moved by leg length;
+baking bit-identical; Ward's walk on Mast through the animator covering 2 x 1.4 m x his leg ratio in metres; Ward's
+controller on Mast, its mask translated); golden `Retargeting` (Ward, Mast and Bollard walking and waving on one
+controller, a Bollard on root motion); `cli.retargeting_build_identically` (the controller script on Bollard: Lua
+project, Lua and C# built game, the same pose). Found on the way: root motion ignored an armature's scale (fixed);
+Ward.nooranim's mask named Ward's bone, which other bodies don't have (masks now translate). Not done: fingers;
+foot IK; the editor's view of the map (part 6).
 
 ## Open questions
 

@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 5: retargeting
+**Added**
+- **Retargeting** (`asset/retarget.h`): humanoid bone maps detected from names (Rigify, Mixamo, Unreal mannequin,
+  Blender metarig, common names) and corrected in a model's `.noormeta` (`settings.bone_map`); the `Retargeter`
+  (rest-pose-relative, by bone direction; hips scaled by leg length) and `bake`.
+- The animator's `"retarget_from"`: another model's clips, retargeted, as this model's own.
+- Controllers' masks may name humanoid bones, or (retargeted) the clips' model's bones.
+- `asset::posed_world`; generated test bodies Mast (Mixamo, T-pose, 0.01 armature) and Bollard (Rigify, A-pose).
+
+**Changed:** skinned models placed in a scene list their nodes (as animated ones did), so they can play retargeted
+clips.
+
+**Fixed:** root motion now accounts for transforms between the root bone and the model (an armature's 0.01 scale).
+
+**Tests:** unit tests "retargeting" (9); golden `Retargeting`; `cli.retargeting_build_identically`.
+
 ### 2026-11-20 — Milestone 8C, part 4: root motion and characters
 **Added**
 - **Root motion:** `asset::root_motion_node`, `asset::root_delta`; the animator's `"root_motion"` (clips, cross-fades,

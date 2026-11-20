@@ -24,6 +24,16 @@ Writes into tests/data/animation/Ward/ (and copies into tests/data/render_scenes
                     WalkForward  Walk's legs and arms, with the hips moving 1.4 m forward (+Z) each 1 s cycle: played
                            with root motion it walks the character 1.4 m a second; without, it pops back each loop.
 
+And into tests/data/animation/Retarget/ (part 5), two more bodies with no clips of their own, to retarget Ward's onto:
+
+  Mast.glb        tall and thin (2.0 m), Mixamo's names (mixamorig:Hips, mixamorig:LeftArm ...), a T-pose, and Mixamo's
+                  units: the bones in centimetres under an "Armature" node scaled 0.01; shoulders, three spine bones and
+                  toes. Green.
+  Bollard.glb     short and stout (1.45 m), Rigify's deform names (DEF-spine for the hips, DEF-spine.001 ... .006 for
+                  spine, chest, neck and head, DEF-upper_arm.L.001 twist bones), built in an A-pose (arms 45 degrees
+                  down), with Blender's bone frames (each joint's +Y along its bone, rolled; the forearms rolled 30
+                  degrees more), so every joint has a rest rotation. Rust red.
+
 Every body part is a tube along its bone; vertices near a joint blend between the two bones that meet there, so elbows
 and knees bend smoothly. Colours: a blue-grey tunic, light grey limbs, a warm head (vertex colours).
 """
@@ -35,6 +45,7 @@ import struct
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / 'tests' / 'data' / 'animation' / 'Ward'
+RETARGET = ROOT / 'tests' / 'data' / 'animation' / 'Retarget'
 SCENE_ASSETS = ROOT / 'tests' / 'data' / 'render_scenes' / 'Assets' / 'Characters'
 
 # name, parent, head (model space, T-pose), radius at head, radius at tail, colour
@@ -67,6 +78,79 @@ TAILS = {'DEF-head': (0, 1.80, 0), 'DEF-hand.L': (0.86, 1.45, 0), 'DEF-hand.R': 
 POSE = {'DEF-upper_arm.L': ((0, 0, 1), -70), 'DEF-upper_arm.R': ((0, 0, 1), 70), 'DEF-forearm.L': ((0, 1, 0), 50),
         'DEF-thigh.R': ((1, 0, 0), -35), 'DEF-shin.R': ((1, 0, 0), 60), 'DEF-head': ((0, 1, 0), 25)}
 
+
+def _mast():
+    """Mast: Mixamo names, T-pose, 2.0 m."""
+    green = (0.22, 0.48, 0.32)
+    p = 'mixamorig:'
+    bones = [
+        (p + 'Hips', None, (0, 1.10, 0), 0.15, 0.14, green),
+        (p + 'Spine', p + 'Hips', (0, 1.25, 0), 0.14, 0.15, green),
+        (p + 'Spine1', p + 'Spine', (0, 1.42, 0), 0.15, 0.16, green),
+        (p + 'Spine2', p + 'Spine1', (0, 1.58, 0), 0.16, 0.13, green),
+        (p + 'Neck', p + 'Spine2', (0, 1.72, 0), 0.05, 0.05, SKIN),
+        (p + 'Head', p + 'Neck', (0, 1.80, 0), 0.10, 0.08, SKIN),
+    ]
+    for side, s in (('Left', 1), ('Right', -1)):
+        bones += [
+            (p + side + 'Shoulder', p + 'Spine2', (0.05 * s, 1.66, 0), 0.05, 0.05, green),
+            (p + side + 'Arm', p + side + 'Shoulder', (0.20 * s, 1.66, 0), 0.05, 0.045, LIMB),
+            (p + side + 'ForeArm', p + side + 'Arm', (0.52 * s, 1.66, 0), 0.045, 0.035, LIMB),
+            (p + side + 'Hand', p + side + 'ForeArm', (0.82 * s, 1.66, 0), 0.035, 0.03, SKIN),
+        ]
+    for side, s in (('Left', 1), ('Right', -1)):
+        bones += [
+            (p + side + 'UpLeg', p + 'Hips', (0.11 * s, 1.06, 0), 0.07, 0.055, LIMB),
+            (p + side + 'Leg', p + side + 'UpLeg', (0.11 * s, 0.58, 0), 0.055, 0.04, LIMB),
+            (p + side + 'Foot', p + side + 'Leg', (0.11 * s, 0.09, 0), 0.04, 0.035, green),
+            (p + side + 'ToeBase', p + side + 'Foot', (0.11 * s, 0.03, 0.12), 0.03, 0.025, green),
+        ]
+    tails = {p + 'Head': (0, 2.02, 0), p + 'LeftHand': (0.95, 1.66, 0), p + 'RightHand': (-0.95, 1.66, 0),
+             p + 'LeftToeBase': (0.11, 0.03, 0.22), p + 'RightToeBase': (-0.11, 0.03, 0.22)}
+    return {'name': 'Mast', 'bones': bones, 'tails': tails, 'frames': 'identity', 'armature_scale': 0.01, 'rolls': {}}
+
+
+def _bollard():
+    """Bollard: Rigify deform names, A-pose, Blender bone frames, 1.45 m."""
+    rust = (0.62, 0.30, 0.18)
+    d = 'DEF-'
+    bones = [
+        (d + 'spine', None, (0, 0.78, 0), 0.20, 0.21, rust),
+        (d + 'spine.001', d + 'spine', (0, 0.90, 0), 0.21, 0.22, rust),
+        (d + 'spine.002', d + 'spine.001', (0, 1.02, 0), 0.22, 0.21, rust),
+        (d + 'spine.003', d + 'spine.002', (0, 1.12, 0), 0.21, 0.15, rust),
+        (d + 'spine.004', d + 'spine.003', (0, 1.26, 0), 0.07, 0.07, SKIN),
+        (d + 'spine.005', d + 'spine.004', (0, 1.30, 0), 0.07, 0.07, SKIN),
+        (d + 'spine.006', d + 'spine.005', (0, 1.33, 0), 0.12, 0.10, SKIN),
+    ]
+    c45 = math.sqrt(0.5)
+    for side, s in (('L', 1), ('R', -1)):
+        def arm(k):  # a point k metres along the arm from the shoulder joint, 45 degrees down
+            return (s * (0.21 + c45 * k), 1.24 - c45 * k, 0)
+        bones += [
+            (d + 'shoulder.' + side, d + 'spine.003', (0.03 * s, 1.22, 0.02), 0.07, 0.07, rust),
+            (d + 'upper_arm.' + side, d + 'shoulder.' + side, arm(0), 0.065, 0.06, LIMB),
+            (d + 'upper_arm.' + side + '.001', d + 'upper_arm.' + side, arm(0.12), 0.06, 0.055, LIMB),
+            (d + 'forearm.' + side, d + 'upper_arm.' + side + '.001', arm(0.24), 0.055, 0.045, LIMB),
+            (d + 'hand.' + side, d + 'forearm.' + side, arm(0.46), 0.045, 0.04, SKIN),
+        ]
+    for side, s in (('L', 1), ('R', -1)):
+        bones += [
+            (d + 'thigh.' + side, d + 'spine', (0.12 * s, 0.76, 0), 0.10, 0.08, LIMB),
+            (d + 'shin.' + side, d + 'thigh.' + side, (0.12 * s, 0.43, 0.01), 0.08, 0.06, LIMB),
+            (d + 'foot.' + side, d + 'shin.' + side, (0.12 * s, 0.08, 0), 0.06, 0.05, rust),
+            (d + 'toe.' + side, d + 'foot.' + side, (0.12 * s, 0.03, 0.11), 0.045, 0.04, rust),
+        ]
+    tails = {d + 'spine.006': (0, 1.53, 0), d + 'hand.L': (0.21 + c45 * 0.56, 1.24 - c45 * 0.56, 0),
+             d + 'hand.R': (-0.21 - c45 * 0.56, 1.24 - c45 * 0.56, 0), d + 'toe.L': (0.12, 0.03, 0.19), d + 'toe.R': (-0.12, 0.03, 0.19)}
+    rolls = {d + 'forearm.L': 30, d + 'forearm.R': -30}
+    return {'name': 'Bollard', 'bones': bones, 'tails': tails, 'frames': 'blender', 'armature_scale': None, 'rolls': rolls}
+
+
+WARD = {'name': 'Ward', 'bones': BONES, 'tails': TAILS, 'frames': 'identity', 'armature_scale': None, 'rolls': {}}
+MAST = _mast()
+BOLLARD = _bollard()
+
 SIDES = 12
 RINGS = 6
 
@@ -86,15 +170,15 @@ def smoothstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
-def build_mesh():
-    index = {b[0]: i for i, b in enumerate(BONES)}
+def build_mesh(bones=BONES, tails=TAILS):
+    index = {b[0]: i for i, b in enumerate(bones)}
     children = {}
-    for b in BONES:
+    for b in bones:
         if b[1]:
             children.setdefault(b[1], []).append(b[0])
     positions, normals, colours, joints, weights, indices = [], [], [], [], [], []
-    for bi, (name, parent, head, r0, r1, colour) in enumerate(BONES):
-        tail = TAILS.get(name) or [h for n, _, h, *_ in BONES if n == children[name][0]][0]
+    for bi, (name, parent, head, r0, r1, colour) in enumerate(bones):
+        tail = tails.get(name) or [h for n, _, h, *_ in bones if n == children[name][0]][0]
         axis = sub(tail, head)
         length = math.sqrt(dot(axis, axis))
         d = norm(axis)
@@ -216,8 +300,48 @@ def clips():
     ]
 
 
-def write_glb(path, posed, animated=False):
-    positions, normals, colours, joints, weights, indices = build_mesh()
+def frame(d, roll_degrees):
+    """Blender's bone frame: +Y along the bone d, +X and +Z across it (rolled by roll_degrees); columns x, y, z."""
+    ref = (0, 0, 1) if abs(d[2]) < 0.9 else (0, 1, 0)
+    x = norm(cross(d, ref))
+    z = cross(x, d)
+    a = math.radians(roll_degrees)
+    x, z = add(mul(x, math.cos(a)), mul(z, math.sin(a))), add(mul(z, math.cos(a)), mul(x, -math.sin(a)))
+    return x, d, z
+
+
+def quat_from_columns(x, y, z):
+    m00, m01, m02 = x[0], y[0], z[0]
+    m10, m11, m12 = x[1], y[1], z[1]
+    m20, m21, m22 = x[2], y[2], z[2]
+    tr = m00 + m11 + m22
+    if tr > 0:
+        s = math.sqrt(tr + 1.0) * 2
+        q = [(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, 0.25 * s]
+    elif m00 > m11 and m00 > m22:
+        s = math.sqrt(1.0 + m00 - m11 - m22) * 2
+        q = [0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s]
+    elif m11 > m22:
+        s = math.sqrt(1.0 + m11 - m00 - m22) * 2
+        q = [(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s]
+    else:
+        s = math.sqrt(1.0 + m22 - m00 - m11) * 2
+        q = [(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s]
+    return q
+
+
+def qconj(q):
+    return [-q[0], -q[1], -q[2], q[3]]
+
+
+def qrot(q, v):
+    p = qmul(qmul(q, [v[0], v[1], v[2], 0.0]), qconj(q))
+    return tuple(p[:3])
+
+
+def write_glb(path, posed, animated=False, rig=WARD):
+    bones, tails = rig['bones'], rig['tails']
+    positions, normals, colours, joints, weights, indices = build_mesh(bones, tails)
     blobs = []
 
     def add_blob(data):
@@ -250,28 +374,56 @@ def write_glb(path, posed, animated=False):
     a_jnt = accessor(b''.join(struct.pack('<4H', *j) for j in joints), '', n, 5123, 'VEC4', 34962)
     a_wgt = accessor(b''.join(struct.pack('<4f', *w) for w in weights), '', n, 5126, 'VEC4', 34962)
     a_idx = accessor(b''.join(struct.pack('<I', i) for i in indices), '', len(indices), 5125, 'SCALAR', 34963)
-    # Inverse bind matrices: the T-pose joints are pure translations, so each is a translation back (column-major).
+    index = {b[0]: i for i, b in enumerate(bones)}
+    children = {}
+    for b in bones:
+        if b[1]:
+            children.setdefault(b[1], []).append(b[0])
+    # Each joint's rest frame in model space: none (Ward, Mast: pure translations) or Blender's (Bollard).
+    rot = {}
+    for name, parent, head, *_ in bones:
+        if rig['frames'] == 'blender':
+            tail = tails.get(name) or bones[index[children[name][0]]][2]
+            rot[name] = quat_from_columns(*frame(norm(sub(tail, head)), rig['rolls'].get(name, 0)))
+        else:
+            rot[name] = [0, 0, 0, 1]
+    k = rig['armature_scale'] or 1.0  # Mast: bones in centimetres under an Armature scaled 0.01
+    first = 2 if rig['armature_scale'] else 1  # the first joint's node
+    # Inverse bind matrices: back from model space into each joint's (column-major). For pure translations (Ward), a
+    # translation back.
     ibm = b''
-    for _, _, head, *_ in BONES:
-        ibm += struct.pack('<16f', 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -head[0], -head[1], -head[2], 1)
-    a_ibm = accessor(ibm, '', len(BONES), 5126, 'MAT4')
+    for name, _, head, *_ in bones:
+        q = rot[name]
+        ix, iy, iz = qrot(qconj(q), (1, 0, 0)), qrot(qconj(q), (0, 1, 0)), qrot(qconj(q), (0, 0, 1))  # R^T's columns
+        t = qrot(qconj(q), head)
+        cols = [mul(ix, 1 / k), mul(iy, 1 / k), mul(iz, 1 / k), mul(t, -1 / k)]
+        if rig['frames'] != 'blender' and k == 1.0:
+            cols = [(1, 0, 0), (0, 1, 0), (0, 0, 1), (-head[0], -head[1], -head[2])]
+        ibm += struct.pack('<16f', *cols[0], 0, *cols[1], 0, *cols[2], 0, *cols[3], 1)
+    a_ibm = accessor(ibm, '', len(bones), 5126, 'MAT4')
 
-    index = {b[0]: i for i, b in enumerate(BONES)}
     nodes = []
-    # Node 0: the character (its mesh, skinned); joints follow from node 1.
-    nodes.append({'name': 'Ward', 'mesh': 0, 'skin': 0})
-    for name, parent, head, *_ in BONES:
-        ph = (0, 0, 0) if parent is None else BONES[index[parent]][2]
-        node = {'name': name, 'translation': list(sub(head, ph))}
+    # Node 0: the character (its mesh, skinned); joints follow (after the Armature node, if there is one).
+    nodes.append({'name': rig['name'], 'mesh': 0, 'skin': 0})
+    if rig['armature_scale']:
+        nodes.append({'name': 'Armature', 'scale': [k, k, k], 'children': [first]})
+    for name, parent, head, *_ in bones:
+        ph = (0, 0, 0) if parent is None else bones[index[parent]][2]
+        pq = [0, 0, 0, 1] if parent is None else rot[parent]
+        offset = qrot(qconj(pq), sub(head, ph)) if rig['frames'] == 'blender' else sub(head, ph)
+        node = {'name': name, 'translation': list(mul(offset, 1 / k)) if k != 1.0 else list(offset)}
+        local = qmul(qconj(pq), rot[name])
+        if rig['frames'] == 'blender':
+            node['rotation'] = local
         if posed and name in POSE:
             node['rotation'] = quat(*POSE[name])
-        kids = [i + 1 for i, b in enumerate(BONES) if b[1] == name]
+        kids = [i + first for i, b in enumerate(bones) if b[1] == name]
         if kids:
             node['children'] = kids
         nodes.append(node)
     animations = []
     if animated:
-        index_of = {b[0]: i + 1 for i, b in enumerate(BONES)}  # glTF node index (node 0 is the mesh)
+        index_of = {b[0]: i + first for i, b in enumerate(bones)}  # glTF node index (node 0 is the mesh)
         for name, channels in clips():
             samplers, chans = [], []
             for bone, target, interp, times, values in channels:
@@ -287,10 +439,10 @@ def write_glb(path, posed, animated=False):
         'asset': {'version': '2.0', 'generator': 'NoorEngine tools/samples/make_test_characters.py'},
         'scene': 0, 'scenes': [{'nodes': [0, 1]}],
         'nodes': nodes,
-        'meshes': [{'name': 'Ward', 'primitives': [{'attributes': {'POSITION': a_pos, 'NORMAL': a_nrm, 'COLOR_0': a_col, 'JOINTS_0': a_jnt,
+        'meshes': [{'name': rig['name'], 'primitives': [{'attributes': {'POSITION': a_pos, 'NORMAL': a_nrm, 'COLOR_0': a_col, 'JOINTS_0': a_jnt,
                                                                     'WEIGHTS_0': a_wgt}, 'indices': a_idx, 'material': 0}]}],
-        'materials': [{'name': 'Ward', 'pbrMetallicRoughness': {'baseColorFactor': [1, 1, 1, 1], 'metallicFactor': 0, 'roughnessFactor': 0.7}}],
-        'skins': [{'name': 'Ward', 'joints': list(range(1, len(BONES) + 1)), 'inverseBindMatrices': a_ibm, 'skeleton': 1}],
+        'materials': [{'name': rig['name'], 'pbrMetallicRoughness': {'baseColorFactor': [1, 1, 1, 1], 'metallicFactor': 0, 'roughnessFactor': 0.7}}],
+        'skins': [{'name': rig['name'], 'joints': list(range(first, len(bones) + first)), 'inverseBindMatrices': a_ibm, 'skeleton': first}],
         'accessors': accessors, 'bufferViews': views,
         **({'animations': animations} if animations else {}),
     }
@@ -304,7 +456,7 @@ def write_glb(path, posed, animated=False):
     glb = struct.pack('<III', 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(binary)) + struct.pack('<II', len(js), 0x4E4F534A) + js + \
           struct.pack('<II', len(binary), 0x004E4942) + binary
     path.write_bytes(glb)
-    print('wrote', path.relative_to(ROOT), f'({n} vertices, {len(indices) // 3} triangles, {len(BONES)} joints)')
+    print('wrote', path.relative_to(ROOT), f'({n} vertices, {len(indices) // 3} triangles, {len(bones)} joints)')
 
 
 def main():
@@ -312,9 +464,14 @@ def main():
     write_glb(OUT / 'Ward_Bind.glb', posed=False)
     write_glb(OUT / 'Ward_Posed.glb', posed=True)
     write_glb(OUT / 'Ward_Anim.glb', posed=False, animated=True)
+    RETARGET.mkdir(parents=True, exist_ok=True)
+    write_glb(RETARGET / 'Mast.glb', posed=False, rig=MAST)
+    write_glb(RETARGET / 'Bollard.glb', posed=False, rig=BOLLARD)
     SCENE_ASSETS.mkdir(parents=True, exist_ok=True)
     for f in ('Ward_Bind.glb', 'Ward_Posed.glb', 'Ward_Anim.glb'):
         shutil.copyfile(OUT / f, SCENE_ASSETS / f)
+    for f in ('Mast.glb', 'Bollard.glb'):
+        shutil.copyfile(RETARGET / f, SCENE_ASSETS / f)
     shutil.copyfile(ROOT / 'tests' / 'data' / 'animation' / 'RobotExpressive' / 'RobotExpressive.glb', SCENE_ASSETS / 'RobotExpressive.glb')
 
 

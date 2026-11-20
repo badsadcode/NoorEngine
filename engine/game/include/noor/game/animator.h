@@ -26,6 +26,11 @@
 // "events": [{"clip": "Walk", "at": 0.5, "name": "step"}] names moments of plain clips (controllers name them on
 // their states); scripts hear on_animation_event(name) each time one is passed.
 //
+// Part 5: "retarget_from": "<model id>" plays another model's clips on this one (asset/retarget.h): a humanoid's
+// walk on any humanoid, whatever its bones are called or its proportions. Both models' bone maps are detected (or
+// corrected in their .noormeta); the clips are retargeted once, when the pair is first needed, and then are this
+// model's own: "animation", controllers, root motion and events all use them as usual.
+//
 // Playback is a pure function of time (asset::sample): the same game time gives the same pose, in the editor, in a
 // built game and on any machine. Clips move the nodes they name; the model's other nodes are left alone. Which entity
 // each node became comes from the root's "model": {"nodes": [...]} (written by scene::instantiate_model); a model
@@ -33,6 +38,7 @@
 
 #include "noor/asset/anim_controller.h"
 #include "noor/asset/animation.h"
+#include "noor/asset/retarget.h"
 #include "noor/runtime/world.h"
 
 #include <cstdint>
@@ -70,16 +76,21 @@ public:
 
 private:
     struct Model {
-        asset::ImportedModel model;
-        std::vector<int> animated;  // nodes any of its clips move, in node order
+        asset::ImportedModel model;  // with "retarget_from", the other model's clips retargeted in place of its own
+        std::vector<int> animated;   // nodes any of its clips move, in node order
         std::vector<asset::NodePose> rest;
-        int root = -1;  // asset::root_motion_node
+        int root = -1;               // asset::root_motion_node
+        math::Mat4 root_space{};     // from the root bone's parent's space into the model's (an armature's 0.01 scale)
+        std::unordered_map<std::string, int> aliases;  // other names controllers' masks may use: humanoid bones
+                                                       // ("RightUpperArm"), the clips' model's bones when retargeted
     };
     struct Running {  // a controller running for one character
-        Guid controller, model;
+        Guid controller, model, clips;
         std::unique_ptr<asset::AnimControllerPlayer> player;
     };
-    const Model* model(const Guid& id);
+    // The model a character's animator plays: its "model" asset, with "retarget_from"'s clips if it has one.
+    const Model* model(const Guid& id, const Guid& clips = {});
+    const Model* model_of(const scene::Entity& root);
     const asset::AnimController* controller(const Guid& id);
     asset::AnimControllerPlayer* running(const scene::Entity& root);
     asset::AnimParameters parameters(const asset::Json& component, const asset::AnimController& controller) const;
@@ -88,7 +99,7 @@ private:
     void move_character(runtime::World& world, scene::Entity& model_root, math::Vec3 moved, double dt);
 
     Resolver resolve_;
-    std::unordered_map<Guid, std::optional<Model>> models_;  // by asset id; nullopt: failed to load
+    std::unordered_map<std::string, std::optional<Model>> models_;  // by asset id (and clips' id); nullopt: failed
     std::unordered_map<Guid, std::optional<asset::AnimController>> controllers_;  // by asset id
     std::unordered_map<Guid, Running> running_;               // root entity -> its controller
     std::unordered_map<Guid, std::vector<Guid>> nodes_;      // root entity -> the entity of each node (nil: none)

@@ -27,7 +27,14 @@ Part 4 (root motion, events, props on bones):
   tests/data/animation_scripts/Scenes/Ward_Walk(_CSharp).noorscene  Ward in a character controller on root motion,
       hearing his footsteps (animation events), walking faster after four of them, until a wall stops him.
 
-    python tools/samples/add_animation_scene.py [part2] [part3] [part4]   (all when none is named)
+Part 5 (retargeting: Mast.glb and Bollard.glb have no clips of their own):
+  tests/data/render_scenes/Scenes/Retargeting.noorscene      the golden: Ward, Mast (tall, Mixamo names, T-pose) and
+      Bollard (stout, Rigify names, A-pose) side by side on Ward's controller, walking and waving: the same clips on
+      three bodies (Mast and Bollard with "retarget_from": Ward_Anim.glb); and Bollard walking across on root motion.
+  tests/data/animation_scripts/Scenes/Bollard_Controller(_CSharp).noorscene  ward_controller's script driving Bollard
+      on Ward's controller and clips, retargeted: the built-game check runs it in the project and in a built game.
+
+    python tools/samples/add_animation_scene.py [part2] [part3] [part4] [part5]   (all when none is named)
 """
 import ctypes
 import json
@@ -78,7 +85,7 @@ def main():
         sys.exit(dll.noor_last_error().decode())
     try:
         guid = {}
-        for f in ('Ward_Anim.glb', 'RobotExpressive.glb', 'Ward.nooranim'):
+        for f in ('Ward_Anim.glb', 'RobotExpressive.glb', 'Ward.nooranim', 'Mast.glb', 'Bollard.glb'):
             guid[f] = json.loads((PROJECT / 'Assets' / 'Characters' / (f + '.noormeta')).read_text(encoding='utf-8'))['guid']
         sprites = json.loads((PROJECT / 'Scenes' / 'Sprites_Sun.noorscene').read_text(encoding='utf-8'))
 
@@ -109,7 +116,7 @@ def main():
                 run(doc, {'op': 'set_component', 'entity': e['id'], 'type': 'animator', 'value': animator})
             return e['id']
 
-        parts = set(sys.argv[1:]) or {'part2', 'part3', 'part4'}
+        parts = set(sys.argv[1:]) or {'part2', 'part3', 'part4', 'part5'}
 
         def subtree_entity(root, name):
             scene = json.loads(dll.noor_doc_scene(doc))['entities']
@@ -166,13 +173,29 @@ def main():
                 save(path)
                 shutil.move(PROJECT / path, SCRIPTS / path)
 
-        def scripted(name, script, x, animator):
+        def scripted(name, script, x, animator, model='Ward_Anim.glb', who='Ward'):
             path = f'Scenes/{name}.noorscene'
             new_scene(path, name, {'position': [0, 1.4, 5.0], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
-            root = place('Ward_Anim.glb', 'Ward', x, animator=animator)
+            root = place(model, who, x, animator=animator)
             run(doc, {'op': 'set_component', 'entity': root, 'type': 'script', 'value': {'file': script}})
             save(path)
             shutil.move(PROJECT / path, SCRIPTS / path)
+
+        if 'part5' in parts:
+            ctrl, clips = guid['Ward.nooranim'], guid['Ward_Anim.glb']
+            new_scene('Scenes/Retargeting.noorscene', 'Retargeting', {'position': [0.3, 1.5, 6.6], 'rotation': [-0.0697565, 0, 0, 0.9975641]})
+            ground()
+            walking = {'controller': ctrl, 'parameters': {'speed': 1.4, 'waving': True}}
+            place('Ward_Anim.glb', 'Ward', -1.6, turn=25, animator=walking)
+            place('Mast.glb', 'Mast', 0.0, turn=25, animator={**walking, 'retarget_from': clips})
+            place('Bollard.glb', 'Bollard', 1.5, turn=25, animator={**walking, 'retarget_from': clips})
+            place('Bollard.glb', 'Bollard (walking across)', -5.0, -3.0, turn=90,
+                  animator={'animation': 'WalkForward', 'root_motion': True, 'retarget_from': clips})
+            save('Scenes/Retargeting.noorscene')
+            (SCRIPTS / 'Scenes').mkdir(parents=True, exist_ok=True)
+            for name, script, x in (('Bollard_Controller', 'Scripts/ward_controller.luau', -0.9),
+                                    ('Bollard_Controller_CSharp', 'Scripts/WardController.cs', 0.9)):
+                scripted(name, script, x, {'controller': ctrl, 'retarget_from': clips}, model='Bollard.glb', who='Bollard')
 
         if 'part3' in parts:
             ctrl = guid['Ward.nooranim']

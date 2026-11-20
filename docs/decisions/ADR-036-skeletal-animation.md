@@ -76,6 +76,14 @@ main asset path.
   it wraps, so nothing drifts) and given to the nearest character controller at or above the model as velocity, or
   to the model's position. Events are named moments on clips (the animator) or controller states. Bones-as-entities
   made sockets free: a prop is a child of a bone; `bone(name)` finds one. Script ABI v6 (bones, events).
+- *Part 5:* retargeting bakes: a source clip becomes an ordinary clip of the target (keys at every source key and at
+  least 60 a second, linear) when the pair is first needed, so blending, controllers, root motion and events needed no
+  changes. The transfer matches bone directions in model space (a per-bone shortest-arc correction between the rest
+  poses, then the source bone's turn from rest), square roots only, so it's the same everywhere. The hips scale by
+  leg length (hips height above the feet). Maps are detected (four presets, then common names) and corrected in the
+  model's `.noormeta` (`settings.bone_map`): the map belongs to the model, not to each animator. Only bones the clip
+  moves or turns are baked. Found on the way: root motion ignored an armature's scale between the root bone and the
+  model (Mixamo's 0.01 would have walked a character 100 times too far); now taken from the root's parent's space.
 - Crowds cost CPU per bone (gathering the scene) and per character (sampling); the crowd benchmark in part 8 says
   where the limit is. GPU sampling and a hidden pose stay later options.
 - The device must support buffer device addresses and 64-bit shader integers (every desktop GPU we target does); one

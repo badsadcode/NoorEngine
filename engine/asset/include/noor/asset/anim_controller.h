@@ -121,7 +121,10 @@ using AnimParameters = std::unordered_map<std::string, float>;
 // Runs a controller for one model. Holds each layer's state, progress and fade: create one per character.
 class AnimControllerPlayer {
 public:
-    AnimControllerPlayer(const AnimController& controller, const ImportedModel& model);
+    // `aliases`: other names a mask may use for the model's nodes (part 5: humanoid bone names such as "RightUpperArm",
+    // and, for clips retargeted from another model, that model's bone names), tried when no node has the name.
+    AnimControllerPlayer(const AnimController& controller, const ImportedModel& model,
+                         const std::unordered_map<std::string, int>* aliases = nullptr);
 
     // Problems found binding the controller to the model (clips it doesn't have, mask bones it doesn't have).
     [[nodiscard]] const std::vector<std::string>& warnings() const noexcept { return warnings_; }
