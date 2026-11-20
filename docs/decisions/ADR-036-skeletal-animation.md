@@ -50,7 +50,7 @@ main asset path.
 - **Retargeting** through a humanoid bone map (about 20 core bones, fingers optional) with presets for Rigify
   (`DEF-`), Mixamo (`mixamorig:`), the Unreal mannequin and Blender's metarig, auto-detected and overridable; the
   transfer works relative to each rig's rest pose, with the hips' height scaled by leg length.
-- **glTF only** until FBX through ufbx (MIT) has been tried on real files (part 7, research first).
+- **glTF first; FBX through ufbx (MIT)** since part 7, after it was tried on real files (FBX_RESEARCH.md).
 - **Deterministic maths:** quaternion blending with a fixed order and the engine's own functions (as 8B did for sine
   and cosine), so poses are the same in Debug and Release and in built games.
 
@@ -76,6 +76,13 @@ main asset path.
   it wraps, so nothing drifts) and given to the nearest character controller at or above the model as velocity, or
   to the model's position. Events are named moments on clips (the animator) or controller states. Bones-as-entities
   made sockets free: a prop is a child of a bone; `bone(name)` finds one. Script ABI v6 (bones, events).
+- *Part 7:* FBX imports into the same `ImportedModel` (`asset/fbx_import.h`; `asset/model_import.h` picks the importer
+  by extension, and every model load goes through it). ufbx converts axes, units, skins and keys alike
+  (`MODIFY_GEOMETRY`), helper nodes take 3ds Max's geometric transforms and Maya's scale compensation, takes are baked
+  to linear keys at 60 a second. A skinned bone rests where its cluster was bound. Checked against Blender's reading of
+  133 files (ours, FBX SDK 2020 store packs, Maya, Blender, Meshy). `"retarget_from"` gained a same-skeleton path
+  (`game::same_skeleton_clips`): clips copied by bone name when the clip file's bones sit at the same offsets under the
+  same unanimated parents, any rig; humanoid retargeting otherwise.
 - *Part 6:* the Animation panel previews by posing the render snapshot only (the document's scene is never touched,
   so previewing makes no undo steps and can't leave a character half-posed in a saved scene). It loads characters
   through `game::AnimationAssets`, now shared with `AnimatorSystem`, so a preview is exactly what plays. Controllers
@@ -101,5 +108,5 @@ main asset path.
 ## Unresolved
 
 - ~~Test characters~~: settled (CC0 RobotExpressive and SimpleSkin; our own generated Ward).
-- Whether FBX support happens in 8C (part 7's research decides).
+- ~~Whether FBX support happens in 8C~~ Settled in part 7: yes (FBX_RESEARCH.md).
 - IK, look-at, foot placement and ragdolls (spec 18.2) are after 8C.

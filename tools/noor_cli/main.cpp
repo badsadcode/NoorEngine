@@ -23,6 +23,8 @@
 // <project> is the project folder or its .noorproj file; <asset> and <scene> are project-relative.
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/model_compare.h"
+#include "noor/asset/model_import.h"
 #include "noor/asset/interchange.h"
 #include "noor/asset/project.h"
 #include "noor/asset/registry.h"
@@ -80,7 +82,8 @@ int usage() {
                "  noor_cli add-prefab <project> <prefab> <scene> [x y z [yaw degrees]]\n"
                "  noor_cli build <project> <output folder> [--scene <path>]\n"
                "  noor_cli cook <project>\n"
-               "  noor_cli generate <project> <graph path> [--out <folder>] [--threads <n>] [--no-cache]\n",
+               "  noor_cli generate <project> <graph path> [--out <folder>] [--threads <n>] [--no-cache]\n"
+               "  noor_cli compare-models <model a> <model b> [--report <file.json>]\n",
                stderr);
     return 64;
 }
@@ -177,7 +180,7 @@ int cmd_make_material(const std::vector<std::string>& a) {
 
 int cmd_info(const std::vector<std::string>& a) {
     if (a.size() != 1) return usage();
-    auto m = asset::import_gltf(a[0]);
+    auto m = asset::import_model(a[0]);
     if (!m) return report(m.error());
     std::map<std::string, int> markers;
     int collision = 0;
@@ -237,7 +240,7 @@ int cmd_add_model(const std::vector<std::string>& a) {
     auto scene_path = p->resolve(a[2]);
     if (!source) return report(source.error());
     if (!scene_path) return report(scene_path.error());
-    auto model = asset::import_gltf(*source);
+    auto model = asset::import_model(*source);
     if (!model) return report(model.error());
 
     scene::Scene scene;
@@ -898,6 +901,36 @@ int cmd_generate(const std::vector<std::string>& a) {
 
 } // namespace
 
+// Two imports of the same model compared (Milestone 8C, part 7): an FBX and the glTF exported from the same scene.
+// The skeleton, every joint at rest and through every clip, and the drawn shapes; exits 0 if both load.
+int cmd_compare_models(const std::vector<std::string>& a) {
+    if (a.size() != 2 && !(a.size() == 4 && a[2] == "--report")) return usage();
+    auto ma = asset::import_model(a[0]);
+    if (!ma) return report(ma.error());
+    auto mb = asset::import_model(a[1]);
+    if (!mb) return report(mb.error());
+    const auto r = asset::compare_models(*ma, *mb);
+    asset::Json j = r.to_json();
+    j["a"] = a[0];
+    j["b"] = a[1];
+    j["warnings_a"] = ma->warnings;
+    j["warnings_b"] = mb->warnings;
+    j["clips_a"] = ma->animations.size();
+    j["clips_b"] = mb->animations.size();
+    std::printf("%s\n  nodes %zu / %zu, matched %zu (only in a: %zu, only in b: %zu, parents differ: %zu)\n", a[0].c_str(), r.nodes_a, r.nodes_b,
+                r.matched, r.only_a.size(), r.only_b.size(), r.parent_differs.size());
+    std::printf("  triangles %llu / %llu, skins %zu / %zu, joints %zu / %zu, clips %zu / %zu\n", static_cast<unsigned long long>(r.triangles_a),
+                static_cast<unsigned long long>(r.triangles_b), r.skins_a, r.skins_b, r.joints_a, r.joints_b, ma->animations.size(), mb->animations.size());
+    std::printf("  rest: joints within %.3f mm (%s), shape within %.3f mm\n", r.rest_joints * 1000.0, r.rest_joints_worst.c_str(), r.rest_shape * 1000.0);
+    for (const auto& c : r.clips)
+        std::printf("  clip %-24s %.3f / %.3f s: joints within %.3f mm (%s at %.2f s), shape within %.3f mm\n", c.name.c_str(), c.duration_a, c.duration_b,
+                    c.joints * 1000.0, c.joints_worst.c_str(), c.joints_worst_time, c.shape * 1000.0);
+    if (a.size() == 4) {
+        if (auto w = noor::fs::write_file_atomic(a[3], j.dump(2), false); !w) return report(w.error());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     noor::log::add_sink(std::make_shared<noor::ConsoleLogSink>());
     noor::log::set_min_level(noor::LogLevel::Warn);
@@ -917,5 +950,6 @@ int main(int argc, char** argv) {
     if (cmd == "build") return cmd_build(args);
     if (cmd == "cook") return cmd_cook(args);
     if (cmd == "generate") return cmd_generate(args);
+    if (cmd == "compare-models") return cmd_compare_models(args);
     return usage();
 }

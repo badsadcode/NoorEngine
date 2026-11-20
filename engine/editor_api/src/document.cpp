@@ -14,6 +14,7 @@
 #include "noor/foundation/file_io.h"
 
 #include "noor/asset/gltf_import.h"
+#include "noor/asset/model_import.h"
 #include "noor/asset/interchange.h"
 #include "noor/game/game.h"
 #include "noor/game/scatter.h"
@@ -726,7 +727,7 @@ Result<Json> Document::asset_details(const Guid& id) {
     auto full = project_.resolve(a->path);
     if (!full) return std::unexpected(full.error());
     const stdfs::path manifest = asset::manifest_path_for_model(*full);
-    const bool model = a->importer == "gltf";
+    const bool model = a->importer == "gltf" || a->importer == "fbx";
     const bool interchange = model && a->from_interchange && stdfs::exists(manifest);
 
     // Stale when any file it read changed (size or time); the level files are listed in the manifest.
@@ -769,7 +770,7 @@ Result<Json> Document::asset_details(const Guid& id) {
                                 {"issues", Json::array({{{"field", ""}, {"message", read_error}, {"error", true}}})}};
         }
     } else if (model) {
-        if (auto m = asset::import_gltf(*full)) {
+        if (auto m = asset::import_model(*full)) {
             j["model"] = {{"triangles", m->render_triangles()}, {"materials", m->materials.size()}, {"images", m->images.size()},
                           {"nodes", m->nodes.size()}};
         }
@@ -1120,7 +1121,7 @@ Status Document::add_asset(const Json& command) {
     } else {
         auto source = project_.resolve(rec->path);
         if (!source) return std::unexpected(source.error());
-        auto model = asset::import_gltf(*source);
+        auto model = asset::import_model(*source);
         if (!model) return std::unexpected(model.error());
         scene::instantiate_model(scratch, rec->guid, *model, name, placement);
     }

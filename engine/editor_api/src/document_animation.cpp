@@ -6,6 +6,7 @@
 
 #include "noor/asset/anim_controller.h"
 #include "noor/asset/animation.h"
+#include "noor/asset/model_import.h"
 #include "noor/asset/retarget.h"
 #include "noor/foundation/file_io.h"
 #include "noor/foundation/log.h"
@@ -280,7 +281,8 @@ Result<Json> Document::animation(const Json& command) {
         if (auto s = registry_.scan(project_); !s) return std::unexpected(s.error());
         const auto rel = project_.relative(*file);
         const auto* rec = rel ? registry_.find_path(*rel) : nullptr;
-        if (!rec || rec->importer != importer)
+        const bool model = std::string_view(importer) == "gltf";
+        if (!rec || (model ? rec->importer != "gltf" && rec->importer != "fbx" : rec->importer != importer))
             return fail(ErrorCode::InvalidArgument, std::format("{} isn't {}", relative(*file), std::string(importer) == "gltf" ? "a model" : "an animation controller"));
         return Named{*file, rec};
     };
@@ -295,7 +297,7 @@ Result<Json> Document::animation(const Json& command) {
     };
     // A model: its clips, its skeleton and its humanoid bone map (detected, with its .noormeta's corrections).
     const auto describe_model = [&](const Named& m) -> Result<Json> {
-        auto model = asset::import_gltf(m.file);
+        auto model = asset::import_model(m.file);
         if (!model) return std::unexpected(model.error());
         Json corrections = Json::object();
         {
@@ -389,7 +391,7 @@ Result<Json> Document::animation(const Json& command) {
         } else if (!command.contains("node") || command["node"].is_null()) {
             map[bone] = nullptr;
         } else if (command["node"].is_string()) {
-            auto model = asset::import_gltf(m->file);
+            auto model = asset::import_model(m->file);
             if (!model) return std::unexpected(model.error());
             const std::string node = command["node"].get<std::string>();
             if (std::ranges::none_of(model->nodes, [&](const asset::ImportedNode& n) { return n.name == node; }))

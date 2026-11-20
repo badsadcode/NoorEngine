@@ -149,7 +149,7 @@ public sealed class ComponentsEditor : StackPanel
         }
         if (_doc.Scattering == "plant")
         {
-            var models = _doc.Assets.Where(a => a.Importer == "gltf").ToList();
+            var models = _doc.Assets.Where(a => a.Importer is "gltf" or "fbx").ToList();
             var items = new List<string> { "(the scatter's own)" };
             items.AddRange(models.Select(m => m.Path));
             var current = models.FirstOrDefault(m => m.Guid == _doc.ScatterAsset)?.Path ?? "(the scatter's own)";

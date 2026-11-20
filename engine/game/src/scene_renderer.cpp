@@ -1,4 +1,5 @@
 #include "noor/game/scene_renderer.h"
+#include "noor/asset/model_import.h"
 #include "noor/game/cooked_csg.h"
 
 #include "noor/asset/gltf_import.h"
@@ -47,7 +48,7 @@ const SceneRenderer::Model* SceneRenderer::model(const std::filesystem::path& fi
     auto it = models_.find(key);
     if (it == models_.end()) {
         std::optional<Model> loaded;
-        if (auto model = asset::import_gltf(file)) {
+        if (auto model = asset::import_model(file)) {
             loaded.emplace();
             static_assert(sizeof(render::SkinVertex) == sizeof(asset::SkinWeights), "the same skin layout, uploaded as is");
             for (const auto& mesh : model->meshes) {

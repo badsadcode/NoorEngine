@@ -4,6 +4,7 @@
 #include "noor/game/weather.h"
 #include "noor/fx/particle_system.h"
 #include "noor/game/animator.h"
+#include "noor/asset/model_import.h"
 #include "noor/game/sprite_animation.h"
 #include "noor/game/particle_ground.h"
 #include "noor/runtime/script_api.h"
@@ -57,7 +58,7 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         if (!path) return std::nullopt;
         auto& model = (*cache)[path->generic_string()];
         if (!model) {
-            auto imported = asset::import_gltf(*path);
+            auto imported = asset::import_model(*path);
             if (!imported) return std::nullopt;
             model = std::make_shared<asset::ImportedModel>(std::move(*imported));
         }
@@ -136,7 +137,7 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
                 if (path) {
                     auto& model = (*cache)[path->generic_string()];
                     if (!model)
-                        if (auto imported = asset::import_gltf(*path)) model = std::make_shared<asset::ImportedModel>(std::move(*imported));
+                        if (auto imported = asset::import_model(*path)) model = std::make_shared<asset::ImportedModel>(std::move(*imported));
                     if (model)
                         for (std::size_t n = 0; n < model->nodes.size(); ++n) {
                             const auto& node = model->nodes[n];

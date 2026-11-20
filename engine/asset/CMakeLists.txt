@@ -4,6 +4,9 @@ noor_add_module(asset
         src/project.cpp
         src/registry.cpp
         src/gltf_import.cpp
+        src/fbx_import.cpp
+        src/model_import.cpp
+        src/model_compare.cpp
         src/gltf_export.cpp
         src/interchange.cpp
         src/instance_set.cpp
@@ -26,6 +29,7 @@ noor_add_module(asset
         nlohmann_json::nlohmann_json
     PRIVATE_DEPS
         cgltf::cgltf
+        ufbx::ufbx
         stb::image
         bc7enc::bc7enc
 )

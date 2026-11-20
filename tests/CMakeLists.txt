@@ -39,6 +39,7 @@ add_executable(noor_unit_tests
     unit/test_anim_controller.cpp
     unit/test_root_motion.cpp
     unit/test_retarget.cpp
+    unit/test_fbx.cpp
     unit/test_csg.cpp
     unit/test_terrain.cpp
     unit/test_sculpt.cpp

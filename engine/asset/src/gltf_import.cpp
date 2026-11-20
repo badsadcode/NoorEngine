@@ -1,4 +1,5 @@
 #include "noor/asset/gltf_import.h"
+#include "mesh_util.h"
 
 #include "noor/foundation/log.h"
 
@@ -83,43 +84,6 @@ Json parse_noor_extras(const cgltf_extras& extras, std::vector<std::string>& war
 }
 
 // Appends one triangle primitive to `out`. Returns false (with a warning) if it can't be used.
-// Tangents from the UVs when the file has none (per-triangle directions, summed per vertex,
-// made perpendicular to the normal). glTF asks for MikkTSpace; this simpler method agrees with it
-// on ordinary meshes and is replaced by MikkTSpace if normal maps show seams (Milestone 5, part 3).
-void compute_tangents(std::vector<MeshVertex>& vertices, const std::vector<std::uint32_t>& indices,
-                      std::size_t first_vertex, std::size_t first_index) {
-    std::vector<Vec3> tangents(vertices.size() - first_vertex, Vec3{0, 0, 0});
-    std::vector<Vec3> bitangents(tangents.size(), Vec3{0, 0, 0});
-    for (std::size_t i = first_index; i + 2 < indices.size(); i += 3) {
-        const std::uint32_t ia = indices[i], ib = indices[i + 1], ic = indices[i + 2];
-        const MeshVertex& a = vertices[ia];
-        const MeshVertex& b = vertices[ib];
-        const MeshVertex& c = vertices[ic];
-        const Vec3 e1 = b.position - a.position, e2 = c.position - a.position;
-        const float du1 = b.uv.x - a.uv.x, dv1 = b.uv.y - a.uv.y, du2 = c.uv.x - a.uv.x, dv2 = c.uv.y - a.uv.y;
-        const float det = du1 * dv2 - du2 * dv1;
-        if (std::abs(det) < 1e-12f) continue;  // no UVs, or a degenerate UV triangle
-        const float r = 1.0f / det;
-        const Vec3 t = (e1 * dv2 - e2 * dv1) * r;
-        const Vec3 bt = (e2 * du1 - e1 * du2) * r;
-        for (const std::uint32_t k : {ia, ib, ic}) {
-            tangents[k - first_vertex] = tangents[k - first_vertex] + t;
-            bitangents[k - first_vertex] = bitangents[k - first_vertex] + bt;
-        }
-    }
-    for (std::size_t v = 0; v < tangents.size(); ++v) {
-        MeshVertex& vert = vertices[first_vertex + v];
-        const Vec3 n = vert.normal;
-        Vec3 t = tangents[v] - n * math::dot(n, tangents[v]);  // Gram-Schmidt
-        if (math::length(t) < 1e-8f) {  // no UV direction here: any vector perpendicular to the normal
-            t = math::cross(std::abs(n.y) < 0.99f ? Vec3{0, 1, 0} : Vec3{1, 0, 0}, n);
-        }
-        t = math::normalize(t);
-        const float w = math::dot(math::cross(n, t), bitangents[v]) < 0.0f ? -1.0f : 1.0f;
-        vert.tangent = {t.x, t.y, t.z, w};
-    }
-}
-
 // What skin reading had to fix in a mesh, reported once per mesh in plain words.
 struct SkinStats {
     std::size_t over_four_sets = 0, dropped = 0, renormalised = 0, weightless = 0;
@@ -290,6 +254,44 @@ bool append_primitive(const cgltf_primitive& prim, ImportedMesh& out, std::vecto
 }
 
 } // namespace
+
+// Tangents from the UVs when the file has none (per-triangle directions, summed per vertex,
+// made perpendicular to the normal). glTF asks for MikkTSpace; this simpler method agrees with it
+// on ordinary meshes and is replaced by MikkTSpace if normal maps show seams (Milestone 5, part 3).
+void compute_tangents(std::vector<MeshVertex>& vertices, const std::vector<std::uint32_t>& indices,
+                      std::size_t first_vertex, std::size_t first_index) {
+    std::vector<Vec3> tangents(vertices.size() - first_vertex, Vec3{0, 0, 0});
+    std::vector<Vec3> bitangents(tangents.size(), Vec3{0, 0, 0});
+    for (std::size_t i = first_index; i + 2 < indices.size(); i += 3) {
+        const std::uint32_t ia = indices[i], ib = indices[i + 1], ic = indices[i + 2];
+        const MeshVertex& a = vertices[ia];
+        const MeshVertex& b = vertices[ib];
+        const MeshVertex& c = vertices[ic];
+        const Vec3 e1 = b.position - a.position, e2 = c.position - a.position;
+        const float du1 = b.uv.x - a.uv.x, dv1 = b.uv.y - a.uv.y, du2 = c.uv.x - a.uv.x, dv2 = c.uv.y - a.uv.y;
+        const float det = du1 * dv2 - du2 * dv1;
+        if (std::abs(det) < 1e-12f) continue;  // no UVs, or a degenerate UV triangle
+        const float r = 1.0f / det;
+        const Vec3 t = (e1 * dv2 - e2 * dv1) * r;
+        const Vec3 bt = (e2 * du1 - e1 * du2) * r;
+        for (const std::uint32_t k : {ia, ib, ic}) {
+            tangents[k - first_vertex] = tangents[k - first_vertex] + t;
+            bitangents[k - first_vertex] = bitangents[k - first_vertex] + bt;
+        }
+    }
+    for (std::size_t v = 0; v < tangents.size(); ++v) {
+        MeshVertex& vert = vertices[first_vertex + v];
+        const Vec3 n = vert.normal;
+        Vec3 t = tangents[v] - n * math::dot(n, tangents[v]);  // Gram-Schmidt
+        if (math::length(t) < 1e-8f) {  // no UV direction here: any vector perpendicular to the normal
+            t = math::cross(std::abs(n.y) < 0.99f ? Vec3{0, 1, 0} : Vec3{1, 0, 0}, n);
+        }
+        t = math::normalize(t);
+        const float w = math::dot(math::cross(n, t), bitangents[v]) < 0.0f ? -1.0f : 1.0f;
+        vert.tangent = {t.x, t.y, t.z, w};
+    }
+}
+
 
 math::Mat4 ImportedModel::world_matrix(std::size_t i) const {
     math::Mat4 m = math::compose(nodes[i].translation, nodes[i].rotation, nodes[i].scale);

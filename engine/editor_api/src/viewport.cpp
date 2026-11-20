@@ -27,6 +27,7 @@
 #include "noor/game/particle_draws.h"
 #include "noor/game/sprites.h"
 #include "noor/asset/skinning.h"
+#include "noor/asset/model_import.h"
 #include "noor/game/particle_ground.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/texture_library.h"
@@ -480,7 +481,7 @@ void render_thread_main(noor_viewport* vp) {
                 if (old.handle.valid()) r.destroy_mesh(old.handle);
         }
         cached = {true, version, std::nullopt, {}, {}};
-        if (auto model = noor::asset::import_gltf(path)) {
+        if (auto model = noor::asset::import_model(path)) {
             std::vector<LoadedMesh> loaded;
             for (const auto& mesh : model->meshes) {
                 auto h = r.create_mesh({{reinterpret_cast<const noor::render::Vertex*>(mesh.vertices.data()), mesh.vertices.size()},

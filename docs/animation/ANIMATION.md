@@ -1,7 +1,7 @@
 # Skeletal animation
 
 Milestone 8C ([plan](../milestones/M8_PLAN.md#8c-skeletal-animation),
-[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, **part 4, root motion and characters**, **part 5, retargeting**, and **part 6, the Animation panel**.
+[ADR-036](../decisions/ADR-036-skeletal-animation.md)). What works so far: **part 1, skinned meshes**, **part 2, clips and the player**, **part 3, blending and the controller**, **part 4, root motion and characters**, **part 5, retargeting**, **part 6, the Animation panel**, and **part 7, FBX**.
 
 ## Skinned meshes (part 1)
 
@@ -245,7 +245,27 @@ The engine side is `noor_doc_animation` (editor API v27): `model`, `set_bone`, `
 `characters` and `preview`. The preview poses the character with the same code a game uses (`game::AnimationAssets`,
 shared with `AnimatorSystem`), so what you scrub is what plays.
 
+## FBX (part 7)
+
+FBX files are models like GLBs: put one in `Assets/`, and its skeleton, skin, clips, meshes and materials import the
+same way (through ufbx, MIT; the research and the files tried are in [FBX_RESEARCH.md](FBX_RESEARCH.md)). Converted on
+the way in to right-handed, +Y up, metres. Each take is a clip, played over the take's own span; Blender's
+"Armature|Walk" is called "Walk". The rest pose is where the skin was bound.
+
+**A character's clips in files of their own**, as FBX packs and Mixamo ship them (an armature with its takes, no mesh):
+put each in the project and give the character's animator `"retarget_from"` naming the clip file. If the skeleton is the
+same (the clip file's bones by name, at the same offsets under the same unanimated parents), the clips are copied as
+they are, on any rig: a fish's, a turtle's. If it isn't, humanoids are retargeted (part 5).
+
+**Exporting from Blender:** its FBX exporter keys every bone in every take by default, with the pose it was left in;
+clear the pose (Alt+G, Alt+R, Alt+S on all bones) before exporting, or bones an action doesn't move come out bent. Its
+curve simplification moves keys by a millimetre or two; set it to 0 for exact clips.
+
+`noor_cli compare-models a.fbx b.glb` compares two imports of the same model (skeleton, joints through every clip,
+shapes), and `tools/samples/fbx_research.py` runs that against Blender's reading of any folder of FBX files.
+
 ## Not yet
+- FBX: blend shapes, cameras, lights; textures kept in another folder than the FBX names (the import lists them).
 - Retargeting fingers, and correcting feet to the ground (IK): later. A target much stockier than the source may see
   hands pass through hips.
 - The Animation panel: blend-space samples, layers (adding, masks, weights) and parameters (adding) are edited in the

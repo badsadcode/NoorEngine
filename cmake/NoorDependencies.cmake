@@ -48,6 +48,24 @@ add_library(noor_third_party_cgltf INTERFACE)
 target_include_directories(noor_third_party_cgltf SYSTEM INTERFACE ${cgltf_SOURCE_DIR})
 add_library(cgltf::cgltf ALIAS noor_third_party_cgltf)
 
+# --- ufbx (MIT or public domain, two files): FBX import (Milestone 8C, part 7) ---------------
+# The implementation is compiled once, here, without the engine's warnings-as-errors flags.
+FetchContent_Declare(ufbx_c
+    URL      https://raw.githubusercontent.com/ufbx/ufbx/26a482ae66871d7de36eb722aa060bce95bce274/ufbx.c
+    URL_HASH SHA256=4a956c26a708e40d82ecb0aeaee54da709d5ba7c144c9642174970059bda7e1d
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME ufbx.c)
+FetchContent_Declare(ufbx_h
+    URL      https://raw.githubusercontent.com/ufbx/ufbx/26a482ae66871d7de36eb722aa060bce95bce274/ufbx.h
+    URL_HASH SHA256=f787be529af577efc04f3e3e735844a08556718dbb613d1211c2b313d72895dc
+    DOWNLOAD_NO_EXTRACT TRUE
+    DOWNLOAD_NAME ufbx.h)
+FetchContent_MakeAvailable(ufbx_c ufbx_h)
+add_library(noor_third_party_ufbx STATIC ${ufbx_c_SOURCE_DIR}/ufbx.c)
+target_include_directories(noor_third_party_ufbx SYSTEM PUBLIC ${ufbx_h_SOURCE_DIR})
+set_target_properties(noor_third_party_ufbx PROPERTIES FOLDER "ThirdParty")
+add_library(ufbx::ufbx ALIAS noor_third_party_ufbx)
+
 # --- Luau (MIT): Lua scripting (ADR-009) -----------------------------------------
 set(LUAU_BUILD_CLI OFF CACHE BOOL "" FORCE)
 set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)

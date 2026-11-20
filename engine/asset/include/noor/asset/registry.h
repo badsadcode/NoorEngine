@@ -20,7 +20,7 @@ inline constexpr std::string_view kMetaExtension = ".noormeta";
 struct AssetRecord {
     Guid guid;
     std::string path;           // project-relative, '/' separators
-    std::string importer;       // "gltf", "audio", "prefab", "texture", "material"
+    std::string importer;       // "gltf", "fbx" (models), "audio", "prefab", "texture", "material"...
     std::string source_sha256;  // content hash at last scan
     bool from_interchange = false;  // GUID came from a Noor Interchange manifest
 };
@@ -46,7 +46,7 @@ public:
     // Moves/renames an asset and its meta together (the in-editor way). Both paths project-relative.
     [[nodiscard]] Status move_asset(const Project& project, std::string_view from, std::string_view to);
 
-    // True for files the registry manages: models (".glb", ".gltf"; not "<name>.lod<n>.glb", which
+    // True for files the registry manages: models (".glb", ".gltf", ".fbx"; not "<name>.lod<n>.glb", which
     // belong to their LOD0 file per Noor Interchange 3.5), sounds, prefabs and textures.
     [[nodiscard]] static bool is_importable(const std::filesystem::path& path);
 

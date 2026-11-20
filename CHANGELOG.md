@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 7: FBX
+**Added**
+- **FBX import** through ufbx 0.23.1 (MIT): skeletons, skins, clips (each take, baked at 60 a second), meshes,
+  materials and textures, into the same models as glTF (`asset/fbx_import.h`); `asset/model_import.h` picks the
+  importer by extension and every model load uses it; `.fbx` files are assets (importer "fbx").
+- `"retarget_from"` copies clips from a file with the same skeleton (any rig: FBX clip files beside their character).
+- `asset/model_compare.h` and `noor_cli compare-models`: two imports of one model compared (skeleton, joints through
+  every clip, shapes). `tools/samples/make_fbx_test_files.py` (Blender: FBX and its glTF from one scene, or Blender's
+  reading of any FBX) and `tools/samples/fbx_research.py`.
+- The research note, `docs/animation/FBX_RESEARCH.md`: 133 files tried, a go.
+
+**Tests:** unit tests "fbx" (4); test files in `tests/data/animation/FBX` (Blender 5.2 and 3.3 exports of our characters).
+
 ### 2026-11-20 — Milestone 8C, part 6: the Animation panel
 **Added**
 - The editor's **Animation panel**: a scene character's clips played and scrubbed on a timeline (speed, loop, in

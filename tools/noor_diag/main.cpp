@@ -18,6 +18,7 @@
 // itself and checks that rendering pauses, resumes and follows the window. Exit code 4 on failure.
 
 #include "noor/foundation/log.h"
+#include "noor/asset/model_import.h"
 #include "noor/foundation/math.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
@@ -490,7 +491,7 @@ int run(const Options& options) {
                     const auto* record = registry.find(*guid);
                     if (record) {
                         if (auto path = project->resolve(record->path)) {
-                            if (auto model = noor::asset::import_gltf(*path)) {
+                            if (auto model = noor::asset::import_model(*path)) {
                                 auto handles = upload(*model);
                                 it->second = LoadedModel{std::move(*model), std::move(handles)};
                             }
@@ -513,7 +514,7 @@ int run(const Options& options) {
 
         const auto load_model = [&]() -> bool {
             if (!options.scene_path.empty()) return load_scene();
-            auto model = noor::asset::import_gltf(options.glb_path);
+            auto model = noor::asset::import_model(options.glb_path);
             if (!model) {
                 NOOR_LOG_ERROR("Diag", "{}", model.error().describe());
                 return false;

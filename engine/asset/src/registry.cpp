@@ -105,7 +105,7 @@ bool AssetRegistry::is_importable(const stdfs::path& path) {
         is_environment(path) || is_fx(path) || is_sprite(path) || is_anim(path))
         return true;
     const std::string ext = lower_extension(path);
-    if (ext != ".glb" && ext != ".gltf") return false;
+    if (ext != ".glb" && ext != ".gltf" && ext != ".fbx") return false;
     static const std::regex lod(R"(\.lod[0-9]+$)", std::regex::icase);
     return !std::regex_search(path.stem().string(), lod);
 }
@@ -209,7 +209,8 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                 const bool fx = is_fx(source);
                 const bool sprite = is_sprite(source);
                 const bool anim = is_anim(source);
-                const auto from_manifest = prefab || audio || texture || material || sculpt || paint || graph || environment || fx || sprite || anim
+                const bool fbx = lower_extension(source) == ".fbx";
+                const auto from_manifest = prefab || audio || texture || material || sculpt || paint || graph || environment || fx || sprite || anim || fbx
                                                ? std::nullopt
                                                : interchange_guid(source);
                 const auto embedded = prefab ? prefab_guid(source) : from_manifest;
@@ -217,7 +218,7 @@ Result<ScanReport> AssetRegistry::scan(const Project& project) {
                 meta.json["noor_meta"] = kMetaFormat;
                 meta.json["guid"] = (embedded ? *embedded : Guid::generate()).to_string();
                 meta.json["importer"] = prefab ? "prefab" : audio ? "audio" : texture ? "texture" : material ? "material" : sculpt ? "terrain_sculpt" : paint ? "terrain_paint" : graph ? "procgraph" :
-                                         environment ? "environment" : fx ? "fx" : sprite ? "sprite" : anim ? "anim_controller" : "gltf";
+                                         environment ? "environment" : fx ? "fx" : sprite ? "sprite" : anim ? "anim_controller" : fbx ? "fbx" : "gltf";
                 meta.json["source_sha256"] = *sha;
                 if (from_manifest) meta.json["interchange_manifest"] = manifest_path_for(source).filename().generic_string();
                 // Textures: the first guess at their settings, from the name (ADR-029); edit them later.

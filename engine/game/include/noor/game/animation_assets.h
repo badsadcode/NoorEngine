@@ -35,7 +35,8 @@ public:
                                                        // ("RightUpperArm"), the clips' model's bones when retargeted
     };
 
-    // The model `id` (an asset id) with `clips`' clips retargeted onto it (nil: its own); nullptr if it can't load.
+    // The model `id` (an asset id) with `clips`' clips on it (nil: its own): copied if `clips` has the same skeleton,
+    // else retargeted; nullptr if it can't load.
     const Model* model(const Guid& id, const Guid& clips = {});
     // The model a character's animator plays: its "model" asset, with its animator's "retarget_from" clips if any.
     const Model* model_of(const scene::Entity& root);
@@ -56,6 +57,14 @@ private:
     std::unordered_map<std::string, std::optional<Model>> models_;  // by asset id (and clips' id); nullopt: failed
     std::unordered_map<Guid, std::optional<asset::AnimController>> controllers_;  // by asset id
 };
+
+// Another model's clips, when that model has the same skeleton (part 7): the nodes above the bones its clips move have
+// the same names and transforms in `target`, and nine in ten of those bones are found there by name at the same offset
+// from their parents (with the same rest rotation too, if `source` is skinned). The clips are copied, their channels
+// pointed at `target`'s nodes; nullopt if the skeletons differ (then "retarget_from" retargets, which needs humanoid
+// bone maps).
+[[nodiscard]] std::optional<std::vector<asset::ImportedAnimation>> same_skeleton_clips(const asset::ImportedModel& source,
+                                                                                        const asset::ImportedModel& target);
 
 // Which entity each of a placed model's nodes became: from the root's "model": {"nodes": [...]} (scene::
 // instantiate_model writes it); for a model placed before 8C part 2, matched by name below the root (then

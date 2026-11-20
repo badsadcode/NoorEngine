@@ -404,7 +404,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | 4 ✅ | **Root motion and characters:** root motion into the character controller, sockets (props on bones), bone transforms for scripts; Create ▸ Player gets an animated character (spec 18.5) | A walk with root motion covers its clip's distance (within a centimetre) and stops at a wall; a sword in a hand follows it in a golden; the same in a built game |
 | 5 ✅ | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
 | 6 ✅ | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
-| 7 | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
+| 7 ✅ | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
 | 8 | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
 
 ## Highest risks (settle early)
@@ -530,13 +530,30 @@ at half its fade, the fade edited to 0.6 s and the preview at a quarter; his bon
 warned), mapped elsewhere (lit up), put back; hiding the panel ends the preview). Not done: blend-space samples, layers
 and parameters edited in the file; controller edits aren't on the undo stack; graph positions aren't saved.
 
+## Part 7 result (2026-11-20)
+Done: **go** ([FBX_RESEARCH.md](../animation/FBX_RESEARCH.md)). ufbx 0.23.1 (MIT or public domain), pinned by hash.
+`asset/fbx_import.h` reads FBX into the same `ImportedModel` as glTF (skeletons, skins, clips, meshes, materials and
+embedded or neighbouring textures), and `asset/model_import.h` makes every model load take either; the registry calls
+an FBX a model (importer "fbx"). Clip files of their own play on a character with the same skeleton, any rig
+(`"retarget_from"` copies by bone name; humanoids with other names are retargeted as before). Tried, each file read by
+NoorEngine and by Blender and compared: our characters through Blender 5.2 and 3.3 (exact at rest; clips within
+0.001 mm with Blender's curve simplification off, within 1.6 mm with it on), 97 files of FBX SDK 2020 store-bought
+creatures (joints within 0.14 mm, shapes within 0.002 mm, all 79 clips), 18 Synty files from Maya (within 0.014 mm),
+12 Blender and Meshy statics (up to 1.2 million triangles). Every file imported. Proven: unit tests "fbx" (Ward, Mast,
+Bollard and Blender 3.3's Ward against Blender's glTF of the same scene; Ward's clips from a clip-only file copied
+exactly; other skeletons refused; broken, empty and oversized files refused in words; the registry); `noor_cli
+compare-models`. Found on the way: Blender's FBX exporter keys every bone with a leftover pose and simplifies curves;
+its 3.3 glTF exporter and importer get Ward wrong in places; a take's span vs Blender's absolute times. Not tried:
+Mixamo's and Unreal's own FBX files (FBX SDK too, but untested), ASCII and pre-7 FBX. Not imported: blend shapes,
+cameras, lights.
+
 ## Open questions
 
 1. **Alden for the sample.** There's no rigged Alden and Tom doesn't animate by hand. Options for part 8: a blocky
    stand-in built by script from his concept sheet's description, animated by retargeting the CC0 robot's clips
    (Tom to approve the look), or the robot itself on Hillside with Alden waiting for a real model.
 2. ~~**Which CC0 test characters?**~~ Settled (risk 1 above).
-3. **FBX:** keep part 7 (research, then maybe an importer), or drop it and stay glTF-only for now?
+3. ~~**FBX:**~~ **Settled in part 7:** kept, researched, and a go (FBX_RESEARCH.md).
 
 ## Not in 8C (planned later)
 IK solvers, look-at and aim constraints, foot placement on uneven ground, ragdolls and blending into them (spec
