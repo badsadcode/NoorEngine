@@ -73,6 +73,10 @@ frame writing to descriptor sets that didn't exist yet.
 Proposed line for the Milestone 5 picture (Tom and Noor make it):
 *"Alden discovers colour: the stones are rough, the buckle shines, and the sky lights the world."*
 
+![Alden kneeling by a sunlit stream among mossy rocks, holding up a red flower, the sun bright over the valley](../devlog/img/alden/alden_m5_colour.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).*
+
 ## Carried into Milestone 6 (manual creation tools)
 - CSG brushes need surface materials and UVs: the material system and texture sets are ready;
   per-face material assignment and UV projection (box/planar) are new.

@@ -74,6 +74,10 @@ Writing a real game against the public API is what this gate is for, and it earn
 Proposed line for the Milestone 4 picture (Tom and Noor make it):
 *"Alden discovers that the world now answers back: things fall, scripts think, and he can walk."*
 
+![Alden striding up a stone path among old ruins as crates tumble around him and glowing symbols light up](../devlog/img/alden/alden_m4_living_world.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).*
+
 ## Carried into Milestone 5 (PBR lighting, HDRI and materials)
 - Textures and material assets first: the arena walls, and The Uncounted, Chapter Two, both need
   them (IDEAS.md).

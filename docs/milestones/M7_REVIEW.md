@@ -115,3 +115,11 @@ New tests: rock import and convex collision (placed and scattered), the placemen
   after culling and the grass's draw distance. In Debug: about 50 ms a frame (draw building dominates).
 - Graphs: the Hillside forest graph (9 nodes) runs in 7 ms (Release, no cache); the test forest's scatter
   of 4 ha in well under a second in Debug.
+
+## Alden discovers ...
+
+**... a forest that grew itself.** Alden at the edge of a valley that wasn't there yesterday, oaks and rocks spread across it, checking his map: it's not on it.
+
+![Alden under a great oak, reading a map as he looks out over a valley full of trees](../devlog/img/alden/alden_m7_forest.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).* Added after the review, when the tradition caught up with the early milestones.

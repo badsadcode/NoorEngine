@@ -4,6 +4,20 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8C, part 8: the sample and the 8C review
+**Added**
+- **Alden Wayfarer** as a character (`tools/samples/make_alden.py`: the concept sheet's look, on Ward's skeleton; his
+  controller blending Idle, WalkForward and RunForward; his staff as a separate model).
+- The 8C sample, `samples/Hillside/Scenes/Hillside_Alden.noorscene` (`tools/samples/add_hillside_alden.py`, through the
+  editor API): Alden wandering a loop by the house on root motion, his staff on his hand's bone
+  (`Scripts/alden_wander.luau`).
+- The crowd benchmark, `tools/samples/measure_hillside_alden.py` (100 and 250 Aldens).
+- The 8C review, `docs/milestones/M8C_REVIEW.md`: the gate passes.
+- Noor's ten "Alden discovers" pictures, one in each milestone review from M1 to 8C
+  (`docs/milestones/ALDEN_DISCOVERIES.md`, `docs/devlog/img/alden/`).
+
+**Tests:** golden `Hillside_Alden`; `player.hillside_alden` (the built Hillside game plays Alden identically).
+
 ### 2026-11-20 — Milestone 8C, part 7: FBX
 **Added**
 - **FBX import** through ufbx 0.23.1 (MIT): skeletons, skins, clips (each take, baked at 60 a second), meshes,

@@ -82,6 +82,10 @@ once in the final full run and passed on the rerun; it now waits for them).
 Proposed line for the Milestone 6 picture (Tom and Noor make it):
 *"Alden discovers building: he raises a hill, paints a path, and walks it home."*
 
+![Alden three times over: raising a hill with a sweep of golden light, walking a winding path he made, and building a house frame](../devlog/img/alden/alden_m6_building.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).*
+
 ## Carried into Milestone 7 (procedural graph and first generation tools)
 - The terrain's layer stack is the natural first client of the procedural graph: the generated
   base is already a recipe (seed + settings), and the gate's "local override survives

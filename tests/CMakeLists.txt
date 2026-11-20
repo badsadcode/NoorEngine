@@ -502,6 +502,17 @@ add_test(NAME render.golden_Hillside_Storm
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Hillside_Storm PROPERTIES LABELS "gpu;render;sample" TIMEOUT 240 RESOURCE_LOCK "hillside_cache;gpu_timing"
                      FIXTURES_REQUIRED hillside_cooked)
+# The 8C sample (Milestone 8C, part 8): Alden Wayfarer wandering about Hillside on root motion, his staff on a
+# socket (tools/samples/add_hillside_alden.py). Five seconds in: walking towards the camera.
+add_test(NAME render.golden_Hillside_Alden
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DSCENE=Scenes/Hillside_Alden.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Hillside_Alden.png -DFRAMES=300
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Hillside_Alden
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Hillside_Alden PROPERTIES LABELS "gpu;render;sample" TIMEOUT 240 RESOURCE_LOCK "hillside_cache;gpu_timing"
+                     FIXTURES_REQUIRED hillside_cooked)
 # Milestone 7, part 8: Hillside's forest is a graph (paint mask + scatter); cook it before drawing the sample
 # (a fresh clone has no .noor folder), and pin its result (it reads the paint layer through the registry).
 add_test(NAME cli.cook_hillside COMMAND $<TARGET_FILE:noor_cli> cook ${PROJECT_SOURCE_DIR}/samples/Hillside)
@@ -579,6 +590,14 @@ add_test(NAME player.hillside_storm
         -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_storm_check.cmake)
 set_tests_properties(player.hillside_storm PROPERTIES LABELS "gpu;player;sample" TIMEOUT 240 FIXTURES_REQUIRED "built_hillside_game;hillside_cooked"
                      RESOURCE_LOCK "hillside_cache;gpu_timing")  # heavy: not beside the timing tests
+# The 8C sample (Milestone 8C, part 8): Alden plays the same in the built game as in the project (every bone, his
+# place to the millimetre, fifteen seconds in).
+add_test(NAME player.hillside_alden
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_hillside_game/Hillside.exe"
+        -DPROJECT=${PROJECT_SOURCE_DIR}/samples/Hillside -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_hillside_alden
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/hillside_alden_check.cmake)
+set_tests_properties(player.hillside_alden PROPERTIES LABELS "gpu;player;sample" TIMEOUT 240 FIXTURES_REQUIRED "built_hillside_game;hillside_cooked"
+                     RESOURCE_LOCK "hillside_cache;gpu_timing")
 # The judge must notice a different picture: today's daylight against the sunset reference fails.
 add_test(NAME render.golden_catches_a_change
     COMMAND noor_image_compare ${CMAKE_CURRENT_BINARY_DIR}/render_golden_Daylight/screenshot.bmp

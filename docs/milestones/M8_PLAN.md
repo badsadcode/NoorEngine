@@ -12,8 +12,8 @@ each ending in its own review, like Milestone 7 ended in one.
 |---|---|---|
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
-| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Next** ([parts below](#8c-skeletal-animation), proposed) |
-| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | Planned |
+| **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Done** ([review](M8C_REVIEW.md)) |
+| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
 Assets for all of it come mainly from **Blender** (plain glTF), with trees, grass and rocks from NoorMD
@@ -405,7 +405,7 @@ workflow (spec section 22), an effects node graph, and lightning (NoorSky phase 
 | 5 ✅ | **Retargeting:** the humanoid bone map, the four presets and auto-detection, manual mapping, rest-pose-relative transfer, hips scaling | One clip on rigs of different proportions and rest poses (T and A): bone directions within a few degrees at key frames (unit); a side-by-side golden |
 | 6 ✅ | **The Animation panel:** clips with a scrubbable timeline, playback speed and looping, the skeleton shown in the viewport, the controller's states and transitions edited, the bone map with its detected preset and warnings | An editor smoke test scrubs a clip, edits a transition and sees the preview follow, and maps a rig |
 | 7 ✅ | **FBX, research first:** ufbx (MIT) checked against Blender, Mixamo and Unreal FBX files; if it holds up, an importer into the same skeletons and clips as glTF; if not, written down why | A go/no-go note with the files tried; with a go, an FBX and its glTF export import to the same skeleton and the same sampled poses |
-| 8 | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
+| 8 ✅ | **Sample + review:** Alden Wayfarer walking about Hillside (idle, walk, run from his speed; root motion; a staff in his hand), a crowd benchmark, performance notes, the 8C review | The 8C gate |
 
 ## Highest risks (settle early)
 
@@ -546,6 +546,16 @@ compare-models`. Found on the way: Blender's FBX exporter keys every bone with a
 its 3.3 glTF exporter and importer get Ward wrong in places; a take's span vs Blender's absolute times. Not tried:
 Mixamo's and Unreal's own FBX files (FBX SDK too, but untested), ASCII and pre-7 FBX. Not imported: blend shapes,
 cameras, lights.
+
+## Part 8 result (2026-11-20)
+Done: the 8C gate passes ([review](M8C_REVIEW.md)). Alden Wayfarer, made by `tools/samples/make_alden.py` from the
+concept sheet's description (approved by Tom), on Ward's skeleton, with his own controller (Idle, WalkForward and
+RunForward by speed) and his staff as a separate model; `Hillside_Alden.noorscene` (written through the editor API by
+`add_hillside_alden.py`): he wanders a loop by the house on root motion, his staff on his hand's bone. Proven: golden
+`Hillside_Alden`; `player.hillside_alden` (the built Hillside game: every bone and his place to the millimetre, fifteen
+seconds in). The crowd benchmark (`measure_hillside_alden.py`): 100 Aldens, each with a character controller, script
+and controller, cost no GPU worth measuring and 1.9 ms of game update plus 2.0 ms of gathering; 250, 4.6 and 4.4 ms.
+Noor painted all ten "Alden discovers" pictures, M1 to 8C, the same day ([ALDEN_DISCOVERIES.md](ALDEN_DISCOVERIES.md)).
 
 ## Open questions
 

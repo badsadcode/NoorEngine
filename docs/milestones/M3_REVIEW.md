@@ -59,3 +59,11 @@ author, save, reopen and play simple scenes").
 ## Carried into Milestone 4 (core scripts and gameplay)
 - Play mode's tick moves into the runtime loop; scripts become behaviours (ADR-026).
 - Editor API is at v4 and still pre-1.0; ADR-007 (plugin ABI) decides stability.
+
+## Alden discovers ...
+
+**... the map table.** Alden leans over a big table with a little model of the world on it, moving a tiny tree with two fingers.
+
+![Alden in a study lit by a tall window, leaning over a table with a miniature landscape, placing a tiny tree](../devlog/img/alden/alden_m3_map_table.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).* Added after the review, when the tradition caught up with the early milestones.

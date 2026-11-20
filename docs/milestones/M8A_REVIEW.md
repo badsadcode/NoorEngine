@@ -121,3 +121,11 @@ anti-sparkle fade.
 ## Next
 **8B: particles and sprites** (rain, snow and dust for 8A's weather, FX, sprite sheets and 8-direction billboards
 for The Uncounted's creatures), as the plan orders it.
+
+## Alden discovers ...
+
+**... the sky.** Alden sits on a hilltop as the sun goes down, layered clouds turning pink, the first stars coming out, and a planet rising in the distance.
+
+![Alden sitting on a rock at sunset, his staff beside him, pink clouds over the valley and a ringed planet rising in a starry sky](../devlog/img/alden/alden_m8a_sky.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).* Added after the review, when the tradition caught up with the early milestones.

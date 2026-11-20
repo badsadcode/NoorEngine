@@ -339,9 +339,11 @@ def qrot(q, v):
     return tuple(p[:3])
 
 
-def write_glb(path, posed, animated=False, rig=WARD):
+def write_glb(path, posed, animated=False, rig=WARD, mesh=None, clip_list=None):
+    """`mesh`: (positions, normals, colours, joints, weights, indices) in place of the tubes; `clip_list`: in place of clips()
+    (make_alden.py uses both)."""
     bones, tails = rig['bones'], rig['tails']
-    positions, normals, colours, joints, weights, indices = build_mesh(bones, tails)
+    positions, normals, colours, joints, weights, indices = mesh if mesh is not None else build_mesh(bones, tails)
     blobs = []
 
     def add_blob(data):
@@ -424,7 +426,7 @@ def write_glb(path, posed, animated=False, rig=WARD):
     animations = []
     if animated:
         index_of = {b[0]: i + first for i, b in enumerate(bones)}  # glTF node index (node 0 is the mesh)
-        for name, channels in clips():
+        for name, channels in (clip_list if clip_list is not None else clips()):
             samplers, chans = [], []
             for bone, target, interp, times, values in channels:
                 a_in = accessor(b''.join(struct.pack('<f', t) for t in times), '', len(times), 5126, 'SCALAR', None, ([min(times)], [max(times)]))

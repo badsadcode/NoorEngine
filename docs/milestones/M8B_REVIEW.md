@@ -126,7 +126,11 @@ a double (the sheet editor's preview stuck on frame 0); sub-emitters not muted w
 
 ## Alden discovers ...
 **... the weather.** Alden Wayfarer stands by a campfire on Hillside as a storm rolls in, rain blowing sideways and
-sparks hissing in the grass. (Picture: Tom or Noor; the milestone tradition.)
+sparks hissing in the grass.
+
+![Alden crouched by a campfire under a rough shelter as rain lashes down and lightning cracks over the hills](../devlog/img/alden/alden_m8b_weather.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).*
 
 ## Next
 **8C: skeletal animation** (skinned meshes and clips from glTF, an animation player, blending, a simple state machine, root motion, an editor preview, retargeting through a humanoid bone map with Rigify, Mixamo, Unreal-mannequin and metarig presets; Alden Wayfarer as the test character), as the plan orders it. It starts with its own plan, as 8B did.

@@ -52,3 +52,11 @@ Spec reference: master spec section 29, Milestone 1.
 - Instancing when real scenes need it.
 - Deferred deletion instead of `vkDeviceWaitIdle` on mesh destruction; asynchronous uploads.
 - Shared Vulkan device for multiple editor viewports (ADR-003 consequence).
+
+## Alden discovers ...
+
+**... light.** A dark, empty void, and one window opening onto it: Alden steps through, staff first, into the first frame NoorEngine ever drew.
+
+![Alden, seen from behind in the dark, steps through a glowing doorway into a bright valley of waterfalls and ruins](../devlog/img/alden/alden_m1_light.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).* Added after the review, when the tradition caught up with the early milestones.

@@ -1,0 +1,37 @@
+{
+  "noor_anim": 1,
+  "parameters": {
+    "speed": {
+      "type": "float",
+      "default": 0
+    }
+  },
+  "layers": [
+    {
+      "name": "Base",
+      "entry": "Move",
+      "states": [
+        {
+          "name": "Move",
+          "blend": {
+            "x": "speed",
+            "samples": [
+              {
+                "clip": "Idle",
+                "x": 0
+              },
+              {
+                "clip": "WalkForward",
+                "x": 1.4
+              },
+              {
+                "clip": "RunForward",
+                "x": 4
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

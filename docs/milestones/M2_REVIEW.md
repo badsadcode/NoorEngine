@@ -51,3 +51,11 @@ Spec reference: master spec section 29, Milestone 2 ("Goal: save actual content 
 - The editor uses `scene::History` for every edit, `expand_prefabs` for display, the registry for
   the content browser, and `FileWatcher` for live updates.
 - A shared Vulkan device for several viewports (ADR-003 consequence).
+
+## Alden discovers ...
+
+**... that the world remembers.** He sets a stone on a cairn, walks away, comes back the next day, and it's still there, exactly where he left it.
+
+![Three panels: Alden places a stone on a little cairn, walks away past it, and comes back to find it standing where he left it](../devlog/img/alden/alden_m2_memory.webp)
+
+*Picture: Noor (2026-11-20), for the milestone tradition (Noor's idea, devlog #015).* Added after the review, when the tradition caught up with the early milestones.
