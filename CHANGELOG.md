@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 in progress (8A: sky, atmosphere and environments)
 
+### 2026-11-20 — Milestone 8D, part 2: waves
+**Added**
+- **Waves** (`docs/water/WATER.md`): four Gerstner waves from the look's `wave_height`, `wave_length`,
+  `wave_direction` and `choppiness`, raised by the ground wind (`wind`); one formula on the CPU (`game/water.h`) and in
+  the vertex shader. The "Sea" preset.
+- The endless sea's grid: rings round the camera out to 20 km, finer near; boxes with waves get a finer grid.
+- `water_height` and `water_normal` for scripts: `noor.water_height(x, z)` / `noor.water_normal(x, z)` (Lua),
+  `Water.Height` / `Water.Normal` (C#, rt API v7); `game::WaterSystem` answers the World's water query.
+- `noor_player --water-probes N` (with `--msaa 1`): the last frame's depth read back at N x N pixels beside
+  `water_height`; `CapturedFrame::depth`.
+
+**Measured:** drawn and gameplay surfaces within 6.2 mm out to 20 m; the wavy sea 0.1 ms of GPU.
+
+**Tests:** unit tests "water" (9); `render.water_readback`; `player.water_waves` (with `cli.build_render_scenes`);
+goldens `Water_Waves_1s`, `Water_Waves_4s`.
+
 ### 2026-11-20 — Milestone 8D, part 1: the water surface
 **Added**
 - **Water** (ADR-037, `docs/water/WATER.md`): the `water` component, a box (a level rectangle) or a sea (under the

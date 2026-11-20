@@ -33,6 +33,7 @@
 #include "noor/game/texture_library.h"
 #include "noor/game/material_library.h"
 #include "noor/game/environment_library.h"
+#include "noor/game/water.h"
 #include "noor/terrain/terrain.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
@@ -1301,13 +1302,12 @@ void render_thread_main(noor_viewport* vp) {
             frame.lighting.time = shown && shown->game_time
                                       ? static_cast<float>(*shown->game_time)
                                       : static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at).count());
-            // Water (8D): its ripples on the same clock.
+            // Water (8D): its waves and ripples on the same clock (the game's, in double precision, while playing).
             water_draws.clear();
-            if (shown)
-                for (auto w : shown->water) {
-                    w.time = frame.lighting.time;
-                    water_draws.push_back(w);
-                }
+            if (shown) {
+                water_draws.assign(shown->water.begin(), shown->water.end());
+                noor::game::set_water_time(water_draws, shown->game_time ? *shown->game_time : static_cast<double>(frame.lighting.time));
+            }
             frame.water = water_draws;
             // Sprites (8B part 5): turned to this camera every frame, animated on the clock above; a sprite being
             // moved follows the gizmo, a selected one is tinted like the rest.

@@ -233,6 +233,7 @@ static_assert(sizeof(LiveSkyPush) == 128, "push constants: the guaranteed minimu
 
 struct PendingCapture {
     GpuBuffer buffer;
+    GpuBuffer depth_buffer;  // the scene's depth, when asked for (no MSAA)
     std::uint32_t frame_slot = 0;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
@@ -542,6 +543,7 @@ struct Renderer::Impl {
     std::array<GpuBuffer, kFramesInFlight> particle_buffers{};
     std::array<std::size_t, kFramesInFlight> particle_capacity{};
     bool capture_requested = false;
+    bool capture_depth_requested = false;
     PendingCapture capture;
 
     GpuInfo info;
@@ -648,6 +650,7 @@ struct Renderer::Impl {
 
     // vulkan_capture.cpp
     Status record_capture(VkCommandBuffer cmd, VkImage image);
+    Status record_depth_capture(VkCommandBuffer cmd);  // right after the scene pass, before the screen pass clears it
     Result<std::optional<CapturedFrame>> take_capture();
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL on_validation_message(

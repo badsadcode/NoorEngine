@@ -533,6 +533,35 @@ add_test(NAME render.golden_Water_Sea
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Water_Sea
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Water_Sea PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# Waves (Milestone 8D, part 2): the Sea preset with four buoys floated by Lua on noor.water_height, at two moments (one
+# and four seconds in): the waves have moved on and the buoys with them.
+foreach(moment IN ITEMS 1s:60 4s:240)
+    string(REPLACE ":" ";" moment "${moment}")
+    list(GET moment 0 label)
+    list(GET moment 1 frames)
+    add_test(NAME render.golden_Water_Waves_${label}
+        COMMAND ${CMAKE_COMMAND}
+            -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Water_Waves.noorscene
+            -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Water_Waves_${label}.png -DFRAMES=${frames}
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Water_Waves_${label}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+    set_tests_properties(render.golden_Water_Waves_${label} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+endforeach()
+# What gameplay reads is what's drawn: the depth read back under the waves against water_height (within 1 cm, 20 m).
+add_test(NAME render.water_readback
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/water_readback -P ${CMAKE_CURRENT_SOURCE_DIR}/water_waves_check.cmake)
+set_tests_properties(render.water_readback PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# ... and a built game reads the same: the buoys float identically in the project and in the built render-scenes game.
+add_test(NAME cli.build_render_scenes
+    COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes ${CMAKE_CURRENT_BINARY_DIR}/built_render_scenes_game)
+set_tests_properties(cli.build_render_scenes PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_render_scenes_game)
+add_test(NAME player.water_waves
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_render_scenes_game/Render Scenes.exe"
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_water_waves
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/water_waves_check.cmake)
+set_tests_properties(player.water_waves PROPERTIES LABELS "gpu;player" TIMEOUT 180 FIXTURES_REQUIRED built_render_scenes_game)
 add_test(NAME render.golden_Hillside_Lake
     COMMAND ${CMAKE_COMMAND}
         -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>

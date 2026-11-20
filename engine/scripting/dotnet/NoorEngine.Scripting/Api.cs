@@ -242,6 +242,24 @@ public static unsafe class Noor
     }
 }
 
+/// <summary>Water (Milestone 8D): the surface where gameplay meets it, waves included.</summary>
+public static unsafe class Water
+{
+    /// <summary>The water surface's height (world y) at world (x, z) now, or null where there's no water.</summary>
+    public static float? Height(float x, float z)
+    {
+        float h;
+        return Engine.A.Water(x, z, &h, null) != 0 ? h : null;
+    }
+
+    /// <summary>The surface's normal at world (x, z) now (up, tilted by the waves), or null where there's no water.</summary>
+    public static Vector3? Normal(float x, float z)
+    {
+        RtVec3 n;
+        return Engine.A.Water(x, z, null, &n) != 0 ? n.ToVector() : null;
+    }
+}
+
 /// <summary>Input actions and axes (the project's Settings/input.json) and mouse capture.</summary>
 public static unsafe class Input
 {

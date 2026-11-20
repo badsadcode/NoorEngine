@@ -441,6 +441,20 @@ struct LuaScriptSystem::Impl {
                  lua_setfield(L, -2, "distance");
                  return 1;
              }},
+            // noor.water_height(x, z) -> the water surface's height there now (waves included), or nil (8D part 2)
+            {"water_height", [](lua_State* L) {
+                 const auto h = api::water_height(world_of(L), static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)));
+                 if (h) lua_pushnumber(L, *h);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
+            // noor.water_normal(x, z) -> the surface's normal there (a vector), or nil
+            {"water_normal", [](lua_State* L) {
+                 const auto n = api::water_normal(world_of(L), static_cast<float>(luaL_checknumber(L, 1)), static_cast<float>(luaL_checknumber(L, 2)));
+                 if (n) lua_pushvector(L, n->x, n->y, n->z);
+                 else lua_pushnil(L);
+                 return 1;
+             }},
             {nullptr, nullptr},
         };
         static const luaL_Reg input_functions[] = {

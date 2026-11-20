@@ -245,6 +245,15 @@ int32_t rt_animation_parameter(noor_rt_entity e, const char* name, float value, 
     return api::set_animation_parameter(*t_world, from_rt(e), name, v) ? 1 : 0;
 }
 
+int32_t rt_water(float x, float z, float* height, noor_rt_vec3* normal) {
+    if (!t_world) return 0;
+    const auto s = t_world->water_at(x, z);
+    if (!s) return 0;
+    if (height) *height = s->height;
+    if (normal) *normal = {s->normal.x, s->normal.y, s->normal.z};
+    return 1;
+}
+
 const noor_rt_api kApi = {
     NOOR_RT_API_VERSION, sizeof(noor_rt_api),
     rt_log, rt_time, rt_find,
@@ -258,6 +267,7 @@ const noor_rt_api kApi = {
     rt_sprite, rt_sprite_animation, rt_burst, rt_event_name,
     rt_animation_parameter,
     rt_bone,
+    rt_water,
 };
 
 } // namespace

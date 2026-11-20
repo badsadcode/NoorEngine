@@ -81,6 +81,12 @@ bool emitter_burst(World& w, const Guid& e, int count);
 void capture_mouse(World& w, bool capture);
 [[nodiscard]] bool mouse_captured(World& w);
 
+// ---- Water (Milestone 8D, part 2) ----
+// The water surface's height (world y) at world (x, z) now, waves included; nothing where there's no water.
+[[nodiscard]] std::optional<float> water_height(World& w, float x, float z);
+// Its normal there (up, tilted by the waves).
+[[nodiscard]] std::optional<math::Vec3> water_normal(World& w, float x, float z);
+
 // ---- HUD (UI units: the screen is 720 tall; see UiCommand) ----
 // "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom", "bottom_right".
 [[nodiscard]] std::optional<UiAnchor> parse_anchor(std::string_view name);

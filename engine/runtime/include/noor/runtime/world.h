@@ -141,6 +141,20 @@ public:
     void handle(std::string name, CommandHandler handler) { commands_[std::move(name)] = std::move(handler); }
     bool command(std::string_view name, const Guid& entity, const asset::Json& args);
 
+    // ---- Water (Milestone 8D, part 2) ----
+    // The water surface at world (x, z) now, from whoever keeps the water (game::WaterSystem); nothing without one or
+    // where there's no water.
+    struct WaterSample {
+        float height = 0.0f;  // world y
+        math::Vec3 normal{0, 1, 0};
+        Guid entity;          // the water body's entity
+    };
+    using WaterQuery = std::function<std::optional<WaterSample>(const World&, float x, float z)>;
+    void set_water_query(WaterQuery query) { water_query_ = std::move(query); }
+    [[nodiscard]] std::optional<WaterSample> water_at(float x, float z) const {
+        return water_query_ ? water_query_(*this, x, z) : std::nullopt;
+    }
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -162,6 +176,7 @@ private:
     std::vector<Event> events_;
     std::map<std::string, CommandHandler, std::less<>> commands_;
     std::optional<bool> mouse_capture_request_;
+    WaterQuery water_query_;
     std::unordered_map<Guid, math::Mat4> render_poses_;
     std::vector<UiCommand> ui_;
     double time_ = 0.0;

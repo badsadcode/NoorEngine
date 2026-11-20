@@ -710,6 +710,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     depth.resolveMode = VK_RESOLVE_MODE_NONE;
     depth.resolveImageView = VK_NULL_HANDLE;
     end_label(frame.cmd);
+    if (capture_requested && capture_depth_requested && !msaa && swapchain_supports_capture && !capture.pending)
+        if (auto status = record_depth_capture(frame.cmd); !status)
+            NOOR_LOG_WARN("Render", "Depth capture skipped: {}", status.error().describe());
     stamp(5, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
     // ---- Screen pass: tonemap, then gizmos and the HUD in display colours ----
@@ -827,6 +830,7 @@ void Renderer::Impl::destroy() {
         if (capture.buffer.buffer != VK_NULL_HANDLE) {
             destroy_buffer(capture.buffer);
         }
+        if (capture.depth_buffer.buffer != VK_NULL_HANDLE) destroy_buffer(capture.depth_buffer);
         destroy_shadows();
         destroy_instance_buffers();
         destroy_environment();
@@ -977,7 +981,8 @@ void Renderer::destroy_material(MaterialHandle material) {
 }
 void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
 Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) { return impl_->render_frame(frame); }
-void Renderer::request_capture() noexcept {
+void Renderer::request_capture(bool with_depth) noexcept {
+    impl_->capture_depth_requested = with_depth;
     if (!impl_->swapchain_supports_capture) {
         NOOR_LOG_WARN("Render", "Frame capture requested, but this swapchain cannot be read back");
     }

@@ -384,6 +384,14 @@ struct WaterDraw {
     double time = 0.0;                              // seconds (the ripples move with it)
     bool endless = false;                           // a sea: under the camera out to the horizon (center's y only;
                                                     // half_size and yaw are ignored)
+    // Waves (8D part 2; game/water.h has the formula): the main wave's height (crest to trough, metres; 0: none), length
+    // (metres), direction (radians towards which, 0 = -Z) and choppiness (0..0.9), and the four waves' phases at `time`
+    // (radians; game::set_water_time works them out in double precision).
+    float wave_height = 0.0f;
+    float wave_length = 8.0f;
+    float wave_direction = 0.0f;
+    float choppiness = 0.5f;
+    std::array<float, 4> wave_phase{};
 };
 
 struct FrameDesc {
@@ -429,9 +437,16 @@ struct CapturedFrame {
     std::uint32_t height = 0;
     std::string format;
     std::vector<std::uint8_t> pixels;
+    // The scene's depth after the see-through pass (water included), one float a pixel (reverse-Z: 0 is infinitely
+    // far), when asked for and drawn without MSAA (8D part 2: water's drawn height read back); empty otherwise.
+    std::vector<float> depth;
 
     // Returns {r, g, b, a} in sRGB bytes regardless of the stored byte order.
     [[nodiscard]] std::array<std::uint8_t, 4> rgba_at(std::uint32_t x, std::uint32_t y) const;
+    [[nodiscard]] float depth_at(std::uint32_t x, std::uint32_t y) const {
+        const std::size_t i = static_cast<std::size_t>(y) * width + x;
+        return i < depth.size() ? depth[i] : 0.0f;
+    }
 };
 
 class Renderer {
@@ -496,8 +511,8 @@ public:
         return render_frame(empty);
     }
 
-    // Asks the renderer to copy the next presented frame to CPU memory.
-    void request_capture() noexcept;
+    // Asks the renderer to copy the next presented frame to CPU memory (and its depth: only without MSAA).
+    void request_capture(bool with_depth = false) noexcept;
     // Returns the captured frame once it is available (waits for the GPU if needed),
     // or nothing if no capture was requested/completed yet.
     [[nodiscard]] Result<std::optional<CapturedFrame>> take_capture();

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 6u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events */
+#define NOOR_RT_API_VERSION 7u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -115,6 +115,9 @@ typedef struct noor_rt_api {
 
     /* v6 (8C part 4): the first entity of that name anywhere below e (a model's bone). */
     int32_t (*bone)(noor_rt_entity e, const char* name, noor_rt_entity* out);
+
+    /* v7 (8D part 2): the water surface at world (x, z) now: its height and normal. 0 where there's no water. */
+    int32_t (*water)(float x, float z, float* height, noor_rt_vec3* normal);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

@@ -17,6 +17,7 @@ noor_add_module(game
         src/material_library.cpp
         src/environment_library.cpp
         src/weather.cpp
+        src/water.cpp
         src/cooked_csg.cpp
     PUBLIC_DEPS
         noor::asset

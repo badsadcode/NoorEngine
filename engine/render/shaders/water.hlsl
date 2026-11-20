@@ -8,7 +8,8 @@
 //     offset lands on something in front of the water;
 //   - at the shore the water fades in over `shore_fade` metres of depth: no hard line where it meets the ground;
 //   - the sky is reflected (the environment's cube, blurred by roughness) by Fresnel, and the sun glints (GGX);
-//   - small ripples (a few sine waves in world space, moving with time) bend the normal: waves come in part 2.
+//   - waves (part 2: four Gerstner waves, game/water.h's formula) move the surface in the vertex shader; small ripples
+//     (a few sine waves in world space, moving with time) bend the normal on top.
 // The atmosphere and fog between the camera and the surface apply to the water's own light (reflected, scattered); what's
 // seen through already had its own (an approximation: the stretch from the surface down counts as air). A sea is the same
 // surface, drawn under the camera out to the horizon. Writes depth and alpha 1.
@@ -27,29 +28,91 @@ struct PushConstants
     float4 absorption;  // rgb: per metre, w: refraction
     float4 scatter;     // rgb, w: shore fade (m)
     float4 params;      // x: roughness, y: time (s), zw: 1 / screen size
-    uint4 grid;         // x: cells per side
+    float4 waves;       // the main wave: x: height (crest to trough, m), y: length (m), z: direction (rad), w: choppiness
+    float4 phases;      // the four waves' phases (rad), worked out on the CPU in double precision
+    uint4 grid;         // a box: x: cells per side; a sea (z = 1): x: segments round, y: rings out
 };
 [[vk::push_constant]] PushConstants pc;
+
+static const float kSeaInner = 0.4;  // the sea's first ring (m); the rings then grow by 1 + 2 pi / segments each
 
 struct VertexOutput
 {
     float4 position : SV_Position;
     [[vk::location(0)]] float3 world : POSITION1;
+    [[vk::location(1)]] float2 rest : TEXCOORD0;  // the surface point at rest (x, z) that the waves moved here
 };
+
+// The four Gerstner waves (game/water.h: the same derivation, keep the tables in step). `cell`: metres between the
+// grid's vertices (or a pixel's footprint): a wave shorter than about four of them can't be drawn and fades out.
+static const float kWaveLength[4] = {1.0, 0.62, 0.38, 0.24};
+static const float kWaveAmplitude[4] = {1.0, 0.5, 0.28, 0.16};
+static const float kWaveTurn[4] = {0.0, 0.42, -0.55, 0.95};
+
+// The point at rest `p` moved by the waves (xyz offset); `normal` the surface's normal there.
+float3 gerstner(float2 p, float cell, out float3 normal)
+{
+    float3 offset = 0.0;
+    float3 tx = float3(1.0, 0.0, 0.0), tz = float3(0.0, 0.0, 1.0);  // the surface's tangents (game/water.h)
+    if (pc.waves.x > 0.0)
+    {
+        [unroll] for (int i = 0; i < 4; ++i)
+        {
+            const float angle = pc.waves.z + kWaveTurn[i];
+            const float2 d = float2(sin(angle), -cos(angle));
+            const float a = 0.5 * pc.waves.x * kWaveAmplitude[i];
+            const float k = 6.2831853 / (pc.waves.y * kWaveLength[i]);
+            const float q = pc.waves.w / (k * a * 4.0);
+            const float fade = saturate(2.0 - cell * k / 1.5707963);  // full at 4 cells a wave, gone at 2
+            const float theta = k * dot(d, p) - pc.phases[i];
+            const float c = cos(theta), s = sin(theta);
+            const float af = a * fade;
+            offset += float3(q * af * d.x * c, af * s, q * af * d.y * c);
+            const float wa = k * af;
+            const float qs = q * wa * s;
+            tx += float3(-qs * d.x * d.x, wa * d.x * c, -qs * d.x * d.y);
+            tz += float3(-qs * d.x * d.y, wa * d.y * c, -qs * d.y * d.y);
+        }
+    }
+    normal = normalize(cross(tz, tx));
+    return offset;
+}
 
 VertexOutput VSMain(uint vertex : SV_VertexID)
 {
-    // A grid of cells, two triangles each, over the footprint (-1..1 on both axes before scaling).
-    const uint n = max(pc.grid.x, 1u);
-    const uint cell = vertex / 6u;
     const uint2 corners[6] = {uint2(0, 0), uint2(1, 0), uint2(1, 1), uint2(0, 0), uint2(1, 1), uint2(0, 1)};
-    const uint2 c = uint2(cell % n, cell / n) + corners[vertex % 6u];
-    const float2 local = (float2(c) / float(n)) * 2.0 - 1.0;
-    const float2 xz = local * pc.size.xy;
-    const float cy = cos(pc.center_yaw.w), sy = sin(pc.center_yaw.w);
-    const float3 world = pc.center_yaw.xyz + float3(cy * xz.x + sy * xz.y, 0.0, -sy * xz.x + cy * xz.y);
+    float2 rest;
+    float cell;
+    if (pc.grid.z != 0u)
+    {
+        // The sea: rings round the camera, each a little wider than the last, so a cell covers about the same part of
+        // the screen near and far (fine at your feet, kilometres at the horizon).
+        const uint segments = max(pc.grid.x, 3u);
+        const uint quad = vertex / 6u;
+        const uint2 c = uint2(quad % segments, quad / segments) + corners[vertex % 6u];
+        const float growth = 1.0 + 6.2831853 / float(segments);
+        const float r = c.y == 0u ? 0.0 : kSeaInner * pow(growth, float(c.y - 1u));
+        const float angle = 6.2831853 * float(c.x) / float(segments);
+        rest = frame.camera_position.xz + r * float2(cos(angle), sin(angle));
+        cell = max(r, kSeaInner) * (growth - 1.0);
+    }
+    else
+    {
+        // A box: a grid of cells over the footprint (-1..1 on both axes before scaling), turned by its yaw.
+        const uint n = max(pc.grid.x, 1u);
+        const uint quad = vertex / 6u;
+        const uint2 c = uint2(quad % n, quad / n) + corners[vertex % 6u];
+        const float2 local = (float2(c) / float(n)) * 2.0 - 1.0;
+        const float2 xz = local * pc.size.xy;
+        const float cy = cos(pc.center_yaw.w), sy = sin(pc.center_yaw.w);
+        rest = pc.center_yaw.xz + float2(cy * xz.x + sy * xz.y, -sy * xz.x + cy * xz.y);
+        cell = 2.0 * max(pc.size.x, pc.size.y) / float(n);
+    }
+    float3 normal;
+    const float3 world = float3(rest.x, pc.center_yaw.y, rest.y) + gerstner(rest, cell, normal);
     VertexOutput o;
     o.world = world;
+    o.rest = rest;
     o.position = mul(frame.clip_from_world, float4(world, 1.0));
     return o;
 }
@@ -104,10 +167,14 @@ float4 PSMain(VertexOutput input) : SV_Target0
     const float3 v = normalize(to_eye);
     const float t = pc.params.y;
 
-    const float2 fw = fwidth(world.xz);
+    const float2 fw = fwidth(input.rest);
+    const float footprint = max(fw.x, fw.y);
     float lost;
-    const float2 slope = ripple_slope(world.xz, t, max(fw.x, fw.y), lost);
-    const float3 n = normalize(float3(-slope.x, 1.0, -slope.y));
+    const float2 slope = ripple_slope(world.xz, t, footprint, lost);
+    // The waves' normal at this pixel's point, tilted by the ripples.
+    float3 wave_n;
+    gerstner(input.rest, footprint, wave_n);
+    const float3 n = normalize(float3(wave_n.x - slope.x * wave_n.y, wave_n.y, wave_n.z - slope.y * wave_n.y));
 
     // How deep the water is here: what the scene has under this pixel.
     const uint2 px = uint2(input.position.xy);

@@ -68,6 +68,11 @@ void WaterLook::apply(const Json& s) {
     number(s, "roughness", roughness, 0.0f, 1.0f);
     number(s, "ripple", ripple, 0.0f, 10.0f);
     number(s, "ripple_scale", ripple_scale, 0.01f, 100.0f);
+    number(s, "wave_height", wave_height, 0.0f, 30.0f);
+    number(s, "wave_length", wave_length, 0.5f, 1000.0f);
+    number(s, "wave_direction", wave_direction, -3600.0f, 3600.0f);
+    number(s, "choppiness", choppiness, 0.0f, 0.9f);
+    number(s, "wind", wind, 0.0f, 1.0f);
 }
 
 const Json& water_presets() {
@@ -75,7 +80,12 @@ const Json& water_presets() {
         {{"name", "Lake"},
          {"description", "A calm, clear green lake: you see the bottom near the shore, deep green further out"},
          {"water", {{"tint", "#6FB7A8"}, {"clarity", 4.0}, {"scatter", "#1F4A48"}, {"refraction", 0.06}, {"shore_fade", 0.12},
-                    {"roughness", 0.06}, {"ripple", 1.0}, {"ripple_scale", 1.2}}}},
+                    {"roughness", 0.06}, {"ripple", 1.0}, {"ripple_scale", 1.2}, {"wave_height", 0.0}}}},
+        {{"name", "Sea"},
+         {"description", "Open sea: a long swell with smaller waves on it, blue-green and deep, rougher in the wind"},
+         {"water", {{"tint", "#4F9FB0"}, {"clarity", 6.0}, {"scatter", "#0E3A4A"}, {"refraction", 0.05}, {"shore_fade", 0.2},
+                    {"roughness", 0.08}, {"ripple", 0.8}, {"ripple_scale", 1.5}, {"wave_height", 0.6}, {"wave_length", 14.0},
+                    {"wave_direction", 160.0}, {"choppiness", 0.55}, {"wind", 0.3}}}},
     });
     return presets;
 }

@@ -66,6 +66,28 @@ Status Renderer::Impl::record_capture(VkCommandBuffer cmd, VkImage image) {
     return {};
 }
 
+// The scene's depth buffer (no MSAA) into a host-visible buffer: depth attachment -> copy -> depth attachment again.
+Status Renderer::Impl::record_depth_capture(VkCommandBuffer cmd) {
+    const VkDeviceSize size = static_cast<VkDeviceSize>(extent.width) * extent.height * 4;
+    auto buffer = create_buffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, true);
+    if (!buffer) return std::unexpected(buffer.error());
+    set_name(VK_OBJECT_TYPE_BUFFER, buffer->buffer, "Depth capture readback");
+    image_barrier(cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                  VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT, VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT,
+                  VK_ACCESS_2_TRANSFER_READ_BIT);
+    VkBufferImageCopy region{};
+    region.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+    region.imageExtent = {extent.width, extent.height, 1};
+    vkCmdCopyImageToBuffer(cmd, depth_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer->buffer, 1, &region);
+    image_barrier(cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                  VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                  VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    if (capture.depth_buffer.buffer != VK_NULL_HANDLE) destroy_buffer(capture.depth_buffer);
+    capture.depth_buffer = *buffer;
+    return {};
+}
+
 Result<std::optional<CapturedFrame>> Renderer::Impl::take_capture() {
     if (!capture.pending) {
         if (capture_requested && !swapchain_supports_capture) {
@@ -88,6 +110,13 @@ Result<std::optional<CapturedFrame>> Renderer::Impl::take_capture() {
     }
     const auto* bytes = static_cast<const std::uint8_t*>(capture.buffer.mapped);
     out.pixels.assign(bytes, bytes + static_cast<std::size_t>(out.width) * out.height * 4);
+    if (capture.depth_buffer.buffer != VK_NULL_HANDLE) {
+        // The copy finished with the frame (the host barrier after the colour copy covers it: same submission).
+        NOOR_VK_TRY(vmaInvalidateAllocation(allocator, capture.depth_buffer.allocation, 0, VK_WHOLE_SIZE));
+        const auto* d = static_cast<const float*>(capture.depth_buffer.mapped);
+        out.depth.assign(d, d + static_cast<std::size_t>(out.width) * out.height);
+        destroy_buffer(capture.depth_buffer);
+    }
 
     destroy_buffer(capture.buffer);
     capture = {};

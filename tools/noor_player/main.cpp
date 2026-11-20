@@ -29,6 +29,7 @@
 #include "noor/game/game.h"
 #include "noor/game/hud.h"
 #include "noor/game/scene_renderer.h"
+#include "noor/game/water.h"
 #include "noor/platform/input.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/window.h"
@@ -71,6 +72,7 @@ struct Options {
     std::uint32_t msaa = 4;
     bool cpu_sky = false;
     bool trace_environment = false;
+    std::uint32_t water_probes = 0;  // N: the last frame's depth read back at N x N pixels, compared with water_height
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -89,6 +91,7 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--msaa" && more) o.msaa = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (a == "--cpu-sky") o.cpu_sky = true;
         else if (a == "--trace-environment") o.trace_environment = true;
+        else if (a == "--water-probes" && more) o.water_probes = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (!a.starts_with("--") && o.project.empty()) o.project = a;
         else return false;
     }
@@ -379,7 +382,7 @@ int run(const Options& o) {
                     const auto draws = scene_renderer.draws(view);
                     const double t_view_done = noor::platform::time_seconds();
                     const bool last_frame = o.frames && (*world)->frame_count() == o.frames;
-                    if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture();
+                    if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture(o.water_probes > 0);
                     overlay.clear();
                     const auto pixels = (*renderer)->swapchain_size();
                     hud.build((*world)->ui_commands(), static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
@@ -388,7 +391,7 @@ int run(const Options& o) {
                     std::span<const noor::render::ParticleDraw> particle_draws;
                     if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
                         particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
-                    for (auto& w : view.water) w.time = (*world)->time();  // ripples on the game's clock
+                    noor::game::set_water_time(view.water, (*world)->time());  // waves and ripples on the game's clock
                     auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
@@ -430,7 +433,7 @@ int run(const Options& o) {
                     last_frame_desc.overlay = last_overlay;
                     for (int attempt = 0; attempt < 30 && !last_capture; ++attempt) {
                         (void)noor::platform::pump_events();
-                        (*renderer)->request_capture();
+                        (*renderer)->request_capture(o.water_probes > 0);
                         if (auto frame = (*renderer)->render_frame(last_frame_desc); !frame) break;
                         if (auto cap = (*renderer)->take_capture(); cap && cap->has_value()) last_capture = std::move(**cap);
                     }
@@ -452,6 +455,40 @@ int run(const Options& o) {
                         entities[s.entities[i].name] = {p.x, p.y, p.z};
                     }
                     report["entities"] = std::move(entities);
+                    // Water's drawn surface against gameplay's (8D part 2): the last frame's depth at a grid of pixels,
+                    // turned back into world points, each beside water_height at its (x, z) (the same game time).
+                    if (o.water_probes > 0 && last_capture) {
+                        if (last_capture->depth.empty()) NOOR_LOG_WARN("Player", "--water-probes needs --msaa 1 (the depth is read back without MSAA)");
+                        const auto& cam = last_frame_desc.camera;
+                        const float aspect = static_cast<float>(last_capture->width) / static_cast<float>(std::max(1u, last_capture->height));
+                        const auto world_from_clip =
+                            noor::math::inverse(noor::math::perspective_reverse_z(cam.fov_y, aspect, cam.near_plane) * cam.view);
+                        Json probes = Json::array();
+                        double worst = 0.0;
+                        int on_water = 0;
+                        const std::uint32_t n = o.water_probes;
+                        for (std::uint32_t j = 0; j < n && !last_capture->depth.empty(); ++j)
+                            for (std::uint32_t i = 0; i < n; ++i) {
+                                const std::uint32_t px = (2 * i + 1) * last_capture->width / (2 * n), py = (2 * j + 1) * last_capture->height / (2 * n);
+                                const float d = last_capture->depth_at(px, py);
+                                if (d <= 0.0f) continue;  // the sky
+                                const float u = (static_cast<float>(px) + 0.5f) / static_cast<float>(last_capture->width) * 2.0f - 1.0f;
+                                const float v = (static_cast<float>(py) + 0.5f) / static_cast<float>(last_capture->height) * 2.0f - 1.0f;
+                                const noor::math::Vec4 h = world_from_clip * noor::math::Vec4{u, v, d, 1.0f};
+                                const noor::math::Vec3 p{h.x / h.w, h.y / h.w, h.z / h.w};
+                                const auto water = (*world)->water_at(p.x, p.z);
+                                const noor::math::Vec3 eye = noor::math::inverse(cam.view).transform_point({0, 0, 0});
+                                Json probe{{"pixel", {px, py}}, {"world", {p.x, p.y, p.z}}, {"distance", noor::math::length(p - eye)},
+                                           {"water", water ? Json(water->height) : Json(nullptr)},
+                                           {"error", water ? Json(std::abs(p.y - water->height)) : Json(nullptr)}};
+                                if (water && std::abs(p.y - water->height) < 0.5f) {  // a pixel showing the water (not a post in it)
+                                    ++on_water;
+                                    worst = std::max(worst, static_cast<double>(std::abs(p.y - water->height)));
+                                }
+                                probes.push_back(std::move(probe));
+                            }
+                        report["water_probes"] = {{"probes", std::move(probes)}, {"on_water", on_water}, {"max_error", worst}};
+                    }
                     if (last_capture) {
                         const auto c = last_capture->rgba_at(last_capture->width / 2, last_capture->height / 2);
                         report["center_pixel"] = {c[0], c[1], c[2]};

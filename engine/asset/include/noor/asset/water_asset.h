@@ -14,6 +14,10 @@
 // milky). "refraction": how far what's under is bent (a fraction of the screen, at a metre deep). "shore_fade": metres
 // of depth over which the water fades in at the shore. "roughness": blurs the sky's reflection. "ripple" (0: a mirror)
 // and "ripple_scale" (metres): small ripples. The component adds "size": [x, z] (metres, before the entity's scale).
+// Waves (part 2): "wave_height" (metres, crest to trough of the main wave; 0: none), "wave_length" (metres),
+// "wave_direction" (degrees towards which they travel, 0 = -Z, 90 = +X, as the wind), "choppiness" (0 round .. 0.9
+// sharp crests) and "wind" (0..1: how much the environment's ground wind raises them). Three smaller waves come with
+// the main one (game/water.h).
 
 #include "noor/asset/json.h"
 #include "noor/foundation/error.h"
@@ -35,12 +39,17 @@ struct WaterLook {
     float roughness = 0.06f;
     float ripple = 1.0f;
     float ripple_scale = 1.2f;
+    float wave_height = 0.0f;
+    float wave_length = 8.0f;
+    float wave_direction = 0.0f;  // degrees
+    float choppiness = 0.5f;
+    float wind = 0.0f;
 
     // Fields present in `settings` replace these (unknown fields are ignored; bad values keep the default).
     void apply(const Json& settings);
 };
 
-// The built-in presets: [{"name", "description", "water"}] (never written to). Part 1: "Lake".
+// The built-in presets: [{"name", "description", "water"}] (never written to): "Lake", "Sea".
 [[nodiscard]] const Json& water_presets();
 [[nodiscard]] const Json* water_preset(std::string_view name);
 

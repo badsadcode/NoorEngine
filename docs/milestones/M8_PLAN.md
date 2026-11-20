@@ -624,7 +624,7 @@ skinning, network replication of animation state.
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
-| 2 | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
+| 2 ✅ | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
 | 3 | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
 | 4 | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
 | 5 | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
@@ -670,6 +670,24 @@ undone). **Measured** (`tools/samples/measure_hillside_lake.py`, RTX 3080, 1280�
 lake 0.035 ms, the split pass about 0.03 ms more: about 0.1 ms with water, nothing without. Highest risk 1 settled.
 Not done: the absorption counts the surface-to-camera stretch as air (an approximation, documented); no planar or
 screen-space reflections yet (part 3); the sea is flat (part 2).
+
+## Part 2 result (2026-11-20)
+Done. Four Gerstner waves (the main one from the look's `wave_height`, `wave_length`, `wave_direction` and `choppiness`,
+three smaller ones at fixed proportions), each at deep water's pace with its phase in double precision; the wind (the
+particles' ground wind, `wind` x 0.21 U^2/g) raises them without changing their lengths or directions. One formula
+(`game/water.h`) evaluated on the CPU for gameplay (the height found by stepping back from the sideways motion; the
+exact normal from the surface's tangents: GPU Gems' shorter formula was 2 cm/m off on choppy crests, caught by the unit
+test) and in water.hlsl's vertex shader to draw. The sea's grid: rings round the camera out to 20 km (256 round, about
+440 out); a box with waves gets cells of a sixth of its shortest wave; waves too short for the grid fade out where drawn
+(gameplay keeps them). `noor.water_height` / `noor.water_normal` (Lua) and `Water.Height` / `Water.Normal` (C#, rt API
+v7) through a World water query that `game::WaterSystem` answers. The "Sea" preset. Proven: unit tests (deep water's
+pace, phases an hour in, the wind's share, heights where the waves moved the surface, the normal against the measured
+slope, scripts reading the highest body); `render.water_readback` (the depth read back without MSAA at 24 x 24 pixels,
+each point against `water_height`: 416 pixels within 20 m, at most 6.2 mm apart, 2 mm within 10 m; the player's
+`--water-probes`); `player.water_waves` (four Lua-floated buoys in the same place to the bit in the built game); goldens
+`Water_Waves_1s` and `_4s`; the part 1 goldens unchanged. **Measured:** the wavy sea 0.1 ms (670,000 vertices). Not done:
+far out the drawn waves are calmer than gameplay's; waves ignore depth until part 3. Tom asked for crisp, stylised
+waves later (IDEAS inbox: crest glow, foam on steep crests, more waves).
 
 ## Open questions
 

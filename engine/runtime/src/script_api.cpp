@@ -297,6 +297,15 @@ double time(World& w) { return w.time(); }
 void capture_mouse(World& w, bool capture) { w.request_mouse_capture(capture); }
 bool mouse_captured(World& w) { return w.input().state().mouse_captured; }
 
+std::optional<float> water_height(World& w, float x, float z) {
+    if (const auto s = w.water_at(x, z)) return s->height;
+    return std::nullopt;
+}
+std::optional<math::Vec3> water_normal(World& w, float x, float z) {
+    if (const auto s = w.water_at(x, z)) return s->normal;
+    return std::nullopt;
+}
+
 math::Quat quat_from_euler(math::Vec3 d) {
     const auto yaw = math::Quat::from_axis_angle({0, 1, 0}, static_cast<float>(d.y * kDegToRad));
     const auto pitch = math::Quat::from_axis_angle({1, 0, 0}, static_cast<float>(d.x * kDegToRad));

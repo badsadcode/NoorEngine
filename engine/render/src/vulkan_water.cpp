@@ -14,19 +14,30 @@ namespace noor::render {
 
 namespace {
 
-// water.hlsl's push constants: 96 bytes.
+// water.hlsl's push constants: 128 bytes (all Vulkan guarantees).
 struct WaterPush {
     float center_yaw[4];   // xyz: the surface's middle (world; y is the water level), w: yaw (radians)
     float size[4];         // xy: half size along its x and z (m), z: ripple strength, w: metres per ripple
     float absorption[4];   // rgb: absorbed per metre, w: refraction
     float scatter[4];      // rgb: light scattered back from inside, w: the shore's fade depth (m)
     float params[4];       // x: roughness, y: time (s), z, w: 1 / the screen's size in pixels
-    std::uint32_t grid[4]; // x: cells along each side
+    float waves[4];        // the main wave: height, length, direction (rad), choppiness
+    float phases[4];       // the four waves' phases (rad)
+    std::uint32_t grid[4]; // a box: x: cells per side; a sea (z = 1): x: segments round, y: rings out
 };
-static_assert(sizeof(WaterPush) == 96);
+static_assert(sizeof(WaterPush) == 128);
 
-constexpr std::uint32_t kWaterGrid = 32;
-constexpr float kSeaRadius = 20000.0f;  // metres from the camera to the endless sea's edge
+constexpr std::uint32_t kWaterGrid = 32;       // a calm box's cells per side
+constexpr std::uint32_t kMaxWaterGrid = 512;   // a box with waves: cells small enough for its shortest wave, up to this
+constexpr std::uint32_t kSeaSegments = 256;    // the sea's rings: segments round
+constexpr float kSeaInner = 0.4f;              // the first ring (m), as water.hlsl
+constexpr float kSeaRadius = 20000.0f;         // metres from the camera to the endless sea's edge
+
+// How many rings reach kSeaRadius, each 1 + 2 pi / segments wider than the last.
+std::uint32_t sea_rings() {
+    const double growth = 1.0 + 2.0 * 3.14159265358979 / kSeaSegments;
+    return 2u + static_cast<std::uint32_t>(std::ceil(std::log(kSeaRadius / kSeaInner) / std::log(growth)));
+}
 
 } // namespace
 
@@ -250,7 +261,6 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, water_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, water_layout, 0, 1, &frame_sets[frame_index], 0, nullptr);
-    const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
     for (const WaterDraw& w : frame.water) {
         WaterPush push{};
         push.center_yaw[0] = w.center.x;
@@ -259,14 +269,28 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         push.center_yaw[3] = w.yaw;
         push.size[0] = w.half_size.x;
         push.size[1] = w.half_size.y;
+        push.waves[0] = std::max(0.0f, w.wave_height);
+        push.waves[1] = std::max(0.5f, w.wave_length);
+        push.waves[2] = w.wave_direction;
+        push.waves[3] = std::clamp(w.choppiness, 0.0f, 0.9f);
+        for (int i = 0; i < 4; ++i) push.phases[i] = w.wave_phase[static_cast<std::size_t>(i)];
+        std::uint32_t vertices = 0;
         if (w.endless) {
-            // The sea: a square under the camera reaching the horizon (the haze hides its edge long before). Its middle
-            // snaps to whole cells so its vertices don't slide as the camera moves (the surface itself is flat in part 1).
-            const float cell = 2.0f * kSeaRadius / static_cast<float>(kWaterGrid);
-            push.center_yaw[0] = std::round(eye.x / cell) * cell;
-            push.center_yaw[2] = std::round(eye.z / cell) * cell;
-            push.center_yaw[3] = 0.0f;
-            push.size[0] = push.size[1] = kSeaRadius;
+            // The sea: rings round the camera out to the horizon (the haze hides its edge long before), finer near.
+            push.grid[0] = kSeaSegments;
+            push.grid[1] = sea_rings();
+            push.grid[2] = 1;
+            vertices = kSeaSegments * push.grid[1] * 6;
+        } else {
+            // A box: with waves, cells of a sixth of its shortest wave (the smallest is 0.24 of the main one).
+            std::uint32_t n = kWaterGrid;
+            if (push.waves[0] > 0.0f) {
+                const float cell = push.waves[1] * 0.24f / 6.0f;
+                const float span = 2.0f * std::max(w.half_size.x, w.half_size.y);
+                n = std::clamp(static_cast<std::uint32_t>(std::ceil(span / std::max(cell, 0.01f))), kWaterGrid, kMaxWaterGrid);
+            }
+            push.grid[0] = n;
+            vertices = n * n * 6;
         }
         push.size[2] = w.ripple;
         push.size[3] = std::max(0.01f, w.ripple_scale);
@@ -282,12 +306,11 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         push.params[1] = static_cast<float>(std::fmod(w.time, 3600.0));
         push.params[2] = 1.0f / static_cast<float>(std::max(1u, extent.width));
         push.params[3] = 1.0f / static_cast<float>(std::max(1u, extent.height));
-        push.grid[0] = kWaterGrid;
         vkCmdPushConstants(cmd, water_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
-        vkCmdDraw(cmd, kWaterGrid * kWaterGrid * 6, 1, 0, 0);
+        vkCmdDraw(cmd, vertices, 1, 0, 0);
         ++stats.draw_calls;
         ++stats.water_draws;
-        stats.triangles += 2ull * kWaterGrid * kWaterGrid;
+        stats.triangles += vertices / 3;
     }
     end_label(cmd);
 }
