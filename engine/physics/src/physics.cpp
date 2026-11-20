@@ -183,8 +183,40 @@ struct PhysicsSystem::Impl {
         // In the water (8D part 5).
         float height = 1.8f, swim_depth = 1.17f, wade_speed = 0.5f, swim_speed = 0.6f;
         CharacterWater water;
+        // Feel (2D part 2, ADR-040). Zeros mean "as before": instant speed, no coyote time, no buffer.
+        bool plane = false;  // "plane": "xy": moves along X only, held at plane_z
+        float plane_z = 0.0f;
+        float acceleration = 0.0f, deceleration = 0.0f, air_acceleration = 0.0f, gravity_scale = 1.0f;
+        float coyote_time = 0.0f, jump_buffer = 0.0f, jump_cut = 0.5f;
+        math::Vec3 horizontal{0, 0, 0};  // the horizontal velocity it's moving with (approaches wanted)
+        float buffered_jump = 0.0f, buffer_left = 0.0f;  // a jump asked for, waiting for ground
+        float since_ground = 1e9f;                      // seconds since it last stood on ground
+        bool jumped = false;                            // has jumped since it last stood on ground
+        bool release = false;                           // the jump button was let go
+        bool cut = false;                               // this jump's rise has been cut already
+        float drop_left = 0.0f;                         // ignoring one-way platforms this much longer
+        math::Vec3 velocity{0, 0, 0};                   // what it moved with last step
+        // Built-in platformer controls ("platformer" component): the animation it last asked for, and its facing.
+        std::string animation;
+        bool facing_left = false;
     };
     std::unordered_map<Guid, Character> characters;
+    // One-way platforms (2D part 2): each one's top (world y), by body. Characters stand on them only from above.
+    std::unordered_map<JPH::uint32, float> one_way_tops;
+    struct CharacterListener final : JPH::CharacterContactListener {
+        Impl* d = nullptr;
+        bool OnContactValidate(const JPH::CharacterVirtual* character, const JPH::CharacterContact& contact) override {
+            const auto top = d->one_way_tops.find(contact.mBodyB.GetIndexAndSequenceNumber());
+            if (top == d->one_way_tops.end()) return true;
+            const auto ud = character->GetUserData();
+            if (ud > 0 && ud <= d->entity_of.size()) {
+                const auto c = d->characters.find(d->entity_of[static_cast<std::size_t>(ud - 1)]);
+                if (c != d->characters.end() && c->second.drop_left > 0.0f) return false;  // dropping through
+            }
+            // From above only: its feet at or over the top (a little slack for standing on it), and not rising.
+            return character->GetPosition().GetY() >= top->second - 0.05f && character->GetLinearVelocity().GetY() <= 0.01f;
+        }
+    } character_listener;
     // The last two fixed-step poses of everything physics moves (dynamic bodies, characters), so
     // late_update can tell the World where to draw them between steps.
     struct Pose {
@@ -240,6 +272,7 @@ struct PhysicsSystem::Impl {
         system.Init(65536, 0, 65536, 16384, broad_phase_layers, object_vs_broad_phase, object_pairs);
         system.SetGravity(to_j(options.gravity));
         system.SetContactListener(&listener);
+        character_listener.d = this;
     }
 
     ~Impl() {
@@ -518,6 +551,16 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         c.swim_depth = std::clamp(number(*ch, "swim_depth", 0.65f * height), 0.1f, height);
         c.wade_speed = std::clamp(number(*ch, "wade_speed", 0.5f), 0.0f, 1.0f);
         c.swim_speed = std::clamp(number(*ch, "swim_speed", 0.6f), 0.0f, 2.0f);
+        c.plane = ch->value("plane", std::string()) == "xy";
+        c.plane_z = pos ? pos->z : 0.0f;
+        c.acceleration = std::max(0.0f, number(*ch, "acceleration", 0.0f));
+        c.deceleration = std::max(0.0f, number(*ch, "deceleration", c.acceleration));
+        c.air_acceleration = std::max(0.0f, number(*ch, "air_acceleration", c.acceleration));
+        c.gravity_scale = std::max(0.0f, number(*ch, "gravity_scale", 1.0f));
+        c.coyote_time = std::clamp(number(*ch, "coyote_time", 0.0f), 0.0f, 1.0f);
+        c.jump_buffer = std::clamp(number(*ch, "jump_buffer", 0.0f), 0.0f, 1.0f);
+        c.jump_cut = std::clamp(number(*ch, "jump_cut", 0.5f), 0.0f, 1.0f);
+        c.controller->SetListener(&d.character_listener);
         d.characters[entity.id] = std::move(c);
     }
     // Terrain: one static height field per tile, placed at the entity (its rotation and scale are ignored).
@@ -632,6 +675,8 @@ void PhysicsSystem::entity_started(runtime::World& world, scene::Entity& entity)
         return;
     }
     Impl::Body body{id, type, settings.mIsSensor};
+    if (type == Impl::Type::Static && c->value("one_way", false))  // 2D part 2: a platform characters jump up through
+        d.one_way_tops[id.GetIndexAndSequenceNumber()] = bi.GetTransformedShape(id).GetWorldSpaceBounds().mMax.GetY();
     if (type == Impl::Type::Dynamic && !settings.mIsSensor) {
         body.buoyancy = std::max(0.0f, number(rb, "buoyancy", 1.0f));
         body.water_drag = std::max(0.0f, number(rb, "water_drag", 1.0f));
@@ -705,19 +750,64 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         float speed = 1.0f;
         if (water.state == WaterState::Wading) speed = 1.0f + (c.wade_speed - 1.0f) * std::clamp(water.feet_depth / c.swim_depth, 0.0f, 1.0f);
         else if (swimming) speed = c.swim_speed;
+        // Jumping (2D part 2): a jump asked for waits up to jump_buffer for ground; ground counts up to coyote_time after
+        // leaving it (once). With both 0 (the default) a jump happens only from the ground, at the next step, as before.
+        const bool on_ground = ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && vertical.GetY() - ground.GetY() < 0.1f;
+        if (on_ground) {
+            c.since_ground = 0.0f;
+            c.jumped = false;
+        } else {
+            c.since_ground += step;
+        }
+        if (c.jump > 0) {
+            c.buffered_jump = std::max(c.buffered_jump, c.jump);
+            c.buffer_left = c.jump_buffer;
+        }
+        c.jump = 0.0f;
+        c.drop_left = std::max(0.0f, c.drop_left - step);
+        const bool may_jump = on_ground || (!c.jumped && c.since_ground <= c.coyote_time + 1e-4f);
+        bool jumping = false;
         JPH::Vec3 v;
         if (swimming) {
             // Held with its chest at the surface (feet swim_depth under it): pulled there, gently, no gravity.
             const float target = feet.y + (water.feet_depth - c.swim_depth);
             v = JPH::Vec3(0, std::clamp((target - feet.y) * 3.0f, -2.0f, 2.0f), 0);
-        } else if (ch.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround && vertical.GetY() - ground.GetY() < 0.1f) {
+        } else if (c.buffered_jump > 0 && may_jump) {
+            // Jump: from the ground (moving with it), or just off a ledge (coyote time).
+            v = (on_ground ? ground : JPH::Vec3::sZero()) + JPH::Vec3(0, c.buffered_jump, 0);
+            jumping = true;
+        } else if (on_ground) {
             v = ground;  // standing: move with what we stand on
-            if (c.jump > 0) v += JPH::Vec3(0, c.jump, 0);
         } else {
             v = vertical;  // in the air: keep falling (or rising)
+            // Let go of jump while rising: keep jump_cut of the upward speed (once per jump).
+            if (c.release && c.jumped && !c.cut && v.GetY() > 0.0f) {
+                v.SetY(v.GetY() * c.jump_cut);
+                c.cut = true;
+            }
         }
-        c.jump = 0.0f;
-        v += (swimming ? JPH::Vec3::sZero() : gravity * step) + JPH::Vec3(c.wanted.x * speed, 0, c.wanted.z * speed);
+        if (jumping) {
+            c.buffered_jump = 0.0f;
+            c.jumped = true;
+            c.cut = false;
+            c.since_ground = c.coyote_time + 1.0f;  // no second coyote jump
+        } else if (c.buffered_jump > 0) {
+            c.buffer_left -= step;
+            if (c.buffer_left < 0.0f) c.buffered_jump = 0.0f;  // waited long enough (or there's no buffer)
+        }
+        c.release = false;
+        // Horizontal: straight to the asked speed, or towards it at the character's acceleration.
+        const math::Vec3 want{c.wanted.x * speed, 0.0f, c.plane ? 0.0f : c.wanted.z * speed};
+        const float rate = !on_ground ? c.air_acceleration : (math::length(want) > 1e-4f ? c.acceleration : c.deceleration);
+        if (rate <= 0.0f || swimming) {
+            c.horizontal = want;
+        } else {
+            const math::Vec3 diff = want - c.horizontal;
+            const float dl = math::length(diff), most = rate * step;
+            c.horizontal = dl <= most ? want : c.horizontal + diff * (most / dl);
+        }
+        const JPH::Vec3 fall = swimming ? JPH::Vec3::sZero() : gravity * (step * c.gravity_scale);
+        v += fall + JPH::Vec3(c.horizontal.x, 0, c.horizontal.z);
         // A river's current (8D part 6): a swimmer drifts with it, a wader is pushed by part of it (more the deeper).
         const float drift = swimming ? 1.0f : water.state == WaterState::Wading ? 0.5f * std::clamp(water.feet_depth / c.swim_depth, 0.0f, 1.0f) : 0.0f;
         v += JPH::Vec3(current.x * drift, 0, current.z * drift);
@@ -725,8 +815,19 @@ void PhysicsSystem::fixed_update(runtime::World& world, double dt) {
         JPH::CharacterVirtual::ExtendedUpdateSettings settings;
         settings.mWalkStairsStepUp = JPH::Vec3(0, c.step_height, 0);
         const JPH::IgnoreSingleBodyFilter self(ch.GetInnerBodyID());
-        ch.ExtendedUpdate(step, gravity, settings, d.system.GetDefaultBroadPhaseLayerFilter(layers::kMoving),
+        ch.ExtendedUpdate(step, gravity * c.gravity_scale, settings, d.system.GetDefaultBroadPhaseLayerFilter(layers::kMoving),
                           d.system.GetDefaultLayerFilter(layers::kMoving), self, {}, *d.temp);
+        if (c.plane) {  // 2D: never a hair out of its plane
+            JPH::RVec3 at = ch.GetPosition();
+            if (at.GetZ() != c.plane_z) {
+                at.SetZ(c.plane_z);
+                ch.SetPosition(at);
+            }
+            JPH::Vec3 lv = ch.GetLinearVelocity();
+            lv.SetZ(0.0f);
+            ch.SetLinearVelocity(lv);
+        }
+        c.velocity = from_j(ch.GetLinearVelocity());
         if (auto* e = world.find(entity)) {
             const auto r = runtime::api::world_rotation(world, entity).value_or(math::Quat{});
             runtime::api::set_world_pose(world, entity, from_j(ch.GetPosition()), r);
@@ -876,6 +977,63 @@ const char* PhysicsSystem::water_state_name(WaterState s) noexcept {
     case WaterState::Under: return "under";
     }
     return "dry";
+}
+
+void PhysicsSystem::character_jump_release(const Guid& entity) {
+    if (const auto it = impl_->characters.find(entity); it != impl_->characters.end()) it->second.release = true;
+}
+
+void PhysicsSystem::character_drop(const Guid& entity) {
+    if (const auto it = impl_->characters.find(entity); it != impl_->characters.end()) it->second.drop_left = 0.25f;
+}
+
+std::optional<math::Vec3> PhysicsSystem::character_velocity(const Guid& entity) const {
+    const auto it = impl_->characters.find(entity);
+    if (it == impl_->characters.end()) return std::nullopt;
+    return it->second.velocity;
+}
+
+// Built-in platformer controls (2D part 2): reads the input each frame and steers the character, as a script would.
+void PhysicsSystem::update(runtime::World& world, double) {
+    auto& d = *impl_;
+    for (auto& [entity, c] : d.characters) {
+        const Json* pc = api::component(world, entity, "platformer");
+        if (!pc || !pc->is_object()) continue;
+        const float speed = std::max(0.0f, number(*pc, "speed", 6.0f));
+        const float jump_height = std::max(0.0f, number(*pc, "jump_height", 1.5f));
+        const float x = api::input_axis(world, pc->value("axis", std::string("move_x")));
+        const std::string jump = pc->value("jump", std::string("jump"));
+        if (std::fabs(x) > 0.01f) c.wanted = {x * speed, 0.0f, 0.0f};  // keys walk it; without them a script may
+        if (api::input_pressed(world, jump)) {
+            if (api::input_axis(world, pc->value("down", std::string("move_y"))) < -0.5f) {
+                c.drop_left = 0.25f;  // down + jump: through a one-way platform
+            } else {
+                // The speed that rises exactly jump_height in fixed steps of dt. The textbook v = sqrt(2 g h) peaks
+                // short by about v dt / 2 (each step moves with the speed at its end), 4% at 60 Hz for a 1.5 m jump;
+                // the stepped apex is v^2 / 2g - v dt / 2 = h, so v = g dt / 2 + sqrt((g dt / 2)^2 + 2 g h).
+                const float g = std::max(0.0f, -d.system.GetGravity().GetY() * c.gravity_scale);
+                const float half = g * static_cast<float>(world.fixed_dt) * 0.5f;
+                c.jump = std::max(c.jump, half + std::sqrt(half * half + 2.0f * g * jump_height));
+            }
+        }
+        if (api::input_released(world, jump)) c.release = true;
+        // Face the way it moves (its sprite's flip_x), and play the sprite animation for what it's doing: from how it
+        // actually moves, so a script steering it (or something pushing it) looks right too.
+        const float vx = std::fabs(x) > 0.01f ? x : c.velocity.x;
+        if (vx < -0.1f) c.facing_left = true;
+        else if (vx > 0.1f) c.facing_left = false;
+        if (const Json* sprite = api::component(world, entity, "sprite"); sprite && sprite->is_object() && sprite->value("flip_x", false) != c.facing_left) {
+            Json s = *sprite;
+            s["flip_x"] = c.facing_left;
+            api::set_component(world, entity, "sprite", std::move(s));
+        }
+        if (const auto anims = pc->find("animations"); anims != pc->end() && anims->is_object()) {
+            const bool grounded = c.controller->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+            const char* state = !grounded ? (c.velocity.y > 0.0f ? "jump" : "fall") : (std::fabs(c.velocity.x) > 0.3f ? "run" : "idle");
+            const std::string name = anims->value(state, std::string());
+            if (!name.empty() && name != c.animation && api::play_animation(world, entity, name)) c.animation = name;
+        }
+    }
 }
 
 bool PhysicsSystem::is_grounded(const Guid& entity) const {

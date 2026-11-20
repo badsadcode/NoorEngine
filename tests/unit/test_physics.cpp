@@ -370,3 +370,237 @@ TEST_CASE("physics 2D: a polygon lands and rests on a side, locks work in 3D too
     // Two points aren't a polygon: no body, so it hangs where it was put.
     CHECK(sim.pos(bad).y == 2.0f);
 }
+
+// ---- 2D characters (2D foundations part 2, ADR-040): a platformer's controller, driven by keys like a player ------
+
+namespace {
+
+using runtime::Key;
+
+// A platformer character: 0.3 m wide, 1.1 m tall, gravity x3 (platformers fall fast), the built-in controls.
+scene::Entity hero(math::Vec3 at, Json extra_character = Json::object(), Json platformer = Json::object()) {
+    scene::Entity e;
+    e.id = Guid::generate();
+    e.name = "Hero";
+    e.transform.position = at;
+    Json ch{{"radius", 0.3}, {"height", 1.1}, {"plane", "xy"}, {"gravity_scale", 3}, {"coyote_time", 0.1}, {"jump_buffer", 0.1}};
+    for (auto& [k, v] : extra_character.items()) ch[k] = v;
+    e.components["character"] = ch;
+    Json pc{{"speed", 6}, {"jump_height", 1.5}};
+    for (auto& [k, v] : platformer.items()) pc[k] = v;
+    e.components["platformer"] = pc;
+    return e;
+}
+
+scene::Entity block(std::string name, math::Vec3 centre, float w, float h, bool one_way = false) {
+    Json c{{"shape", "rectangle"}, {"size", {w, h}}};
+    if (one_way) c["one_way"] = true;
+    return body(std::move(name), centre, c);
+}
+
+// Steps the world a frame at a time with these keys held.
+struct Pad {
+    Sim& sim;
+    runtime::InputState keys;
+    void hold(Key k, bool on = true) { keys.set(k, on); }
+    void frames(int n) {
+        for (int i = 0; i < n; ++i) sim.world.frame(1.0 / 60.0, keys);
+    }
+};
+
+} // namespace
+
+TEST_CASE("platformer: walks along X only, up a slope, and never leaves its plane") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    auto slope = block("Slope", {8, 0, 0}, 8, 1);
+    slope.transform.rotation = math::Quat::from_axis_angle({0, 0, 1}, math::radians(20.0f));
+    s.entities.push_back(slope);
+    const auto h = hero({0, 0.01f, 0.2f});
+    s.entities.push_back(h);
+    Sim sim(s);
+    Pad pad{sim};
+    pad.frames(10);  // settle
+    pad.hold(Key::D);
+    pad.hold(Key::W);  // W is move_y, which a platformer ignores: no walking "into" the screen
+    float highest = 0.0f;
+    for (int i = 0; i < 150; ++i) {
+        pad.frames(1);
+        highest = std::max(highest, sim.pos(h).y);
+        CHECK(sim.pos(h).z == 0.2f);  // exactly in its plane, every step
+    }
+    const math::Vec3 p = sim.pos(h);
+    MESSAGE("after 2.5 s walking right: " << p.x << ", " << p.y << ", " << p.z << " (highest " << highest << ")");
+    CHECK(p.x > 12.0f);      // walked right, over the slope and off its far end
+    CHECK(highest > 1.5f);   // up the slope (its top is about 1.8 m up)
+}
+
+TEST_CASE("platformer: the jump peaks at jump_height, a tap jumps lower, and speed builds at the acceleration") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    const auto h = hero({0, 0.01f, 0}, {{"acceleration", 30}, {"deceleration", 40}});
+    s.entities.push_back(h);
+    Sim sim(s);
+    Pad pad{sim};
+    pad.frames(20);
+    const float ground = sim.pos(h).y;
+    // Held: up to jump_height (1.5 m), to the millimetre (the jump speed is solved for 60 Hz steps).
+    pad.hold(Key::Space);
+    float top = ground;
+    for (int i = 0; i < 60; ++i) {
+        pad.frames(1);
+        top = std::max(top, sim.pos(h).y);
+    }
+    pad.hold(Key::Space, false);
+    pad.frames(60);
+    MESSAGE("held jump: " << top - ground << " m");
+    CHECK(top - ground == doctest::Approx(1.5f).epsilon(0.01));
+    // Tapped (let go after 4 frames): jump_cut halves the rise speed, so a much lower jump.
+    pad.hold(Key::Space);
+    pad.frames(4);
+    pad.hold(Key::Space, false);
+    float tap = ground;
+    for (int i = 0; i < 60; ++i) {
+        pad.frames(1);
+        tap = std::max(tap, sim.pos(h).y);
+    }
+    MESSAGE("tapped jump: " << tap - ground << " m");
+    CHECK(tap - ground < 0.6f * 1.5f);  // a tap: a little over half the full jump
+    CHECK(tap - ground > 0.2f);
+    pad.frames(60);
+    // Acceleration 30 m/s2: from standing to 6 m/s in 0.2 s (12 steps), not at once.
+    const float x0 = sim.pos(h).x;
+    pad.hold(Key::D);
+    pad.frames(1);
+    pad.frames(1);
+    const float early = (sim.pos(h).x - x0);
+    pad.frames(20);
+    const float before = sim.pos(h).x;
+    pad.frames(1);
+    const float full = (sim.pos(h).x - before) * 60.0f;
+    MESSAGE("moved " << early << " m in two steps; then " << full << " m/s");
+    CHECK(early < 2.0f * 6.0f / 60.0f * 0.5f);  // well under two steps at full speed
+    CHECK(full == doctest::Approx(6.0f).epsilon(0.02));
+}
+
+TEST_CASE("platformer: coyote time and jump buffering forgive a late or early press") {
+    // A ledge: floor to x = 2, a pit, floor again from x = 12 (far: the run off the ledge falls into the pit).
+    const auto course = [] {
+        scene::Scene s;
+        s.entities.push_back(block("Left", {-8, -0.5f, 0}, 20, 1));
+        s.entities.push_back(block("Pit floor", {7, -6.5f, 0}, 10, 1));
+        return s;
+    };
+    // Runs right off the ledge and presses jump `late` frames after the feet leave it: does it jump (rise)?
+    const auto jumps_after = [&](int late) {
+        auto s = course();
+        const auto h = hero({0.0f, 0.01f, 0});
+        s.entities.push_back(h);
+        Sim sim(s);
+        Pad pad{sim};
+        pad.frames(10);
+        pad.hold(Key::D);
+        int left_at = -1;
+        for (int i = 0; i < 120 && left_at < 0; ++i) {
+            pad.frames(1);
+            if (!sim.physics->is_grounded(h.id)) left_at = i;
+        }
+        REQUIRE(left_at >= 0);
+        pad.frames(late);
+        const float y0 = sim.pos(h).y;
+        pad.hold(Key::Space);
+        pad.frames(8);
+        return sim.pos(h).y > y0 + 0.1f;
+    };
+    CHECK(jumps_after(3));    // 0.05 s late: within coyote_time (0.1 s), it still jumps
+    CHECK_FALSE(jumps_after(12));  // 0.2 s late: too late, it falls
+
+    // Buffering: jump pressed (and held) a few frames before landing from a fall happens on landing.
+    const auto jumps_on_landing = [&](int early_frames) {
+        scene::Scene s;
+        s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+        const auto h = hero({0.0f, 3.0f, 0});
+        s.entities.push_back(h);
+        Sim sim(s);
+        Pad pad{sim};
+        // Fall until about `early_frames` frames from the floor (falling at v, a frame covers v / 60).
+        for (int i = 0; i < 200; ++i) {
+            pad.frames(1);
+            const auto v = sim.physics->character_velocity(h.id).value_or(math::Vec3{});
+            if (sim.pos(h).y + v.y / 60.0f * static_cast<float>(early_frames) <= 0.0f) break;
+        }
+        pad.hold(Key::Space);  // pressed now, while still in the air
+        float lowest = sim.pos(h).y, highest_after = -1e9f;
+        bool landed = false;
+        for (int i = 0; i < 40; ++i) {
+            pad.frames(1);
+            const float y = sim.pos(h).y;
+            if (!landed && sim.physics->is_grounded(h.id)) landed = true;
+            lowest = std::min(lowest, y);
+            if (landed) highest_after = std::max(highest_after, y);
+        }
+        return highest_after > lowest + 0.5f;
+    };
+    CHECK(jumps_on_landing(3));    // 0.05 s early: buffered, it jumps when it lands
+    CHECK_FALSE(jumps_on_landing(15));  // 0.25 s early: forgotten (and the key is held, not pressed again)
+}
+
+TEST_CASE("platformer: up through a one-way platform from below, stands on it, drops through with down + jump") {
+    scene::Scene s;
+    s.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    s.entities.push_back(block("Ledge", {0, 1.0f, 0}, 4, 0.2f, true));  // top at 1.1 m, under a 1.5 m jump
+    const auto h = hero({0.0f, 0.01f, 0});
+    s.entities.push_back(h);
+    Sim sim(s);
+    Pad pad{sim};
+    pad.frames(10);
+    pad.hold(Key::Space);
+    pad.frames(50);  // up through it, and back down onto it
+    pad.hold(Key::Space, false);
+    pad.frames(30);
+    MESSAGE("after jumping up through the ledge: y " << sim.pos(h).y);
+    CHECK(sim.pos(h).y == doctest::Approx(1.1f).epsilon(0.05));  // standing on its top
+    CHECK(sim.physics->is_grounded(h.id));
+    // Down + jump: through it, back to the floor.
+    pad.hold(Key::S);
+    pad.hold(Key::Space);
+    pad.frames(2);
+    pad.hold(Key::S, false);
+    pad.hold(Key::Space, false);
+    pad.frames(60);
+    MESSAGE("after dropping: y " << sim.pos(h).y);
+    CHECK(sim.pos(h).y < 0.1f);
+    // A solid ledge (not one-way) stops the same jump: its head hits the underside.
+    scene::Scene s2;
+    s2.entities.push_back(block("Floor", {0, -0.5f, 0}, 40, 1));
+    s2.entities.push_back(block("Ceiling", {0, 1.6f, 0}, 4, 0.2f));
+    const auto h2 = hero({0.0f, 0.01f, 0});
+    s2.entities.push_back(h2);
+    Sim sim2(s2);
+    Pad pad2{sim2};
+    pad2.frames(10);
+    pad2.hold(Key::Space);
+    pad2.frames(50);
+    CHECK(sim2.pos(h2).y < 0.1f);  // bumped its head and fell back to the floor
+}
+
+TEST_CASE("platformer: a 3D character without the new settings moves exactly as before") {
+    // No plane, no acceleration, no coyote time, no buffer: a jump asked for in the air is dropped (as in Milestone 4),
+    // and speed is reached at once.
+    scene::Scene s;
+    s.entities.push_back(floor_entity());
+    scene::Entity e;
+    e.id = Guid::generate();
+    e.name = "Walker";
+    e.transform.position = {0, 0.01f, 0};
+    e.components["character"] = {{"radius", 0.3}, {"height", 1.8}};
+    s.entities.push_back(e);
+    Sim sim(s);
+    sim.run(0.3);
+    const math::Vec3 p0 = sim.pos(e);
+    sim.physics->character_move(e.id, {2, 0, 3});
+    sim.world.frame(1.0 / 60.0, {});
+    const math::Vec3 step = (sim.pos(e) - p0) * 60.0f;
+    CHECK(step.x == doctest::Approx(2.0f).epsilon(0.02));
+    CHECK(step.z == doctest::Approx(3.0f).epsilon(0.02));
+}

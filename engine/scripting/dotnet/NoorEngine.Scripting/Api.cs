@@ -130,6 +130,10 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public void CharacterMove(Vector3 velocity) => Engine.A.Push(Id, 2, new RtVec3(velocity));
     /// <summary>Character controller: jump (upward m/s) if standing on ground.</summary>
     public void CharacterJump(float speed = 5) => Engine.A.CharacterJump(Id, speed);
+    /// <summary>Character controller: the jump button was let go; a rising jump keeps jump_cut of its speed (shorter jumps).</summary>
+    public void CharacterJumpRelease() => Engine.A.Push(Id, 3, default);
+    /// <summary>Character controller: fall through the one-way platform it stands on.</summary>
+    public void CharacterDrop() => Engine.A.Push(Id, 4, default);
     public bool IsGrounded => Engine.A.IsGrounded(Id) != 0;
     /// <summary>Character controller in the water: "dry", "wading", "swimming" or "under" (null: not a character).</summary>
     public unsafe string? WaterState => Engine.A.CharacterWater(Id, null, null) switch

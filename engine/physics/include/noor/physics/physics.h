@@ -19,6 +19,20 @@
 //                origin: slides along walls, walks up steps and slopes, sticks to the floor going down,
 //                jumps. Scripts steer it each frame with character_move / character_jump. Raycasts and
 //                triggers see it (an inner body). It moves its entity; it doesn't need a collider.
+//                Feel (2D part 2, ADR-040; all off by default, so 3D characters move as they always have):
+//                "plane": "xy" keeps it in its XY plane (2D: it moves along X only, never drifts in Z);
+//                "acceleration" / "deceleration" / "air_acceleration" (m/s2; 0: reaches the asked speed at once);
+//                "gravity_scale" (1); "coyote_time" (s: a jump still works this long after walking off a ledge);
+//                "jump_buffer" (s: a jump asked this long before landing happens on landing); "jump_cut" (0.5:
+//                letting go of jump while rising keeps this share of the upward speed: character_jump_release).
+//   "collider" + "one_way": true: a level platform characters stand on but jump up through from below and from the
+//                sides, and drop through with character_drop.
+//   "platformer": {"speed": 6, "jump_height": 1.5, "axis": "move_x", "jump": "jump", "down": "move_y",
+//                  "animations": {"idle": ..., "run": ..., "jump": ..., "fall": ...}}  (2D part 2)
+//                Built-in platformer controls for a character: the axis walks it, the jump action jumps (to
+//                jump_height when held, shorter when let go early), down + jump drops through a one-way platform. It
+//                turns the entity's sprite to face the way it moves and plays the named sprite animations (from how it
+//                actually moves, so a script may steer it with character_move / character_jump instead of the keys).
 // An entity with a collider and no rigidbody is static. Sizes are multiplied by the entity's world
 // scale when play starts. Dynamic bodies move their entity; kinematic bodies follow it (scripts move
 // them); static bodies stay where they started.
@@ -99,6 +113,7 @@ public:
 
     [[nodiscard]] std::string_view name() const override { return "physics"; }
     void entity_started(runtime::World& world, scene::Entity& entity) override;
+    void update(runtime::World& world, double dt) override;  // built-in platformer controls
     void fixed_update(runtime::World& world, double dt) override;
     void entity_destroyed(runtime::World& world, const scene::Entity& entity) override;
 
@@ -116,8 +131,15 @@ public:
     // Horizontal velocity (m/s, world) wanted this frame; the vertical part is ignored. Reset after
     // each frame, so scripts call it every frame they want to move.
     void character_move(const Guid& entity, math::Vec3 velocity);
-    // Jumps with this upward speed (m/s) at the next fixed step, if the character stands on ground.
+    // Jumps with this upward speed (m/s) at the next fixed step, if the character stands on ground (or left it less
+    // than coyote_time ago, or lands within jump_buffer).
     void character_jump(const Guid& entity, float speed);
+    // The jump button let go (2D part 2): if it's still rising from a jump, it keeps jump_cut of its upward speed.
+    void character_jump_release(const Guid& entity);
+    // Falls through the one-way platform it stands on (ignores one-way platforms for a quarter of a second).
+    void character_drop(const Guid& entity);
+    // Its velocity as the controller last moved it (m/s, world).
+    [[nodiscard]] std::optional<math::Vec3> character_velocity(const Guid& entity) const;
     [[nodiscard]] bool is_grounded(const Guid& entity) const;
     // In the water (8D part 5): its state and the water's depth at its feet and at the top of its head (positive: under).
     enum class WaterState : std::uint8_t { Dry, Wading, Swimming, Under };

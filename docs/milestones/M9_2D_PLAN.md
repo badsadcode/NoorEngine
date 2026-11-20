@@ -25,8 +25,8 @@ the bit; every existing golden and yardstick unchanged.
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **2D physics on Jolt**: a rigidbody can be locked to a plane (`"plane": "xy"`: moving in X and Y, turning about Z) or have any axis locked (`lock_position`, `lock_rotation`, for 3D too); 2D collider shapes: `rectangle`, `circle`, `polygon` (convex, from points), each a slab of a given depth | Bodies locked to the plane stay in it to the bit over a long tumbling pile, turning only about Z (unit); a circle rolls down a slope as a disc should (its speed against the formula); polygons land and rest; deterministic run to run; a golden of a 2D pile; existing physics tests unchanged |
-| 2 | **A 2D character controller**: walking, jumping with variable height, slopes, one-way platforms, ground snapping; coyote time and jump buffering as options; `on_ground` events for scripts | A scripted run over a test course (slope, gap, one-way platform) lands where the maths says; a built game identical |
-| 3 | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
+| 2 ✅ | **A 2D character controller**: walking, jumping with variable height, slopes, one-way platforms, ground snapping; coyote time and jump buffering as options; `on_ground` events for scripts | A scripted run over a test course (slope, gap, one-way platform) lands where the maths says; a built game identical |
+| 3 | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
 | 4 | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
 | 5 | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
 | 6 | **Cameras for 2D**: pixel-perfect (whole pixels at a chosen pixels per unit, integer scaling for retro resolutions), following with a dead zone and bounds, parallax layers | A moving pixel-perfect camera never draws a sprite between pixels (readback); parallax layers move by their factor (golden at two moments) |
@@ -42,6 +42,27 @@ the same pile twice lands identically; a circle rolls down a 20° slope at **2.2
 X and Z turning locked stands on a step's edge it would otherwise topple off; a polygon of two points is refused. A
 golden of a 2D pile under an orthographic camera (`Physics2D_Pile`). Risk 1 (Jolt in a plane) is settled for bodies;
 characters are part 2.
+
+## Part 2 result (2026-11-20)
+Done. The `character` component gains a 2D mode and a feel, all off by default (3D characters move exactly as before,
+tested): `"plane": "xy"`, `acceleration` / `deceleration` / `air_acceleration`, `gravity_scale`, `coyote_time`,
+`jump_buffer`, `jump_cut`. One-way platforms (`"one_way": true` on a static collider). `character_jump_release` and
+`character_drop` for Lua and C# (rt API v10). And a built-in **`platformer`** component: keys walk and jump it, it faces
+its sprite and plays idle, run, jump and fall, and a script can steer it instead. Its jump speed is solved for 60 Hz
+steps, so `jump_height` is what you get.
+
+Proved (keys pressed in the unit tests as a player would): a walk up a 20° slope and off its end without leaving the
+plane on any of 150 steps; a held jump peaking at **1.50091 m** for 1.5 asked (the textbook speed would be 4% short); a
+tap jumping about half as high; 6 m/s reached at 30 m/s²; a jump 0.05 s after leaving a ledge works and 0.2 s doesn't;
+a jump pressed 0.05 s before landing happens and 0.25 s doesn't; up through a one-way ledge, standing on it at its top,
+down + jump back through, and the same jump stopped by a solid ledge. Tom's own pixel art ran on it in a local demo
+(the devlog's pictures; the art stays out of the repository).
+
+**Not done here, said plainly:** the built-game check moves to the samples (part 7), where there's a real course to
+play; ground events for scripts (`is_grounded()` is there) wait for a game that needs them; ladders (the old game had
+them) are a later part. **Found:** pixel-art sprites sample with `repeat`, so a frame's edge picks up the opposite edge
+or the next frame (a thin line under the hero's feet in a jump frame). Part 3 fixes it (frames sampled inside their
+own rectangle).
 
 ## Highest risks (settle early)
 

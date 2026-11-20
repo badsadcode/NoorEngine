@@ -110,7 +110,9 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:add_impulse(v)` | Instant push (kg·m/s), e.g. a jump or a hit |
 | `e:add_force(v)` | Push during the next physics step (newtons) |
 | `e:character_move(v)` | Character controller: walk with this horizontal velocity (m/s, world) this frame. Call it every frame you want to move |
-| `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground |
+| `e:character_jump(speed)` | Character controller: jump (upward m/s, default 5) if standing on ground (or within its `coyote_time` of leaving it; with a `jump_buffer`, a jump asked just before landing happens on landing) |
+| `e:character_jump_release()` | The jump button was let go: a jump still rising keeps `jump_cut` (0.5) of its upward speed, so a tap jumps lower than a hold |
+| `e:character_drop()` | Falls through the one-way platform it stands on |
 | `e:is_grounded()` | Character controller: standing on walkable ground |
 | `e:character_water()` | Character controller in water (8D): its state ("dry", "wading", "swimming", "under"), the water's depth at its feet and at its head (positive: under); `nil` if it isn't a character |
 | `e:play_sound()`, `e:stop_sound()`, `e:is_playing()` | The entity's `audio_source`: (re)start, stop, still playing? |
@@ -155,6 +157,26 @@ and Y and turns only about Z, exactly (it never drifts out of its plane):
 
 A `circle` rolls like a disc (it's given a disc's inertia). `angular_damping` (0.05 by default) slows turning, as
 `linear_damping` slows moving.
+
+**2D characters and platformers** (2D foundations, part 2): a `character` with `"plane": "xy"` moves along X only and
+never leaves its plane. Its feel is set on the component (all off by default, so 3D characters move as before):
+
+```json
+"character":  { "radius": 0.3, "height": 1.1, "plane": "xy", "gravity_scale": 3,
+                "acceleration": 40, "deceleration": 50, "air_acceleration": 25,   // m/s2; 0: at once
+                "coyote_time": 0.1, "jump_buffer": 0.1, "jump_cut": 0.5 }
+"platformer": { "speed": 6.5, "jump_height": 2.2,
+                "animations": { "idle": "idle", "run": "run", "jump": "jump", "fall": "fall" } }
+"collider":   { "shape": "rectangle", "size": [3, 0.25], "one_way": true }      // jump up through it, stand on it
+```
+
+- **`coyote_time`**: a jump still works this many seconds after running off a ledge. **`jump_buffer`**: a jump pressed
+  this long before landing happens on landing. Both forgive the player's timing, the way good platformers do.
+- **`platformer`** is a built-in player: `move_x` walks, `jump` jumps to exactly `jump_height` metres (held; a tap
+  jumps lower), down + jump drops through a one-way platform. It faces the sprite the way the character moves and
+  plays the named sprite animations. Without keys pressed, a script can steer the same character with
+  `character_move` / `character_jump`, and the facing and animations still follow.
+- **One-way platforms** are level: they're stood on from above only.
 
 A `character` is a capsule controller with its feet at the entity's origin: it slides along
 walls, walks up steps and slopes, stays on the ground going down, and jumps. While playing, the

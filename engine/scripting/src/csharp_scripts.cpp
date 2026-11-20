@@ -159,6 +159,8 @@ void rt_push(noor_rt_entity e, int32_t kind, noor_rt_vec3 v) {
     if (kind == NOOR_RT_IMPULSE) p->add_impulse(id, vec(v));
     else if (kind == NOOR_RT_FORCE) p->add_force(id, vec(v));
     else if (kind == NOOR_RT_CHARACTER_MOVE) p->character_move(id, vec(v));
+    else if (kind == NOOR_RT_CHARACTER_JUMP_RELEASE) p->character_jump_release(id);
+    else if (kind == NOOR_RT_CHARACTER_DROP) p->character_drop(id);
 }
 void rt_character_jump(noor_rt_entity e, float speed) {
     if (auto* p = physics_of()) p->character_jump(from_rt(e), speed);

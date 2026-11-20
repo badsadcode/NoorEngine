@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 9u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow */
+#define NOOR_RT_API_VERSION 10u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4) */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -44,7 +44,7 @@ enum {
     NOOR_RT_VELOCITY = 7        /* physics body; get/set */
 };
 /* push kinds */
-enum { NOOR_RT_IMPULSE = 0, NOOR_RT_FORCE = 1, NOOR_RT_CHARACTER_MOVE = 2 };
+enum { NOOR_RT_IMPULSE = 0, NOOR_RT_FORCE = 1, NOOR_RT_CHARACTER_MOVE = 2, NOOR_RT_CHARACTER_JUMP_RELEASE = 3 /* v10 */, NOOR_RT_CHARACTER_DROP = 4 /* v10 */ };
 /* sound(): ops */
 enum { NOOR_RT_SOUND_PLAY = 0, NOOR_RT_SOUND_STOP = 1, NOOR_RT_SOUND_IS_PLAYING = 2 };
 /* input queries */

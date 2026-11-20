@@ -97,7 +97,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 9;
+    public const uint ExpectedVersion = 10;
     public static RtApi* Api;
 
     public static ref RtApi A

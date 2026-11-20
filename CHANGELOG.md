@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-20 — 2D foundations, part 2: a platformer character
+**Added**
+- `character`: `"plane": "xy"`, `acceleration`, `deceleration`, `air_acceleration`, `gravity_scale`, `coyote_time`,
+  `jump_buffer`, `jump_cut` (all off by default). One-way platforms (`"one_way": true` colliders).
+- The built-in `platformer` component (keys walk and jump, sprite facing and animations; scripts may steer instead).
+- `character_jump_release`, `character_drop` (Lua; C# `CharacterJumpRelease`, `CharacterDrop`); rt API v10.
+- `PhysicsSystem::character_velocity`.
+
+**Tests:** in-plane walking up a slope; jump height (1.50091 m for 1.5); taps; acceleration; coyote time and jump
+buffering, each with a too-late case; one-way platforms up, on and through; a 3D character unchanged.
+
+**Found:** pixel-art frames bleed at their edges (`repeat` sampling); fixed in part 3.
+
 ### 2026-11-20 — 2D foundations, part 1: 2D physics on Jolt
 **Added**
 - [M9_2D_PLAN.md](docs/milestones/M9_2D_PLAN.md) and [ADR-040](docs/decisions/ADR-040-2d-and-isometric.md): 2D inside

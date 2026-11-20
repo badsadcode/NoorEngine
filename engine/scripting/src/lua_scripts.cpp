@@ -307,6 +307,14 @@ struct LuaScriptSystem::Impl {
                  if (auto* p = physics_of(L)) p->character_jump(check_entity(L, 1), static_cast<float>(luaL_optnumber(L, 2, 5.0)));
                  return 0;
              }},
+            {"character_jump_release", [](lua_State* L) {  // 2D part 2: the jump button let go (a shorter jump)
+                 if (auto* p = physics_of(L)) p->character_jump_release(check_entity(L, 1));
+                 return 0;
+             }},
+            {"character_drop", [](lua_State* L) {  // through a one-way platform
+                 if (auto* p = physics_of(L)) p->character_drop(check_entity(L, 1));
+                 return 0;
+             }},
             {"is_grounded", [](lua_State* L) {
                  auto* p = physics_of(L);
                  lua_pushboolean(L, p && p->is_grounded(check_entity(L, 1)));
