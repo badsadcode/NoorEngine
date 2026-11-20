@@ -1,6 +1,6 @@
 # ADR-036: Skeletal animation
 
-**Status:** Accepted, with one change from the proposal (Milestone 8C, part 1, 2026-11-20): **bones are entities** (below)
+**Status:** Accepted (Milestone 8C, done 2026-11-20: all eight parts; [review](../milestones/M8C_REVIEW.md)), with one change from the proposal (part 1): **bones are entities** (below)
 
 ## Context
 

@@ -13,7 +13,7 @@ each ending in its own review, like Milestone 7 ended in one.
 | **8A: Sky, atmosphere and environments** | NoorSky phase A ([brief](../ideas/NOORSKY.md)): a sun-driven sky, aerial perspective and fog, environment lighting rebuilt on the GPU so the sun can move, a layered cloud sky, night (moon, stars), **space** (no atmosphere: stars, planets, a sun that doesn't scatter), a `.noorenv` asset with six presets and a gallery, weather zones that blend environments across space | **Done** ([review](M8A_REVIEW.md)) |
 | **8B: Particles and sprites** | A particle system with an editor (rain, snow and dust for 8A's weather, FX, gameplay); sprite sheets and 8-direction billboards (The Uncounted's creatures) with animation playback from scripts | **Done** ([review](M8B_REVIEW.md)) |
 | **8C: Skeletal animation** | Skinned meshes and animations from glTF (any rig Blender exports), an animation player, blending, a simple state machine, root motion, an editor preview; **retargeting** through a humanoid bone map with presets for **Rigify** (deform bones), **Mixamo**, the **Unreal mannequin** and Blender's metarig; Alden Wayfarer as the test character | **Done** ([review](M8C_REVIEW.md)) |
-| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** |
+| **8D: Water** | Water bodies (lakes, a sea plane), reflections, shorelines that read the terrain, and **underwater** environments (light absorbed with depth, fog, a surface seen from below), built on 8A's environments | **Next** ([parts below](#8d-water), proposed) |
 | Later (8 or 9) | Volumetric fog and clouds (NoorSky phase C), streaming for big worlds | Not scheduled |
 
 Assets for all of it come mainly from **Blender** (plain glTF), with trees, grass and rocks from NoorMD
@@ -559,9 +559,8 @@ Noor painted all ten "Alden discovers" pictures, M1 to 8C, the same day ([ALDEN_
 
 ## Open questions
 
-1. **Alden for the sample.** There's no rigged Alden and Tom doesn't animate by hand. Options for part 8: a blocky
-   stand-in built by script from his concept sheet's description, animated by retargeting the CC0 robot's clips
-   (Tom to approve the look), or the robot itself on Hillside with Alden waiting for a real model.
+1. ~~**Alden for the sample.**~~ **Settled in part 8:** a blocky Alden built by script from his concept sheet's
+   description, on Ward's skeleton with Ward's motions (Tom approved the look).
 2. ~~**Which CC0 test characters?**~~ Settled (risk 1 above).
 3. ~~**FBX:**~~ **Settled in part 7:** kept, researched, and a go (FBX_RESEARCH.md).
 
@@ -570,3 +569,98 @@ IK solvers, look-at and aim constraints, foot placement on uneven ground, ragdol
 18.2, with physics), morph targets and facial animation, the sequencer and cinematics (18.4), an animation studio
 for posing and keying in the editor (ideas inbox: after 8C), animation compression, GPU sampling, dual-quaternion
 skinning, network replication of animation state.
+
+---
+
+# 8D: water
+
+## Where 8D starts
+
+- **There's no water.** Hillside has a valley and no lake; the open question from 8A ("a deep-sea environment
+  before 8D?") is still open; Tom's deep-sea project and Thornwake's rivers both want it.
+- **What the renderer has:** a see-through pass after the opaque scene, sorted back to front (glass, particles);
+  the sky, sun and environment lighting rebuilt on the GPU (8A: reflections of the sky are already there to sample);
+  height fog and aerial perspective; MSAA (4x by default); cascaded sun shadows.
+- **What it hasn't:** nothing reads the scene behind a see-through surface. There's no copy of the opaque scene's
+  colour or depth, so no refraction, no "how deep is the water here", no soft edges where water meets the shore; no
+  screen-space reflections; no planar reflections.
+- **What else helps:** terrains with height fields the CPU can read (sculpted ones too), Jolt physics with a
+  character controller, deterministic fixed steps and built-game checks, environment assets with presets and
+  weather zones (8A), particles that collide with planes and spawn sub-emitters (8B), and the editor's gallery
+  pattern (Environments, Effects).
+- **The spec (17.1, NoorWater)** asks for distinct bodies (ocean, lake, river, pool, underwater volumes), shorelines
+  and lake levels, rivers along splines or flow networks, waves for open water, shallows and rivers, PBR reflection,
+  refraction and transparency, underwater fog and light falloff, foam, wetness, ripples, wakes, wind and weather,
+  a query API for boats, swimmers, physics and gameplay, and debug views (normals, flow, displacement, depth,
+  cost). It says plainly that an art-directed approximation is fine if it's consistent and disclosed: 8D is not a
+  fluid simulation.
+
+## Decisions (ADR-037, proposed with this plan)
+
+- **A `water` component on an entity**, with a shape: a **box** (lakes, ponds, pools: a level surface inside a
+  footprint, and a volume under it), an **endless sea** (a surface to the horizon, following the camera), and later
+  a **river** (a spline). Its look in a **`.noorwater` asset** with built-in presets and overrides on the component,
+  like environments and effects.
+- **The scene behind the water is read once a frame**: when water is in view, the opaque scene's colour and depth
+  are resolved and copied after the opaque pass. The water then knows how thick it is at every pixel: its colour is
+  light absorbed by that thickness (red first, then green: Beer-Lambert per channel), the shore fades in softly,
+  foam gathers where it's shallow, and what's under it is bent a little (refraction by offsetting the lookup).
+- **Reflections: the sky and sun always, nearby things by screen-space reflection** where the screen has them,
+  falling back to the sky where it hasn't. Planar reflections (a mirror-perfect lake, at the cost of drawing the scene
+  a second time) are not in 8D (open question 1).
+- **Waves are a formula, not a simulation**: a handful of Gerstner waves set by the wind and the preset, plus
+  scrolling detail normals. One formula, evaluated in the vertex shader for drawing and on the CPU for gameplay
+  (`water_height(x, z)` for scripts, buoyancy, swimming), a pure function of position and game time, so built games
+  agree. Gameplay reads only the CPU's answer. An FFT ocean only if Gerstner waves can't look right.
+- **Underwater belongs to the environment**: an `underwater` block (absorption, scattering colour, visibility,
+  caustics) used whenever the camera is inside a water volume, so a weather zone can change it like anything else.
+  A **deep sea without a surface** is simply a water volume whose surface is far above (8A's open question: yes).
+- **Floating is NoorEngine's, pushing is Jolt's**: buoyancy is worked out from sample points on each body against
+  the water's height (submerged fraction, drag), applied as forces at the fixed step. Characters wade (slowed) and,
+  in deep water, swim (a state scripts and the animator can read).
+
+## Parts (each ends tested, documented and pushed)
+
+| Part | What | Proves |
+|---|---|---|
+| 1 | **The water surface:** the `water` component (box, endless sea), the scene's colour and depth copied once a frame, absorption by thickness, refraction, a soft shoreline, sky and sun reflections with Fresnel, fog and aerial perspective over it; `.noorwater` with a first preset | A lake on Hillside as a golden; thickness and absorption against hand-worked values (unit); the copy's cost measured |
+| 2 | **Waves:** Gerstner waves from the wind and preset, detail normals, the endless sea's grid following the camera to the horizon; `water_height(x, z)` for Lua and C# | The CPU's height equals what's drawn (a marker floated at the CPU's height sits on the rendered surface, read back); identical in a built game; a sea golden at two moments |
+| 3 | **Shorelines and reflections:** each body's depth map from the terrain under it, waves calming in the shallows, foam and wet sand at the waterline; screen-space reflections with the sky behind them | Waves damped by depth (unit); a shoreline golden; reflections of the house in the lake that fade to sky at the screen's edge |
+| 4 | **Underwater:** absorption and fog with depth, the surface seen from below (the bright window overhead, total internal reflection beyond it), caustics on what's below, the waterline across the screen when the camera is half in; underwater in `.noorenv`, a deep-sea preset | Goldens under the lake, in the deep sea, and at the waterline; walking a camera down through the surface without a pop |
+| 5 | **Water in the game:** buoyancy for physics bodies, wading and swimming for characters (`on_water` events, the depth at the feet and head), particles splashing on the surface (8B's planes), rain rippling it, wind roughening it | A crate floats at the depth its density says, within a centimetre, and bobs identically in a built game; a character slows in water and swims in deep water; splash counts exact |
+| 6 | **Rivers:** a spline water body following the ground, flowing (flow-scrolled normals and foam, speed along the spline), joining a lake; the flow speed for scripts and buoyancy | A river golden; a floating crate carried downstream at the flow's speed |
+| 7 | **The Water panel and debug views:** a gallery of presets (Lake, Pond, Sea, Tropical, Swamp, River, Deep sea) like Environments, live editing, debug views (depth, flow, wave displacement, normals, cost) | API tests (presets, apply in one undo step, edits reach the game); the editor smoke test edits a lake and sees it change |
+| 8 | **Sample + review:** Hillside gets its lake (Alden at the shore, crates bobbing, rain on the water), a seaside or deep-sea scene, a cost table, the 8D review | The 8D gate |
+
+## Highest risks (settle early)
+
+1. **Reading the scene behind the water.** Copying colour and depth after the opaque pass means resolving MSAA (or
+   reading it multisampled) and restructuring the frame's passes; it has to cost little when water is in view and
+   nothing when it isn't. Part 1 measures it before anything is built on it.
+2. **Reflections people expect.** A calm lake that reflects only the sky looks wrong; screen-space reflections miss
+   whatever is off screen (the far shore at the top of the picture, the underside of a bridge). Settled in part 3
+   with before/after pictures; planar reflections stay possible later for mirror lakes (open question 1).
+3. **One wave formula on two processors.** The shader's floats and the CPU's must agree closely enough that a
+   floating crate sits on the drawn surface; gameplay uses only the CPU's answer, drawing only the GPU's, and a test
+   measures the gap.
+4. **The endless sea.** A surface to the horizon needs a grid that follows the camera without swimming or shimmering,
+   and precision far from the origin (Baltic Drive's moving origin is the reference if it comes to that).
+5. **The waterline.** A camera half in the water sees two worlds split by a wobbling line; the classic place for
+   pops and seams. Part 4 tests a camera walked down through the surface.
+
+## Open questions
+
+1. **Reflections:** screen-space plus the sky (recommended: no second scene render, good on rippled water), or also
+   planar reflections for mirror-calm lakes (sharp, but the scene drawn twice where they're used)?
+2. **Which water first, for the look:** a calm Hillside lake (recommended, part 1), a sea coast, or the deep sea
+   (Tom's deep-sea project)? All three come, but the first gets the most tuning.
+3. **Rivers in 8D** (part 6, a spline surface over the existing ground), **or later with terrain carving** (the spec's
+   13.5: rivers as typed terrain modifications, with NoorRoads)? Recommended: the surface in 8D, carving later.
+4. **Swimming:** a simple generated swim clip for Alden (like his walk, from make_alden.py), or no swim animation in
+   8D (characters float upright)?
+
+## Not in 8D (planned later)
+Fluid simulation (Thornwake's local water simulation, D22, is the reference when it comes), terrain carving by rivers
+and roads (with NoorRoads), planar reflections (open question 1), wakes behind moving boats, interactive ripples from
+every footstep, waterfalls as their own effect, ice and frozen water, volumetric light shafts underwater (with NoorSky
+phase C's volumetrics), boats and vehicles as gameplay templates.
