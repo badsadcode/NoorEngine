@@ -543,7 +543,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
             stats.gpu_ms = ms(ticks[0], ticks[kTimestampsPerFrame - 1]);
             // "Scene": opaque and sky; "Scene copy": its colour and depth copied for water (8D; 0 without water); "See-through":
             // water and the see-through draws.
-            static constexpr const char* kPassNames[] = {"Environment", "Shadows", "Scene", "Scene copy", "See-through", "Tonemap", "Gizmos", "HUD"};
+            static constexpr const char* kPassNames[] = {"Environment", "Shadows", "Scene", "Scene copy", "See-through", "Tonemap", "Gizmos", "HUD", "Game UI"};
             stats.passes.resize(kTimestampsPerFrame - 1);
             for (std::uint32_t i = 0; i + 1 < kTimestampsPerFrame; ++i) stats.passes[i] = {kPassNames[i], ms(ticks[i], ticks[i + 1])};
         }
@@ -753,7 +753,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.pColorAttachments = &color;
     rendering.renderArea = {{0, 0}, extent};
     if (!same_size) rendering.pDepthAttachment = nullptr;
-    begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD, game UI)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
+    begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
     stamp(6, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -762,11 +762,13 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
     }
-    if (auto status = record_ui(frame.cmd, frame_desc.ui); !status) {
-        NOOR_LOG_ERROR("Render", "Game UI skipped: {}", status.error().describe());
-    }
     vkCmdEndRendering(frame.cmd);
     end_label(frame.cmd);
+    stamp(8, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+    // Game UI (6c): its own layers, then back onto the screen.
+    if (auto status = record_ui(frame.cmd, frame_desc.ui, image, image_views[image_index]); !status) {
+        NOOR_LOG_ERROR("Render", "Game UI skipped: {}", status.error().describe());
+    }
 
     if (capture_requested && swapchain_supports_capture && !capture.pending) {
         if (auto status = record_capture(frame.cmd, image); !status) {
@@ -925,6 +927,7 @@ std::uint64_t Renderer::render_target_memory() const noexcept {
     std::uint64_t bytes = pixels * (8 + 4);                  // HDR (RGBA16F) + depth (D32)
     if (samples > 1) bytes += pixels * samples * (8 + 4);   // the multisampled scene images
     bytes += static_cast<std::uint64_t>(impl_->shadow_size) * impl_->shadow_size * 4 * kShadowCascades;
+    bytes += impl_->ui_memory();  // the game UI's layers, once a frame has had UI (6c)
     return bytes;
 }
 void Renderer::set_msaa(std::uint32_t samples) noexcept {

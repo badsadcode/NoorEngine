@@ -6,12 +6,12 @@ game. ([ADR-041](../decisions/ADR-041-game-ui.md): RmlUi does the layout and sty
 For a score in the corner or a health bar, the **HUD** is still the quick way (`noor.ui.text`, `noor.ui.rect` from a
 script, redrawn every frame). Documents are for anything with layout: panels, lists, buttons, pictures.
 
-**What works today (gameplay foundations parts 6a and 6b):** documents shown in a running game (noor_player and built
-games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; scripts (Lua and C#) open,
-show, hide and close them, change what's in them, read and set their controls and react to clicks and changes; the
-mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** gradients, shadows, blur, transforms
-(6c); a UI builder in the editor, and documents in the editor's Play (6d); gamepads (6e); binding data to a page
-(a later step).
+**What works today (gameplay foundations parts 6a to 6c):** documents shown in a running game (noor_player and built
+games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; gradients, shadows, blur and
+other filters, frosted glass over the game, 2D and 3D transforms, masks ([Effects](#effects)); scripts (Lua and C#)
+open, show, hide and close them, change what's in them, read and set their controls and react to clicks and changes;
+the mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** a UI builder in the editor, and
+documents in the editor's Play (6d); gamepads (6e); binding data to a page (a later step).
 
 ## Showing a document
 
@@ -64,6 +64,30 @@ call is listed in [Lua](../scripting/LUA_API.md#ui-documents-menus) and [C#](../
 - **Who owns a document:** a document a script opens closes when the script's entity is destroyed; one from a
   `ui_document` component, when that entity is. `noor.ui.find(path)` gets a component's document.
 - `click(element)` presses a button from a script: handy for tests, tutorials and gamepad shortcuts.
+
+## Effects
+
+![Fourteen cards over a 3D scene, one effect each: linear, radial, conic and repeating gradients, a box shadow with a coloured ring, frosted glass blurring the scene behind it, a blurred card, a grayscale gradient, a drop shadow, a rotated card, one tilted in perspective, a rounded box cutting off a bar, a gradient fading out through a mask, and a half-transparent card](../devlog/img/devlog097_ui_effects.png)
+
+*The render test's page (`tests/data/render_scenes/UI/effects.noorui`), straight from the test.*
+
+| What | RCSS | Notes |
+|---|---|---|
+| Gradients | `decorator: linear-gradient(120deg, #FF5E62, #FFC857)`; `radial-gradient`, `conic-gradient`, `repeating-linear-gradient` and friends | Up to 16 colour stops |
+| Shadows | `box-shadow: #00000099 0dp 12dp 24dp 0dp, #4B1AF2 0dp 0dp 0dp 4dp` | Several at once, `inset` too; drawn once and kept until the box changes |
+| Filters | `filter: blur(3dp)`, `drop-shadow(#000C 6dp 6dp 4dp)`, `opacity(0.5)`, `brightness()`, `contrast()`, `grayscale()`, `sepia()`, `hue-rotate()`, `saturate()`, `invert()` | On the element and everything in it; several in a row |
+| Frosted glass | `backdrop-filter: blur(10dp)` with a see-through background | Blurs what's behind, **the game included** |
+| Transforms | `transform: rotate(12deg)`, `scale()`, `translate()`, `perspective(400dp) rotateY(35deg)` | Hit-testing follows: a rotated button is clicked where it's drawn |
+| Clipping | `overflow: hidden` on a box with `border-radius` | Children are cut to the rounded shape |
+| Masks | `mask-image: linear-gradient(0deg, #0000, #000F)` (or an image) | The element shows where the mask is opaque |
+| Opacity | `opacity: 0.5` (each colour faded), or `filter: opacity(0.5)` (the element and its children as one picture) | |
+
+Not supported: RmlUi's `shader` decorator (custom shaders: its own demo), and `mix-blend-mode`. A filter or shader the
+renderer doesn't know is a warning in the log, and the element draws without it.
+
+**Colours blend like a browser.** Since 6c the UI is blended in sRGB, as CSS is everywhere: `background-color: #0000008C`
+darkens what's behind exactly as it would on a web page. (6a blended in linear light, which made dims look lighter
+than their authors meant.)
 
 ## Mouse and keyboard
 
@@ -138,8 +162,14 @@ keep it the same size), so its text stays sharp instead of being scaled up with 
 
 A game without a `ui_document` doesn't start the UI at all: no memory, threads or frame time (checked by the
 yardsticks). The player program is about 4 MB bigger for carrying it. With a page open: its textures (the font's
-glyphs at each size used, images), and a few hundred triangles a frame. The menu in the render test: 17 draws, 436
-vertices, 5 textures (0.5 MB).
+glyphs at each size used, images), a few hundred triangles a frame, and the UI's layers (made with the first page:
+at 1280 x 720 about 26 MB of GPU memory, 40 MB with the effects page's nested layers).
+
+GPU time of the UI a frame, measured at 1280 x 720 on an RTX 3080 over the light Daylight scene, where the GPU idles at
+low clocks (so these are on the high side; a busy game's GPU runs faster): the pause menu **0.40 ms**, the fourteen-card
+effects page **1.7 ms**. Every effect costs a few passes over the element's own area, so a menu with one frosted panel
+costs much less than the test page. The UI is multisampled 2x (smooth rounded and rotated edges); the environment
+variable `NOOR_UI_MSAA` (1, 2 or 4) changes that, for comparing: 4x cost the menu 0.67 ms, 1x 0.30 ms.
 
 ## Licences
 
@@ -150,14 +180,19 @@ the friendly thing to do.
 
 ## For engine programmers
 
-`engine/ui` (`noor::ui::Ui`, `ui.h`) wraps RmlUi: its render interface turns geometry into `render::UiFrame` (indexed
-triangles, a texture, a translation and a clip rectangle per draw), drawn by the renderer's UI pass (`vulkan_ui.cpp`,
-`ui.hlsl`: premultiplied sRGB colours blended in linear light, textures from the bindless table with a clamping
-sampler); its file interface reads only inside the project; a plugin gives each document the default style sheet as it
-loads. One `Ui` at a time (RmlUi has global state). `WorldUi` (`world_ui.h`) is a running World's
+`engine/ui` (`noor::ui::Ui`, `ui.h`) wraps RmlUi: its render interface records RmlUi's calls as a `render::UiFrame`, a
+list of commands (draw, gradient, clip mask, push / composite / pop layer, save a layer as a texture or a mask) with
+the geometry, transforms, gradients and filters they use, each call meaning what it does in RmlUi's reference renderer
+(`RmlUi_Renderer_GL3.cpp`). The renderer runs them after the screen pass (`vulkan_ui.cpp`, `ui.hlsl`): the screen is
+copied, the UI is drawn into layers of its own (8-bit, sRGB premultiplied, multisampled, a shared stencil for clip
+masks), filters ping-pong between three single-sample images read through the bindless table (blur: halved, a 7-tap
+Gaussian down and across, scaled back up), and the finished base layer is laid over the screen's copy in sRGB and
+written back in linear light. A backdrop filter sees the screen under the base layer. Resolves and filters touch only
+the element's area. All of it is made with the first frame that has UI. Its file interface reads only inside the
+project; a plugin gives each document the default style sheet as it loads. One `Ui` at a time (RmlUi has global state). `WorldUi` (`world_ui.h`) is a running World's
 `runtime::UiDocuments`: it starts the `Ui` with the first document, opens `ui_document` components, and turns RmlUi's
 events into messages queued on the World from each document's emitter id (`World::ui_emitter`). Scripts' calls all go
 through one function, `runtime::api::ui(world, caller, {"op": ...})`, Lua's and C#'s (rt API v18) alike. Tests:
-`tests/unit/test_ui.cpp` and `test_ui_scripts.cpp` (no GPU), `render.golden_UI_Menu` (the picture, under Vulkan
-validation), `player.ui_lua_csharp` (a pause menu from Lua in a project, Lua and C# in a built game).
+`tests/unit/test_ui.cpp` and `test_ui_scripts.cpp` (no GPU), `render.golden_UI_Menu` and `render.golden_UI_Effects`
+(the pictures, under Vulkan validation), `player.ui_lua_csharp` (a pause menu from Lua in a project, Lua and C# in a built game).
 `tests/data/ui_project`'s `Scenes/Try` is a menu to play with by hand.

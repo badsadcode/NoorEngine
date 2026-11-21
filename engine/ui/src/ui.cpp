@@ -156,33 +156,87 @@ public:
     }
 };
 
+// RmlUi's drawing, effects included (6c), recorded as render::UiCommands for the renderer to run in order (vulkan_ui.cpp).
+// The meaning of each call follows RmlUi's reference renderer (RmlUi_Renderer_GL3.cpp): the same clip-mask values,
+// filter matrices and gradient parameters, so pages look the way RmlUi's documentation shows.
 class RenderInterface final : public Rml::RenderInterface {
 public:
     TextureHost host;
     const FileInterface* files = nullptr;
-    // Where the context sits on the screen: added to every translation and clip rectangle.
-    std::int32_t offset_x = 0, offset_y = 0;
+    math::Vec2 origin;  // where the context sits on the screen (the frame's origin)
 
     struct Geometry {
         std::vector<render::UiVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::uint64_t frame = ~0ull;  // the frame it was last copied into (and where)
+        std::uint32_t first_index = 0;
+        std::int32_t vertex_offset = 0;
     };
     std::unordered_map<std::uintptr_t, Geometry> geometry;
     std::uintptr_t next_geometry = 1;
     std::unordered_map<std::uint32_t, std::uint64_t> texture_bytes;  // alive textures: their size
+    std::unordered_map<std::uintptr_t, render::UiFilter> compiled_filters;
+    std::unordered_map<std::uintptr_t, render::UiGradient> compiled_shaders;
+    std::uintptr_t next_handle = 1;
 
     // This frame's.
+    std::uint64_t frame_number = 0;
     std::vector<render::UiVertex> vertices;
     std::vector<std::uint32_t> indices;
-    std::vector<render::UiDraw> draws;
+    std::vector<render::UiCommand> commands;
+    std::vector<std::array<float, 16>> transforms;
+    std::vector<render::UiGradient> gradients;
+    std::vector<render::UiFilter> filters;
     bool scissor_on = false;
     Rml::Rectanglei scissor;
+    std::int32_t transform = -1;
+    bool clip_on = false;
+    std::uint8_t clip_ref = 0;
+    std::uint32_t layers = 0;  // pushed above the base
 
     void begin_frame() {
+        ++frame_number;
         vertices.clear();
         indices.clear();
-        draws.clear();
+        commands.clear();
+        transforms.clear();
+        gradients.clear();
+        filters.clear();
         scissor_on = false;
+        transform = -1;
+        clip_on = false;
+        clip_ref = 0;
+        layers = 0;
+    }
+    [[nodiscard]] render::UiFrame frame() const { return {vertices, indices, commands, transforms, gradients, filters, origin}; }
+
+    // A command carrying the state now: scissor, clip mask, transform.
+    render::UiCommand command(render::UiCommand::Kind kind) const {
+        render::UiCommand c;
+        c.kind = kind;
+        c.scissor = scissor_on;
+        if (scissor_on) c.rect = {scissor.Left(), scissor.Top(), scissor.Width(), scissor.Height()};
+        c.stencil = clip_on;
+        c.stencil_ref = clip_ref;
+        c.transform = transform;
+        return c;
+    }
+    // The geometry into this frame's buffers (once a frame, however often it's drawn); false if there's none.
+    bool place(Rml::CompiledGeometryHandle handle, render::UiCommand& c) {
+        const auto it = geometry.find(handle);
+        if (it == geometry.end() || it->second.indices.empty()) return false;
+        Geometry& g = it->second;
+        if (g.frame != frame_number) {
+            g.frame = frame_number;
+            g.first_index = static_cast<std::uint32_t>(indices.size());
+            g.vertex_offset = static_cast<std::int32_t>(vertices.size());
+            vertices.insert(vertices.end(), g.vertices.begin(), g.vertices.end());
+            indices.insert(indices.end(), g.indices.begin(), g.indices.end());
+        }
+        c.first_index = g.first_index;
+        c.index_count = static_cast<std::uint32_t>(g.indices.size());
+        c.vertex_offset = g.vertex_offset;
+        return true;
     }
 
     Rml::CompiledGeometryHandle CompileGeometry(Rml::Span<const Rml::Vertex> v, Rml::Span<const int> i) override {
@@ -195,21 +249,11 @@ public:
         return handle;
     }
     void RenderGeometry(Rml::CompiledGeometryHandle handle, Rml::Vector2f translation, Rml::TextureHandle texture) override {
-        const auto it = geometry.find(handle);
-        if (it == geometry.end() || it->second.indices.empty()) return;
-        render::UiDraw d;
-        d.first_index = static_cast<std::uint32_t>(indices.size());
-        d.index_count = static_cast<std::uint32_t>(it->second.indices.size());
-        d.vertex_offset = static_cast<std::int32_t>(vertices.size());
-        d.translation = {translation.x + static_cast<float>(offset_x), translation.y + static_cast<float>(offset_y)};
-        d.texture = {static_cast<std::uint32_t>(texture)};
-        if (scissor_on) {
-            d.clip = true;
-            d.clip_rect = {scissor.Left() + offset_x, scissor.Top() + offset_y, scissor.Width(), scissor.Height()};
-        }
-        vertices.insert(vertices.end(), it->second.vertices.begin(), it->second.vertices.end());
-        indices.insert(indices.end(), it->second.indices.begin(), it->second.indices.end());
-        draws.push_back(d);
+        auto c = command(render::UiCommand::Kind::Draw);
+        if (!place(handle, c)) return;
+        c.translation = {translation.x, translation.y};
+        c.texture = {static_cast<std::uint32_t>(texture)};
+        commands.push_back(c);
     }
     void ReleaseGeometry(Rml::CompiledGeometryHandle handle) override { geometry.erase(handle); }
 
@@ -261,6 +305,201 @@ public:
     }
     void EnableScissorRegion(bool enable) override { scissor_on = enable; }
     void SetScissorRegion(Rml::Rectanglei region) override { scissor = region; }
+
+    // ---- Effects (6c) ----
+
+    void SetTransform(const Rml::Matrix4f* t) override {
+        if (!t) {
+            transform = -1;
+            return;
+        }
+        std::array<float, 16> m{};
+        if constexpr (std::is_same_v<Rml::Matrix4f, Rml::ColumnMajorMatrix4f>) {
+            std::memcpy(m.data(), t->data(), sizeof(m));
+        } else {
+            const Rml::ColumnMajorMatrix4f c = t->Transpose();  // row-major storage: its transpose's data is column-major
+            std::memcpy(m.data(), c.data(), sizeof(m));
+        }
+        transform = static_cast<std::int32_t>(transforms.size());
+        transforms.push_back(m);
+    }
+
+    void EnableClipMask(bool enable) override { clip_on = enable; }
+    void RenderToClipMask(Rml::ClipMaskOperation operation, Rml::CompiledGeometryHandle handle, Rml::Vector2f translation) override {
+        auto c = command(render::UiCommand::Kind::ClipMask);
+        if (!place(handle, c)) return;
+        c.translation = {translation.x, translation.y};
+        switch (operation) {
+        case Rml::ClipMaskOperation::Set:
+            c.clip_op = render::UiCommand::ClipOp::Set;
+            clip_ref = 1;
+            break;
+        case Rml::ClipMaskOperation::SetInverse:
+            c.clip_op = render::UiCommand::ClipOp::SetInverse;
+            clip_ref = 1;
+            break;
+        case Rml::ClipMaskOperation::Intersect:
+            c.clip_op = render::UiCommand::ClipOp::Intersect;
+            clip_ref = static_cast<std::uint8_t>(std::min(255, clip_ref + 1));
+            break;
+        }
+        commands.push_back(c);
+    }
+
+    Rml::LayerHandle PushLayer() override {
+        commands.push_back(command(render::UiCommand::Kind::PushLayer));
+        return static_cast<Rml::LayerHandle>(++layers);
+    }
+    void CompositeLayers(Rml::LayerHandle source, Rml::LayerHandle destination, Rml::BlendMode blend,
+                         Rml::Span<const Rml::CompiledFilterHandle> filter_handles) override {
+        auto c = command(render::UiCommand::Kind::Composite);
+        c.index = static_cast<std::uint32_t>(source);
+        c.destination = static_cast<std::uint32_t>(destination);
+        c.replace = blend == Rml::BlendMode::Replace;
+        c.first_filter = static_cast<std::uint32_t>(filters.size());
+        for (const auto h : filter_handles)
+            if (const auto it = compiled_filters.find(h); it != compiled_filters.end()) filters.push_back(it->second);
+        c.filter_count = static_cast<std::uint32_t>(filters.size()) - c.first_filter;
+        commands.push_back(c);
+    }
+    void PopLayer() override {
+        commands.push_back(command(render::UiCommand::Kind::PopLayer));
+        if (layers > 0) --layers;
+    }
+    Rml::TextureHandle SaveLayerAsTexture() override {
+        if (!scissor_on || scissor.Width() <= 0 || scissor.Height() <= 0) return 0;
+        const auto w = static_cast<std::uint32_t>(scissor.Width()), h = static_cast<std::uint32_t>(scissor.Height());
+        const std::vector<std::uint8_t> clear(static_cast<std::size_t>(w) * h * 4, 0);
+        const auto handle = make(w, h, clear, "UI layer texture");
+        if (!handle) return 0;
+        auto c = command(render::UiCommand::Kind::SaveTexture);
+        c.texture = {static_cast<std::uint32_t>(handle)};
+        commands.push_back(c);
+        return handle;
+    }
+    Rml::CompiledFilterHandle SaveLayerAsMaskImage() override {
+        commands.push_back(command(render::UiCommand::Kind::SaveMask));
+        render::UiFilter f;
+        f.kind = render::UiFilter::Kind::MaskImage;
+        const auto handle = next_handle++;
+        compiled_filters.emplace(handle, f);
+        return handle;
+    }
+
+    Rml::CompiledFilterHandle CompileFilter(const Rml::String& name, const Rml::Dictionary& p) override {
+        render::UiFilter f;
+        Rml::Matrix4f m = Rml::Matrix4f::Identity();
+        bool matrix = true;
+        const float value = Rml::Get(p, "value", 1.0f);
+        if (name == "opacity") {
+            f.kind = render::UiFilter::Kind::Opacity;
+            f.value = value;
+            matrix = false;
+        } else if (name == "blur") {
+            f.kind = render::UiFilter::Kind::Blur;
+            f.value = Rml::Get(p, "sigma", 1.0f);
+            matrix = false;
+        } else if (name == "drop-shadow") {
+            f.kind = render::UiFilter::Kind::DropShadow;
+            f.value = Rml::Get(p, "sigma", 0.0f);
+            const auto c = Rml::Get(p, "color", Rml::Colourb()).ToPremultiplied();
+            f.color = {c.red / 255.0f, c.green / 255.0f, c.blue / 255.0f, c.alpha / 255.0f};
+            const auto o = Rml::Get(p, "offset", Rml::Vector2f(0.0f));
+            f.offset = {o.x, o.y};
+            matrix = false;
+        } else if (name == "brightness") {
+            m = Rml::Matrix4f::Diag(value, value, value, 1.0f);
+        } else if (name == "contrast") {
+            const float grey = 0.5f - 0.5f * value;
+            m = Rml::Matrix4f::Diag(value, value, value, 1.0f);
+            m.SetColumn(3, Rml::Vector4f(grey, grey, grey, 1.0f));
+        } else if (name == "invert") {
+            const float v = std::clamp(value, 0.0f, 1.0f), inverted = 1.0f - 2.0f * v;
+            m = Rml::Matrix4f::Diag(inverted, inverted, inverted, 1.0f);
+            m.SetColumn(3, Rml::Vector4f(v, v, v, 1.0f));
+        } else if (name == "grayscale") {
+            const float rev = 1.0f - value;
+            const Rml::Vector3f g = value * Rml::Vector3f(0.2126f, 0.7152f, 0.0722f);
+            m = Rml::Matrix4f::FromRows({g.x + rev, g.y, g.z, 0}, {g.x, g.y + rev, g.z, 0}, {g.x, g.y, g.z + rev, 0}, {0, 0, 0, 1});
+        } else if (name == "sepia") {
+            const float rev = 1.0f - value;
+            const Rml::Vector3f r = value * Rml::Vector3f(0.393f, 0.769f, 0.189f);
+            const Rml::Vector3f g = value * Rml::Vector3f(0.349f, 0.686f, 0.168f);
+            const Rml::Vector3f b = value * Rml::Vector3f(0.272f, 0.534f, 0.131f);
+            m = Rml::Matrix4f::FromRows({r.x + rev, r.y, r.z, 0}, {g.x, g.y + rev, g.z, 0}, {b.x, b.y, b.z + rev, 0}, {0, 0, 0, 1});
+        } else if (name == "hue-rotate") {  // https://www.w3.org/TR/filter-effects-1/#attr-valuedef-type-huerotate
+            const float s = std::sin(value), c = std::cos(value);
+            m = Rml::Matrix4f::FromRows({0.213f + 0.787f * c - 0.213f * s, 0.715f - 0.715f * c - 0.715f * s, 0.072f - 0.072f * c + 0.928f * s, 0},
+                                        {0.213f - 0.213f * c + 0.143f * s, 0.715f + 0.285f * c + 0.140f * s, 0.072f - 0.072f * c - 0.283f * s, 0},
+                                        {0.213f - 0.213f * c - 0.787f * s, 0.715f - 0.715f * c + 0.715f * s, 0.072f + 0.928f * c + 0.072f * s, 0},
+                                        {0, 0, 0, 1});
+        } else if (name == "saturate") {
+            m = Rml::Matrix4f::FromRows({0.213f + 0.787f * value, 0.715f - 0.715f * value, 0.072f - 0.072f * value, 0},
+                                        {0.213f - 0.213f * value, 0.715f + 0.285f * value, 0.072f - 0.072f * value, 0},
+                                        {0.213f - 0.213f * value, 0.715f - 0.715f * value, 0.072f + 0.928f * value, 0}, {0, 0, 0, 1});
+        } else {
+            NOOR_LOG_WARN("UI", "The filter '{}' isn't supported", name);
+            return 0;
+        }
+        if (matrix) {
+            f.kind = render::UiFilter::Kind::ColorMatrix;
+            const Rml::ColumnMajorMatrix4f cm = m;
+            std::memcpy(f.matrix.data(), cm.data(), sizeof(f.matrix));
+        }
+        const auto handle = next_handle++;
+        compiled_filters.emplace(handle, f);
+        return handle;
+    }
+    void ReleaseFilter(Rml::CompiledFilterHandle filter) override { compiled_filters.erase(filter); }
+
+    Rml::CompiledShaderHandle CompileShader(const Rml::String& name, const Rml::Dictionary& p) override {
+        using K = render::UiGradient::Kind;
+        render::UiGradient g;
+        const bool repeating = Rml::Get(p, "repeating", false);
+        if (name == "linear-gradient") {
+            g.kind = repeating ? K::RepeatingLinear : K::Linear;
+            const auto p0 = Rml::Get(p, "p0", Rml::Vector2f(0.0f)), p1 = Rml::Get(p, "p1", Rml::Vector2f(0.0f));
+            g.p = {p0.x, p0.y};
+            g.v = {p1.x - p0.x, p1.y - p0.y};
+        } else if (name == "radial-gradient") {
+            g.kind = repeating ? K::RepeatingRadial : K::Radial;
+            const auto c = Rml::Get(p, "center", Rml::Vector2f(0.0f)), r = Rml::Get(p, "radius", Rml::Vector2f(1.0f));
+            g.p = {c.x, c.y};
+            g.v = {1.0f / std::max(r.x, 1e-6f), 1.0f / std::max(r.y, 1e-6f)};
+        } else if (name == "conic-gradient") {
+            g.kind = repeating ? K::RepeatingConic : K::Conic;
+            const auto c = Rml::Get(p, "center", Rml::Vector2f(0.0f));
+            const float angle = Rml::Get(p, "angle", 0.0f);
+            g.p = {c.x, c.y};
+            g.v = {std::cos(angle), std::sin(angle)};
+        } else {
+            NOOR_LOG_WARN("UI", "The shader '{}' isn't supported (gradients are)", name);
+            return 0;
+        }
+        const auto it = p.find("color_stop_list");
+        if (it == p.end() || it->second.GetType() != Rml::Variant::COLORSTOPLIST) return 0;
+        const auto& stops = it->second.GetReference<Rml::ColorStopList>();
+        g.stops = static_cast<std::uint32_t>(std::min<std::size_t>(stops.size(), render::UiGradient::kMaxStops));
+        for (std::uint32_t i = 0; i < g.stops; ++i) {
+            const auto& s = stops[i];
+            g.positions[i] = s.position.number;
+            g.colors[i] = {s.color.red / 255.0f, s.color.green / 255.0f, s.color.blue / 255.0f, s.color.alpha / 255.0f};
+        }
+        const auto handle = next_handle++;
+        compiled_shaders.emplace(handle, g);
+        return handle;
+    }
+    void RenderShader(Rml::CompiledShaderHandle shader, Rml::CompiledGeometryHandle handle, Rml::Vector2f translation, Rml::TextureHandle) override {
+        const auto it = compiled_shaders.find(shader);
+        if (it == compiled_shaders.end()) return;
+        auto c = command(render::UiCommand::Kind::Gradient);
+        if (!place(handle, c)) return;
+        c.translation = {translation.x, translation.y};
+        c.index = static_cast<std::uint32_t>(gradients.size());
+        gradients.push_back(it->second);
+        commands.push_back(c);
+    }
+    void ReleaseShader(Rml::CompiledShaderHandle shader) override { compiled_shaders.erase(shader); }
 };
 
 // Gives every document the default style sheet, first (so the document's own win), as it loads: RmlUi tells plugins
@@ -593,8 +832,7 @@ void Ui::set_viewport(std::int32_t x, std::int32_t y, std::int32_t width, std::i
     height = std::max(1, height);
     if (x == impl_->x && y == impl_->y && width == impl_->width && height == impl_->height) return;
     impl_->x = x, impl_->y = y, impl_->width = width, impl_->height = height;
-    impl_->renderer.offset_x = x;
-    impl_->renderer.offset_y = y;
+    impl_->renderer.origin = {static_cast<float>(x), static_cast<float>(y)};
     impl_->context->SetDimensions({width, height});
     impl_->context->SetDensityIndependentPixelRatio(static_cast<float>(height) / 720.0f);  // dp: the HUD's unit
 }
@@ -616,14 +854,15 @@ render::UiFrame Ui::draw() {
     auto& r = impl_->renderer;
     r.begin_frame();
     impl_->context->Render();
-    return {r.vertices, r.indices, r.draws};
+    return r.frame();
 }
 
 UiStats Ui::stats() const {
     const auto& r = impl_->renderer;
     UiStats s;
     s.documents = static_cast<std::uint32_t>(impl_->documents.size());
-    s.draws = static_cast<std::uint32_t>(r.draws.size());
+    for (const auto& c : r.commands)
+        if (c.kind == render::UiCommand::Kind::Draw || c.kind == render::UiCommand::Kind::Gradient) ++s.draws;
     s.vertices = static_cast<std::uint32_t>(r.vertices.size());
     s.textures = static_cast<std::uint32_t>(r.texture_bytes.size());
     for (const auto& [id, bytes] : r.texture_bytes) s.texture_bytes += bytes;

@@ -249,6 +249,17 @@ add_test(NAME render.golden_UI_Menu
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_UI_Menu
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_UI_Menu PROPERTIES LABELS "gpu;render;ui" TIMEOUT 60)
+# Effects (part 6c): gradients (linear, radial, conic, repeating), box-shadow, a frosted panel (backdrop-filter: blur, over
+# the scene), blur, grayscale, drop-shadow, rotate, perspective, a rounded box clipping its child (the clip mask), a mask
+# image, opacity: the renderer's layers, filters and stencil, under Vulkan validation.
+add_test(NAME render.golden_UI_Effects
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/UI_Effects.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/UI_Effects.png -DWINDOW=960x540
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_UI_Effects
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_UI_Effects PROPERTIES LABELS "gpu;render;ui" TIMEOUT 60)
 # Display settings (2D part 6): a base resolution scaled up in whole steps, with bars or more of the world, and a
 # render scale (tests/display_check.cmake, tests/tools/display_check.cpp).
 add_executable(noor_display_check tools/display_check.cpp)

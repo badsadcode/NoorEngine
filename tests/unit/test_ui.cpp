@@ -1,5 +1,5 @@
-// Game UI (gameplay foundations part 6, ADR-041), without a GPU: documents opened from a project folder become draws
-// with the built-in font's textures, the default style sheet applies, clipping becomes clip rectangles in screen pixels,
+// Game UI (gameplay foundations part 6, ADR-041), without a GPU: documents opened from a project folder become draw
+// commands with the built-in font's textures, the default style sheet applies, clipping becomes scissor rectangles,
 // the viewport moves everything, hidden documents draw nothing, files outside the project are refused, and only one Ui
 // exists at a time.
 #include "noor/foundation/guid.h"
@@ -72,23 +72,25 @@ TEST_CASE("UI: a document becomes draws with the built-in font, in the viewport"
     CHECK(u.visible(*doc));
     u.update();
     const auto frame = u.draw();
-    REQUIRE(!frame.draws.empty());
+    REQUIRE(!frame.commands.empty());
     CHECK(!frame.vertices.empty());
     CHECK(!frame.indices.empty());
     CHECK(tex.made > 0);  // the font's glyphs
+    // Everything is moved by the viewport's corner, after any transform.
+    CHECK(frame.origin.x == 100.0f);
+    CHECK(frame.origin.y == 50.0f);
     bool textured = false, untextured = false, clipped = false;
-    for (const auto& d : frame.draws) {
+    std::size_t draws = 0;
+    for (const auto& d : frame.commands) {
+        CHECK(d.kind == render::UiCommand::Kind::Draw);  // a plain page: no effects
+        ++draws;
         CHECK(d.first_index + d.index_count <= frame.indices.size());
+        CHECK(d.transform == -1);
         (d.texture.valid() ? textured : untextured) = true;
-        // Everything is moved by the viewport's corner.
-        CHECK(d.translation.x >= 100.0f);
-        CHECK(d.translation.y >= 50.0f);
-        if (d.clip) {
+        if (d.scissor) {
             clipped = true;
-            CHECK(d.clip_rect[0] >= 100);
-            CHECK(d.clip_rect[1] >= 50);
-            CHECK(d.clip_rect[2] == 100);  // 100dp at 720 high: 100 pixels
-            CHECK(d.clip_rect[3] == 40);
+            CHECK(d.rect[2] == 100);  // 100dp at 720 high: 100 pixels
+            CHECK(d.rect[3] == 40);
         }
     }
     CHECK(textured);    // text
@@ -96,27 +98,27 @@ TEST_CASE("UI: a document becomes draws with the built-in font, in the viewport"
     CHECK(clipped);     // the list in its box
     const auto stats = u.stats();
     CHECK(stats.documents == 1);
-    CHECK(stats.draws == frame.draws.size());
+    CHECK(stats.draws == draws);
     CHECK(stats.textures == tex.alive.size());
 
     // dp follow the picture's height: half as tall, half the size.
     u.set_viewport(0, 0, 640, 360);
     u.update();
-    for (const auto& d : u.draw().draws)
-        if (d.clip) CHECK(d.clip_rect[3] == 20);
+    for (const auto& d : u.draw().commands)
+        if (d.scissor) CHECK(d.rect[3] == 20);
 
     // Hidden: nothing to draw; shown again: back.
     u.set_visible(*doc, false);
     CHECK_FALSE(u.visible(*doc));
     u.update();
-    CHECK(u.draw().draws.empty());
+    CHECK(u.draw().commands.empty());
     u.set_visible(*doc, true);
     u.update();
-    CHECK(!u.draw().draws.empty());
+    CHECK(!u.draw().commands.empty());
 
     u.close(*doc);
     u.update();
-    CHECK(u.draw().draws.empty());
+    CHECK(u.draw().commands.empty());
     CHECK(u.stats().documents == 0);
 }
 
@@ -132,9 +134,9 @@ TEST_CASE("UI: the default style sheet gives blocks and the built-in font, and t
     REQUIRE(u.open("UI/plain.noorui"));
     u.update();
     const auto frame = u.draw();
-    REQUIRE(frame.draws.size() >= 2);
+    REQUIRE(frame.commands.size() >= 2);
     // Each line of text is one draw; the second starts lower down.
-    float first_y = frame.draws[0].translation.y, last_y = frame.draws.back().translation.y;
+    float first_y = frame.commands[0].translation.y, last_y = frame.commands.back().translation.y;
     CHECK(last_y > first_y);
 }
 
@@ -176,5 +178,5 @@ TEST_CASE("UI: one at a time, and its textures are given back when it goes") {
     REQUIRE(again);
     REQUIRE((*again)->open("UI/page.noorui"));
     (*again)->update();
-    CHECK(!(*again)->draw().draws.empty());
+    CHECK(!(*again)->draw().commands.empty());
 }

@@ -29,8 +29,16 @@ noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.hlsl VSMain
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.hlsl PSMain ps_6_0 mesh_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/overlay.hlsl VSMain vs_6_0 overlay_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/overlay.hlsl PSMain ps_6_0 overlay_ps)
-noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ui.hlsl VSMain vs_6_0 ui_vs)
-noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ui.hlsl PSMain ps_6_0 ui_ps)
+# Game UI (6c): geometry, gradients, the clip mask, and passes over whole layers (copies, filters, blur, the finish).
+foreach(entry IN ITEMS VSMain:vs:ui_vs PSDraw:ps:ui_draw_ps PSGradient:ps:ui_gradient_ps PSClip:ps:ui_clip_ps VSFull:vs:ui_full_vs
+                      VSFullPlain:vs:ui_full_plain_vs PSPass:ps:ui_pass_ps PSOpaque:ps:ui_opaque_ps PSColorMatrix:ps:ui_color_matrix_ps
+                      PSBlur:ps:ui_blur_ps PSDropShadow:ps:ui_drop_shadow_ps PSMask:ps:ui_mask_ps PSFinal:ps:ui_final_ps)
+    string(REPLACE ":" ";" parts "${entry}")
+    list(GET parts 0 fn)
+    list(GET parts 1 stage)
+    list(GET parts 2 name)
+    noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/ui.hlsl ${fn} ${stage}_6_0 ${name})
+endforeach()
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/sky.hlsl VSMain vs_6_0 sky_vs)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/sky.hlsl PSMain ps_6_0 sky_ps)
 noor_add_shader(noor_render ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.hlsl VSMain vs_6_0 shadow_vs)

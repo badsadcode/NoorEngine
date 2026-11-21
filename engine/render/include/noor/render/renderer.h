@@ -391,30 +391,78 @@ struct OverlayVertex {
 };
 
 // ---- Game UI (gameplay foundations part 6, ADR-041) -------------------------------------------
-// What the ui module draws: indexed triangles in screen pixels, textured and clipped, over everything (the HUD too).
-// Colours are as CSS gives them: sRGB, premultiplied by alpha; the shader blends them in linear light like the rest.
+// What the ui module draws, over everything (the HUD too): a list of commands the renderer runs in order, as RmlUi's
+// render interface gives them. Geometry is indexed triangles in pixels; colours are as CSS gives them, sRGB
+// premultiplied by alpha, and blended in sRGB like a browser does, in the UI's own layers (6c): the first starts as a
+// copy of the screen (so backdrop filters see the game), the last is drawn back onto it.
 struct UiVertex {
-    math::Vec2 position;                  // pixels, origin top-left, before the draw's translation
+    math::Vec2 position;                  // pixels, before the command's translation and transform
     std::array<std::uint8_t, 4> color{};  // sRGB, premultiplied
     math::Vec2 uv;
 };
 static_assert(sizeof(UiVertex) == 20, "the UI pipeline reads float2, unorm8x4, float2");
 
-struct UiDraw {
-    std::uint32_t first_index = 0;  // into UiFrame::indices
+struct UiCommand {
+    enum class Kind : std::uint8_t {
+        Draw,         // geometry, with `texture` (none: plain colour)
+        Gradient,     // geometry filled by gradients[index] (times its vertex colours)
+        ClipMask,     // geometry written into the clip mask, by `clip_op`
+        PushLayer,    // a new transparent layer on top: what follows goes into it
+        Composite,    // layer `index` through filters[first_filter, +filter_count) onto layer `destination` (0: the base)
+        PopLayer,     // back to the layer below
+        SaveTexture,  // the top layer's `rect` copied into `texture` (a texture that size, made for it)
+        SaveMask,     // the top layer kept as the mask for the next MaskImage filter
+    };
+    // Set: the mask becomes the geometry; SetInverse: everything but it; Intersect: what's in both.
+    enum class ClipOp : std::uint8_t { Set, SetInverse, Intersect };
+    Kind kind = Kind::Draw;
+    ClipOp clip_op = ClipOp::Set;
+    bool replace = false;         // Composite: replace the destination's pixels rather than blend over them
+    bool scissor = false;         // drawing only inside `rect`
+    bool stencil = false;         // drawing only where the clip mask is `stencil_ref`
+    std::uint8_t stencil_ref = 0;
+    std::array<std::int32_t, 4> rect{};  // x, y, width, height in pixels from UiFrame::origin
+    std::uint32_t first_index = 0;       // geometry: into UiFrame::indices
     std::uint32_t index_count = 0;
-    std::int32_t vertex_offset = 0;  // added to each index
-    math::Vec2 translation;          // pixels
-    // Rgba8Unorm holding sRGB values premultiplied by alpha (what RmlUi makes); none: white.
-    TextureHandle texture;
-    bool clip = false;
-    std::array<std::int32_t, 4> clip_rect{};  // x, y, width, height in pixels (when `clip`)
+    std::int32_t vertex_offset = 0;
+    math::Vec2 translation;              // pixels, before the transform
+    TextureHandle texture;               // Draw: Rgba8Unorm, sRGB premultiplied (none: white); SaveTexture: the target
+    std::int32_t transform = -1;         // into UiFrame::transforms; -1: none
+    std::uint32_t index = 0;             // Gradient: gradients[index]; Composite: the source layer
+    std::uint32_t destination = 0;
+    std::uint32_t first_filter = 0;
+    std::uint32_t filter_count = 0;
+};
+
+// A gradient: t from where a fragment's uv is (linear: along p -> p + v; radial: |v * (uv - p)|, v the inverse radii;
+// conic: the angle round p, v the start direction), its colour mixed between the stops, as RmlUi's reference renderer.
+struct UiGradient {
+    enum class Kind : std::uint32_t { Linear, Radial, Conic, RepeatingLinear, RepeatingRadial, RepeatingConic };
+    static constexpr std::uint32_t kMaxStops = 16;
+    Kind kind = Kind::Linear;
+    math::Vec2 p, v;
+    std::uint32_t stops = 0;
+    std::array<float, kMaxStops> positions{};
+    std::array<math::Vec4, kMaxStops> colors{};  // sRGB, premultiplied, 0..1
+};
+
+struct UiFilter {
+    enum class Kind : std::uint8_t { Opacity, Blur, DropShadow, ColorMatrix, MaskImage };
+    Kind kind = Kind::Opacity;
+    float value = 1.0f;                     // Opacity: the factor; Blur and DropShadow: sigma in pixels
+    math::Vec2 offset;                      // DropShadow, pixels
+    math::Vec4 color;                       // DropShadow: sRGB premultiplied
+    std::array<float, 16> matrix{};         // ColorMatrix: column-major, on premultiplied rgb (the 4th column x alpha)
 };
 
 struct UiFrame {
     std::span<const UiVertex> vertices;
     std::span<const std::uint32_t> indices;
-    std::span<const UiDraw> draws;  // in order, back to front
+    std::span<const UiCommand> commands;               // in order
+    std::span<const std::array<float, 16>> transforms; // column-major, pixels to pixels (perspective allowed)
+    std::span<const UiGradient> gradients;
+    std::span<const UiFilter> filters;
+    math::Vec2 origin;  // the UI's top-left on the screen, pixels: added after the transform
 };
 
 // ---- Particles (Milestone 8B, part 2, ADR-035) ----------------------------------------------
@@ -561,7 +609,8 @@ struct FrameStats {
     // GPU time of the most recent frame whose results are available (lags 1â€“2 frames).
     // Negative when timestamps are unsupported or not available yet.
     double gpu_ms = -1.0;
-    // GPU time per pass of that frame, in order (Environment, Shadows, Scene, Tonemap, Gizmos, HUD); empty when unknown.
+    // GPU time per pass of that frame, in order (Environment, Shadows, Scene, Scene copy, See-through, Tonemap, Gizmos, HUD,
+    // Game UI); empty when unknown.
     struct Pass {
         const char* name = "";
         double ms = 0.0;

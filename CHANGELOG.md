@@ -4,6 +4,22 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 6c: UI effects
+**Added**
+- Renderer: `UiCommand` (draw, gradient, clip mask, push / composite / pop layer, save texture, save mask), `UiGradient`,
+  `UiFilter`, `UiFrame::transforms` and `origin` (replacing `UiDraw`); the UI's own layers, stencil, filters and blur in
+  `vulkan_ui.cpp` (13 programs in `ui.hlsl`); texture-table slots for images the table doesn't own; a "Game UI" GPU pass
+  in `FrameStats::passes` (`kTimestampsPerFrame` 10); the UI's images in `render_target_memory()`.
+- `noor::ui`: RmlUi's transforms, clip masks, layers, filters (opacity, blur, drop-shadow, brightness, contrast,
+  grayscale, sepia, hue-rotate, saturate, invert, mask images), gradients and saved layers, recorded as commands.
+- noor_player's report: `timing_ms.ui_gpu`. `NOOR_UI_MSAA` (1, 2, 4) to compare the UI's multisampling (default 2).
+- `tests/data/render_scenes/UI/effects.noorui`, `Scenes/UI_Effects`.
+
+**Changed:** the UI blends in sRGB, as CSS does (dims and see-through panels look as on the web); the screen's copy
+and the finished UI are combined in the shader. `render.golden_UI_Menu` made again.
+
+**Tests:** `render.golden_UI_Effects`; `test_ui.cpp` reads the command list.
+
 ### 2026-11-21 — Gameplay foundations, part 6b: UI documents from scripts
 **Added**
 - `runtime::UiDocuments` (`ui_documents.h`), `World::set_ui_documents`, `ui_emitter`, `own_ui_document` (documents close

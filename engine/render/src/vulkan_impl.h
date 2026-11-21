@@ -58,8 +58,8 @@ inline constexpr std::uint32_t kFramesInFlight = 2;
 inline constexpr std::uint64_t kNoTimeout = std::numeric_limits<std::uint64_t>::max();
 inline constexpr VkFormat kDepthFormat = VK_FORMAT_D32_SFLOAT;
 inline constexpr VkFormat kHdrFormat = VK_FORMAT_R16G16B16A16_SFLOAT;  // the lit scene, before tonemapping
-// GPU timestamps per frame: start, after shadows, after the scene, after tonemapping, after the gizmos, end.
-inline constexpr std::uint32_t kTimestampsPerFrame = 9;
+// GPU timestamps per frame: start, after each pass (FrameStats::passes), end. The last pass is the game UI's (6c).
+inline constexpr std::uint32_t kTimestampsPerFrame = 10;
 // The aerial perspective volume (Milestone 8A, part 3): 32^3 froxels over the camera's view, slices
 // spaced by the square root of the distance out to this far end (km of air, after the distance scale).
 inline constexpr std::uint32_t kAerialSize = 32;
@@ -95,6 +95,7 @@ struct GpuTexture {
     VkImageView view = VK_NULL_HANDLE;
     std::uint64_t bytes = 0;
     bool alive = false;
+    bool external = false;  // a view of an image someone else owns (the game UI's layers): the table only points at it
 };
 
 struct GpuMesh {
@@ -519,16 +520,9 @@ struct Renderer::Impl {
         std::array<std::size_t, kFramesInFlight> capacity{};
     } overlay;
 
-    // Game UI (gameplay foundations part 6, ADR-041): vulkan_ui.cpp. Textures come from the bindless table.
-    struct UiPass {
-        VkPipeline pipeline = VK_NULL_HANDLE;
-        VkPipelineLayout layout = VK_NULL_HANDLE;
-        VkFormat color_format = VK_FORMAT_UNDEFINED;
-        std::array<GpuBuffer, kFramesInFlight> vertices{};
-        std::array<GpuBuffer, kFramesInFlight> indices{};
-        std::array<std::size_t, kFramesInFlight> vertex_capacity{};
-        std::array<std::size_t, kFramesInFlight> index_capacity{};
-    } ui;
+    // Game UI (gameplay foundations part 6, ADR-041): vulkan_ui.cpp, made the first time a frame has UI.
+    struct UiRenderer;
+    UiRenderer* ui = nullptr;
 
     std::array<FrameSync, kFramesInFlight> frames{};
     std::uint32_t frame_index = 0;
@@ -669,10 +663,15 @@ struct Renderer::Impl {
     Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);
     Status record_overlay(VkCommandBuffer cmd, std::span<const OverlayVertex> vertices);
     void destroy_overlay();
-    // vulkan_ui.cpp
-    Status ensure_ui(VkFormat color_format);
-    Status record_ui(VkCommandBuffer cmd, const UiFrame& frame);
+    // vulkan_ui.cpp: the UI's commands, after the screen pass, onto `target` (the swapchain image, in
+    // COLOR_ATTACHMENT_OPTIMAL before and after).
+    Status record_ui(VkCommandBuffer cmd, const UiFrame& frame, VkImage screen, VkImageView screen_view);
     void destroy_ui();
+    [[nodiscard]] std::uint64_t ui_memory() const noexcept;
+    // vulkan_textures.cpp: a table slot pointing at an image view someone else owns (sampled in
+    // SHADER_READ_ONLY_OPTIMAL), and giving it back.
+    Result<std::uint32_t> claim_texture_slot(VkImageView view);
+    void release_texture_slot(std::uint32_t slot);
     void destroy_mesh_pipeline();
     Result<GpuBuffer> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, bool readback);
     void destroy_buffer(GpuBuffer& buffer);

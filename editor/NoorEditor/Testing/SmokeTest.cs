@@ -1187,12 +1187,12 @@ internal static class SmokeTest
         var panel = window.GetVisualDescendants().OfType<RenderPanel>().FirstOrDefault();
         // GPU pass timings arrive a frame or two after the frame (timestamp queries): wait for them
         // rather than reading once (a single read flaked on 2026-11-18).
-        await WaitFor(() => { panel?.Refresh(); return (int?)((panel?.Last?["passes"] as JsonArray)?.Count ?? 0); }, n => n == 8, 5);
+        await WaitFor(() => { panel?.Refresh(); return (int?)((panel?.Last?["passes"] as JsonArray)?.Count ?? 0); }, n => n == 9, 5);
         var last = panel?.Last;
         long N(string key) => last?[key]?.GetValue<long>() ?? -1;
         check(panel != null && N("draw_calls") > 0 && N("triangles") > 0 && N("render_target_bytes") > 0 &&
-              (last?["passes"] as JsonArray)?.Count == 8,  // Environment, Shadows, Scene, Scene copy, See-through, Tonemap, Gizmos, HUD
-              $"render panel: shows the scene viewport's draws ({N("draw_calls")}), triangles, memory and 8 pass timings");
+              (last?["passes"] as JsonArray)?.Count == 9,  // Environment, Shadows, Scene, Scene copy, See-through, Tonemap, Gizmos, HUD, Game UI
+              $"render panel: shows the scene viewport's draws ({N("draw_calls")}), triangles, memory and 9 pass timings");
         check(N("msaa_samples") == 4, $"anti-aliasing: 4x MSAA by default ({N("msaa_samples")})");
         await Task.Delay(300);  // drawn on screen before the picture
         shot(window, "editor_22_render_panel.png");

@@ -30,7 +30,7 @@
 namespace noor::ui {
 
 // Where the UI's textures go (font atlases, images): the renderer's table, or a test's stand-in. `rgba` is width x
-// height x 4 bytes, sRGB values premultiplied by alpha (render::UiDraw::texture).
+// height x 4 bytes, sRGB values premultiplied by alpha (render::UiCommand::texture).
 struct TextureHost {
     std::function<Result<render::TextureHandle>(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> rgba)> create;
     std::function<void(render::TextureHandle)> destroy;

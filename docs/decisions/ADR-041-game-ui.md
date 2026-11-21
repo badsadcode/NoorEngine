@@ -56,6 +56,10 @@ spike was our own; the spike showed the gap is much bigger than the look of one 
 - The editor's UI builder (later in part 6) edits `.noorui` files and shows them live with RmlUi.
 - Built games carry RmlUi and FreeType (statically linked) and their licence notices (from part 6a: `licenses/`).
 
+## Notes since
+- 6c: RmlUi's effects (filters, layers, masks, gradients, transforms) run in our Vulkan renderer, in the UI's own layers
+  blended in sRGB like a browser; a frosted panel blurs the game behind it ([Game UI](../ui/GAME_UI.md#effects)).
+
 ## Open
 - Text quality at large sizes, and on 4K screens: FreeType renders each size it's asked for; check memory with many sizes.
 - Whether to move the HUD to RmlUi too later (one text renderer) or keep both.

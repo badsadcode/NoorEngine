@@ -1,0 +1,45 @@
+<rml>
+<head>
+    <title>Effects</title>
+    <!-- The render test of the UI's effects (gameplay foundations part 6c): every card is one effect, over the Daylight
+         scene. Sizes in dp (1/720 of the picture's height). -->
+    <style>
+        body { width: 100%; height: 100%; padding: 24dp; box-sizing: border-box; display: flex; flex-wrap: wrap;
+               align-content: flex-start; }
+        .card { width: 200dp; height: 150dp; margin: 12dp; border-radius: 16dp; font-size: 22dp; color: #FFFFFF;
+                text-align: center; padding-top: 58dp; box-sizing: border-box; }
+        #linear { decorator: linear-gradient(120deg, #FF5E62, #FF9966, #FFC857); }
+        #radial { decorator: radial-gradient(circle, #FFFFFF 0%, #6A5ACD 60%, #191623 100%); }
+        #conic { decorator: conic-gradient(#FF0000, #FFFF00, #00FF00, #00FFFF, #0000FF, #FF00FF, #FF0000); }
+        #stripes { decorator: repeating-linear-gradient(45deg, #2A2140 0dp, #2A2140 12dp, #4B1AF2 12dp, #4B1AF2 24dp); }
+        #shadow { background-color: #EDE8F7; color: #191623; box-shadow: #00000099 0dp 12dp 24dp 0dp, #4B1AF2 0dp 0dp 0dp 4dp; }
+        #frosted { background-color: #FFFFFF33; backdrop-filter: blur(10dp); border: 2dp #FFFFFF66; }
+        #blurred { background-color: #2A9D8F; filter: blur(3dp); }
+        #grey { decorator: linear-gradient(90deg, #FF0000, #00FF00, #0000FF); filter: grayscale(1); }
+        #dropped { background-color: #FFC857; color: #191623; filter: drop-shadow(#000000CC 6dp 6dp 4dp); }
+        #turned { background-color: #4B1AF2; transform: rotate(12deg); }
+        #tilted { background-color: #E76F51; transform: perspective(400dp) rotateY(35deg); }
+        #rounded { overflow: hidden; background-color: #264653; padding: 0; }
+        /* A bar wider than the card, across its rounded top corners: they cut it (a clip mask, not just a scissor). */
+        #rounded div { width: 260dp; height: 50dp; margin-left: -30dp; background-color: #E9C46A; }
+        #masked { decorator: linear-gradient(90deg, #FF5E62, #4B1AF2); mask-image: linear-gradient(0deg, #0000, #000F); }
+        #faded { background-color: #191623; opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <div class="card" id="linear">linear</div>
+    <div class="card" id="radial">radial</div>
+    <div class="card" id="conic">conic</div>
+    <div class="card" id="stripes">repeating</div>
+    <div class="card" id="shadow">box-shadow</div>
+    <div class="card" id="frosted">backdrop blur</div>
+    <div class="card" id="blurred">blur</div>
+    <div class="card" id="grey">grayscale</div>
+    <div class="card" id="dropped">drop-shadow</div>
+    <div class="card" id="turned">rotate</div>
+    <div class="card" id="tilted">perspective</div>
+    <div class="card" id="rounded"><div></div></div>
+    <div class="card" id="masked">mask</div>
+    <div class="card" id="faded">opacity</div>
+</body>
+</rml>

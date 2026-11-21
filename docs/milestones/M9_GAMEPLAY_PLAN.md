@@ -216,6 +216,34 @@ Play doesn't show documents (6d); `ui_document` components on entities spawned l
 documents instead); the mouse also reaches the game while over a menu (pausing makes that harmless); the player's mouse
 and keyboard mapping is checked by hand, not by a test.
 
+## Part 6c result (2026-11-21)
+Done. **Effects.** RmlUi's whole render interface is implemented: transforms (2D and perspective), clip masks (a shared
+stencil: Set, SetInverse, Intersect, so rounded boxes cut their children), layers (push, composite with Blend or
+Replace, pop), filters (opacity, blur, drop-shadow, the colour matrices: brightness, contrast, grayscale, sepia,
+hue-rotate, saturate, invert; mask images), gradient shaders (linear, radial, conic and their repeating forms, up to 16
+stops) and layers saved as textures (box-shadow) or masks. The `ui` module records them as `render::UiCommand`s
+(`renderer.h`: `UiCommand`, `UiGradient`, `UiFilter`, `UiFrame::transforms` and `origin`), each call meaning what it
+does in RmlUi's reference renderer. The renderer runs them after the screen pass (`vulkan_ui.cpp`, `ui.hlsl`, 13
+programs): the screen is copied; the UI goes into its own layers (8-bit sRGB premultiplied, 2x multisampled, a shared
+stencil), filters ping-pong between three single-sample images read through the bindless table (which gained slots for
+images it doesn't own), the finished base layer is laid over the screen's copy in sRGB and written back in linear
+light; a backdrop filter sees the screen under the base layer (frosted glass over the game). Resolves and filter passes
+touch only the element's area; everything is made with the first frame that has UI and remade on resize. The
+renderer's stats gained a "Game UI" pass, the player's report `timing_ms.ui_gpu`. **Changed:** the UI now blends in
+sRGB, as CSS does (6a blended in linear light: dims looked lighter than meant); `render.golden_UI_Menu` was made again.
+
+Proved: a page of fourteen effects (four gradients, box-shadow with a ring, backdrop blur over the scene, blur,
+grayscale, drop-shadow, rotate, perspective, a rounded box cutting a bar across its corners, a mask, opacity) matches
+its 960 x 540 golden under Vulkan validation with no errors (`render.golden_UI_Effects`); the menu still matches its
+golden; the unit tests read the new command list. Measured at 1280 x 720 (RTX 3080, a light scene, low clocks): the menu's
+UI 0.40 ms, the effects page 1.7 ms; 4x multisampling cost the menu 0.67 ms, 1x 0.30 ms, so 2x (RmlUi's own choice) is
+the default; GPU memory for the UI's images about 26 MB (40 MB with nested layers).
+
+Exceptions: RmlUi's `shader` decorator (custom shaders) and `mix-blend-mode` aren't supported; a big blur is scaled back
+up in one filtered step (RmlUi adds a second, exact one; a slowly moving blurred element may shimmer slightly); barriers
+between UI passes are conservative (correct, not the fastest); a swapchain that can't be copied (none we've seen) loses
+backdrop filters and blends the UI over the screen in linear light.
+
 ## Highest risks (settle early)
 
 1. **UI: our own or a library.** A retained UI with layout, focus, gamepad navigation, text input and themes is a big

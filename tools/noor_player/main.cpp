@@ -377,6 +377,7 @@ int run(const Options& o) {
                 struct Timing {
                     double wall = 0, game = 0, view = 0, collect = 0, record = 0, gpu = -1, environment = -1, particles = -1;
                     double scene = -1, scene_copy = -1, see_through = -1;  // GPU passes (8D: what water costs)
+                    double ui = -1;                                        // the game UI's pass (part 6c)
                     double cpu = 0;  // 9A part 1: the game, the view and recording together (what a frame costs the CPU, vsync aside)
                 };
                 double first_frame_at = -1;  // 9A part 1: seconds from the process starting to its first frame drawn
@@ -537,6 +538,7 @@ int run(const Options& o) {
                             if (name == "Scene") timings.back().scene = pass.ms;
                             else if (name == "Scene copy") timings.back().scene_copy = pass.ms;
                             else if (name == "See-through") timings.back().see_through = pass.ms;
+                            else if (name == "Game UI") timings.back().ui = pass.ms;
                         }
                         timings.back().cpu = timings.back().game + timings.back().view + std::max(0.0, timings.back().record);
                         frame_start = t_end;
@@ -698,6 +700,7 @@ int run(const Options& o) {
                                                {"scene_gpu", stat(&Timing::scene)},
                                                {"scene_copy_gpu", stat(&Timing::scene_copy)},
                                                {"see_through_gpu", stat(&Timing::see_through)},
+                                               {"ui_gpu", stat(&Timing::ui)},
                                                {"particles", stat(&Timing::particles)},
                                                {"cpu", stat(&Timing::cpu)}};
                     }

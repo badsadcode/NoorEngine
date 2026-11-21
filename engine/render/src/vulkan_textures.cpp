@@ -326,7 +326,7 @@ Result<TextureHandle> Renderer::Impl::create_texture(const TextureDesc& texture,
 }
 
 void Renderer::Impl::destroy_texture(TextureHandle handle) {
-    if (handle.id < kFirstUserTexture || handle.id >= textures.size() || !textures[handle.id].alive) return;
+    if (handle.id < kFirstUserTexture || handle.id >= textures.size() || !textures[handle.id].alive || textures[handle.id].external) return;
     vkDeviceWaitIdle(device);  // simple and safe, like meshes; deferred deletion comes with streaming
     GpuTexture& tex = textures[handle.id];
     // Point the slot back at white, so a stale index can never read a destroyed image.
@@ -345,10 +345,53 @@ void Renderer::Impl::destroy_texture(TextureHandle handle) {
     tex = {};
 }
 
+Result<std::uint32_t> Renderer::Impl::claim_texture_slot(VkImageView view) {
+    if (auto st = ensure_texture_table(); !st) return std::unexpected(st.error());
+    std::uint32_t slot = kAnySlot;
+    for (std::uint32_t i = kFirstUserTexture; i < textures.size(); ++i)
+        if (!textures[i].alive) {
+            slot = i;
+            break;
+        }
+    if (slot == kAnySlot) {
+        if (textures.size() >= kMaxTextures) return fail(ErrorCode::OutOfMemory, std::format("texture table full ({} textures)", kMaxTextures));
+        slot = static_cast<std::uint32_t>(textures.size());
+        textures.emplace_back();
+    }
+    textures[slot] = {};
+    textures[slot].view = view;
+    textures[slot].alive = true;
+    textures[slot].external = true;
+    VkDescriptorImageInfo image{VK_NULL_HANDLE, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = texture_set;
+    write.dstBinding = 0;
+    write.dstArrayElement = slot;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &image;
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    return slot;
+}
+
+void Renderer::Impl::release_texture_slot(std::uint32_t slot) {
+    if (slot < kFirstUserTexture || slot >= textures.size() || !textures[slot].external) return;
+    VkDescriptorImageInfo image{VK_NULL_HANDLE, textures[kTextureWhite].view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    write.dstSet = texture_set;
+    write.dstBinding = 0;
+    write.dstArrayElement = slot;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &image;
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    textures[slot] = {};
+}
+
 void Renderer::Impl::destroy_textures() {
     if (device == VK_NULL_HANDLE) return;
     for (GpuTexture& tex : textures) {
-        if (!tex.alive) continue;
+        if (!tex.alive || tex.external) continue;
         vkDestroyImageView(device, tex.view, nullptr);
         vmaDestroyImage(allocator, tex.image, tex.allocation);
         tex = {};
