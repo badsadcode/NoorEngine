@@ -6,6 +6,7 @@
 //   vulkan_frame.cpp     the HDR image, per-frame lighting uniforms, tonemapping (ADR-012)
 //   vulkan_textures.cpp  textures and the bindless texture table (ADR-029)
 //   vulkan_overlay.cpp   the HUD
+//   vulkan_ui.cpp        game UI documents (RmlUi's geometry, ADR-041)
 
 #include "noor/foundation/log.h"
 #include "noor/render/renderer.h"
@@ -469,6 +470,7 @@ struct Renderer::Impl {
     VkDescriptorSet texture_set = VK_NULL_HANDLE;
     VkSampler texture_sampler = VK_NULL_HANDLE;
     VkSampler nearest_sampler = VK_NULL_HANDLE;  // pixel art (materials with nearest_filter): binding 3
+    VkSampler clamp_sampler = VK_NULL_HANDLE;    // game UI (images, font atlases): binding 4
     std::vector<GpuTexture> textures;  // index = slot
     std::uint64_t texture_bytes = 0;   // user textures only
     float max_anisotropy = 1.0f;
@@ -516,6 +518,17 @@ struct Renderer::Impl {
         std::array<GpuBuffer, kFramesInFlight> vertices{};
         std::array<std::size_t, kFramesInFlight> capacity{};
     } overlay;
+
+    // Game UI (gameplay foundations part 6, ADR-041): vulkan_ui.cpp. Textures come from the bindless table.
+    struct UiPass {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout layout = VK_NULL_HANDLE;
+        VkFormat color_format = VK_FORMAT_UNDEFINED;
+        std::array<GpuBuffer, kFramesInFlight> vertices{};
+        std::array<GpuBuffer, kFramesInFlight> indices{};
+        std::array<std::size_t, kFramesInFlight> vertex_capacity{};
+        std::array<std::size_t, kFramesInFlight> index_capacity{};
+    } ui;
 
     std::array<FrameSync, kFramesInFlight> frames{};
     std::uint32_t frame_index = 0;
@@ -656,6 +669,10 @@ struct Renderer::Impl {
     Status upload_overlay_atlas(std::uint32_t width, std::uint32_t height, std::span<const std::uint8_t> r8);
     Status record_overlay(VkCommandBuffer cmd, std::span<const OverlayVertex> vertices);
     void destroy_overlay();
+    // vulkan_ui.cpp
+    Status ensure_ui(VkFormat color_format);
+    Status record_ui(VkCommandBuffer cmd, const UiFrame& frame);
+    void destroy_ui();
     void destroy_mesh_pipeline();
     Result<GpuBuffer> create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, bool host_visible, bool readback);
     void destroy_buffer(GpuBuffer& buffer);

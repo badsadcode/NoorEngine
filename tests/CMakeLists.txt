@@ -57,6 +57,7 @@ add_executable(noor_unit_tests
     unit/test_messages.cpp
     unit/test_tweens.cpp
     unit/test_timeline.cpp
+    unit/test_ui.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -66,7 +67,7 @@ foreach(source IN LISTS noor_unit_sources)
         message(FATAL_ERROR "${source}: a TEST_CASE name contains ';' (ctest would run nothing for it): use a comma")
     endif()
 endforeach()
-target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph noor::fx doctest::doctest stb::image)
+target_link_libraries(noor_unit_tests PRIVATE noor::foundation noor::platform noor::asset noor::scene noor::runtime noor::physics noor::audio noor::scripting noor::game noor::csg noor::terrain noor::terrain_edit noor::procgraph noor::fx noor::ui doctest::doctest stb::image)
 target_compile_definitions(noor_unit_tests PRIVATE NOOR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # Header-only pieces of render (fly_camera.h) are tested without touching the GPU.
 target_include_directories(noor_unit_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/render/include)
@@ -236,6 +237,17 @@ add_test(NAME render.golden_Camera2D_Follow
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Camera2D_Follow
         -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
 set_tests_properties(render.golden_Camera2D_Follow PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# Game UI (gameplay foundations part 6, ADR-041): a .noorui page over the Daylight scene, drawn by RmlUi through the
+# renderer's UI pass under Vulkan validation: a dimmed screen, rounded panels, text in three sizes, a border, an image,
+# and a list clipped by its box (a scissor). 640 x 360, so the text has pixels to be read in.
+add_test(NAME render.golden_UI_Menu
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/UI_Menu.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/UI_Menu.png -DWINDOW=640x360
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_UI_Menu
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_UI_Menu PROPERTIES LABELS "gpu;render;ui" TIMEOUT 60)
 # Display settings (2D part 6): a base resolution scaled up in whole steps, with bars or more of the world, and a
 # render scale (tests/display_check.cmake, tests/tools/display_check.cpp).
 add_executable(noor_display_check tools/display_check.cpp)

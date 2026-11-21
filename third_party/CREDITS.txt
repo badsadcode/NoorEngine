@@ -1,0 +1,10 @@
+Credits for what NoorEngine builds into every game
+
+Portions of this software are copyright (c) 2026 The FreeType Project (https://freetype.org). All rights reserved.
+    Font rendering for game UI. Licence: FreeType-FTL.txt (the FreeType License).
+
+RmlUi, copyright (c) 2008-2014 CodePoint Ltd, Shift Technology Ltd, and contributors; (c) 2019-2026 The RmlUi Team,
+and contributors. Game UI documents. Licence: RmlUi-LICENSE.txt (MIT).
+
+Atkinson Hyperlegible, copyright 2020 Braille Institute of America, Inc. The built-in font (HUD and game UI).
+Licence: AtkinsonHyperlegible-OFL.txt (SIL Open Font License 1.1).

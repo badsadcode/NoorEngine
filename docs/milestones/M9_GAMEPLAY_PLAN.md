@@ -148,6 +148,43 @@ in a project, Lua and C# in a built game end on exactly the same state and event
 Exceptions: key edits are saved to the file at once, not undo steps; no key dragging, curve editor or blending between
 timelines; scrubbing doesn't fire call or emit keys.
 
+## Part 6: how it's split (2026-11-21)
+The spike chose RmlUi ([ADR-041](../decisions/ADR-041-game-ui.md), accepted). Part 6 is too big for one step:
+
+| Step | What | Proves |
+|---|---|---|
+| 6a | RmlUi and FreeType as pinned dependencies; a `ui` module wrapping them; a UI pass in the Vulkan renderer (textured, scissored, premultiplied geometry and the textures RmlUi makes); `.noorui` documents shown in a game | A document drawn in the player matches its golden; the renderer's UI pass under Vulkan validation; a project without UI pays nothing (yardsticks) |
+| 6b | Scripts: open and close documents, events from elements (`click`, `change`, `submit`), data from scripts into the page, Lua and C# | A menu that pauses and resumes the game, the same from Lua and C# in a built game |
+| 6c | Beautiful: gradients, shadows, blur (layers and filters), transforms in the renderer; built games carry the credits and licence files | Goldens of each effect |
+| 6d | The editor's UI builder: `.noorui` files edited with a live preview | The smoke test builds a menu |
+| 6e | Gamepads and rebinding (the plan's 6b) | As planned |
+
+## Part 6a result (2026-11-21)
+Done. **RmlUi 6.3 and FreeType 2.14.3** are pinned dependencies (`cmake/NoorDependencies.cmake`, SHA-256 checked, static;
+`third_party/manifest.json`); the spike uses the same ones. The **`ui` module** (`engine/ui`, `noor::ui::Ui`) wraps them:
+documents opened from inside the project only, the built-in font always loaded, a default style sheet given to each
+document as it loads (blocks, the font, a light text colour), `dp` = 1/720 of the picture's height, the viewport's
+offset, the mouse, textures through a `TextureHost` (the renderer's, or a test's). The **renderer's UI pass**
+(`vulkan_ui.cpp`, `ui.hlsl`): indexed triangles with a texture, translation and scissor per draw, CSS's premultiplied
+sRGB colours turned into linear light, textures from the bindless table with a new clamping sampler (binding 4), drawn
+after the HUD; its pipeline is made the first time a frame has UI. **In games:** a `ui_document` component
+(`{"document": "UI/x.noorui", "visible": true}`) opens a document in noor_player and built games, laid out in the
+display's picture, on the world's real-time clock. The built-in font moved to its own small target (`engine/fonts`) so
+the HUD and the UI share one copy. Built games carry `RmlUi-LICENSE.txt`, `FreeType-FTL.txt` and `CREDITS.txt` (moved
+here from 6c: the player links them from now on). Docs: [Game UI](../ui/GAME_UI.md).
+
+Proved: a document becomes draws with the font's textures, moved by the viewport, clipped boxes as clip rectangles in
+screen pixels that follow the picture's height, hidden and closed documents draw nothing, the default style sheet's
+blocks, files outside the project refused, missing ones with a reason, one `Ui` at a time and its textures all given
+back (unit, no GPU); a pause menu and a settings panel (rounded boxes, three text sizes, a border, an image, a clipped
+list) over the Daylight scene match their 640 x 360 golden under Vulkan validation with no errors or warnings
+(`render.golden_UI_Menu`); a game without UI doesn't start it: the yardsticks' memory, threads, CPU and GPU are
+unchanged, and side by side with the player before 6a (on a busy PC) the first frame and the GPU time are the same.
+
+Exceptions: the player is 4.2 MB bigger (16.5 to 20.6 MB) whether a game uses UI or not; documents don't show in the
+editor's Play yet (6d); no scripts, keyboard or gamepad yet (6b, 6e); rounded clipping, gradients, shadows and filters
+need the renderer's clip masks and layers (6c); destroying a UI texture waits for the GPU (as every texture does today).
+
 ## Highest risks (settle early)
 
 1. **UI: our own or a library.** A retained UI with layout, focus, gamepad navigation, text input and themes is a big

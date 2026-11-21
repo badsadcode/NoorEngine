@@ -4,6 +4,26 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 6a: game UI documents
+**Added**
+- [ADR-041](docs/decisions/ADR-041-game-ui.md) accepted: RmlUi behind our own API, from the UI spike (`tools/ui_spike`).
+- Dependencies: RmlUi 6.3 (MIT) and FreeType 2.14.3 (FTL), pinned by SHA-256, static (`cmake/NoorDependencies.cmake`,
+  `third_party/manifest.json`); the spike now uses the same ones.
+- The `ui` module (`engine/ui`, `noor::ui::Ui`): open, close, show and hide `.noorui` documents from inside a project,
+  the built-in font, a default style sheet, `dp` units (1/720 of the picture's height), viewport, mouse, stats;
+  `TextureHost` and `renderer_textures`.
+- Renderer: `UiVertex`, `UiDraw`, `UiFrame`, `FrameDesc::ui`; the UI pass (`vulkan_ui.cpp`, `ui.hlsl`), made on first
+  use; a clamping sampler in the bindless texture table (set 1, binding 4).
+- The `ui_document` component, opened by noor_player (and so by built games); the player's report gains `ui`.
+- `engine/fonts`: the built-in font as its own target (the HUD and the UI share it).
+- Built games carry `licenses/RmlUi-LICENSE.txt`, `FreeType-FTL.txt` and `CREDITS.txt`.
+- `tests/render_golden.cmake` takes `-DWINDOW=WxH` (and keeps such references at that size).
+- [docs/ui/GAME_UI.md](docs/ui/GAME_UI.md).
+
+**Changed:** noor_player is 4.2 MB bigger (RmlUi and FreeType), whether or not a game has UI.
+
+**Tests:** `test_ui.cpp` (4 cases, no GPU); `render.golden_UI_Menu` (`tests/data/render_scenes/UI`).
+
 ### 2026-11-21 — Gameplay foundations, part 5: animating any property (timelines)
 **Added**
 - `.noortimeline` assets (`asset/timeline_asset.h`: value, call and emit tracks; `key_span`), registered by the asset

@@ -8,10 +8,14 @@ set_target_properties(noor_cli PROPERTIES FOLDER "Tools")
 # "if different"), so a rebuilt player is copied even when noor_cli itself didn't change.
 set(payload_commands
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:noor_player> $<TARGET_FILE_DIR:noor_cli>
-    # The built-in HUD font's licence (SIL OFL 1.1): games carry it in licenses/.
+    # What every game carries in licenses/: the built-in font's licence (SIL OFL 1.1), ...
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:noor_cli>/licenses
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/third_party/fonts/OFL.txt
             $<TARGET_FILE_DIR:noor_cli>/licenses/AtkinsonHyperlegible-OFL.txt
+    # Game UI (ADR-041): RmlUi (MIT) and FreeType (the FTL, whose credit line is in CREDITS.txt) are in noor_player.
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NOOR_RMLUI_LICENSE} $<TARGET_FILE_DIR:noor_cli>/licenses/RmlUi-LICENSE.txt
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NOOR_FREETYPE_LICENSE} $<TARGET_FILE_DIR:noor_cli>/licenses/FreeType-FTL.txt
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/third_party/CREDITS.txt $<TARGET_FILE_DIR:noor_cli>/licenses/CREDITS.txt
     # Project templates (2D part 7): `noor_cli new --template` and the editor's New Project read them from here.
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${PROJECT_SOURCE_DIR}/templates $<TARGET_FILE_DIR:noor_cli>/templates)
 if(TARGET noor_scripting_managed)

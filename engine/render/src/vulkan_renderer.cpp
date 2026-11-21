@@ -753,7 +753,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     rendering.pColorAttachments = &color;
     rendering.renderArea = {{0, 0}, extent};
     if (!same_size) rendering.pDepthAttachment = nullptr;
-    begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
+    begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD, game UI)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
     stamp(6, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -761,6 +761,9 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     stamp(7, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
+    }
+    if (auto status = record_ui(frame.cmd, frame_desc.ui); !status) {
+        NOOR_LOG_ERROR("Render", "Game UI skipped: {}", status.error().describe());
     }
     vkCmdEndRendering(frame.cmd);
     end_label(frame.cmd);
@@ -851,6 +854,7 @@ void Renderer::Impl::destroy() {
         destroy_mesh_pipeline();
         destroy_msaa_targets();
         destroy_overlay();
+        destroy_ui();
         destroy_cloud_volume();
         destroy_frame_resources();
         destroy_textures();

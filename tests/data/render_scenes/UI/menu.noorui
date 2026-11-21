@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <title>Paused</title>
+    <!-- The render test's page (gameplay foundations part 6): a dimmed screen, the pause menu, and a settings panel with
+         an image and a list clipped by its box. Sizes in dp (1/720 of the picture's height). -->
+    <link type="text/rcss" href="menu.rcss"/>
+</head>
+<body>
+    <div id="menu">
+        <h1>Paused</h1>
+        <div class="button">Resume</div>
+        <div class="button focused">Settings</div>
+        <div class="button">Quit</div>
+    </div>
+    <div id="settings">
+        <h2>Settings</h2>
+        <img src="/Assets/Textures/checker_color.png"/>
+        <div id="list">
+            <p>Music volume</p><p>Effects volume</p><p>Subtitles</p><p>Invert look</p>
+            <p>Field of view</p><p>Brightness</p><p>Language</p><p>Credits</p>
+        </div>
+    </div>
+</body>
+</rml>

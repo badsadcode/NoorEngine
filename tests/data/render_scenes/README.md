@@ -21,6 +21,10 @@ noor_player and compared with `tests/golden/<scene>.png` (320x180) by `noor_imag
 - `Atmosphere_Day`: `Scripts/DayCycle.luau` drags the time of day from 5:00 to 21:00 over 8 seconds
   (`tests/day_cycle_check.cmake` measures the moving sun).
 
+- `UI_Menu`: the Daylight scene under a game UI document (`UI/menu.noorui`, `UI/menu.rcss`: a pause menu and a
+  settings panel with an image and a clipped list), drawn at 640 x 360 and kept at that size (gameplay foundations part
+  6a).
+
 The objects span the albedo range: a near-black box (#141414), greys, a near-white ball
 (#F2F2F2) and saturated red, green and blue, so exposure, tonemapping or colour-space mistakes
 show up. When a change is meant to alter the picture: run the test, look at the screenshot and

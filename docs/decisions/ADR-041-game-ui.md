@@ -1,6 +1,6 @@
 # ADR-041: Game UI, our own widgets or RmlUi
 
-**Status:** Proposed (Sage recommends RmlUi; waiting for Tom's yes, since it adds a lasting dependency)
+**Status:** Accepted (Tom, 2026-11-21, after the spike and the licences were explained)
 **Date:** 2026-11-21
 
 ## Context
@@ -39,7 +39,7 @@ edges twice; a GPU doesn't.)*
 | Size | Small | The spike (our game library, RmlUi and FreeType) is a 6.6 MB program |
 | Licences | Ours | RmlUi MIT; FreeType's own licence (BSD-style, credit in the docs) |
 
-## Decision (proposed)
+## Decision
 **RmlUi**, behind our own API. Games and the editor talk to `noor.ui` (Lua), `Ui` (C#) and `.noorui` documents (RML
 files under our name and our docs); RmlUi stays an implementation detail of the `ui` module, so it could be replaced
 without breaking games. The HUD stays as it is for quick text and bars (`noor.ui.text`, `noor.ui.rect`).
@@ -54,11 +54,11 @@ spike was our own; the spike showed the gap is much bigger than the look of one 
 - Fonts: FreeType becomes a dependency. The HUD keeps its SDF font; UI documents use FreeType.
 - Scripts: our own bridge for Lua (Luau) and C#: events on elements (`click`, `change`), data models bound from scripts.
 - The editor's UI builder (later in part 6) edits `.noorui` files and shows them live with RmlUi.
-- Built games carry RmlUi and FreeType (statically linked) and their licence notices.
+- Built games carry RmlUi and FreeType (statically linked) and their licence notices (from part 6a: `licenses/`).
 
 ## Open
 - Text quality at large sizes, and on 4K screens: FreeType renders each size it's asked for; check memory with many sizes.
 - Whether to move the HUD to RmlUi too later (one text renderer) or keep both.
 
 ## Reviewed by
-Sage (spike and recommendation). Tom: to confirm.
+Sage (spike and recommendation); Tom (accepted, 2026-11-21).

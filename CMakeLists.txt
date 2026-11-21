@@ -30,6 +30,8 @@ add_subdirectory(engine/terrain)
 add_subdirectory(engine/terrain_edit)
 add_subdirectory(engine/procgraph)
 add_subdirectory(engine/fx)  # NoorFX: particles (Milestone 8B)
+add_subdirectory(engine/fonts)  # the built-in font (HUD and game UI)
+add_subdirectory(engine/ui)  # game UI documents (RmlUi, ADR-041)
 add_subdirectory(engine/game)
 add_subdirectory(engine/csg)  # editor and cooking only (ADR-016): games load cooked meshes
 add_subdirectory(tools/noor_cli)

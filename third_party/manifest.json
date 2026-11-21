@@ -223,6 +223,26 @@
       "linkage": "static (CrossSection, TBB, bindings and tests off)",
       "shipped": true,
       "purpose": "CSG booleans for brushes in the editor and when cooking (ADR-016); not linked into games"
+    },
+    {
+      "name": "FreeType",
+      "version": "2.14.3",
+      "source": "https://github.com/freetype/freetype (tag VER-2-14-3, SHA-256 pinned)",
+      "commit": null,
+      "license": "FreeType License (FTL, BSD-style: games credit it in their documentation); dual-licensed with GPLv2, we use the FTL",
+      "linkage": "static (zlib, bzip2, PNG, HarfBuzz and Brotli off)",
+      "shipped": true,
+      "purpose": "Font rendering for game UI documents (RmlUi's font engine; ADR-041)"
+    },
+    {
+      "name": "RmlUi",
+      "version": "6.3",
+      "source": "https://github.com/mikke89/RmlUi (tag 6.3, SHA-256 pinned)",
+      "commit": null,
+      "license": "MIT",
+      "linkage": "static (samples off; FreeType font engine)",
+      "shipped": true,
+      "purpose": "Game UI: .noorui documents (RML/RCSS), layout, styling, input (ADR-041), behind the ui module"
     }
   ]
 }

@@ -57,36 +57,47 @@ Status Renderer::Impl::ensure_texture_table() {
     nearest_info.maxLod = VK_LOD_CLAMP_NONE;
     NOOR_VK_TRY(vkCreateSampler(device, &nearest_info, nullptr, &nearest_sampler));
     set_name(VK_OBJECT_TYPE_SAMPLER, nearest_sampler, "Texture sampler (nearest, repeat)");
+    // Game UI (part 6): images and font atlases end at their edges, so no wrapping round to the other side.
+    VkSamplerCreateInfo clamp_info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    clamp_info.magFilter = VK_FILTER_LINEAR;
+    clamp_info.minFilter = VK_FILTER_LINEAR;
+    clamp_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    clamp_info.addressModeU = clamp_info.addressModeV = clamp_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    clamp_info.maxLod = VK_LOD_CLAMP_NONE;
+    NOOR_VK_TRY(vkCreateSampler(device, &clamp_info, nullptr, &clamp_sampler));
+    set_name(VK_OBJECT_TYPE_SAMPLER, clamp_sampler, "Texture sampler (linear, clamp)");
 
-    const VkDescriptorSetLayoutBinding bindings[4] = {
+    const VkDescriptorSetLayoutBinding bindings[5] = {
         // Vertex shaders too: water reads its depth maps per vertex (8D part 3).
         {0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
         {1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &texture_sampler},
         {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},  // materials
         {3, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &nearest_sampler},
+        {4, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, &clamp_sampler},
     };
     // Textures are added and removed while earlier frames may still be in flight: slots that
     // frame doesn't use may change (update-after-bind, unused-while-pending), and empty slots are
     // fine (partially bound).
-    const VkDescriptorBindingFlags binding_flags[4] = {
+    const VkDescriptorBindingFlags binding_flags[5] = {
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
             VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
         0,
         0,
         0,
+        0,
     };
     VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
-    flags_info.bindingCount = 4;
+    flags_info.bindingCount = 5;
     flags_info.pBindingFlags = binding_flags;
     VkDescriptorSetLayoutCreateInfo layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     layout_info.pNext = &flags_info;
     layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-    layout_info.bindingCount = 4;
+    layout_info.bindingCount = 5;
     layout_info.pBindings = bindings;
     NOOR_VK_TRY(vkCreateDescriptorSetLayout(device, &layout_info, nullptr, &texture_set_layout));
 
     const VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, kMaxTextures},
-                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 2},
+                                           {VK_DESCRIPTOR_TYPE_SAMPLER, 3},
                                            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
     VkDescriptorPoolCreateInfo pool_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
@@ -352,6 +363,8 @@ void Renderer::Impl::destroy_textures() {
     if (texture_sampler) vkDestroySampler(device, texture_sampler, nullptr);
     if (nearest_sampler) vkDestroySampler(device, nearest_sampler, nullptr);
     nearest_sampler = VK_NULL_HANDLE;
+    if (clamp_sampler) vkDestroySampler(device, clamp_sampler, nullptr);
+    clamp_sampler = VK_NULL_HANDLE;
     texture_pool = VK_NULL_HANDLE;
     texture_set_layout = VK_NULL_HANDLE;
     texture_set = VK_NULL_HANDLE;

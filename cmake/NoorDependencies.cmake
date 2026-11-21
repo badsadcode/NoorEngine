@@ -223,6 +223,39 @@ FetchContent_Declare(hud_font
 FetchContent_MakeAvailable(hud_font)
 set(NOOR_HUD_FONT ${hud_font_SOURCE_DIR}/AtkinsonHyperlegible-Regular.ttf CACHE INTERNAL "The HUD font (OFL)")
 
+# --- FreeType 2.14.3 (FreeType License, BSD-style with a credit clause) and RmlUi 6.3 (MIT): game UI (ADR-041,
+# gameplay foundations part 6). Static, FreeType without its optional extras (zlib, bzip2, PNG, HarfBuzz, Brotli);
+# RmlUi finds this FreeType through FetchContent (OVERRIDE_FIND_PACKAGE). Built games carry both notices.
+set(BUILD_SHARED_LIBS_BEFORE_UI ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+FetchContent_Declare(Freetype
+    URL      https://github.com/freetype/freetype/archive/refs/tags/VER-2-14-3.tar.gz
+    URL_HASH SHA256=dc49de6b01a266eef4876a4dd34d9842c475d3e28ff2eff63bd2fb760ab56261
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM
+    OVERRIDE_FIND_PACKAGE)
+set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_PNG ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_HARFBUZZ ON CACHE BOOL "" FORCE)
+set(FT_DISABLE_BROTLI ON CACHE BOOL "" FORCE)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(Freetype)
+if(NOT TARGET Freetype::Freetype)
+    add_library(Freetype::Freetype ALIAS freetype)
+endif()
+FetchContent_Declare(RmlUi
+    URL      https://github.com/mikke89/RmlUi/archive/refs/tags/6.3.tar.gz
+    URL_HASH SHA256=d977298bb6147610e5984d5db85ddf284020d655a8713913f6982074f1dbdede
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM)
+set(RMLUI_SAMPLES OFF CACHE BOOL "" FORCE)
+set(RMLUI_FONT_ENGINE "freetype" CACHE STRING "" FORCE)
+FetchContent_MakeAvailable(RmlUi)
+set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_BEFORE_UI})
+set(NOOR_FREETYPE_LICENSE ${freetype_SOURCE_DIR}/docs/FTL.TXT CACHE INTERNAL "FreeType's licence, the FTL we use it under (built games carry it)")
+set(NOOR_RMLUI_LICENSE ${rmlui_SOURCE_DIR}/LICENSE.txt CACHE INTERNAL "RmlUi's licence (built games carry it)")
+
 # --- doctest (MIT, tests only) ---------------------------------------------
 if(NOOR_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

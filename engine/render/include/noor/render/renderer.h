@@ -390,6 +390,33 @@ struct OverlayVertex {
     math::Vec4 color;  // linear RGB, straight alpha
 };
 
+// ---- Game UI (gameplay foundations part 6, ADR-041) -------------------------------------------
+// What the ui module draws: indexed triangles in screen pixels, textured and clipped, over everything (the HUD too).
+// Colours are as CSS gives them: sRGB, premultiplied by alpha; the shader blends them in linear light like the rest.
+struct UiVertex {
+    math::Vec2 position;                  // pixels, origin top-left, before the draw's translation
+    std::array<std::uint8_t, 4> color{};  // sRGB, premultiplied
+    math::Vec2 uv;
+};
+static_assert(sizeof(UiVertex) == 20, "the UI pipeline reads float2, unorm8x4, float2");
+
+struct UiDraw {
+    std::uint32_t first_index = 0;  // into UiFrame::indices
+    std::uint32_t index_count = 0;
+    std::int32_t vertex_offset = 0;  // added to each index
+    math::Vec2 translation;          // pixels
+    // Rgba8Unorm holding sRGB values premultiplied by alpha (what RmlUi makes); none: white.
+    TextureHandle texture;
+    bool clip = false;
+    std::array<std::int32_t, 4> clip_rect{};  // x, y, width, height in pixels (when `clip`)
+};
+
+struct UiFrame {
+    std::span<const UiVertex> vertices;
+    std::span<const std::uint32_t> indices;
+    std::span<const UiDraw> draws;  // in order, back to front
+};
+
 // ---- Particles (Milestone 8B, part 2, ADR-035) ----------------------------------------------
 
 // One particle as the GPU draws it: a quad facing the camera (or stretched along its velocity), in the
@@ -521,6 +548,7 @@ struct FrameDesc {
     // Water's debug views (8D part 7): 0 none, 1 depth (how much water is under each pixel), 2 flow (which way and how
     // fast it runs), 3 waves (how far they lift the surface), 4 normals, 5 cost (how hard each pixel worked).
     std::uint32_t water_debug = 0;
+    UiFrame ui;  // gameplay foundations part 6: game UI documents, drawn last (over the HUD)
 };
 
 struct FrameStats {

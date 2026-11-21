@@ -16,8 +16,8 @@
 // --frames runs N frames and exits (tests); the exit code is then 2 if anything logged an error.
 // It's a windowed program (no console): the log is <exe name>.log next to it unless --log says otherwise.
 // --report writes what happened as JSON: frames, play time, each named entity's world position, and
-// the colour of the centre pixel of the last frame, the HUD's vertex count and its text, and the
-// renderer's numbers (GPU time per pass, draws, memory, MSAA samples).
+// the colour of the centre pixel of the last frame, the HUD's vertex count and its text, the game UI's
+// documents and draws, and the renderer's numbers (GPU time per pass, draws, memory, MSAA samples).
 
 #include "noor/asset/json.h"
 #include "noor/asset/project.h"
@@ -42,6 +42,7 @@
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 #include "noor/scripting/dotnet_host.h"
+#include "noor/ui/ui.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -354,6 +355,30 @@ int run(const Options& o) {
                     NOOR_LOG_ERROR("Player", "HUD font: {}", s.error().describe());
                 std::vector<noor::render::OverlayVertex> overlay;
                 const auto asset_path = noor::game::registry_asset_path(*project, registry);
+                // Game UI documents (part 6, ADR-041): the scene's `ui_document` components, opened at the start. RmlUi
+                // starts only when there's one (a game without UI pays nothing). Its clock is the world's real time:
+                // transitions run while the game is paused, and test runs (--frames) are repeatable.
+                std::unique_ptr<noor::ui::Ui> game_ui;
+                for (const auto& e : (*world)->scene().entities) {
+                    if (!e.has("ui_document") || !e.components.at("ui_document").is_object()) continue;
+                    const Json& c = e.components.at("ui_document");
+                    const std::string doc = c.value("document", std::string());
+                    if (doc.empty()) continue;
+                    if (!game_ui) {
+                        auto made = noor::ui::Ui::create({project->root(), noor::ui::renderer_textures(**renderer),
+                                                          [w = world->get()] { return w->real_time(); }});
+                        if (!made) {
+                            NOOR_LOG_ERROR("Player", "Game UI: {}", made.error().describe());
+                            break;
+                        }
+                        game_ui = std::move(*made);
+                    }
+                    if (auto id = game_ui->open(doc); !id)
+                        NOOR_LOG_ERROR("Player", "{}: {}", e.name, id.error().describe());
+                    else if (!c.value("visible", true))
+                        game_ui->set_visible(*id, false);
+                }
+                noor::render::UiFrame ui_frame;
                 bool captured = false;
                 int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
                 bool warned_no_camera = false;
@@ -451,7 +476,21 @@ int run(const Options& o) {
                     if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
                         particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
                     noor::game::set_water_time(view.water, (*world)->time());  // waves and ripples on the game's clock
-                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water, o.water_debug});
+                    if (game_ui) {  // laid out in the game's picture, over the HUD
+                        game_ui->set_viewport(static_cast<std::int32_t>(layout.x), static_cast<std::int32_t>(layout.y), static_cast<std::int32_t>(layout.width), static_cast<std::int32_t>(layout.height));
+                        if (o.input && !captured) {
+                            using B = noor::platform::MouseButton;
+                            game_ui->mouse_move(in.mouse_x, in.mouse_y);
+                            for (const B b : {B::Left, B::Right, B::Middle}) {
+                                if (in.pressed(b)) game_ui->mouse_button(static_cast<int>(b), true);
+                                if (in.released(b)) game_ui->mouse_button(static_cast<int>(b), false);
+                            }
+                            if (in.wheel != 0.0f) game_ui->mouse_wheel(-in.wheel);
+                        }
+                        game_ui->update();
+                        ui_frame = game_ui->draw();
+                    }
+                    auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water, o.water_debug, ui_frame});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
                         exit_code = 1;
@@ -484,6 +523,7 @@ int run(const Options& o) {
                         last_overlay = overlay;
                         last_water = view.water;
                         last_frame_desc = {noor::game::SceneRenderer::camera(view), view.lighting, {}, {}, particle_draws, last_water};
+                        last_frame_desc.ui = ui_frame;  // stays valid: nothing draws the UI again
                     }
                 }
                 // The last frame wasn't presented (the swapchain was being rebuilt, the window was busy):
@@ -575,6 +615,11 @@ int run(const Options& o) {
                         report["ui_pixel_40_40"] = {p[0], p[1], p[2]};
                     }
                     report["hud_vertices"] = overlay.size();
+                    if (game_ui) {
+                        const auto us = game_ui->stats();
+                        report["ui"] = {{"documents", us.documents}, {"draws", us.draws}, {"vertices", us.vertices},
+                                        {"textures", us.textures}, {"texture_bytes", us.texture_bytes}};
+                    }
                     {
                         const auto l = (*renderer)->display_layout();
                         const auto screen = (*renderer)->swapchain_size();

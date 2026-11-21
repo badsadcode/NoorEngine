@@ -3,6 +3,7 @@
 #   -DPLAYER=<noor_player> -DCOMPARE=<noor_image_compare> -DPROJECT=<folder> -DSCENE=<Scenes/X.noorscene>
 #   -DREFERENCE=<tests/golden/X.png> -DWORK=<folder for the screenshot and the diff> [-DEXTRA=<a player option>]
 #   [-DFRAMES=<frames to run before the picture: 5; more for things that build up, like particles>]
+#   [-DWINDOW=<WxH: the window's size, for pictures that need more pixels than the usual (game UI)>]
 # With the environment variable NOOR_UPDATE_GOLDEN=1 the screenshot becomes the new reference
 # (look at it first!).
 file(MAKE_DIRECTORY "${WORK}")
@@ -12,7 +13,11 @@ endif()
 set(shot "${WORK}/screenshot.bmp")
 file(REMOVE "${shot}")
 # With Vulkan validation: a picture can look right while the GPU is being misused.
-execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames ${FRAMES} --no-audio --no-input --validation ${EXTRA}
+set(window_args)
+if(DEFINED WINDOW)
+    set(window_args --window ${WINDOW} --windowed)
+endif()
+execute_process(COMMAND "${PLAYER}" "${PROJECT}" --scene "${SCENE}" --frames ${FRAMES} --no-audio --no-input --validation ${EXTRA} ${window_args}
                         --screenshot "${shot}" --report "${WORK}/report.json" --log "${WORK}/player.log"
                 RESULT_VARIABLE code OUTPUT_QUIET ERROR_QUIET)
 if(NOT code EQUAL 0 OR NOT EXISTS "${shot}")
@@ -24,7 +29,11 @@ if(NOT errors EQUAL 0)
     message(FATAL_ERROR "${errors} error(s) logged (Vulkan validation or engine); see ${WORK}/player.log")
 endif()
 if("$ENV{NOOR_UPDATE_GOLDEN}" STREQUAL "1")
-    execute_process(COMMAND "${COMPARE}" "${shot}" "${REFERENCE}" --update RESULT_VARIABLE code)
+    set(size_args)
+    if(DEFINED WINDOW)  # kept at the window's size (text needs its pixels), not shrunk to the usual 320 x 180
+        set(size_args --size ${WINDOW})
+    endif()
+    execute_process(COMMAND "${COMPARE}" "${shot}" "${REFERENCE}" --update ${size_args} RESULT_VARIABLE code)
     if(NOT code EQUAL 0)
         message(FATAL_ERROR "couldn't write ${REFERENCE}")
     endif()
