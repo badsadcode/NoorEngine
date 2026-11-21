@@ -42,7 +42,7 @@
 #include "noor/scene/prefab.h"
 #include "noor/scene/scene.h"
 #include "noor/scripting/dotnet_host.h"
-#include "noor/ui/ui.h"
+#include "noor/ui/world_ui.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -355,30 +355,15 @@ int run(const Options& o) {
                     NOOR_LOG_ERROR("Player", "HUD font: {}", s.error().describe());
                 std::vector<noor::render::OverlayVertex> overlay;
                 const auto asset_path = noor::game::registry_asset_path(*project, registry);
-                // Game UI documents (part 6, ADR-041): the scene's `ui_document` components, opened at the start. RmlUi
-                // starts only when there's one (a game without UI pays nothing). Its clock is the world's real time:
+                // Game UI documents (part 6, ADR-041): the scene's `ui_document` components and what scripts open. RmlUi
+                // starts with the first document (a game without UI pays nothing). Its clock is the world's real time:
                 // transitions run while the game is paused, and test runs (--frames) are repeatable.
-                std::unique_ptr<noor::ui::Ui> game_ui;
-                for (const auto& e : (*world)->scene().entities) {
-                    if (!e.has("ui_document") || !e.components.at("ui_document").is_object()) continue;
-                    const Json& c = e.components.at("ui_document");
-                    const std::string doc = c.value("document", std::string());
-                    if (doc.empty()) continue;
-                    if (!game_ui) {
-                        auto made = noor::ui::Ui::create({project->root(), noor::ui::renderer_textures(**renderer),
-                                                          [w = world->get()] { return w->real_time(); }});
-                        if (!made) {
-                            NOOR_LOG_ERROR("Player", "Game UI: {}", made.error().describe());
-                            break;
-                        }
-                        game_ui = std::move(*made);
-                    }
-                    if (auto id = game_ui->open(doc); !id)
-                        NOOR_LOG_ERROR("Player", "{}: {}", e.name, id.error().describe());
-                    else if (!c.value("visible", true))
-                        game_ui->set_visible(*id, false);
-                }
+                noor::ui::WorldUi game_ui({project->root(), noor::ui::renderer_textures(**renderer),
+                                           [w = world->get()] { return w->real_time(); }, noor::platform::set_clipboard_text,
+                                           noor::platform::clipboard_text});
+                game_ui.attach(**world);
                 noor::render::UiFrame ui_frame;
+                bool text_input = false;
                 bool captured = false;
                 int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
                 bool warned_no_camera = false;
@@ -430,6 +415,56 @@ int run(const Options& o) {
                         game_in.mouse_delta = {0, 0};
                     }
                     const double t_game = noor::platform::time_seconds();
+                    if (game_ui.ui() && o.input) {  // the UI's input first: what it does reaches scripts this frame
+                        noor::ui::WorldUi::Input ui_in;
+                        using B = noor::platform::MouseButton;
+                        using P = noor::platform::Key;
+                        using K = noor::ui::Key;
+                        ui_in.mouse = !captured;
+                        ui_in.mouse_x = in.mouse_x;
+                        ui_in.mouse_y = in.mouse_y;
+                        for (const B b : {B::Left, B::Right, B::Middle}) {
+                            ui_in.pressed[static_cast<std::size_t>(b)] = in.pressed(b);
+                            ui_in.released[static_cast<std::size_t>(b)] = in.released(b);
+                        }
+                        ui_in.wheel = -in.wheel;
+                        const auto ui_key = [](P k) -> std::optional<K> {
+                            switch (k) {
+                            case P::Tab: return K::Tab;
+                            case P::Enter: return K::Enter;
+                            case P::Space: return K::Space;
+                            case P::Escape: return K::Escape;
+                            case P::Backspace: return K::Backspace;
+                            case P::Delete: return K::Delete;
+                            case P::Left: return K::Left;
+                            case P::Right: return K::Right;
+                            case P::Up: return K::Up;
+                            case P::Down: return K::Down;
+                            case P::Home: return K::Home;
+                            case P::End: return K::End;
+                            case P::PageUp: return K::PageUp;
+                            case P::PageDown: return K::PageDown;
+                            case P::A: return K::A;
+                            case P::C: return K::C;
+                            case P::V: return K::V;
+                            case P::X: return K::X;
+                            default: return std::nullopt;
+                            }
+                        };
+                        for (const P k : in.key_presses)
+                            if (const auto u = ui_key(k)) ui_in.keys.emplace_back(*u, true);
+                        for (std::size_t i = 1; i < noor::platform::InputState::kKeyCount; ++i)
+                            if (in.keys_released[i])
+                                if (const auto u = ui_key(static_cast<P>(i))) ui_in.keys.emplace_back(*u, false);
+                        ui_in.modifiers = {in.down(P::LeftCtrl) || in.down(P::RightCtrl), in.down(P::LeftShift) || in.down(P::RightShift),
+                                           in.down(P::LeftAlt) || in.down(P::RightAlt)};
+                        ui_in.text = in.text;
+                        game_ui.input(ui_in);
+                        if (game_ui.wants_text() != text_input) {  // a text box got or lost focus
+                            text_input = game_ui.wants_text();
+                            noor::platform::set_text_input(**window, text_input);
+                        }
+                    }
                     (*world)->frame(dt, game_in);
                     if (o.stall_ms > 0)  // spin, not sleep: a sleep's length is up to the OS's timer
                         while ((noor::platform::time_seconds() - t_game) * 1000.0 < o.stall_ms) {}
@@ -476,20 +511,9 @@ int run(const Options& o) {
                     if (const auto* ps = (*world)->system<noor::fx::ParticleSystem>())
                         particle_draws = scene_renderer.particles(*ps, **world, noor::math::inverse(frame_camera.view).transform_point({0, 0, 0}));
                     noor::game::set_water_time(view.water, (*world)->time());  // waves and ripples on the game's clock
-                    if (game_ui) {  // laid out in the game's picture, over the HUD
-                        game_ui->set_viewport(static_cast<std::int32_t>(layout.x), static_cast<std::int32_t>(layout.y), static_cast<std::int32_t>(layout.width), static_cast<std::int32_t>(layout.height));
-                        if (o.input && !captured) {
-                            using B = noor::platform::MouseButton;
-                            game_ui->mouse_move(in.mouse_x, in.mouse_y);
-                            for (const B b : {B::Left, B::Right, B::Middle}) {
-                                if (in.pressed(b)) game_ui->mouse_button(static_cast<int>(b), true);
-                                if (in.released(b)) game_ui->mouse_button(static_cast<int>(b), false);
-                            }
-                            if (in.wheel != 0.0f) game_ui->mouse_wheel(-in.wheel);
-                        }
-                        game_ui->update();
-                        ui_frame = game_ui->draw();
-                    }
+                    // Game UI, laid out in the game's picture, over the HUD.
+                    ui_frame = game_ui.draw(static_cast<std::int32_t>(layout.x), static_cast<std::int32_t>(layout.y),
+                                            static_cast<std::int32_t>(layout.width), static_cast<std::int32_t>(layout.height));
                     auto frame = (*renderer)->render_frame({frame_camera, view.lighting, draws, overlay, particle_draws, view.water, o.water_debug, ui_frame});
                     if (!frame) {
                         NOOR_LOG_ERROR("Player", "Frame failed: {}", frame.error().describe());
@@ -615,8 +639,8 @@ int run(const Options& o) {
                         report["ui_pixel_40_40"] = {p[0], p[1], p[2]};
                     }
                     report["hud_vertices"] = overlay.size();
-                    if (game_ui) {
-                        const auto us = game_ui->stats();
+                    if (game_ui.ui()) {
+                        const auto us = game_ui.ui()->stats();
                         report["ui"] = {{"documents", us.documents}, {"draws", us.draws}, {"vertices", us.vertices},
                                         {"textures", us.textures}, {"texture_bytes", us.texture_bytes}};
                     }

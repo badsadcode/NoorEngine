@@ -92,6 +92,7 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.play_sound(clip [, position [, volume [, bus]]])` | Plays a sound once: `clip` is an asset id or a path like `"Assets/Audio/step.wav"`; with a `position` (vector) it's 3D, without it plays everywhere. Default bus `sfx`. Returns `true` if it started |
 | `noor.set_volume(bus, volume)` | Bus volume (`master`, `music`, `sfx`, `ui`, `voice`), `0` is silent, `1` normal |
 | `noor.ui.text(...)`, `noor.ui.rect(...)` | The HUD: see [The HUD](#the-hud) |
+| `noor.ui.open(path)`, `noor.ui.find(path)` | UI documents (menus): see [UI documents](#ui-documents-menus) |
 | `noor.input.capture_mouse(on)` | Ask to capture the mouse for looking (`true`) or release it. Works once the player has clicked into the game view; **Esc** always releases it |
 | `noor.input.mouse_captured()` | Whether the mouse is captured now (then `look_x` / `look_y` are raw mouse movement) |
 
@@ -395,6 +396,39 @@ The built-in font is Atkinson Hyperlegible (SIL OFL 1.1), sharp at any size, wit
 and Latin Extended-A (Polish, Czech, German, French…) plus € ° – — … ‘ ’ “ ” •. Other characters
 show as `?`. Everything is drawn over the scene in the order you draw it (later on top).
 
+## UI documents (menus)
+
+Pages made in `.noorui` files (HTML/CSS-like: [Game UI](../ui/GAME_UI.md)), drawn over the game. A document is a value
+you call methods on; elements are named by their `id` (`"resume"` or `"#resume"`). An element that isn't there is a
+script error naming it.
+
+```lua
+local menu = noor.ui.open("UI/pause.noorui")     -- opened and shown; closes when this script's entity goes
+menu:on("click", "resume", function(e) menu:hide(); noor.set_paused(false) end)
+menu:on("change", function(e) noor.log(e.element .. " is now " .. tostring(e.value)) end)
+menu:set_text("title", "Paused at " .. noor.time())
+local hud = noor.ui.find("UI/hud.noorui")          -- one a ui_document component opened
+```
+
+| | |
+|---|---|
+| `noor.ui.open(path)` | Opens and shows a document; it belongs to the running script's entity |
+| `noor.ui.find(path)` | A document already open (from a `ui_document` component), or `nil` |
+| `d:show()`, `d:hide()`, `d:visible()`, `d:close()` | Shown again (it takes the keyboard), hidden, is it shown, closed for good |
+| `d:on(event [, element], fn(e))` | Listen to `click`, `change`, `submit`, `focus`, `blur`, `mouseover`, `mouseout` on one element or any; `e` is `{type, element, value}`; returns a listener (`:cancel()`) |
+| `d:set_text(element, text)` | Its content becomes this text, shown as it is (numbers too) |
+| `d:set_rml(element, markup)` | Its content becomes this markup |
+| `d:set_class(element, name [, on])` | Adds (or with `false` removes) a class |
+| `d:set_attribute(element, name, value)` | `"disabled"`, `"src"`...; `true` sets it, `false` or `nil` removes it |
+| `d:set_style(element, property, value)` | A style property as RCSS (`"width", "40dp"`); `nil`: back to the style sheet's |
+| `d:value(element)` | Text boxes: a string, ranges: a number, checkboxes: `true` / `false`, others: their content |
+| `d:set_value(element, value)` | The same kinds |
+| `d:focus(element)`, `d:click(element)` | Gives it focus; presses it (its `click` comes next frame) |
+
+Events from the mouse and keyboard arrive in the same frame, those from `set_value` and `click` in the next. A menu's
+script usually runs while paused (`"pause": "always"` on its script component).
+
 ## Not yet
-Pause and fades, timers and coroutine-based waits, messages between scripts: the gameplay foundations
-([plan](../milestones/M9_GAMEPLAY_PLAN.md)), parts 2 and 3.
+Saving and loading, levels and scene changes, navigation: the gameplay foundations
+([plan](../milestones/M9_GAMEPLAY_PLAN.md)), parts 7 to 9. Binding a page to a script's data, and gamepads, come with
+the rest of part 6.

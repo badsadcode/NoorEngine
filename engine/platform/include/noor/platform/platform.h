@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <string>
 
 namespace noor::platform {
 
@@ -35,6 +36,11 @@ struct EventSummary {
 // Relative mouse mode hides and captures the cursor and reports raw movement
 // (for mouse-look). Turn it off to give the cursor back.
 void set_relative_mouse(Window& window, bool enabled);
+// Typed text (InputState::text): on while a text box has focus (game UI). Off, letters are just keys.
+void set_text_input(Window& window, bool enabled);
+// The system clipboard's text (UTF-8): copy and paste between a game's text boxes and other programs.
+void set_clipboard_text(const std::string& text);
+[[nodiscard]] std::string clipboard_text();
 
 // Called when the OS wants the window redrawn while the normal loop is blocked, e.g. while
 // the user drags a window edge on Windows (the OS runs its own modal loop then). The callback

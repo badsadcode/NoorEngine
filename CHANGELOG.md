@@ -4,6 +4,24 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 6b: UI documents from scripts
+**Added**
+- `runtime::UiDocuments` (`ui_documents.h`), `World::set_ui_documents`, `ui_emitter`, `own_ui_document` (documents close
+  with their entity), `queue_message` (delivered at the start of the next frame); `runtime::api::ui` (every UI operation
+  as one JSON request).
+- `noor::ui::WorldUi` (`world_ui.h`): the World's UI, started with the first document; events become messages.
+- `noor::ui::Ui`: `find`, `is_open`, `set_text`, `set_rml`, `set_class`, `set_attribute`, `set_style`, `value`,
+  `set_value`, `focus`, `click`, `take_events` (`UiEvent`), `key` (`Key`, `Modifiers`), `text`, `wants_text`; `UiDesc`
+  clipboard callbacks. Documents take the keyboard when opened or shown.
+- Lua: `noor.ui.open`, `noor.ui.find`, `noor.UiDocument` (show, hide, close, visible, on, set_text, set_rml, set_class,
+  set_attribute, set_style, value, set_value, focus, click).
+- C#: `Ui.Open`, `Ui.Find`, `UiDocument`, `NoorScript.On(UiDocument, ...)`; rt API v18 (`ui`).
+- Platform: keys Delete, Home, End, PageUp, PageDown; `InputState::key_presses`, `text`; `set_text_input`,
+  `set_clipboard_text`, `clipboard_text`.
+- noor_player gives the UI the mouse, keys, typed text and the clipboard.
+
+**Tests:** `test_ui_scripts.cpp` (5 cases); `tests/data/ui_project`, `cli.build_ui_project`, `player.ui_lua_csharp`.
+
 ### 2026-11-21 — Gameplay foundations, part 6a: game UI documents
 **Added**
 - [ADR-041](docs/decisions/ADR-041-game-ui.md) accepted: RmlUi behind our own API, from the UI spike (`tools/ui_spike`).

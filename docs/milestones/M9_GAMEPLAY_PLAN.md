@@ -185,6 +185,37 @@ Exceptions: the player is 4.2 MB bigger (16.5 to 20.6 MB) whether a game uses UI
 editor's Play yet (6d); no scripts, keyboard or gamepad yet (6b, 6e); rounded clipping, gradients, shadows and filters
 need the renderer's clip masks and layers (6c); destroying a UI texture waits for the GPU (as every texture does today).
 
+## Part 6b result (2026-11-21)
+Done. **Scripts and UI documents.** One operation, `runtime::api::ui(world, caller, {"op": ...})`, does everything for
+Lua and C# alike: open (the document belongs to the caller's entity and closes with it), find, show, hide, close,
+visible, and by element id set_text (escaped), set_rml, set_class, set_attribute, set_style, value, set_value, focus,
+click. The runtime knows UI only through `runtime::UiDocuments` (`ui_documents.h`); `noor::ui::WorldUi` implements it,
+starts RmlUi with the first document (a component's or a script's), and sends RmlUi's events (click, change, submit,
+focus, blur, mouseover, mouseout; hover ones only when listened to) to the World as messages from each document's
+emitter id: "click" and "click#resume", with {type, element, value}, queued and delivered at the start of the next
+frame (`World::queue_message`). **Lua:** `noor.ui.open`, `noor.ui.find`, document methods, `d:on(event [, element],
+fn)`. **C#** (rt API v18, one `ui` entry carrying the same JSON requests): `Ui.Open(path, owner)`, `Ui.Find`,
+`UiDocument` with the same methods, `NoorScript.On(document, type, element, handler)`. **Input:** the player gives the
+UI the mouse (not while captured), key presses with their auto-repeats, typed text (SDL text input, turned on while a
+text box has focus) and the Windows clipboard; documents take the keyboard when opened or shown, so Tab, arrows (with
+`nav`) and Enter work. The platform gained Delete, Home, End, Page Up and Page Down, `InputState::key_presses` and
+`text`, `set_text_input`, the clipboard.
+
+Proved: elements by id (text escaped, markup, classes, attributes, styles), control values (a range a number, a
+checkbox true / false, a text box a string), clicks naming the element with an id, changes with their value, Tab
+moving focus and Enter clicking, typing and Backspace in a text box (accents too), copy and paste through the host's
+clipboard, missing elements refused (unit); documents in a World: a component's opened by `WorldUi`, a script's request
+answered, mistakes named, events delivered as "click" and "click#go" the frame after, a document closed with its owner
+and the component's kept, RmlUi not started until a document opens (unit); a menu script that pauses the game, fills
+in the menu, reads it back, clicks Resume (which resumes the game) and keeps a HUD page up to date ends on exactly the
+same line from Lua in the project and Lua and C# in a built game (`player.ui_lua_csharp`). `tests/data/ui_project`'s
+`Scenes/Try` is the same kind of menu to play with by hand.
+
+Exceptions: binding a page to a script's data (RmlUi's data models) isn't there yet: scripts set values; the editor's
+Play doesn't show documents (6d); `ui_document` components on entities spawned later aren't opened (scripts open
+documents instead); the mouse also reaches the game while over a menu (pausing makes that harmless); the player's mouse
+and keyboard mapping is checked by hand, not by a test.
+
 ## Highest risks (settle early)
 
 1. **UI: our own or a library.** A retained UI with layout, focus, gamepad navigation, text input and themes is a big

@@ -6,10 +6,12 @@ game. ([ADR-041](../decisions/ADR-041-game-ui.md): RmlUi does the layout and sty
 For a score in the corner or a health bar, the **HUD** is still the quick way (`noor.ui.text`, `noor.ui.rect` from a
 script, redrawn every frame). Documents are for anything with layout: panels, lists, buttons, pictures.
 
-**What works today (gameplay foundations part 6a):** documents shown in a running game (noor_player and built games),
-laid out and styled, with text, rounded boxes, borders, images and clipped areas; the mouse hovers. **Coming:** scripts
-opening and closing documents and reacting to clicks (6b); gradients, shadows, blur, transforms (6c); a UI builder in
-the editor, and documents in the editor's Play (6d); keyboard and gamepad navigation (6b, 6e).
+**What works today (gameplay foundations parts 6a and 6b):** documents shown in a running game (noor_player and built
+games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; scripts (Lua and C#) open,
+show, hide and close them, change what's in them, read and set their controls and react to clicks and changes; the
+mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** gradients, shadows, blur, transforms
+(6c); a UI builder in the editor, and documents in the editor's Play (6d); gamepads (6e); binding data to a page
+(a later step).
 
 ## Showing a document
 
@@ -22,7 +24,56 @@ Put an entity in the scene with a `ui_document` component:
 ```
 
 The document opens when the game starts and is drawn over everything (the 3D or 2D scene and the HUD). `visible: false`
-loads it hidden (scripts will show it, part 6b). Several documents can be open; later ones are drawn on top.
+loads it hidden (a script shows it). Several documents can be open; later ones are drawn on top. Or open one from a
+script (below).
+
+## From scripts
+
+A pause menu in Lua, on a script that keeps running while the game is paused (`"pause": "always"`):
+
+```lua
+function Menu:on_start()
+    self.menu = noor.ui.open("UI/pause.noorui")   -- opened and shown; it belongs to this script's entity
+    self.menu:hide()
+    self.menu:on("click", "resume", function() self.menu:hide(); noor.set_paused(false) end)
+    self.menu:on("change", "volume", function(e) noor.log("volume " .. e.value) end)
+end
+
+function Menu:on_update()
+    if noor.input.pressed("P") then
+        noor.set_paused(true)
+        self.menu:show()
+        self.menu:focus("resume")
+    end
+end
+```
+
+The same in C#: `var menu = Ui.Open("UI/pause.noorui", Entity);` and `On(menu, "click", "resume", e => ...)`. Every
+call is listed in [Lua](../scripting/LUA_API.md#ui-documents-menus) and [C#](../scripting/CSHARP_API.md#ui-documents-menus).
+
+- **Elements** are named by their `id` (`"resume"` or `"#resume"`). One that isn't there is a script error naming it,
+  so a typo doesn't pass in silence.
+- **Events:** `click`, `change` (a control's value changed: `e.value` is the new one), `submit` (a form: `e.value` holds
+  its fields), `focus`, `blur`, `mouseover`, `mouseout`. A listener gets `{type, element, value}`; `element` is the id
+  of the element it happened on, or of its nearest ancestor with one (a click on a button's icon names the button).
+  Listen to one element (`on("click", "resume", fn)`) or to all (`on("change", fn)`).
+- **When:** events from the mouse and keyboard reach scripts in the same frame; events from what scripts did (`set_value`,
+  `click`) in the next. The order is the same in every run.
+- **Values:** text boxes and selects give strings, ranges numbers, checkboxes and radio buttons `true` / `false`.
+- **Text vs markup:** `set_text` shows text exactly as given (`<` and `&` included); `set_rml` puts markup in.
+- **Who owns a document:** a document a script opens closes when the script's entity is destroyed; one from a
+  `ui_document` component, when that entity is. `noor.ui.find(path)` gets a component's document.
+- `click(element)` presses a button from a script: handy for tests, tutorials and gamepad shortcuts.
+
+## Mouse and keyboard
+
+The mouse hovers and clicks (not while a game has captured it for looking around). **Tab** moves focus through the
+elements with `tab-index: auto`; the **arrow keys** move it to the nearest one in that direction when an element has
+`nav: auto` (or `nav-up`, `nav-down`... for exact neighbours); **Enter** or **Space** clicks what has focus; a document
+takes the keyboard when it's opened or shown. In a **text box**, typing goes in (accents and other languages through
+Windows' own input), with Backspace, Delete, Home, End, the arrows and Ctrl+A / C / V / X (the Windows clipboard: paste a name copied
+from anywhere). Make focus visible with a
+`:focus` style. Keys also reach the game as usual: a pause menu pauses the game, so its keys don't move the player.
 
 ## Writing one
 
@@ -103,5 +154,10 @@ the friendly thing to do.
 triangles, a texture, a translation and a clip rectangle per draw), drawn by the renderer's UI pass (`vulkan_ui.cpp`,
 `ui.hlsl`: premultiplied sRGB colours blended in linear light, textures from the bindless table with a clamping
 sampler); its file interface reads only inside the project; a plugin gives each document the default style sheet as it
-loads. One `Ui` at a time (RmlUi has global state). Tests: `tests/unit/test_ui.cpp` (no GPU), `render.golden_UI_Menu`
-(the picture, under Vulkan validation).
+loads. One `Ui` at a time (RmlUi has global state). `WorldUi` (`world_ui.h`) is a running World's
+`runtime::UiDocuments`: it starts the `Ui` with the first document, opens `ui_document` components, and turns RmlUi's
+events into messages queued on the World from each document's emitter id (`World::ui_emitter`). Scripts' calls all go
+through one function, `runtime::api::ui(world, caller, {"op": ...})`, Lua's and C#'s (rt API v18) alike. Tests:
+`tests/unit/test_ui.cpp` and `test_ui_scripts.cpp` (no GPU), `render.golden_UI_Menu` (the picture, under Vulkan
+validation), `player.ui_lua_csharp` (a pause menu from Lua in a project, Lua and C# in a built game).
+`tests/data/ui_project`'s `Scenes/Try` is a menu to play with by hand.

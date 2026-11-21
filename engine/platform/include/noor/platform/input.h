@@ -7,6 +7,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace noor::platform {
 
@@ -18,6 +20,7 @@ enum class Key : std::uint8_t {
     LeftShift, RightShift, LeftCtrl, RightCtrl, LeftAlt, RightAlt,
     Up, Down, Left, Right,
     F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    Delete, Home, End, PageUp, PageDown,  // text editing (game UI, gameplay foundations part 6b)
     Count
 };
 
@@ -39,6 +42,10 @@ struct InputState {
     float mouse_dx = 0.0f;  // movement since last pump (also valid in relative mode)
     float mouse_dy = 0.0f;
     float wheel = 0.0f;     // vertical wheel steps since last pump, positive = away from the user
+    // Every key press since last pump in order, the keyboard's auto-repeat included (a held Backspace in a text box);
+    // `pressed` has only the first. And the text typed (UTF-8), while text input is on (platform::set_text_input).
+    std::vector<Key> key_presses;
+    std::string text;
 
     [[nodiscard]] bool down(Key k) const noexcept { return keys_down[static_cast<std::size_t>(k)]; }
     [[nodiscard]] bool pressed(Key k) const noexcept { return keys_pressed[static_cast<std::size_t>(k)]; }
@@ -54,6 +61,8 @@ struct InputState {
         buttons_pressed.fill(false);
         buttons_released.fill(false);
         mouse_dx = mouse_dy = wheel = 0.0f;
+        key_presses.clear();
+        text.clear();
     }
     // Releases everything, e.g. when the window loses focus, so no key stays "stuck".
     void release_all() noexcept {

@@ -108,6 +108,8 @@ public unsafe struct RtApi
     public delegate* unmanaged<byte*> LastError;
     // v17: timelines (gameplay foundations, part 5)
     public delegate* unmanaged<RtEntity, int, byte*, float, byte*> Timeline;
+    // v18: game UI documents (gameplay foundations, part 6b): one JSON request
+    public delegate* unmanaged<RtEntity, byte*, byte*> Ui;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -125,7 +127,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 17;
+    public const uint ExpectedVersion = 18;
     public static RtApi* Api;
 
     public static ref RtApi A

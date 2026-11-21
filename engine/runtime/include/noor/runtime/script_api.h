@@ -132,6 +132,23 @@ void capture_mouse(World& w, bool capture);
 void ui_text(World& w, std::string text, math::Vec2 position, float size, math::Vec4 color, UiAnchor anchor);
 void ui_rect(World& w, math::Vec2 position, math::Vec2 size, math::Vec4 color, UiAnchor anchor);
 
+// ---- Game UI documents (gameplay foundations part 6b; ui_documents.h) ----
+// Every UI operation scripts have, Lua's and C#'s alike, as one request: {"op": ..., ...}. `caller` is the script's
+// entity (a document it opens belongs to it). Returns the result (null when there's none to give) or why not.
+//   {"op": "open", "path"}                  -> {"document": n, "emitter": "<guid>"}   (opened and shown)
+//   {"op": "find", "path"}                  -> the same, for one already open, or null
+//   {"op": "close" | "show" | "hide", "document"}
+//   {"op": "visible", "document"}           -> true / false
+//   {"op": "set_text" | "set_rml", "document", "element", "text"}
+//   {"op": "set_class", "document", "element", "name", "on"}
+//   {"op": "set_attribute", "document", "element", "name", "value"}   (null value: removed)
+//   {"op": "set_style", "document", "element", "property", "value"}
+//   {"op": "value", "document", "element"}  -> the value
+//   {"op": "set_value", "document", "element", "value"}
+//   {"op": "focus" | "click", "document", "element"}
+// An element that isn't there is an error naming it (a typo shouldn't pass in silence).
+[[nodiscard]] std::variant<asset::Json, std::string> ui(World& w, const Guid& caller, const asset::Json& request);
+
 // ---- Euler helpers (shared with the editor's convention) ----
 [[nodiscard]] math::Quat quat_from_euler(math::Vec3 degrees);
 [[nodiscard]] math::Vec3 euler_from_quat(math::Quat q);

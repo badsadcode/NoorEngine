@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 17u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time; 15: messages, calls; 16: tweens, last_error; 17: timelines */
+#define NOOR_RT_API_VERSION 18u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time; 15: messages, calls; 16: tweens, last_error; 17: timelines; 18: game UI documents */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -189,6 +189,11 @@ typedef struct noor_rt_api {
     /* v17 (gameplay foundations, part 5): an animation_player's timelines. TIMELINE_PLAY `name` at `speed` (returns
      * `name`, or NULL if there's no such timeline), TIMELINE_STOP, TIMELINE_CURRENT (what it plays, or NULL). */
     const char* (*timeline)(noor_rt_entity e, int32_t op, const char* name, float speed);
+    /* v18 (gameplay foundations, part 6b): game UI documents. One JSON request, as runtime::api::ui takes it (script_api.h):
+     * {"op": "open", "path": ...}, {"op": "set_text", "document": n, "element": ..., "text": ...}, ... `caller` is the
+     * script's entity (documents it opens belong to it). Returns the result as JSON text ("null" when there's none), or
+     * NULL with the reason in last_error(). Events come as messages: listen() to the document's "emitter". */
+    const char* (*ui)(noor_rt_entity caller, const char* request_json);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

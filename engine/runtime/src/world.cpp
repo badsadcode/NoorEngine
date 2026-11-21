@@ -103,6 +103,14 @@ void World::emit_events_as_messages() {
     }
 }
 
+Guid World::ui_emitter(std::uint32_t document) const {
+    Guid tag;  // "ui" and the number: never an entity's id (those are random, or derived from a count without this)
+    tag.bytes[0] = 'u';
+    tag.bytes[1] = 'i';
+    for (int i = 0; i < 4; ++i) tag.bytes[static_cast<std::size_t>(15 - i)] = static_cast<std::uint8_t>(document >> (8 * i));
+    return Guid::derive(scene_.id, tag);
+}
+
 Guid World::next_spawn_id() {
     Guid count;
     std::uint64_t n = ++spawned_;
@@ -146,6 +154,15 @@ void World::flush_destroyed() {
     for (const auto& [id, l] : listeners_)
         if (doomed.contains(l.owner) || (l.emitter && doomed.contains(*l.emitter))) gone.push_back(id);
     for (const auto id : gone) unlisten(id);
+    // UI documents of a destroyed entity close with it.
+    for (auto it = ui_owners_.begin(); it != ui_owners_.end();) {
+        if (doomed.contains(it->second)) {
+            if (ui_documents_) ui_documents_->close(it->first);
+            it = ui_owners_.erase(it);
+        } else {
+            ++it;
+        }
+    }
     std::erase_if(scene_.entities, [&](const scene::Entity& e) { return doomed.contains(e.id); });
     for (const Guid& id : doomed) started_.erase(id);
     reindex();
@@ -168,6 +185,8 @@ void World::frame(double dt, const InputState& input) {
     }
     input_.begin_frame(input);
     start_new_entities();
+    // Messages queued since last frame (UI events): before anything runs, so scripts see them this frame.
+    for (auto& q : std::exchange(queued_, {})) emit(q.emitter, q.name, q.data);
     for (auto& s : systems_) s->update(*this, dt);
     // A script paused, unpaused or changed the time scale just now: the rest of the frame (physics, late update, the
     // clock) already goes by it, so a pause freezes the world at once, not a physics step later.

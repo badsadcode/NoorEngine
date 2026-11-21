@@ -1,0 +1,139 @@
+{
+  "noor_scene": 2,
+  "id": "7e5d0000-0006-4b00-8000-000000000200",
+  "name": "Main_CSharp",
+  "entities": [
+    {
+      "id": "7e5d0000-0006-4b00-8000-000000000201",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1,
+          6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-0006-4b00-8000-000000000202",
+      "name": "Box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "color": "#C08040"
+        },
+        "script": {
+          "file": "Scripts/CsMover.cs"
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-0006-4b00-8000-000000000203",
+      "name": "Menu",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/CsMenu.cs",
+          "pause": "always"
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-0006-4b00-8000-000000000204",
+      "name": "HUD",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "ui_document": {
+          "document": "UI/hud.noorui",
+          "visible": true
+        }
+      }
+    }
+  ]
+}

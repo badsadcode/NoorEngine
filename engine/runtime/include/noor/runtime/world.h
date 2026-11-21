@@ -10,6 +10,7 @@
 
 #include "noor/runtime/input.h"
 #include "noor/runtime/tween.h"
+#include "noor/runtime/ui_documents.h"
 #include "noor/scene/scene.h"
 
 
@@ -227,6 +228,22 @@ public:
     [[nodiscard]] std::size_t listener_count() const noexcept { return listeners_.size(); }
     [[nodiscard]] const std::vector<std::string>& message_errors() const noexcept { return message_errors_; }
 
+    // A message sent at the start of the next frame (before the systems' update), in the order queued: events that
+    // happen outside the frame, like a click on a UI document.
+    void queue_message(std::optional<Guid> emitter, std::string name, asset::Json data = nullptr) {
+        if (queued_.size() < 4096) queued_.push_back({emitter, std::move(name), std::move(data)});
+    }
+
+    // ---- Game UI documents (gameplay foundations, part 6b; ui_documents.h) ----
+    // Whoever shows documents (the host); none: scripts' UI calls fail with a reason.
+    void set_ui_documents(UiDocuments* documents) noexcept { ui_documents_ = documents; }
+    [[nodiscard]] UiDocuments* ui_documents() const noexcept { return ui_documents_; }
+    // The id a document's events come from (listen to it like an entity): the same in every run.
+    [[nodiscard]] Guid ui_emitter(std::uint32_t document) const;
+    // A document belongs to an entity (the script that opened it, or the one with the ui_document component): it's
+    // closed when that entity is destroyed.
+    void own_ui_document(std::uint32_t document, const Guid& owner) { ui_owners_[document] = owner; }
+
     // ---- Tweens (gameplay foundations, part 4): stepped right after the systems' update ----
     [[nodiscard]] Tweens& tweens() noexcept { return tweens_; }
 
@@ -275,6 +292,14 @@ private:
     std::uint64_t next_listener_ = 1;
     int emit_depth_ = 0;
     std::vector<std::string> message_errors_;
+    struct Queued {
+        std::optional<Guid> emitter;
+        std::string name;
+        asset::Json data;
+    };
+    std::vector<Queued> queued_;
+    UiDocuments* ui_documents_ = nullptr;
+    std::map<std::uint32_t, Guid> ui_owners_;
     void emit_events_as_messages();
     double time_scale_ = 1.0;
     double real_time_ = 0.0, real_dt_ = 0.0;

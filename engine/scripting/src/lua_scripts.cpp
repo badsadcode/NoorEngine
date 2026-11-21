@@ -265,12 +265,15 @@ struct LuaScriptSystem::Impl {
 
     // noor.on / e:on: a listener owned by the running script instance (gone with its entity, or the emitter's).
     static int add_listener(lua_State* L, std::optional<Guid> emitter, int first) {
-        Impl* self = of(L);
         const char* name = luaL_checkstring(L, first);
-        luaL_checktype(L, first + 1, LUA_TFUNCTION);
+        return listen_named(L, emitter, name, first + 1);
+    }
+    static int listen_named(lua_State* L, std::optional<Guid> emitter, const std::string& name, int fn_index) {
+        Impl* self = of(L);
+        luaL_checktype(L, fn_index, LUA_TFUNCTION);
         if (self->current == Guid{} || !self->instances.contains(self->current))
             luaL_errorL(L, "on: call it from a script's hook (a listener belongs to its entity)");
-        lua_pushvalue(L, first + 1);
+        lua_pushvalue(L, fn_index);
         const int fn = lua_ref(L, -1);
         lua_pop(L, 1);
         const std::uint64_t handle = self->next_listen++;
@@ -281,6 +284,108 @@ struct LuaScriptSystem::Impl {
         luaL_getmetatable(L, "noor.Listener");
         lua_setmetatable(L, -2);
         return 1;
+    }
+
+    // ---- Game UI documents (gameplay foundations part 6b): a document is a noor.UiDocument; everything goes through
+    // api::ui, the same as C#'s. ----
+    struct UiDoc {
+        std::uint32_t document = 0;
+        Guid emitter;
+    };
+    static UiDoc& check_doc(lua_State* L, int idx) { return *static_cast<UiDoc*>(luaL_checkudata(L, idx, "noor.UiDocument")); }
+    // Runs a request: its result on the stack, or a Lua error with the reason.
+    static int ui_request(lua_State* L, const Json& request) {
+        auto r = api::ui(world_of(L), of(L)->current, request);
+        if (auto* why = std::get_if<std::string>(&r)) luaL_errorL(L, "%s", why->c_str());
+        push_json(L, std::get<Json>(r));
+        return 1;
+    }
+    // A document result ({document, emitter}) as a noor.UiDocument, or nil.
+    static int ui_document_result(lua_State* L, const Json& request) {
+        auto r = api::ui(world_of(L), of(L)->current, request);
+        if (auto* why = std::get_if<std::string>(&r)) luaL_errorL(L, "%s", why->c_str());
+        const Json& j = std::get<Json>(r);
+        if (!j.is_object()) {
+            lua_pushnil(L);
+            return 1;
+        }
+        auto* d = static_cast<UiDoc*>(lua_newuserdata(L, sizeof(UiDoc)));
+        d->document = j["document"].get<std::uint32_t>();
+        d->emitter = *Guid::parse(j["emitter"].get<std::string>());
+        luaL_getmetatable(L, "noor.UiDocument");
+        lua_setmetatable(L, -2);
+        return 1;
+    }
+    static Json doc_request(lua_State* L, const char* op) {
+        return Json{{"op", op}, {"document", check_doc(L, 1).document}};
+    }
+    static Json element_request(lua_State* L, const char* op) {
+        Json r = doc_request(L, op);
+        r["element"] = luaL_checkstring(L, 2);
+        return r;
+    }
+    void register_ui_documents() {
+        static const luaL_Reg methods[] = {
+            {"show", [](lua_State* L) { return ui_request(L, doc_request(L, "show")); }},
+            {"hide", [](lua_State* L) { return ui_request(L, doc_request(L, "hide")); }},
+            {"close", [](lua_State* L) { return ui_request(L, doc_request(L, "close")); }},
+            {"visible", [](lua_State* L) { return ui_request(L, doc_request(L, "visible")); }},
+            // d:on(event [, element], fn(event)): event is {type, element, value}; the listener belongs to the script
+            {"on", [](lua_State* L) {
+                 const UiDoc& d = check_doc(L, 1);
+                 std::string name = luaL_checkstring(L, 2);
+                 int fn = 3;
+                 if (lua_type(L, 3) == LUA_TSTRING) {
+                     std::string element = lua_tostring(L, 3);
+                     if (!element.empty() && element.front() == '#') element.erase(0, 1);
+                     name += "#" + element;
+                     fn = 4;
+                 }
+                 return listen_named(L, d.emitter, name, fn);
+             }},
+            {"set_text", [](lua_State* L) {
+                 Json r = element_request(L, "set_text");
+                 r["text"] = std::string(luaL_tolstring(L, 3, nullptr));  // numbers and booleans too, as Lua prints them
+                 return ui_request(L, r);
+             }},
+            {"set_rml", [](lua_State* L) {
+                 Json r = element_request(L, "set_rml");
+                 r["text"] = luaL_checkstring(L, 3);
+                 return ui_request(L, r);
+             }},
+            {"set_class", [](lua_State* L) {
+                 Json r = element_request(L, "set_class");
+                 r["name"] = luaL_checkstring(L, 3);
+                 r["on"] = lua_isnoneornil(L, 4) || lua_toboolean(L, 4) != 0;
+                 return ui_request(L, r);
+             }},
+            {"set_attribute", [](lua_State* L) {
+                 Json r = element_request(L, "set_attribute");
+                 r["name"] = luaL_checkstring(L, 3);
+                 r["value"] = to_json(L, 4);
+                 return ui_request(L, r);
+             }},
+            {"set_style", [](lua_State* L) {
+                 Json r = element_request(L, "set_style");
+                 r["property"] = luaL_checkstring(L, 3);
+                 r["value"] = lua_isnoneornil(L, 4) ? std::string() : std::string(luaL_checkstring(L, 4));
+                 return ui_request(L, r);
+             }},
+            {"value", [](lua_State* L) { return ui_request(L, element_request(L, "value")); }},
+            {"set_value", [](lua_State* L) {
+                 Json r = element_request(L, "set_value");
+                 r["value"] = to_json(L, 3);
+                 return ui_request(L, r);
+             }},
+            {"focus", [](lua_State* L) { return ui_request(L, element_request(L, "focus")); }},
+            {"click", [](lua_State* L) { return ui_request(L, element_request(L, "click")); }},
+            {nullptr, nullptr},
+        };
+        luaL_newmetatable(L, "noor.UiDocument");
+        lua_newtable(L);
+        luaL_register(L, nullptr, methods);
+        lua_setfield(L, -2, "__index");
+        lua_pop(L, 1);
     }
 
     // noor.after / noor.every: a timer owned by the running script instance.
@@ -310,6 +415,7 @@ struct LuaScriptSystem::Impl {
     }
 
     void register_api() {
+        register_ui_documents();
         luaL_newmetatable(L, "noor.Tween");  // t:cancel(), t:active(), t:wait() (inside a sequence)
         lua_newtable(L);
         lua_pushcfunction(L, [](lua_State* L) {
@@ -973,6 +1079,10 @@ struct LuaScriptSystem::Impl {
                  api::ui_rect(world_of(L), at, size, o.color, o.anchor);
                  return 0;
              }},
+            // noor.ui.open(path) -> a document (opened and shown; it belongs to this script's entity)
+            {"open", [](lua_State* L) { return ui_document_result(L, Json{{"op", "open"}, {"path", luaL_checkstring(L, 1)}}); }},
+            // noor.ui.find(path) -> an open document (one a ui_document component opened), or nil
+            {"find", [](lua_State* L) { return ui_document_result(L, Json{{"op", "find"}, {"path", luaL_checkstring(L, 1)}}); }},
             {nullptr, nullptr},
         };
         lua_newtable(L);

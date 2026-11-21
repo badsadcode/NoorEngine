@@ -172,6 +172,33 @@ Same rules as Lua ([The HUD](LUA_API.md#the-hud)): draw every frame; UI units (t
 tall); anchors `top_left` … `bottom_right`; colors `"#RRGGBB[AA]"`. A wrong color or anchor throws
 `ArgumentException`.
 
+## UI documents (menus)
+
+The same as Lua's ([UI documents](LUA_API.md#ui-documents-menus), [Game UI](../ui/GAME_UI.md)):
+
+```csharp
+private UiDocument _menu = null!;
+
+public override void OnStart()
+{
+    _menu = Ui.Open("UI/pause.noorui", Entity);   // with an owner: closed when that entity goes
+    On(_menu, "click", "resume", e => { _menu.Hide(); Noor.Paused = false; });
+    On(_menu, "change", null, e => Noor.Log($"{e?["element"]} is now {e?["value"]}"));
+    _menu.SetText("title", "Paused");
+}
+```
+
+| | |
+|---|---|
+| `Ui.Open(path, owner = null)`, `Ui.Find(path)` | Opens and shows a document; one already open, or null |
+| `doc.Show()`, `Hide()`, `Visible`, `Close()` | |
+| `On(doc, type, element, handler)` (in a `NoorScript`) | `element` null: any; `handler(JsonNode? e)`, e = `{type, element, value}`; returns a `Listener` |
+| `doc.SetText`, `SetRml`, `SetClass`, `SetAttribute`, `SetStyle` | As Lua's |
+| `doc.Value(element)` → `JsonNode?`, `doc.SetValue(element, value)` | Strings, numbers, true / false |
+| `doc.Focus(element)`, `doc.Click(element)` | |
+
+A missing element or a closed document throws `InvalidOperationException` with the reason.
+
 ## In built games
 
 File ▸ Build Game (or `noor_cli build`) compiles your scripts into the game's `managed/` folder;

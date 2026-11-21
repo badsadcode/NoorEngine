@@ -21,7 +21,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 #include <format>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -120,7 +122,20 @@ private:
 class SystemInterface final : public Rml::SystemInterface {
 public:
     std::function<double()> clock;
+    bool keyboard = false;  // a text box has focus
     double GetElapsedTime() override { return clock(); }
+    std::function<void(const std::string&)> set_clipboard;
+    std::function<std::string()> get_clipboard;
+    void SetClipboardText(const Rml::String& text) override {
+        if (set_clipboard) set_clipboard(text);
+        else Rml::SystemInterface::SetClipboardText(text);
+    }
+    void GetClipboardText(Rml::String& text) override {
+        if (get_clipboard) text = get_clipboard();
+        else Rml::SystemInterface::GetClipboardText(text);
+    }
+    void ActivateKeyboard(Rml::Vector2f, float) override { keyboard = true; }
+    void DeactivateKeyboard() override { keyboard = false; }
     bool LogMessage(Rml::Log::Type type, const Rml::String& message) override {
         switch (type) {
         case Rml::Log::LT_ERROR:
@@ -265,6 +280,73 @@ public:
 
 Ui* g_live = nullptr;  // RmlUi is one per process
 
+// The events scripts can listen to (part 6b), caught on each document in the capture phase so non-bubbling ones (focus,
+// blur) are seen too.
+constexpr Rml::EventId kEvents[] = {Rml::EventId::Click, Rml::EventId::Change, Rml::EventId::Submit, Rml::EventId::Focus,
+                                    Rml::EventId::Blur, Rml::EventId::Mouseover, Rml::EventId::Mouseout};
+
+// A form control's value as JSON (Ui::value).
+asset::Json value_of(Rml::Element* e) {
+    if (auto* input = dynamic_cast<Rml::ElementFormControlInput*>(e)) {
+        const auto type = input->GetAttribute<Rml::String>("type", "text");
+        if (type == "checkbox" || type == "radio") return input->HasAttribute("checked");
+        if (type == "range") {
+            const auto v = input->GetValue();
+            char* end = nullptr;
+            const double d = std::strtod(v.c_str(), &end);
+            return end != v.c_str() ? asset::Json(d) : asset::Json(0.0);
+        }
+        return input->GetValue();
+    }
+    if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) return control->GetValue();
+    return e->GetInnerRML();
+}
+
+// The id of the element or of its nearest ancestor with one.
+std::string id_of(Rml::Element* e) {
+    for (; e; e = e->GetParentNode())
+        if (!e->GetId().empty()) return e->GetId();
+    return {};
+}
+
+std::string escaped(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text) {
+        switch (c) {
+        case '&': out += "&amp;"; break;
+        case '<': out += "&lt;"; break;
+        case '>': out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        default: out += c;
+        }
+    }
+    return out;
+}
+
+class EventCatcher final : public Rml::EventListener {
+public:
+    std::vector<UiEvent>* events = nullptr;
+    std::uint32_t document = 0;
+    void ProcessEvent(Rml::Event& event) override {
+        if (!events || events->size() >= 4096) return;
+        UiEvent e;
+        e.document = {document};
+        e.type = event.GetType();
+        Rml::Element* target = event.GetTargetElement();
+        e.element = id_of(target);
+        if (event.GetId() == Rml::EventId::Change && target) {
+            e.value = value_of(target);
+        } else if (event.GetId() == Rml::EventId::Submit) {
+            asset::Json fields = asset::Json::object();
+            for (const auto& [name, v] : event.GetParameters())
+                if (name != "submit") fields[name] = v.Get<Rml::String>();
+            e.value = std::move(fields);
+        }
+        events->push_back(std::move(e));
+    }
+};
+
 } // namespace
 
 TextureHost renderer_textures(render::Renderer& renderer) {
@@ -283,15 +365,28 @@ struct Ui::Impl {
     RenderInterface renderer;
     Rml::Context* context = nullptr;
     DefaultStyle default_style;
-    std::unordered_map<std::uint32_t, Rml::ElementDocument*> documents;
+    struct Document {
+        Rml::ElementDocument* doc = nullptr;
+        std::string path;
+        std::unique_ptr<EventCatcher> catcher;
+    };
+    std::map<std::uint32_t, Document> documents;  // ordered: find() gives the first opened
     std::uint32_t next_document = 1;
     std::int32_t x = 0, y = 0, width = 0, height = 0;
+    std::vector<UiEvent> events;
 
     explicit Impl(std::filesystem::path root) : files(std::move(root)) {}
 
     Rml::ElementDocument* find(DocumentId d) const {
         const auto it = documents.find(d.id);
-        return it == documents.end() ? nullptr : it->second;
+        return it == documents.end() ? nullptr : it->second.doc;
+    }
+    Rml::Element* element(DocumentId d, std::string_view id) const {
+        auto* doc = find(d);
+        if (!doc || id.empty()) return nullptr;
+        if (id.front() == '#') id.remove_prefix(1);
+        if (id.empty()) return nullptr;
+        return doc->GetElementById(Rml::String(id));
     }
 };
 
@@ -304,6 +399,8 @@ Result<std::unique_ptr<Ui>> Ui::create(UiDesc desc) {
         const auto start = std::chrono::steady_clock::now();
         impl->system.clock = [start] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
     }
+    impl->system.set_clipboard = std::move(desc.set_clipboard);
+    impl->system.get_clipboard = std::move(desc.get_clipboard);
     impl->renderer.host = std::move(desc.textures);
     impl->renderer.files = &impl->files;
     Rml::SetFileInterface(&impl->files);
@@ -335,6 +432,8 @@ Ui::Ui(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
 Ui::~Ui() {
     if (!impl_) return;
+    for (auto& [id, d] : impl_->documents)  // our listeners go before the documents do
+        for (const auto event : kEvents) d.doc->RemoveEventListener(event, d.catcher.get(), true);
     impl_->documents.clear();
     if (impl_->context) Rml::RemoveContext(impl_->context->GetName());
     Rml::UnregisterPlugin(&impl_->default_style);
@@ -361,22 +460,125 @@ Result<DocumentId> Ui::open(std::string_view path) {
     if (!std::filesystem::exists(*file)) return fail(ErrorCode::NotFound, std::format("UI document {}: no such file", path));
     Rml::ElementDocument* doc = impl_->context->LoadDocument(Rml::String(path));
     if (!doc) return fail(ErrorCode::ParseError, std::format("UI document {}: couldn't be read (see the log)", path));
-    doc->Show(Rml::ModalFlag::None, Rml::FocusFlag::None);
+    doc->Show(Rml::ModalFlag::None, Rml::FocusFlag::Auto);
     const DocumentId id{impl_->next_document++};
-    impl_->documents.emplace(id.id, doc);
+    auto catcher = std::make_unique<EventCatcher>();
+    catcher->events = &impl_->events;
+    catcher->document = id.id;
+    for (const auto event : kEvents) doc->AddEventListener(event, catcher.get(), true);
+    impl_->documents.emplace(id.id, Impl::Document{doc, std::string(path), std::move(catcher)});
     return id;
 }
 
 void Ui::close(DocumentId document) {
-    if (auto* doc = impl_->find(document)) {
-        doc->Close();
-        impl_->documents.erase(document.id);
-    }
+    const auto it = impl_->documents.find(document.id);
+    if (it == impl_->documents.end()) return;
+    for (const auto event : kEvents) it->second.doc->RemoveEventListener(event, it->second.catcher.get(), true);
+    it->second.doc->Close();  // RmlUi removes it at its next update
+    impl_->documents.erase(it);
 }
+
+bool Ui::is_open(DocumentId document) const { return impl_->find(document) != nullptr; }
+
+std::optional<DocumentId> Ui::find(std::string_view path) const {
+    std::string_view p = path;
+    while (!p.empty() && p.front() == '/') p.remove_prefix(1);
+    for (const auto& [id, d] : impl_->documents) {
+        std::string_view q = d.path;
+        while (!q.empty() && q.front() == '/') q.remove_prefix(1);
+        if (q == p) return DocumentId{id};
+    }
+    return std::nullopt;
+}
+
+bool Ui::set_text(DocumentId document, std::string_view element, std::string_view text) {
+    return set_rml(document, element, escaped(text));
+}
+bool Ui::set_rml(DocumentId document, std::string_view element, std::string_view rml) {
+    auto* e = impl_->element(document, element);
+    if (e) e->SetInnerRML(Rml::String(rml));
+    return e != nullptr;
+}
+bool Ui::set_class(DocumentId document, std::string_view element, std::string_view name, bool on) {
+    auto* e = impl_->element(document, element);
+    if (e) e->SetClass(Rml::String(name), on);
+    return e != nullptr;
+}
+bool Ui::set_attribute(DocumentId document, std::string_view element, std::string_view name, const asset::Json& value) {
+    auto* e = impl_->element(document, element);
+    if (!e) return false;
+    if (value.is_null() || (value.is_boolean() && !value.get<bool>())) e->RemoveAttribute(Rml::String(name));
+    else if (value.is_string()) e->SetAttribute(Rml::String(name), value.get<std::string>());
+    else if (value.is_boolean()) e->SetAttribute(Rml::String(name), Rml::String());  // present: "disabled", "checked"
+    else e->SetAttribute(Rml::String(name), value.dump());
+    return true;
+}
+bool Ui::set_style(DocumentId document, std::string_view element, std::string_view property, std::string_view value) {
+    auto* e = impl_->element(document, element);
+    if (!e) return false;
+    if (value.empty()) e->RemoveProperty(Rml::String(property));
+    else if (!e->SetProperty(Rml::String(property), Rml::String(value)))
+        NOOR_LOG_WARN("UI", "#{}: '{}: {}' isn't a style property RmlUi understands", element, property, value);
+    return true;
+}
+std::optional<asset::Json> Ui::value(DocumentId document, std::string_view element) const {
+    auto* e = impl_->element(document, element);
+    if (!e) return std::nullopt;
+    return value_of(e);
+}
+bool Ui::set_value(DocumentId document, std::string_view element, const asset::Json& value) {
+    auto* e = impl_->element(document, element);
+    if (!e) return false;
+    if (auto* input = dynamic_cast<Rml::ElementFormControlInput*>(e)) {
+        const auto type = input->GetAttribute<Rml::String>("type", "text");
+        if (type == "checkbox" || type == "radio") {
+            const bool on = value.is_boolean() ? value.get<bool>() : !value.is_null();
+            if (on) input->SetAttribute("checked", Rml::String());
+            else input->RemoveAttribute("checked");
+            return true;
+        }
+    }
+    const std::string text = value.is_string() ? value.get<std::string>() : value.is_null() ? std::string() : value.dump();
+    if (auto* control = dynamic_cast<Rml::ElementFormControl*>(e)) control->SetValue(text);
+    else e->SetInnerRML(escaped(text));
+    return true;
+}
+bool Ui::focus(DocumentId document, std::string_view element) {
+    auto* e = impl_->element(document, element);
+    return e && e->Focus(true);
+}
+bool Ui::click(DocumentId document, std::string_view element) {
+    auto* e = impl_->element(document, element);
+    if (e) e->Click();
+    return e != nullptr;
+}
+
+std::vector<UiEvent> Ui::take_events() { return std::exchange(impl_->events, {}); }
+
+void Ui::key(Key key, bool down, Modifiers modifiers) {
+    static constexpr Rml::Input::KeyIdentifier kKeys[] = {
+        Rml::Input::KI_TAB,   Rml::Input::KI_RETURN, Rml::Input::KI_SPACE, Rml::Input::KI_ESCAPE, Rml::Input::KI_BACK,
+        Rml::Input::KI_DELETE, Rml::Input::KI_LEFT,  Rml::Input::KI_RIGHT, Rml::Input::KI_UP,     Rml::Input::KI_DOWN,
+        Rml::Input::KI_HOME,  Rml::Input::KI_END,    Rml::Input::KI_PRIOR, Rml::Input::KI_NEXT,   Rml::Input::KI_A,
+        Rml::Input::KI_C,     Rml::Input::KI_V,      Rml::Input::KI_X};
+    const auto k = kKeys[static_cast<std::size_t>(key)];
+    int mods = 0;
+    if (modifiers.ctrl) mods |= Rml::Input::KM_CTRL;
+    if (modifiers.shift) mods |= Rml::Input::KM_SHIFT;
+    if (modifiers.alt) mods |= Rml::Input::KM_ALT;
+    if (down) impl_->context->ProcessKeyDown(k, mods);
+    else impl_->context->ProcessKeyUp(k, mods);
+}
+
+void Ui::text(std::string_view utf8) {
+    if (!utf8.empty()) impl_->context->ProcessTextInput(Rml::String(utf8));
+}
+
+bool Ui::wants_text() const { return impl_->system.keyboard; }
 
 void Ui::set_visible(DocumentId document, bool visible) {
     if (auto* doc = impl_->find(document)) {
-        if (visible) doc->Show(Rml::ModalFlag::None, Rml::FocusFlag::None);
+        if (visible) doc->Show(Rml::ModalFlag::None, Rml::FocusFlag::Auto);
         else doc->Hide();
     }
 }

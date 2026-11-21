@@ -1,0 +1,24 @@
+<rml>
+<head>
+    <title>Paused</title>
+    <style>
+        body { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: #0000008C; }
+        #menu { width: 360dp; padding: 24dp; background-color: #191623F2; border-radius: 12dp; }
+        h1 { font-size: 40dp; color: #FFC857; text-align: center; }
+        .button { display: block; margin-top: 12dp; padding: 10dp; text-align: center; background-color: #2A2140; border-radius: 8dp;
+                  tab-index: auto; focus: auto; nav: auto; }
+        .button:focus, .button:hover { background-color: #4B1AF2; }
+        input.range { display: block; width: 100%; height: 16dp; margin-top: 12dp; }
+        input.checkbox { width: 20dp; height: 20dp; background-color: #EDE8F7; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1 id="title">Paused</h1>
+        <div id="resume" class="button">Resume</div>
+        <input id="volume" type="range" min="0" max="1" step="0.05" value="0.5"/>
+        <p><input id="subtitles" type="checkbox"/> Subtitles</p>
+        <div id="quit" class="button">Quit</div>
+    </div>
+</body>
+</rml>

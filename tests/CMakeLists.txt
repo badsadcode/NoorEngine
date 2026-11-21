@@ -58,6 +58,7 @@ add_executable(noor_unit_tests
     unit/test_tweens.cpp
     unit/test_timeline.cpp
     unit/test_ui.cpp
+    unit/test_ui_scripts.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -903,6 +904,17 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/timeline_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_timeline
             -P ${CMAKE_CURRENT_SOURCE_DIR}/timeline_check.cmake)
     set_tests_properties(player.timeline_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_timeline_project)
+
+    # Game UI from scripts (gameplay foundations, part 6b): a pause menu opened, filled in, read and clicked from Lua and C#.
+    add_test(NAME cli.build_ui_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/ui_project ${CMAKE_CURRENT_BINARY_DIR}/built_ui_project)
+    set_tests_properties(cli.build_ui_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_ui_project
+                         PASS_REGULAR_EXPRESSION "Built 'UI Test'")
+    add_test(NAME player.ui_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_ui_project/UI Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/ui_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_ui
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/ui_check.cmake)
+    set_tests_properties(player.ui_lua_csharp PROPERTIES LABELS "gpu;player;ui" TIMEOUT 120 FIXTURES_REQUIRED built_ui_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.

@@ -53,6 +53,11 @@ Key key_from_scancode(SDL_Scancode sc) {
     case SDL_SCANCODE_DOWN: return Key::Down;
     case SDL_SCANCODE_LEFT: return Key::Left;
     case SDL_SCANCODE_RIGHT: return Key::Right;
+    case SDL_SCANCODE_DELETE: return Key::Delete;
+    case SDL_SCANCODE_HOME: return Key::Home;
+    case SDL_SCANCODE_END: return Key::End;
+    case SDL_SCANCODE_PAGEUP: return Key::PageUp;
+    case SDL_SCANCODE_PAGEDOWN: return Key::PageDown;
     default: return Key::Unknown;
     }
 }
@@ -119,6 +124,7 @@ EventSummary pump_events() {
             const auto i = static_cast<std::size_t>(key);
             const bool down = event.type == SDL_EVENT_KEY_DOWN;
             if (down && !event.key.repeat && !g_input.keys_down[i]) g_input.keys_pressed[i] = true;
+            if (down && g_input.key_presses.size() < 256) g_input.key_presses.push_back(key);
             if (!down && g_input.keys_down[i]) g_input.keys_released[i] = true;
             g_input.keys_down[i] = down;
             break;
@@ -143,6 +149,9 @@ EventSummary pump_events() {
         case SDL_EVENT_MOUSE_WHEEL:
             g_input.wheel += event.wheel.y;
             break;
+        case SDL_EVENT_TEXT_INPUT:
+            if (event.text.text && g_input.text.size() < 4096) g_input.text += event.text.text;
+            break;
         default: break;
         }
     }
@@ -155,6 +164,24 @@ void set_relative_mouse(Window& window, bool enabled) {
     if (!SDL_SetWindowRelativeMouseMode(static_cast<SDL_Window*>(window.backend_handle()), enabled)) {
         NOOR_LOG_WARN("Platform", "Relative mouse mode {} failed: {}", enabled ? "on" : "off", SDL_GetError());
     }
+}
+
+void set_text_input(Window& window, bool enabled) {
+    auto* w = static_cast<SDL_Window*>(window.backend_handle());
+    if (enabled == SDL_TextInputActive(w)) return;
+    if (!(enabled ? SDL_StartTextInput(w) : SDL_StopTextInput(w)))
+        NOOR_LOG_WARN("Platform", "Text input {} failed: {}", enabled ? "on" : "off", SDL_GetError());
+}
+
+void set_clipboard_text(const std::string& text) {
+    if (!SDL_SetClipboardText(text.c_str())) NOOR_LOG_WARN("Platform", "Copying to the clipboard failed: {}", SDL_GetError());
+}
+
+std::string clipboard_text() {
+    char* text = SDL_GetClipboardText();
+    std::string out = text ? text : "";
+    SDL_free(text);
+    return out;
 }
 
 void set_live_redraw_callback(std::function<void()> callback) {

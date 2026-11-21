@@ -55,6 +55,10 @@ public abstract class NoorScript
     protected Listener On(Entity emitter, string name, Action<JsonNode?, Entity?> handler) => Listen(emitter, name, handler);
     /// <summary>Listens to game-wide messages called `name` (Noor.Emit).</summary>
     protected Listener On(string name, Action<JsonNode?, Entity?> handler) => Listen(null, name, handler);
+    /// <summary>Listens to a UI document's events (click, change, submit, focus, blur, mouseover, mouseout), on one
+    /// element (its id) or, with null, on any: handler(event), event = {type, element, value}.</summary>
+    protected Listener On(UiDocument document, string type, string? element, Action<JsonNode?> handler) =>
+        Listen(document.Emitter, element == null ? type : $"{type}#{element.TrimStart('#')}", (data, _) => handler(data));
 
     private unsafe Listener Listen(Entity? emitter, string name, Action<JsonNode?, Entity?> handler)
     {
@@ -525,7 +529,7 @@ public static unsafe class Input
 /// both where the position is measured from and the point of the element placed there.
 /// Colors: "#RRGGBB" or "#RRGGBBAA".
 /// </summary>
-public static unsafe class Ui
+public static unsafe partial class Ui
 {
     public static void Text(string text, float x, float y, float size = 24, string color = "#FFFFFF", string anchor = "top_left")
     {

@@ -484,4 +484,83 @@ void ui_rect(World& w, math::Vec2 position, math::Vec2 size, math::Vec4 color, U
     w.ui(std::move(c));
 }
 
+// ---- Game UI documents (gameplay foundations part 6b) ----
+
+std::variant<asset::Json, std::string> ui(World& w, const Guid& caller, const asset::Json& request) {
+    UiDocuments* docs = w.ui_documents();
+    if (!docs) return std::string("there's no game UI here (it shows in noor_player and built games; not yet in the editor's Play)");
+    if (!request.is_object() || !request.contains("op") || !request["op"].is_string()) return std::string("ui: a request needs an \"op\"");
+    const std::string op = request["op"];
+    const auto text = [&](const char* key) -> std::optional<std::string> {
+        if (!request.contains(key) || !request[key].is_string()) return std::nullopt;
+        return request[key].get<std::string>();
+    };
+    const auto described = [&](std::uint32_t d) {
+        return asset::Json{{"document", d}, {"emitter", w.ui_emitter(d).to_string()}};
+    };
+    if (op == "open" || op == "find") {
+        const auto path = text("path");
+        if (!path || path->empty()) return std::format("ui.{}: which document? (a path like \"UI/pause.noorui\")", op);
+        if (op == "find") {
+            const auto d = docs->find(*path);
+            return d ? described(*d) : asset::Json(nullptr);
+        }
+        auto d = docs->open(*path);
+        if (!d) return d.error().message;
+        if (!caller.is_nil()) w.own_ui_document(*d, caller);
+        return described(*d);
+    }
+    if (!request.contains("document") || !request["document"].is_number_unsigned()) return std::format("ui.{}: which document?", op);
+    const auto d = request["document"].get<std::uint32_t>();
+    if (!docs->is_open(d)) return std::format("ui.{}: that document is closed", op);
+    if (op == "close") {
+        docs->close(d);
+        return asset::Json(nullptr);
+    }
+    if (op == "show" || op == "hide") {
+        docs->set_visible(d, op == "show");
+        return asset::Json(nullptr);
+    }
+    if (op == "visible") return asset::Json(docs->visible(d));
+
+    // The rest are about one element, by its id ("resume" or "#resume").
+    auto element = text("element");
+    if (element && element->starts_with('#')) element->erase(0, 1);
+    if (!element || element->empty()) return std::format("ui.{}: which element? (its id)", op);
+    const auto missing = [&] { return std::format("ui.{}: no element with id \"{}\" in the document", op, *element); };
+    const asset::Json value = request.contains("value") ? request["value"] : asset::Json(nullptr);
+    bool ok = false;
+    if (op == "set_text" || op == "set_rml") {
+        const auto t = text("text");
+        if (!t) return std::format("ui.{}: the text must be a string", op);
+        ok = op == "set_text" ? docs->set_text(d, *element, *t) : docs->set_rml(d, *element, *t);
+    } else if (op == "set_class") {
+        const auto name = text("name");
+        if (!name || name->empty()) return std::string("ui.set_class: which class?");
+        ok = docs->set_class(d, *element, *name, request.value("on", true));
+    } else if (op == "set_attribute") {
+        const auto name = text("name");
+        if (!name || name->empty()) return std::string("ui.set_attribute: which attribute?");
+        ok = docs->set_attribute(d, *element, *name, value);
+    } else if (op == "set_style") {
+        const auto property = text("property");
+        if (!property || property->empty()) return std::string("ui.set_style: which property?");
+        ok = docs->set_style(d, *element, *property, value.is_string() ? value.get<std::string>() : std::string());
+    } else if (op == "value") {
+        auto v = docs->value(d, *element);
+        if (!v) return missing();
+        return std::move(*v);
+    } else if (op == "set_value") {
+        ok = docs->set_value(d, *element, value);
+    } else if (op == "focus") {
+        ok = docs->focus(d, *element);
+    } else if (op == "click") {
+        ok = docs->click(d, *element);
+    } else {
+        return std::format("ui: no operation \"{}\"", op);
+    }
+    if (!ok) return missing();
+    return asset::Json(nullptr);
+}
+
 } // namespace noor::runtime::api

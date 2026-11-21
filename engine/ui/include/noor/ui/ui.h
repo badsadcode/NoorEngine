@@ -13,6 +13,7 @@
 //
 // One Ui at a time: RmlUi keeps global state (create fails while another exists).
 
+#include "noor/asset/json.h"
 #include "noor/foundation/error.h"
 #include "noor/render/renderer.h"
 
@@ -20,8 +21,11 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace noor::ui {
 
@@ -38,12 +42,33 @@ struct UiDesc {
     std::filesystem::path root;  // the project folder: documents and what they load come from inside it
     TextureHost textures;
     std::function<double()> clock;  // seconds, for transitions and animations; empty: real time since create
+    // The system clipboard (text boxes' Ctrl+C / V / X); empty: a clipboard of the UI's own.
+    std::function<void(const std::string&)> set_clipboard;
+    std::function<std::string()> get_clipboard;
 };
 
 struct DocumentId {
     std::uint32_t id = 0;
     [[nodiscard]] bool valid() const noexcept { return id != 0; }
     friend bool operator==(DocumentId, DocumentId) = default;
+};
+
+// Something that happened on an element (part 6b): a click, a changed value, a submitted form, focus coming or going,
+// the mouse over or out. `element` is the id of the element it happened on, or of its nearest ancestor with one.
+struct UiEvent {
+    DocumentId document;
+    std::string type;     // click, change, submit, focus, blur, mouseover, mouseout
+    std::string element;  // empty: no element with an id there
+    asset::Json value;    // change: the control's value (as value() gives it); submit: the form's fields; else null
+};
+
+// Keys the UI listens to: focus moves (Tab, arrows with `nav` properties), Enter and Space click, text editing.
+enum class Key : std::uint8_t {
+    Tab, Enter, Space, Escape, Backspace, Delete, Left, Right, Up, Down, Home, End, PageUp, PageDown,
+    A, C, V, X,  // with Ctrl: select all, copy, paste, cut
+};
+struct Modifiers {
+    bool ctrl = false, shift = false, alt = false;
 };
 
 struct UiStats {
@@ -69,8 +94,27 @@ public:
     // file is missing or isn't a document; problems inside it (a bad property) are logged as warnings.
     [[nodiscard]] Result<DocumentId> open(std::string_view path);
     void close(DocumentId document);
+    [[nodiscard]] bool is_open(DocumentId document) const;
     void set_visible(DocumentId document, bool visible);
     [[nodiscard]] bool visible(DocumentId document) const;
+    // An open document by the path it was opened with.
+    [[nodiscard]] std::optional<DocumentId> find(std::string_view path) const;
+
+    // Elements by id (part 6b). False, changing nothing, when the document or element isn't there.
+    bool set_text(DocumentId document, std::string_view element, std::string_view text);  // shown as it is (no markup)
+    bool set_rml(DocumentId document, std::string_view element, std::string_view rml);
+    bool set_class(DocumentId document, std::string_view element, std::string_view name, bool on);
+    bool set_attribute(DocumentId document, std::string_view element, std::string_view name, const asset::Json& value);
+    bool set_style(DocumentId document, std::string_view element, std::string_view property, std::string_view value);
+    // Text boxes, selects and text areas: a string; ranges: a number; checkboxes and radios: true / false; anything
+    // else: its content (markup).
+    [[nodiscard]] std::optional<asset::Json> value(DocumentId document, std::string_view element) const;
+    bool set_value(DocumentId document, std::string_view element, const asset::Json& value);
+    bool focus(DocumentId document, std::string_view element);
+    bool click(DocumentId document, std::string_view element);
+
+    // What happened since the last call, in order.
+    [[nodiscard]] std::vector<UiEvent> take_events();
 
     // Where the UI is drawn: the game's picture on the screen, in pixels (render::Renderer::display_layout()).
     void set_viewport(std::int32_t x, std::int32_t y, std::int32_t width, std::int32_t height);
@@ -81,6 +125,11 @@ public:
     void mouse_wheel(float lines);  // positive: down
     // True when the mouse is over a visible document's element (so a game can leave clicks to the UI).
     [[nodiscard]] bool mouse_over_ui() const;
+    // The keyboard: a key pressed (auto-repeats too) or let go, and typed text (UTF-8).
+    void key(Key key, bool down, Modifiers modifiers = {});
+    void text(std::string_view utf8);
+    // A text box has focus: the host turns typed text on (platform::set_text_input).
+    [[nodiscard]] bool wants_text() const;
 
     // Runs layout, transitions and animations. Call once a frame before draw().
     void update();

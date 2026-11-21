@@ -1,0 +1,42 @@
+<rml>
+<head>
+    <title>Try me</title>
+    <!-- Scenes/Try: a pause menu to play with by hand (mouse, Tab, arrows, Enter, typing). Scripts/Try.luau runs it. -->
+    <style>
+        body { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: #0000008C; }
+        #menu { width: 420dp; padding: 28dp; background-color: #191623F2; border-radius: 12dp; }
+        h1 { font-size: 48dp; color: #FFC857; text-align: center; margin: 0 0 12dp 0; }
+        label { display: block; margin-top: 14dp; font-size: 22dp; color: #B8B0CC; }
+        input.text { display: block; box-sizing: border-box; width: 100%; padding: 6dp 10dp; margin-top: 4dp; font-size: 26dp;
+                     background-color: #0E0C16; border: 2dp #3A3150; border-radius: 6dp; tab-index: auto; nav: auto; }
+        input.text:focus { border-color: #FFC857; }
+        input.range { display: block; width: 100%; height: 20dp; margin-top: 8dp; tab-index: auto; nav: auto; }
+        input.range slidertrack { height: 6dp; margin-top: 7dp; background-color: #3A3150; border-radius: 3dp; }
+        input.range sliderbar { width: 20dp; height: 20dp; background-color: #EDE8F7; border-radius: 10dp; }
+        input.range:focus sliderbar { background-color: #FFC857; }
+        input.range sliderarrowdec, input.range sliderarrowinc { width: 0; }
+        input.checkbox { width: 22dp; height: 22dp; margin-right: 8dp; background-color: #3A3150; border-radius: 4dp;
+                         tab-index: auto; nav: auto; }
+        input.checkbox:checked { background-color: #FFC857; }
+        input.checkbox:focus { border: 2dp #EDE8F7; }
+        .button { display: block; margin-top: 16dp; padding: 12dp; font-size: 30dp; text-align: center; background-color: #2A2140;
+                  border-radius: 8dp; tab-index: auto; focus: auto; nav: auto; }
+        .button:hover { background-color: #3A2D5C; }
+        .button:focus { background-color: #4B1AF2; border: 3dp #FFFFFFE6; }
+        #hint { margin-top: 14dp; font-size: 18dp; color: #8A82A0; text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <h1>Paused</h1>
+        <label>Your name</label>
+        <input id="name" type="text" value="Alden" maxlength="20"/>
+        <label>Volume: <span id="volume-text">50%</span></label>
+        <input id="volume" type="range" min="0" max="1" step="0.05" value="0.5"/>
+        <label><input id="subtitles" type="checkbox"/>Subtitles</label>
+        <div id="resume" class="button">Resume</div>
+        <div id="reset" class="button">Reset</div>
+        <p id="hint">Mouse, or Tab and arrows to move, Enter to press. P pauses again.</p>
+    </div>
+</body>
+</rml>

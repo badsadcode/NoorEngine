@@ -393,6 +393,19 @@ const char* rt_timeline(noor_rt_entity e, int32_t op, const char* name, float sp
     return t_text.c_str();
 }
 
+const char* rt_ui(noor_rt_entity caller, const char* request_json) {
+    t_error.clear();
+    if (!t_world || !request_json) return nullptr;
+    const Json request = Json::parse(request_json, nullptr, false);
+    auto r = api::ui(*t_world, from_rt(caller), request.is_discarded() ? Json() : request);
+    if (auto* why = std::get_if<std::string>(&r)) {
+        t_error = *why;
+        return nullptr;
+    }
+    t_text = std::get<Json>(r).dump();
+    return t_text.c_str();
+}
+
 double rt_clock(int32_t which) {
     if (!t_world) return 0.0;
     switch (which) {
@@ -440,6 +453,7 @@ const noor_rt_api kApi = {
     rt_emit, rt_listen, rt_unlisten, rt_call,
     rt_tween, rt_tween_op, rt_last_error,
     rt_timeline,
+    rt_ui,
 };
 
 } // namespace
