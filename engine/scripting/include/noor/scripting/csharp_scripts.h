@@ -37,6 +37,12 @@ public:
     void late_update(runtime::World& world, double dt) override;
     void entity_destroyed(runtime::World& world, const scene::Entity& entity) override;
     void shutdown(runtime::World& world) override;
+    void deliver(runtime::World& world, std::uint64_t handle, const std::optional<Guid>& sender, std::string_view name,
+                 const asset::Json& data) override;
+    bool invoke(runtime::World& world, const Guid& entity, std::string_view function, const asset::Json& args,
+                asset::Json& result) override;
+    // A C# script's listener (rt API listen()): its owner and the managed side's handle; returns ours for the World.
+    std::uint64_t add_listener(const Guid& owner, std::int64_t managed_handle);
 
     [[nodiscard]] const std::vector<std::string>& errors() const noexcept { return errors_; }
     [[nodiscard]] std::size_t instance_count() const noexcept { return instances_.size(); }
@@ -54,6 +60,12 @@ private:
     std::vector<Guid> order_;
     std::vector<std::string> errors_;
     bool reported_missing_host_ = false;
+    struct Listen {
+        Guid owner;
+        std::int64_t managed = 0;
+    };
+    std::unordered_map<std::uint64_t, Listen> listens_;
+    std::uint64_t next_listen_ = 1;
 };
 
 // Converts entity ids for the ABI.

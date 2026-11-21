@@ -97,6 +97,11 @@ public unsafe struct RtApi
     // v14: the clocks (gameplay foundations, part 2)
     public delegate* unmanaged<int, double> Clock;
     public delegate* unmanaged<int, double, void> SetClock;
+    // v15: messages and calls (gameplay foundations, part 3)
+    public delegate* unmanaged<RtEntity*, byte*, byte*, int> Emit;
+    public delegate* unmanaged<RtEntity*, byte*, RtEntity, long, long> Listen;
+    public delegate* unmanaged<long, void> Unlisten;
+    public delegate* unmanaged<RtEntity, byte*, byte*, int*, byte*> Call;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -107,12 +112,14 @@ public unsafe struct RtHost
     public delegate* unmanaged<long, int, RtEntity, int> Event;
     public delegate* unmanaged<long, void> Release;
     public delegate* unmanaged<byte*> LastError;
+    public delegate* unmanaged<long, long, RtEntity*, byte*, byte*, int> Deliver;
+    public delegate* unmanaged<long, byte*, byte*, int*, byte*> Invoke;
 }
 
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 14;
+    public const uint ExpectedVersion = 15;
     public static RtApi* Api;
 
     public static ref RtApi A

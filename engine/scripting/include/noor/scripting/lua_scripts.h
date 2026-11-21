@@ -52,6 +52,10 @@ public:
     void late_update(runtime::World& world, double dt) override;
     void entity_destroyed(runtime::World& world, const scene::Entity& entity) override;
     void shutdown(runtime::World& world) override;
+    void deliver(runtime::World& world, std::uint64_t handle, const std::optional<Guid>& sender, std::string_view name,
+                 const asset::Json& data) override;
+    bool invoke(runtime::World& world, const Guid& entity, std::string_view function, const asset::Json& args,
+                asset::Json& result) override;
 
     // Source for a script path, used instead of reading the file (tests, generated scripts).
     void add_source(std::string path, std::string source);

@@ -113,7 +113,7 @@ TEST_CASE("csharp host: sprites through the ABI, and the animation end event car
     w.frame(1.0 / 60.0, {});
     CHECK(std::ranges::find(Fake::calls, "event 4") != Fake::calls.end());
     CHECK(std::ranges::find(Fake::calls, "animation attack") != Fake::calls.end());
-    CHECK(api->version == 14u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop; v11: shape casts, overlaps, contacts; v12: tiles; v13: spawn, teleport, tags; v14: clocks
+    CHECK(api->version == 15u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop; v11: shape casts, overlaps, contacts; v12: tiles; v13: spawn, teleport, tags; v14: clocks; v15: messages, calls
     REQUIRE(api->spawn != nullptr);
     REQUIRE(api->teleport != nullptr);
     REQUIRE(api->tag != nullptr);

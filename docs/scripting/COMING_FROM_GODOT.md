@@ -59,7 +59,9 @@ after the 2D foundations ([why that order](../milestones/M9_PLAN.md#the-order-fr
 
 | Godot | NoorEngine | Status |
 |---|---|---|
-| **Signals** between your own scripts (`signal hit`, `emit_signal`, `connect`) | Engine events arrive as hooks (`on_collision_enter`, `on_animation_end`...) | **Your own signals: not yet** (planned) |
+| **Signals**: `emit_signal("hit")`, `lever.pulled.connect(...)` | `self.entity:emit("hit", data)`, `lever:on("pulled", fn)`; game-wide `noor.emit` / `noor.on`; C#: `Entity.Emit`, `On(...)` | ✅ (gameplay foundations, part 3); Lua and C# hear each other |
+| Calling a method on another node, `door.open()`, `call("open")` | `door:call("open")` / `door.Call("open")` (any language) | ✅ (part 3) |
+| `body_entered` on an Area | the trigger's own `on_trigger_enter`, or anyone's `plate:on("trigger_enter", fn)` | ✅ (part 3) |
 | **Timer** node, `await get_tree().create_timer(1).timeout` | `noor.after(1, fn)`, `noor.every`; `noor.wait(1)` inside `noor.start(function() ... end)`; C#: `After`, `Every`, `await Wait(1)` | ✅ (gameplay foundations, part 2) |
 | `get_tree().paused = true`, a node's `process_mode = ALWAYS` | `noor.set_paused(true)`; the script's **Runs while paused** (`"pause": "always"`) | ✅ (part 2) |
 | `Engine.time_scale` | `noor.set_time_scale(0.25)` | ✅ (part 2) |

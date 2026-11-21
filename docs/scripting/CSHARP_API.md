@@ -100,6 +100,21 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `CrossFade(name, seconds)`, `SetAnimationParameter(name, float or bool)`, `SetAnimationTrigger(name)` | An `animator`: blend to a clip or state over `seconds`; set its controller's parameters (a trigger resets when a transition uses it) |
 | `Burst(count)` | The entity's `emitter`: `count` particles at the next fixed step |
 
+## Messages between scripts
+
+Gameplay foundations, part 3 (rt API v15); the same as Lua's, and the two hear each other:
+
+```csharp
+Entity.Emit("pulled", new JsonObject { ["strength"] = 3 });          // this entity says it
+On(Noor.Find("Lever")!, "pulled", (data, sender) => { /* ... */ });  // listen to another
+On("level_complete", (data, _) => { /* ... */ });                    // game-wide; Noor.Emit sends one
+var open = Noor.Find("Door")!.Call("is_open", "please");             // a function of its script (Lua or C#)
+```
+
+`Call` finds a method of the script by name (public or not) and fills its parameters from the arguments (JSON
+converted to their types); its return value comes back as a `JsonNode`. A script's own methods only, not
+`NoorScript`'s.
+
 ## Time: timers, waiting, pause
 
 The same rules as Lua's (gameplay foundations, part 2; rt API v14):

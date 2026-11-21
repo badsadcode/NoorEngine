@@ -11,8 +11,6 @@
 #include "noor/runtime/input.h"
 #include "noor/scene/scene.h"
 
-#include <algorithm>
-#include <functional>
 
 namespace noor::scene {
 struct Prefab;
@@ -82,6 +80,14 @@ public:
     virtual void entity_destroyed(World&, const scene::Entity&) {}
     // The World is shutting down (Stop).
     virtual void shutdown(World&) {}
+    // Messages (gameplay foundations, part 3): a message one of this system's listeners waits for (World::listen).
+    virtual void deliver(World&, std::uint64_t /*handle*/, const std::optional<Guid>& /*sender*/, std::string_view /*name*/,
+                         const asset::Json& /*data*/) {}
+    // Calls `function` on the entity's script, if this system runs it: true and its result (null if none), or false.
+    virtual bool invoke(World&, const Guid& /*entity*/, std::string_view /*function*/, const asset::Json& /*args*/,
+                        asset::Json& /*result*/) {
+        return false;
+    }
 };
 
 class World {
@@ -203,6 +209,23 @@ public:
     void set_teleporter(Teleporter t) { teleporter_ = std::move(t); }
     [[nodiscard]] const Teleporter& teleporter() const noexcept { return teleporter_; }
 
+    // ---- Messages (gameplay foundations, part 3; Godot's signals) ----
+    // A listener waits for messages called `name` from one entity (`emitter`) or game-wide (nullopt). It belongs to the
+    // entity `owner` (the listening script's), and goes when either is destroyed. `system` gets it (System::deliver),
+    // with its own `handle`. Returns an id for unlisten.
+    std::uint64_t listen(std::optional<Guid> emitter, std::string name, const Guid& owner, System* system, std::uint64_t handle);
+    void unlisten(std::uint64_t id);
+    // Sends a message at once to its listeners, in the order they started listening (deterministic). `emitter`: the
+    // entity sending (its listeners hear it), or nullopt for a game-wide one. Messages sent from listeners are
+    // delivered in turn; too deep a chain (a loop) is stopped with an error. Returns how many listeners heard it.
+    int emit(std::optional<Guid> emitter, std::string_view name, const asset::Json& data = nullptr);
+    // Calls a function of the entity's script by name (whichever language it's in): its result, or nothing if the
+    // entity has no script with that function.
+    [[nodiscard]] std::optional<asset::Json> invoke(const Guid& entity, std::string_view function, const asset::Json& args = nullptr);
+    [[nodiscard]] bool has_listeners(std::string_view name) const { return listened_names_.contains(std::string(name)); }
+    [[nodiscard]] std::size_t listener_count() const noexcept { return listeners_.size(); }
+    [[nodiscard]] const std::vector<std::string>& message_errors() const noexcept { return message_errors_; }
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -235,6 +258,19 @@ private:
     bool paused_ = false;
     bool drawing_while_paused_ = false;
     std::vector<UiCommand> frozen_ui_;  // the paused scripts' HUD, kept while paused
+    struct Listener {
+        std::optional<Guid> emitter;
+        std::string name;
+        Guid owner;
+        System* system = nullptr;
+        std::uint64_t handle = 0;
+    };
+    std::map<std::uint64_t, Listener> listeners_;  // by id: the order they started listening
+    std::unordered_map<std::string, int> listened_names_;
+    std::uint64_t next_listener_ = 1;
+    int emit_depth_ = 0;
+    std::vector<std::string> message_errors_;
+    void emit_events_as_messages();
     double time_scale_ = 1.0;
     double real_time_ = 0.0, real_dt_ = 0.0;
     double accumulator_ = 0.0;

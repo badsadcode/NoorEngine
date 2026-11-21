@@ -1,0 +1,98 @@
+{
+  "noor_scene": 2,
+  "id": "b2f0b7d5-c2ec-508f-a4a0-4b2d04955c89",
+  "name": "Main_Mixed",
+  "entities": [
+    {
+      "id": "3228cf31-763c-5154-b184-7b490b9015b7",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "6d6c4c3e-c79d-5214-9ead-5bc9511f6a58",
+      "name": "Lever",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/Lever.luau"
+        }
+      }
+    },
+    {
+      "id": "9c5c8900-b1d0-56ab-9aec-133afe60e3b6",
+      "name": "Door",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/CsDoor.cs"
+        }
+      }
+    }
+  ]
+}

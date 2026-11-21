@@ -89,6 +89,8 @@ public static unsafe class ScriptHost
                 _host->Event = &Event;
                 _host->Release = &Release;
                 _host->LastError = &LastError;
+                _host->Deliver = &Deliver;
+                _host->Invoke = &Invoke;
             }
             return (nint)_host;
         }
@@ -212,6 +214,71 @@ public static unsafe class ScriptHost
 
     [UnmanagedCallersOnly]
     private static void Release(long handle) => Instances.Remove(handle);
+
+    // A message for one of the script's listeners (gameplay foundations, part 3).
+    [UnmanagedCallersOnly]
+    private static int Deliver(long instance, long handle, RtEntity* sender, byte* name, byte* dataJson)
+    {
+        if (!Instances.TryGetValue(instance, out var s)) return 1;
+        try
+        {
+            var json = Engine.Str(dataJson);
+            s.Deliver(handle, json is null or "null" ? null : JsonNode.Parse(json), sender != null ? new Entity(*sender) : null);
+            return 1;
+        }
+        catch (Exception e)
+        {
+            SetError(Describe(e));
+            return 0;
+        }
+    }
+
+    private static nint _invokeResult;
+
+    // e:call / Entity.Call into this script: a method by name, its arguments from JSON, its result as JSON.
+    [UnmanagedCallersOnly]
+    private static byte* Invoke(long instance, byte* function, byte* argsJson, int* found)
+    {
+        *found = 0;
+        if (!Instances.TryGetValue(instance, out var s)) return null;
+        var name = Engine.Str(function) ?? "";
+        var args = JsonNode.Parse(Engine.Str(argsJson) ?? "[]") as JsonArray ?? new JsonArray();
+        var method = s.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                      .FirstOrDefault(m => m.Name == name && m.DeclaringType != typeof(NoorScript) && m.DeclaringType != typeof(object) &&
+                                           m.GetParameters().Length >= args.Count &&
+                                           m.GetParameters().Skip(args.Count).All(p => p.HasDefaultValue));
+        if (method == null) return null;
+        try
+        {
+            var ps = method.GetParameters();
+            var values = new object?[ps.Length];
+            for (var i = 0; i < ps.Length; i++)
+            {
+                if (i >= args.Count) { values[i] = ps[i].DefaultValue; continue; }
+                var a = args[i];
+                values[i] = ps[i].ParameterType == typeof(JsonNode) ? a?.DeepClone()
+                          : a == null ? null
+                          : System.Text.Json.JsonSerializer.Deserialize(a.ToJsonString(), ps[i].ParameterType);
+            }
+            var result = method.Invoke(s, values);
+            *found = 1;
+            var text = result switch
+            {
+                null => "null",
+                JsonNode n => n.ToJsonString(),
+                _ => System.Text.Json.JsonSerializer.Serialize(result, result.GetType()),
+            };
+            if (_invokeResult != 0) Marshal.FreeCoTaskMem(_invokeResult);
+            _invokeResult = Marshal.StringToCoTaskMemUTF8(text);
+            return (byte*)_invokeResult;
+        }
+        catch (Exception e)
+        {
+            *found = 2;
+            SetError(Describe(e));
+            return null;
+        }
+    }
 
     [UnmanagedCallersOnly]
     private static byte* LastError() => (byte*)_error;

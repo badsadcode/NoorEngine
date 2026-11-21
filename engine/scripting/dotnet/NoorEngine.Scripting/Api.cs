@@ -34,6 +34,31 @@ public abstract class NoorScript
     /// <summary>`await Wait(1.5)` in an async method (async void hooks too): carries on that much later.</summary>
     protected WaitAwaitable Wait(double seconds, bool real = false) => new(Jobs, seconds, real);
 
+    // ---- Messages (gameplay foundations, part 3; Godot's signals) ----
+    private readonly Dictionary<long, Action<JsonNode?, Entity?>> _handlers = new();
+    private long _nextHandler = 1;
+
+    /// <summary>Listens to `emitter`'s messages called `name`: handler(data, sender). Gone with either entity, or
+    /// cancelled with the returned listener.</summary>
+    protected Listener On(Entity emitter, string name, Action<JsonNode?, Entity?> handler) => Listen(emitter, name, handler);
+    /// <summary>Listens to game-wide messages called `name` (Noor.Emit).</summary>
+    protected Listener On(string name, Action<JsonNode?, Entity?> handler) => Listen(null, name, handler);
+
+    private unsafe Listener Listen(Entity? emitter, string name, Action<JsonNode?, Entity?> handler)
+    {
+        var handle = _nextHandler++;
+        _handlers[handle] = handler;
+        var from = emitter?.Id ?? default;
+        long id;
+        fixed (byte* n = Engine.Utf8(name)) id = Engine.A.Listen(emitter is not null ? &from : null, n, Entity.Id, handle);
+        return new Listener(id, () => _handlers.Remove(handle));
+    }
+
+    internal void Deliver(long handle, JsonNode? data, Entity? sender)
+    {
+        if (_handlers.TryGetValue(handle, out var h)) h(data, sender);
+    }
+
     public virtual void OnStart() { }
     public virtual void OnUpdate(float dt) { }
     public virtual void OnFixedUpdate(float dt) { }
@@ -153,6 +178,29 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public int? Tile(int x, int y) => Engine.A.Tile(Id, x, y) is var t && t >= -1 ? t : null;
     /// <summary>Tilemap: sets cell (x, y) (-1 empties it); false outside the map. Drawing and collision follow.</summary>
     public bool SetTile(int x, int y, int tile) => Engine.A.SetTile(Id, x, y, tile) != 0;
+    /// <summary>Sends a message from this entity: whoever listens to it hears it at once (gameplay foundations, part 3).
+    /// Returns how many listeners did.</summary>
+    public unsafe int Emit(string name, JsonNode? data = null)
+    {
+        var self = Id;
+        fixed (byte* n = Engine.Utf8(name))
+        fixed (byte* d = Engine.Utf8(data?.ToJsonString() ?? "null"))
+            return Engine.A.Emit(&self, n, d);
+    }
+    /// <summary>Calls a function of this entity's script (Lua or C#) by name: its result (null if none). Throws if it has
+    /// no such function.</summary>
+    public unsafe JsonNode? Call(string function, params object?[] args)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(args);
+        int found;
+        byte* result;
+        fixed (byte* f = Engine.Utf8(function))
+        fixed (byte* a = Engine.Utf8(json))
+            result = Engine.A.Call(Id, f, a, &found);
+        if (found == 0) throw new InvalidOperationException($"'{Name}' has no script function '{function}'");
+        var text = Engine.Str(result);
+        return text is null or "null" ? null : JsonNode.Parse(text);
+    }
     /// <summary>Moves it at once (gameplay foundations, part 1): a body or character through physics, its velocity and
     /// jumps reset; `euler` null keeps its rotation. A respawn, a portal.</summary>
     public unsafe bool Teleport(Vector3 position, Vector3? euler = null)
@@ -286,6 +334,14 @@ public static unsafe class Noor
         var p = parent?.Id ?? default;
         fixed (byte* s = Engine.Utf8(prefab))
             return Engine.A.Spawn(s, new RtVec3(position), new RtVec3(euler ?? Vector3.Zero), parent is not null ? &p : null, &e) != 0 ? new Entity(e) : null;
+    }
+
+    /// <summary>Sends a game-wide message (gameplay foundations, part 3): returns how many listeners heard it.</summary>
+    public static int Emit(string name, JsonNode? data = null)
+    {
+        fixed (byte* n = Engine.Utf8(name))
+        fixed (byte* d = Engine.Utf8(data?.ToJsonString() ?? "null"))
+            return Engine.A.Emit(null, n, d);
     }
 
     /// <summary>Every entity with the tag (a group), in scene order.</summary>

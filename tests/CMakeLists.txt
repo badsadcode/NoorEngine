@@ -54,6 +54,7 @@ add_executable(noor_unit_tests
     unit/test_templates.cpp
     unit/test_spawn.cpp
     unit/test_time.cpp
+    unit/test_messages.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -855,6 +856,17 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/time_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_time
             -P ${CMAKE_CURRENT_SOURCE_DIR}/time_check.cmake)
     set_tests_properties(player.time_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_time_project)
+
+    # Messages and calls between scripts, Lua to Lua and Lua to C# (gameplay foundations, part 3).
+    add_test(NAME cli.build_messages_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/messages_project ${CMAKE_CURRENT_BINARY_DIR}/built_messages_project)
+    set_tests_properties(cli.build_messages_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_messages_project
+                         PASS_REGULAR_EXPRESSION "Built 'Messages Test'")
+    add_test(NAME player.messages_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_messages_project/Messages Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/messages_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_messages
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/messages_check.cmake)
+    set_tests_properties(player.messages_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_messages_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.

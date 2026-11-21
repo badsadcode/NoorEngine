@@ -4,6 +4,17 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 3: messages between scripts
+**Added**
+- World message bus: `listen`, `unlisten`, `emit`, `invoke`, `listener_count`; `System::deliver`, `System::invoke`;
+  engine events also sent as messages from their entity.
+- Lua: `e:emit`, `e:on`, `noor.emit`, `noor.on` (listeners with `:cancel()`), `e:call`.
+- C#: `Entity.Emit`, `NoorScript.On(...)`, `Noor.Emit`, `Entity.Call`, `Listener`; rt API v15 (`emit`, `listen`,
+  `unlisten`, `call`), host table `deliver` and `invoke`.
+
+**Tests:** `test_messages.cpp`; `tests/data/messages_project` and `player.messages_lua_csharp` (a Lua lever and a Lua or
+C# door).
+
 ### 2026-11-21 — Gameplay foundations, part 2: timers, waiting, pause, slow motion
 **Added**
 - World: `set_paused` / `paused`, `set_time_scale` / `time_scale`, `real_time` / `real_dt`; scripts' "pause": "always"

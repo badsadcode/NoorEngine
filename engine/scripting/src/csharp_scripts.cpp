@@ -326,6 +326,32 @@ int32_t rt_find_all(const char* tag, noor_rt_entity* out, int32_t max) {
     return static_cast<int32_t>(all.size());
 }
 
+int32_t rt_emit(const noor_rt_entity* emitter, const char* name, const char* data_json) {
+    if (!t_world || !name) return 0;
+    const Json data = data_json ? Json::parse(data_json, nullptr, false) : Json();
+    return t_world->emit(emitter ? std::optional(from_rt(*emitter)) : std::nullopt, name, data.is_discarded() ? Json() : data);
+}
+int64_t rt_listen(const noor_rt_entity* emitter, const char* name, noor_rt_entity owner, int64_t managed_handle) {
+    if (!t_world || !name) return 0;
+    auto* system = t_world->system<CSharpScriptSystem>();
+    if (!system) return 0;
+    const std::uint64_t handle = system->add_listener(from_rt(owner), managed_handle);
+    return static_cast<int64_t>(t_world->listen(emitter ? std::optional(from_rt(*emitter)) : std::nullopt, name, from_rt(owner), system, handle));
+}
+void rt_unlisten(int64_t id) {
+    if (t_world) t_world->unlisten(static_cast<std::uint64_t>(id));
+}
+const char* rt_call(noor_rt_entity e, const char* function, const char* args_json, int32_t* found) {
+    if (found) *found = 0;
+    if (!t_world || !function) return nullptr;
+    const Json args = args_json ? Json::parse(args_json, nullptr, false) : Json::array();
+    const auto result = t_world->invoke(from_rt(e), function, args.is_discarded() ? Json::array() : args);
+    if (!result) return nullptr;
+    if (found) *found = 1;
+    t_text = result->dump();
+    return t_text.c_str();
+}
+
 double rt_clock(int32_t which) {
     if (!t_world) return 0.0;
     switch (which) {
@@ -370,6 +396,7 @@ const noor_rt_api kApi = {
     rt_tile, rt_set_tile,
     rt_spawn, rt_teleport, rt_tag, rt_find_all,
     rt_clock, rt_set_clock,
+    rt_emit, rt_listen, rt_unlisten, rt_call,
 };
 
 } // namespace
@@ -405,6 +432,7 @@ void CSharpScriptSystem::release(const Guid& id) {
         if (host_) host_->release(it->second);
         instances_.erase(it);
         always_.erase(id);
+        std::erase_if(listens_, [&](const auto& l) { return l.second.owner == id; });
     }
 }
 
@@ -489,6 +517,52 @@ void CSharpScriptSystem::entity_destroyed(runtime::World& world, const scene::En
     if (!instances_.contains(entity.id)) return;
     call(world, entity.id, NOOR_RT_DESTROY, 0.0);
     release(entity.id);
+}
+
+std::uint64_t CSharpScriptSystem::add_listener(const Guid& owner, std::int64_t managed_handle) {
+    const std::uint64_t handle = next_listen_++;
+    listens_[handle] = {owner, managed_handle};
+    return handle;
+}
+
+void CSharpScriptSystem::deliver(runtime::World& world, std::uint64_t handle, const std::optional<Guid>& sender, std::string_view name,
+                                 const asset::Json& data) {
+    const auto l = listens_.find(handle);
+    if (l == listens_.end() || !host_ || !host_->deliver) return;
+    const auto inst = instances_.find(l->second.owner);
+    if (inst == instances_.end()) return;
+    WorldScope scope(world);
+    const noor_rt_entity from = sender ? to_rt(*sender) : noor_rt_entity{};
+    const std::string json = data.dump();
+    world.set_drawing_while_paused(always_.contains(l->second.owner));
+    const bool ok = host_->deliver(inst->second, l->second.managed, sender ? &from : nullptr, std::string(name).c_str(), json.c_str()) != 0;
+    world.set_drawing_while_paused(false);
+    if (!ok) {
+        const char* why = host_->last_error ? host_->last_error() : nullptr;
+        report(std::format("{} (listening to '{}' on '{}'); that listener is stopped", why ? why : "exception", name,
+                           api::name(world, l->second.owner).value_or("?")));
+        listens_.erase(handle);  // the World's entry stays but delivers to nothing; it goes with the entity
+    }
+}
+
+bool CSharpScriptSystem::invoke(runtime::World& world, const Guid& entity, std::string_view function, const asset::Json& args,
+                                asset::Json& result) {
+    const auto inst = instances_.find(entity);
+    if (inst == instances_.end() || !host_ || !host_->invoke) return false;
+    WorldScope scope(world);
+    int32_t found = 0;
+    const std::string a = args.dump();
+    const char* out = host_->invoke(inst->second, std::string(function).c_str(), a.c_str(), &found);
+    if (found == 0) return false;
+    if (found == 2) {
+        const char* why = host_->last_error ? host_->last_error() : nullptr;
+        report(std::format("{} (called as '{}' on '{}')", why ? why : "exception", function, api::name(world, entity).value_or("?")));
+        result = nullptr;
+        return true;
+    }
+    const Json r = out ? Json::parse(out, nullptr, false) : Json();
+    result = r.is_discarded() ? Json() : r;
+    return true;
 }
 
 void CSharpScriptSystem::shutdown(runtime::World& world) {

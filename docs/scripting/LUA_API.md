@@ -245,6 +245,44 @@ Spatial sounds get quieter with distance (full volume inside `min_distance`, no 
 past `max_distance`) and pan with the listener's orientation. Without an `audio_listener` the
 first `camera` hears.
 
+## Messages between scripts
+
+Gameplay foundations, part 3: Godot's signals. An entity **says** something; any script can **listen**:
+
+```lua
+-- Lever.luau: say it
+self.entity:emit("pulled", { strength = 3 })
+
+-- Door.luau: listen to the lever
+function Door:on_start()
+    noor.find("Lever"):on("pulled", function(data, sender)
+        if data.strength >= 3 then self:open() end
+    end)
+end
+
+-- game-wide, from anyone to anyone
+noor.emit("level_complete", { time = 92.5 })
+noor.on("level_complete", function(data) noor.log("done in " .. data.time) end)
+
+-- or ask another script directly (Godot's door.open())
+local open = noor.find("Door"):call("is_open")
+```
+
+| | |
+|---|---|
+| `e:emit(name [, data])` | `e` says `name`; everyone listening to `e` hears it **now**, in the order they started listening. Returns how many heard it |
+| `e:on(name, fn(data, sender))` | The running script listens to `e`. Returns a listener (`l:cancel()`) |
+| `noor.emit(name [, data])`, `noor.on(name, fn(data, sender))` | Game-wide messages (`sender` is `nil`) |
+| `e:call(function, ...)` | Calls a function of `e`'s script, whether it's Lua or C#, and returns its result. An error if there's no such function |
+
+- **Lua and C# hear each other**: messages and calls cross languages. Data travels as JSON: numbers, strings, booleans,
+  tables; an entity in the data arrives as its id (`sender` is a real entity).
+- **Engine events are messages too**, from the entity they happen to: `collision_enter`, `collision_exit`,
+  `trigger_enter`, `trigger_exit` (data: `{other = id}`), `animation_end`, `animation_event`, `water` (`{name = ...}`).
+  A door can listen to a pressure plate's `trigger_enter` without a script on the plate.
+- Listeners go when the listening entity or the one it listens to is destroyed. A listener that errors is reported and
+  stopped; the others still hear. A message sent from its own listeners 32 deep is stopped with an error (a loop).
+
 ## Time: timers, waiting, pause
 
 Gameplay foundations, part 2. All of it is on the **game's clock** (`noor.time()`), which stops while paused and runs

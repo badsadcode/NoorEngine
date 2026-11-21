@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 14u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time */
+#define NOOR_RT_API_VERSION 15u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time; 15: messages, calls */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -163,6 +163,16 @@ typedef struct noor_rt_api {
      * PAUSED. Timers and waits are the managed side's (NoorScript.After, Every, Wait), built on these. */
     double (*clock)(int32_t which);
     void (*set_clock)(int32_t which, double value);
+
+    /* v15 (gameplay foundations, part 3): messages. emit(): from `emitter` (NULL: game-wide) with JSON data (NULL: null);
+     * returns how many listeners heard it. listen(): `owner`'s script listens for `name` from `emitter` (NULL: game-wide);
+     * the engine later calls noor_rt_host.deliver(owner's instance, managed_handle, ...). Returns an id for unlisten. */
+    int32_t (*emit)(const noor_rt_entity* emitter, const char* name, const char* data_json);
+    int64_t (*listen)(const noor_rt_entity* emitter, const char* name, noor_rt_entity owner, int64_t managed_handle);
+    void (*unlisten)(int64_t id);
+    /* Calls a function of e's script (Lua or C#) with a JSON array of arguments: its result as JSON (valid until the next
+     * call), or NULL with *found = 0 if there's no such function. */
+    const char* (*call)(noor_rt_entity e, const char* function, const char* args_json, int32_t* found);
 } noor_rt_api;
 
 typedef struct noor_rt_host {
@@ -174,6 +184,11 @@ typedef struct noor_rt_host {
     int32_t (*event)(int64_t instance, int32_t kind, noor_rt_entity other);
     void (*release)(int64_t instance);
     const char* (*last_error)(void);
+    /* v15: a message for one of the instance's listeners (`handle`, as given to listen()); 0 if the handler threw. */
+    int32_t (*deliver)(int64_t instance, int64_t handle, const noor_rt_entity* sender, const char* name, const char* data_json);
+    /* v15: calls a method of the instance by name with a JSON array of arguments. *found: 0 no such method, 1 called
+     * (returns its result as JSON, NULL for none), 2 it threw (see last_error). */
+    const char* (*invoke)(int64_t instance, const char* function, const char* args_json, int32_t* found);
 } noor_rt_host;
 
 #ifdef __cplusplus

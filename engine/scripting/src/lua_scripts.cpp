@@ -62,6 +62,15 @@ struct LuaScriptSystem::Impl {
     };
     std::map<std::uint64_t, Sequence> sequences;
     std::unordered_map<lua_State*, std::uint64_t> sequence_of;  // a running sequence's thread -> its id
+    // Message listeners (gameplay foundations, part 3): our handle -> the listening instance, its function, the World's id.
+    struct Listen {
+        Guid owner;
+        int fn = 0;
+        std::uint64_t world_id = 0;
+    };
+    std::map<std::uint64_t, Listen> listens;
+    std::uint64_t next_listen = 1;
+    LuaScriptSystem* system = nullptr;  // the system that owns this (it receives the World's deliveries)
     std::unordered_map<Guid, Instance> instances;
     std::vector<Guid> order;  // start order, so hooks run in a stable order
     std::vector<std::string> errors;
@@ -246,6 +255,26 @@ struct LuaScriptSystem::Impl {
         return 1;
     }
 
+    // noor.on / e:on: a listener owned by the running script instance (gone with its entity, or the emitter's).
+    static int add_listener(lua_State* L, std::optional<Guid> emitter, int first) {
+        Impl* self = of(L);
+        const char* name = luaL_checkstring(L, first);
+        luaL_checktype(L, first + 1, LUA_TFUNCTION);
+        if (self->current == Guid{} || !self->instances.contains(self->current))
+            luaL_errorL(L, "on: call it from a script's hook (a listener belongs to its entity)");
+        lua_pushvalue(L, first + 1);
+        const int fn = lua_ref(L, -1);
+        lua_pop(L, 1);
+        const std::uint64_t handle = self->next_listen++;
+        const std::uint64_t id = world_of(L).listen(emitter, name, self->current, self->system, handle);
+        self->listens[handle] = {self->current, fn, id};
+        auto* h = static_cast<std::uint64_t*>(lua_newuserdata(L, sizeof(std::uint64_t)));
+        *h = handle;
+        luaL_getmetatable(L, "noor.Listener");
+        lua_setmetatable(L, -2);
+        return 1;
+    }
+
     // noor.after / noor.every: a timer owned by the running script instance.
     static int add_timer(lua_State* L, bool repeat) {
         Impl* self = of(L);
@@ -273,6 +302,21 @@ struct LuaScriptSystem::Impl {
     }
 
     void register_api() {
+        luaL_newmetatable(L, "noor.Listener");  // l:cancel()
+        lua_newtable(L);
+        lua_pushcfunction(L, [](lua_State* L) {
+            Impl* self = of(L);
+            const auto handle = *static_cast<std::uint64_t*>(luaL_checkudata(L, 1, "noor.Listener"));
+            if (const auto it = self->listens.find(handle); it != self->listens.end()) {
+                if (self->world) self->world->unlisten(it->second.world_id);
+                lua_unref(L, it->second.fn);
+                self->listens.erase(it);
+            }
+            return 0;
+        }, "cancel");
+        lua_setfield(L, -2, "cancel");
+        lua_setfield(L, -2, "__index");
+        lua_pop(L, 1);
         luaL_newmetatable(L, "noor.Timer");  // t:cancel()
         lua_newtable(L);
         lua_pushcfunction(L, [](lua_State* L) {
@@ -363,6 +407,28 @@ struct LuaScriptSystem::Impl {
             {"destroy", [](lua_State* L) {
                  api::destroy(world_of(L), check_entity(L, 1));
                  return 0;
+             }},
+            // e:emit(name [, data]): e sends a message; whoever listens to e hears it -> how many did
+            {"emit", [](lua_State* L) {
+                 const Guid e = check_entity(L, 1);
+                 const Json data = lua_gettop(L) >= 3 ? to_json(L, 3) : Json();
+                 lua_pushinteger(L, world_of(L).emit(e, luaL_checkstring(L, 2), data));
+                 return 1;
+             }},
+            // e:on(name, fn(data, sender)): the running script listens to e's messages -> a listener (l:cancel())
+            {"on", [](lua_State* L) { return add_listener(L, check_entity(L, 1), 2); }},
+            // e:call(function, ...): calls a function of e's script (Lua or C#) -> its result
+            {"call", [](lua_State* L) {
+                 const Guid e = check_entity(L, 1);
+                 const char* fn = luaL_checkstring(L, 2);
+                 Json args = Json::array();
+                 for (int i = 3; i <= lua_gettop(L); ++i) args.push_back(to_json(L, i));
+                 const auto result = world_of(L).invoke(e, fn, args);
+                 if (!result)
+                     luaL_errorL(L, "e:call: %s has no script function '%s'",
+                                 std::format("'{}'", api::name(world_of(L), e).value_or("(gone)")).c_str(), fn);
+                 push_json(L, *result);
+                 return 1;
              }},
             // e:teleport(position [, euler]): at once, velocity and jumps reset (gameplay foundations, part 1)
             {"teleport", [](lua_State* L) {
@@ -595,6 +661,15 @@ struct LuaScriptSystem::Impl {
                  world_of(L).set_time_scale(luaL_checknumber(L, 1));
                  return 0;
              }},
+            // ---- Messages (gameplay foundations, part 3) ----
+            // noor.emit(name [, data]): a game-wide message -> how many listeners heard it
+            {"emit", [](lua_State* L) {
+                 const Json data = lua_gettop(L) >= 2 ? to_json(L, 2) : Json();
+                 lua_pushinteger(L, world_of(L).emit(std::nullopt, luaL_checkstring(L, 1), data));
+                 return 1;
+             }},
+            // noor.on(name, fn(data, sender)): listen to a game-wide message -> a listener (l:cancel())
+            {"on", [](lua_State* L) { return add_listener(L, std::nullopt, 1); }},
             // noor.after(seconds, fn [, {real = true}]) / noor.every(seconds, fn [, ...]) -> a timer (t:cancel())
             {"after", [](lua_State* L) { return add_timer(L, false); }},
             {"every", [](lua_State* L) { return add_timer(L, true); }},
@@ -1000,6 +1075,15 @@ struct LuaScriptSystem::Impl {
         for (const auto& [id, s] : sequences)
             if (s.owner == owner) doomed.push_back(id);
         for (auto id : doomed) drop_sequence(id);
+        for (auto it = listens.begin(); it != listens.end();) {
+            if (it->second.owner == owner) {
+                if (world) world->unlisten(it->second.world_id);
+                lua_unref(L, it->second.fn);
+                it = listens.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
     // Fires the timers that are due and resumes the sequences whose wait is over, oldest first.
     void run_jobs() {
@@ -1048,7 +1132,85 @@ struct LuaScriptSystem::Impl {
     }
 };
 
-LuaScriptSystem::LuaScriptSystem(Options options) : impl_(std::make_unique<Impl>(std::move(options))) { impl_->open(); }
+LuaScriptSystem::LuaScriptSystem(Options options) : impl_(std::make_unique<Impl>(std::move(options))) {
+    impl_->system = this;
+    impl_->open();
+}
+
+void LuaScriptSystem::deliver(runtime::World& world, std::uint64_t handle, const std::optional<Guid>& sender, std::string_view name,
+                              const asset::Json& data) {
+    auto& d = *impl_;
+    d.world = &world;
+    const auto it = d.listens.find(handle);
+    if (it == d.listens.end() || !d.instances.contains(it->second.owner)) return;
+    const Impl::Listen l = it->second;
+    lua_State* L = d.L;
+    lua_pushcfunction(L, Impl::traceback_handler, "traceback");
+    const int handler = lua_gettop(L);
+    lua_getref(L, l.fn);
+    Impl::push_json(L, data);
+    if (sender) Impl::push_entity(L, *sender);
+    else lua_pushnil(L);
+    const double outer_deadline = d.deadline;
+    if (outer_deadline <= 0.0) d.deadline = lua_clock() + d.options.call_budget_seconds;
+    const Guid outer = std::exchange(d.current, l.owner);
+    world.set_drawing_while_paused(d.instances.at(l.owner).always);
+    const int status = lua_pcall(L, 2, 0, handler);
+    world.set_drawing_while_paused(false);
+    d.current = outer;
+    d.deadline = outer_deadline;
+    if (status != LUA_OK) {
+        d.report(std::format("{} (listening to '{}' on '{}'); that listener is stopped", lua_tostring(L, -1) ? lua_tostring(L, -1) : "error",
+                             name, api::name(world, l.owner).value_or("?")));
+        if (const auto again = d.listens.find(handle); again != d.listens.end()) {
+            world.unlisten(again->second.world_id);
+            lua_unref(L, again->second.fn);
+            d.listens.erase(again);
+        }
+    }
+    lua_settop(L, handler - 1);
+}
+
+bool LuaScriptSystem::invoke(runtime::World& world, const Guid& entity, std::string_view function, const asset::Json& args,
+                             asset::Json& result) {
+    auto& d = *impl_;
+    d.world = &world;
+    const auto it = d.instances.find(entity);
+    if (it == d.instances.end()) return false;
+    lua_State* L = d.L;
+    const int base = lua_gettop(L);
+    lua_pushcfunction(L, Impl::traceback_handler, "traceback");
+    const int handler = lua_gettop(L);
+    lua_getref(L, it->second.ref);
+    lua_getfield(L, -1, std::string(function).c_str());
+    if (!lua_isfunction(L, -1)) {
+        lua_settop(L, base);
+        return false;
+    }
+    lua_insert(L, -2);  // function, self
+    int n = 1;
+    if (args.is_array()) {
+        for (const auto& a : args) {
+            Impl::push_json(L, a);
+            ++n;
+        }
+    }
+    const double outer_deadline = d.deadline;
+    if (outer_deadline <= 0.0) d.deadline = lua_clock() + d.options.call_budget_seconds;
+    const Guid outer = std::exchange(d.current, entity);
+    const int status = lua_pcall(L, n, 1, handler);
+    d.current = outer;
+    d.deadline = outer_deadline;
+    if (status != LUA_OK) {
+        d.report(std::format("{} (called as '{}' on '{}')", lua_tostring(L, -1) ? lua_tostring(L, -1) : "error", function,
+                             api::name(world, entity).value_or("?")));
+        result = nullptr;
+    } else {
+        result = Impl::to_json(L, -1);
+    }
+    lua_settop(L, base);
+    return true;
+}
 LuaScriptSystem::~LuaScriptSystem() = default;
 
 bool LuaScriptSystem::handles(const std::filesystem::path& file) {

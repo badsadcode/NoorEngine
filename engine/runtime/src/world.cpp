@@ -1,6 +1,9 @@
 #include "noor/runtime/world.h"
 
+#include "noor/foundation/log.h"
+
 #include <algorithm>
+#include <format>
 
 namespace noor::runtime {
 
@@ -40,6 +43,66 @@ scene::Entity& World::spawn(scene::Entity entity) {
 
 void World::destroy(const Guid& id) { destroy_queue_.push_back(id); }
 
+std::uint64_t World::listen(std::optional<Guid> emitter, std::string name, const Guid& owner, System* system, std::uint64_t handle) {
+    const std::uint64_t id = next_listener_++;
+    ++listened_names_[name];
+    listeners_[id] = {emitter, std::move(name), owner, system, handle};
+    return id;
+}
+
+void World::unlisten(std::uint64_t id) {
+    const auto it = listeners_.find(id);
+    if (it == listeners_.end()) return;
+    if (--listened_names_[it->second.name] <= 0) listened_names_.erase(it->second.name);
+    listeners_.erase(it);
+}
+
+int World::emit(std::optional<Guid> emitter, std::string_view name, const asset::Json& data) {
+    if (!listened_names_.contains(std::string(name))) return 0;
+    if (emit_depth_ >= 32) {
+        message_errors_.push_back(std::format("the message '{}' was sent from its own listeners 32 deep (a loop?): stopped", name));
+        NOOR_LOG_ERROR("Script", "{}", message_errors_.back());
+        return 0;
+    }
+    // Who hears it, decided now: listeners added while it's delivered wait for the next one, ones removed don't hear it.
+    std::vector<std::uint64_t> ids;
+    for (const auto& [id, l] : listeners_)
+        if (l.name == name && l.emitter == emitter) ids.push_back(id);
+    ++emit_depth_;
+    int heard = 0;
+    for (const auto id : ids) {
+        const auto it = listeners_.find(id);
+        if (it == listeners_.end()) continue;
+        const Listener l = it->second;
+        l.system->deliver(*this, l.handle, emitter, name, data);
+        ++heard;
+    }
+    --emit_depth_;
+    return heard;
+}
+
+std::optional<asset::Json> World::invoke(const Guid& entity, std::string_view function, const asset::Json& args) {
+    asset::Json result;
+    for (auto& s : systems_)
+        if (s->invoke(*this, entity, function, args, result)) return result;
+    return std::nullopt;
+}
+
+// Engine events (collisions, triggers, animations ending, water) are messages too, from the entity they happened to,
+// so another entity's script can listen: a door listening to a pressure plate's "trigger_enter".
+void World::emit_events_as_messages() {
+    if (listeners_.empty()) return;
+    static constexpr const char* kNames[] = {"collision_enter", "collision_exit", "trigger_enter", "trigger_exit",
+                                             "animation_end", "animation_event", "water"};
+    for (const Event& e : std::vector<Event>(events_)) {
+        const char* name = kNames[static_cast<int>(e.kind)];
+        if (!has_listeners(name)) continue;
+        asset::Json data = {{"other", e.other.to_string()}};
+        if (!e.name.empty()) data["name"] = e.name;
+        emit(e.entity, name, data);
+    }
+}
+
 Guid World::next_spawn_id() {
     Guid count;
     std::uint64_t n = ++spawned_;
@@ -78,6 +141,11 @@ void World::flush_destroyed() {
         if (!doomed.contains(e.id)) continue;
         for (auto& s : systems_) s->entity_destroyed(*this, e);
     }
+    // Listeners of or on a destroyed entity go with it.
+    std::vector<std::uint64_t> gone;
+    for (const auto& [id, l] : listeners_)
+        if (doomed.contains(l.owner) || (l.emitter && doomed.contains(*l.emitter))) gone.push_back(id);
+    for (const auto id : gone) unlisten(id);
     std::erase_if(scene_.entities, [&](const scene::Entity& e) { return doomed.contains(e.id); });
     for (const Guid& id : doomed) started_.erase(id);
     reindex();
@@ -115,6 +183,7 @@ void World::frame(double dt, const InputState& input) {
     }
     if (steps == max_fixed_steps && accumulator_ >= fixed_dt) accumulator_ = 0.0;  // too slow: drop, don't spiral
 
+    emit_events_as_messages();
     for (auto& s : systems_) s->late_update(*this, dt);
     events_.clear();
     flush_destroyed();

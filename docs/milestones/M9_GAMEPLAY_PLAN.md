@@ -28,7 +28,7 @@ that use all of it; every existing golden and yardstick unchanged.
 |---|---|---|
 | 1 ✅ | **Spawning and the things around it**: `noor.spawn(prefab, position [, rotation, parent])` and C#'s `Spawn`, returning the new entity (its scripts, bodies, sprites, sounds start the next frame); `e:teleport(v)` for characters and bodies (velocity and contacts cleared); **groups**: `noor.find_all(tag)`, `e:has_tag`, `e:add_tag`, `e:remove_tag`; Lua **`require`** for shared script files | A spawned prefab is the same as one placed in the editor (its components, to the bit); 1,000 bullets spawned and destroyed a second, measured; a respawn at a checkpoint; built game identical |
 | 2 ✅ | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
-| 3 | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
+| 3 ✅ | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
 | 4 | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
 | 5 | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
 | 6 | **Game UI**: retained widgets (panel, label, button, image, slider, toggle, list, text box), layout (anchors, stacks, grids), themes, **focus and keyboard / gamepad navigation**; `.noorui` files built in a UI editor or from scripts; it lives in the display's picture (2D part 6) | A pause menu and an inventory made in the editor work with mouse, keyboard and gamepad; layout at three resolutions by readback; cost of 500 widgets measured |
@@ -91,6 +91,21 @@ fixed steps: simpler, and built games still replay them exactly. Found on the wa
 0.49999999999999994, which made 0.5 s timers fire a frame late (a hair of slack fixes it); a pause made in a script
 used to let physics take one more step; C# ran each script's timers just before its own OnUpdate, so it disagreed
 with Lua by one frame after a resume; the paused game's HUD vanished under the pause menu.
+
+## Part 3 result (2026-11-21)
+Done. A **message bus in the World** (`listen`, `unlisten`, `emit`, `invoke`): messages from an entity or game-wide,
+delivered at once to listeners in the order they started listening, data as JSON so Lua and C# hear each other;
+`invoke` calls a script function by name in whichever language runs it. Lua: `e:emit`, `e:on`, `noor.emit`, `noor.on`
+(listeners with `:cancel()`), `e:call`. C#: `Entity.Emit`, `On(...)`, `Noor.Emit`, `Entity.Call` (rt API v15; the host
+table gains `deliver` and `invoke`). Engine events are also messages from their entity (`trigger_enter`...). Listeners go
+with either entity; a throwing listener is stopped alone; a loop is cut at 32 deep.
+
+Proved: a lever's message reaching the listening door with data and sender, synchronously; game-wide messages in
+listening order, a cancelled listener deaf, `e:call` with arguments and a result, a missing function an error; nothing
+left after 10,000 listening entities came and went, listeners to a destroyed emitter gone; a throwing listener and a
+message loop (unit); a pressure plate's `trigger_enter` heard by a door (unit, physics); a Lua lever and a door in Lua
+(project, built game) and in C# (built game) showing the same HUD: messages Lua to C#, calls C# to Lua and Lua to C#
+(`player.messages_lua_csharp`).
 
 ## Highest risks (settle early)
 
