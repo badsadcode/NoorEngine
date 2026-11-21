@@ -1,0 +1,6 @@
+{"panel": {"width": 360, "padding": 32, "spacing": 16, "background": "#191623F2", "children": [
+  {"label": "Paused", "size": 64},
+  {"button": "Resume", "id": "resume", "size": 32},
+  {"button": "Settings", "id": "settings", "size": 32},
+  {"button": "Quit", "id": "quit", "size": 32}
+]}}

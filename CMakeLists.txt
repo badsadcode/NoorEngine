@@ -38,6 +38,11 @@ if(WIN32)
     add_subdirectory(engine/editor_api)  # native child-window viewports are Windows-only for now
 endif()
 add_subdirectory(tools/noor_diag)
+# The UI spike (gameplay foundations, part 6; ADR-041): off unless asked for (it fetches RmlUi and FreeType).
+option(NOOR_UI_SPIKE "Build the game UI spike (fetches RmlUi and FreeType)" OFF)
+if(NOOR_UI_SPIKE)
+    add_subdirectory(tools/ui_spike)
+endif()
 
 if(NOOR_BUILD_TESTS)
     enable_testing()

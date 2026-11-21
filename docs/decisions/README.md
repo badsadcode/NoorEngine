@@ -36,6 +36,8 @@ Template: [ADR-000](ADR-000-template.md). IDs follow the decision register in th
 | [035](ADR-035-particles-and-sprites.md) | Particles and sprites: effect particles simulated on the CPU from a seed, weather particles worked out in the vertex shader, sprites as an asset and a billboard component | Accepted (Milestone 8B, done) |
 | [036](ADR-036-skeletal-animation.md) | Skeletal animation: bones are entities (sockets for free), clips sampled and blended on the CPU from game time, linear blend skinning on the GPU (skin data and palettes read by buffer address), an `animator` component and `.nooranim` controllers, root motion, retargeting through a humanoid bone map with Rigify/Mixamo/Unreal/metarig presets | Accepted (Milestone 8C, done) |
 | [037](ADR-037-water.md) | Water: a `water` component (box, endless sea, river) with `.noorwater` presets, the scene's colour and depth copied once a frame (absorption, refraction, shorelines), sky plus screen-space reflections, Gerstner waves as one formula on GPU and CPU, underwater in the environment, buoyancy at the fixed step | Accepted (Milestone 8D, planned) |
+| [040](ADR-040-2d-and-isometric.md) | 2D, 2.5D and isometric games as the XY plane of the 3D engine: Jolt locked to the plane, sprites and tilemaps ordered by layer or depth, a 2D view in the editor | Accepted (2D foundations, done) |
+| [041](ADR-041-game-ui.md) | Game UI: RmlUi behind our own API (`noor.ui`, `Ui`, `.noorui`), chosen from a spike of the same pause menu both ways | Proposed (gameplay foundations, part 6; waiting for Tom) |
 
 Still open from the register: 007 plugin ABI, 013 world coordinates,
 015 geo pipeline, 017 networking, 018 build/distribution, 020 branding.
