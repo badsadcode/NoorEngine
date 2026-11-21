@@ -59,6 +59,8 @@ line); the game keeps running.
 | `Noor.Log(msg)`, `Noor.Warn(msg)`, `Noor.Error(msg)` | Console |
 | `Noor.Time` | Seconds since play started |
 | `Noor.Find(name)` | `Entity?` |
+| `Noor.FindAll(tag)` | `Entity[]`: every entity with the tag, in scene order (a group; rt API v13) |
+| `Noor.Spawn(prefab, position, euler = null, parent = null)` | `Entity?`: a new copy of a prefab (asset id or `Assets/...noorprefab` path), its root; it starts next frame (rt API v13) |
 | `Noor.Raycast(origin, direction, maxDistance = 1000, ignore = null)` | `RaycastHit?` (`Entity`, `Point`, `Normal`, `Distance`) |
 | `Noor.ShapeCast(shapeJson, from, to, ignore = null)`, `Noor.Overlap(shapeJson, at, ignore = null)` | A swept shape's first hit; the entities a shape overlaps (rt API v11). Shapes as collider JSON, e.g. `{"shape":"circle","radius":0.3}` |
 | `Water.Height(x, z)` | `float?`: the water surface's height (world y) at world (x, z) now, waves included; null where there's no water (8D) |
@@ -81,6 +83,8 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | | |
 |---|---|
 | `Name`, `IdText`, `Exists`, `Parent`, `Child(name)`, `Bone(name)`, `Destroy()` | Identity; `Bone` finds a model's bone anywhere below |
+| `Teleport(position, euler = null)` | At once, through physics for characters and bodies (velocity and jumps reset): a respawn (rt API v13) |
+| `HasTag(tag)`, `AddTag(tag)`, `RemoveTag(tag)` | Groups (rt API v13) |
 | `Position`, `Euler`, `Scale` (get/set) | Local transform |
 | `Translate(v)`, `TranslateLocal(v)`, `Rotate(axis, degrees)` | Moving |
 | `WorldPosition`, `Forward`, `Right`, `Up` | World space |

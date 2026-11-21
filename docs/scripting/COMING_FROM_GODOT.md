@@ -63,7 +63,10 @@ after the 2D foundations ([why that order](../milestones/M9_PLAN.md#the-order-fr
 | **Timer** node, `await get_tree().create_timer(1).timeout` | Compare `noor.time()` yourself | **Timers and waiting: not yet** (planned) |
 | **Tween** | | **Not yet** (planned) |
 | **AnimationPlayer**: animate any property (position, colour, a door opening), call functions on a timeline | Sprite animations and skeletal clips only | **Animating any property: not yet** (planned) |
-| `preload("res://Bullet.tscn").instantiate()` | | **Spawning prefabs at runtime: not yet** (planned) |
+| `preload("res://Bullet.tscn").instantiate()`, `add_child` | `noor.spawn("Assets/Bullet.noorprefab", position [, euler, parent])` / `Noor.Spawn(...)` | ✅ (gameplay foundations, part 1) |
+| Groups: `add_to_group`, `is_in_group`, `get_tree().get_nodes_in_group()` | Tags: `e:add_tag`, `e:has_tag`, `noor.find_all(tag)` | ✅ (part 1) |
+| Setting a CharacterBody's `global_position` (a respawn) | `e:teleport(position)` (physics owns where a character is) | ✅ (part 1) |
+| `preload("res://util.gd")`, `class_name` shared scripts | `local util = require("util")` (Lua); C# classes as usual | ✅ (part 1) |
 | `get_tree().change_scene_to_file()` | | **Changing level: not yet** (planned) |
 | Control, Label, Button, containers, themes | `noor.ui.text`, `noor.ui.rect` (a HUD drawn each frame) | **Real UI (menus, buttons, inventories): not yet** (planned) |
 | FileAccess, ConfigFile, saving a game | | **Saving and loading: not yet** (planned) |

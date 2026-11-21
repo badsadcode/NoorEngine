@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 12u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles */
+#define NOOR_RT_API_VERSION 13u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -57,6 +57,8 @@ enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_
        NOOR_RT_ANIMATION_EVENT = 5 };
 /* sprite(): ops (an animator's clips too, since 8C part 2: the name stayed for the ABI) */
 enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2, NOOR_RT_SPRITE_CROSS_FADE = 3 /* v5: speed = seconds */ };
+/* tag(): ops (v13) */
+enum { NOOR_RT_TAG_HAS = 0, NOOR_RT_TAG_ADD = 1, NOOR_RT_TAG_REMOVE = 2 };
 /* animation_parameter(): kinds */
 enum { NOOR_RT_PARAM_NUMBER = 0, NOOR_RT_PARAM_BOOL = 1 };
 
@@ -141,6 +143,17 @@ typedef struct noor_rt_api {
      * no tilemap; and setting one (-1 empties it): 1 if it was inside the map. */
     int32_t (*tile)(noor_rt_entity e, int32_t x, int32_t y);
     int32_t (*set_tile)(noor_rt_entity e, int32_t x, int32_t y, int32_t tile);
+
+    /* v13 (gameplay foundations, part 1): a new instance of a prefab (its asset id or path) at `position`, turned by
+     * `euler` (degrees), under `parent` if given: 1 and the instance's root in `out`, or 0 if the prefab isn't found.
+     * Its entities start next frame. */
+    int32_t (*spawn)(const char* prefab, noor_rt_vec3 position, noor_rt_vec3 euler, const noor_rt_entity* parent, noor_rt_entity* out);
+    /* Moves e at once (a body or character through physics, velocity and jumps reset); `euler` NULL keeps its rotation. */
+    int32_t (*teleport)(noor_rt_entity e, noor_rt_vec3 position, const noor_rt_vec3* euler);
+    /* Groups: TAG_HAS (1 if e has it), TAG_ADD, TAG_REMOVE. */
+    int32_t (*tag)(noor_rt_entity e, int32_t op, const char* tag);
+    /* The entities with a tag, in scene order: up to `max` written to `out`; returns how many there are. */
+    int32_t (*find_all)(const char* tag, noor_rt_entity* out, int32_t max);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

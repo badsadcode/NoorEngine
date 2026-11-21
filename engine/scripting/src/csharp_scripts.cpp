@@ -299,6 +299,33 @@ int32_t rt_set_tile(noor_rt_entity e, int32_t x, int32_t y, int32_t tile) {
     return t_world && runtime::api::set_tile(*t_world, from_rt(e), x, y, tile) ? 1 : 0;
 }
 
+int32_t rt_spawn(const char* prefab, noor_rt_vec3 position, noor_rt_vec3 euler, const noor_rt_entity* parent, noor_rt_entity* out) {
+    if (!t_world || !prefab) return 0;
+    const auto e = api::spawn(*t_world, prefab, vec(position), api::quat_from_euler(vec(euler)),
+                              parent ? std::optional(from_rt(*parent)) : std::nullopt);
+    if (e && out) *out = to_rt(*e);
+    return e ? 1 : 0;
+}
+int32_t rt_teleport(noor_rt_entity e, noor_rt_vec3 position, const noor_rt_vec3* euler) {
+    if (!t_world) return 0;
+    return api::teleport(*t_world, from_rt(e), vec(position), euler ? std::optional(api::quat_from_euler(vec(*euler))) : std::nullopt) ? 1 : 0;
+}
+int32_t rt_tag(noor_rt_entity e, int32_t op, const char* tag) {
+    if (!t_world || !tag) return 0;
+    switch (op) {
+    case NOOR_RT_TAG_HAS: return api::has_tag(*t_world, from_rt(e), tag) ? 1 : 0;
+    case NOOR_RT_TAG_ADD: api::add_tag(*t_world, from_rt(e), tag); return 1;
+    case NOOR_RT_TAG_REMOVE: api::remove_tag(*t_world, from_rt(e), tag); return 1;
+    default: return 0;
+    }
+}
+int32_t rt_find_all(const char* tag, noor_rt_entity* out, int32_t max) {
+    if (!t_world || !tag) return 0;
+    const auto all = api::find_all(*t_world, tag);
+    for (std::size_t i = 0; out && i < all.size() && static_cast<int32_t>(i) < max; ++i) out[i] = to_rt(all[i]);
+    return static_cast<int32_t>(all.size());
+}
+
 int32_t rt_water_flow(float x, float z, noor_rt_vec3* flow) {
     if (!t_world) return 0;
     const auto s = t_world->water_at(x, z);
@@ -325,6 +352,7 @@ const noor_rt_api kApi = {
     rt_water_flow,
     rt_shape_cast, rt_overlap, rt_character_contacts,
     rt_tile, rt_set_tile,
+    rt_spawn, rt_teleport, rt_tag, rt_find_all,
 };
 
 } // namespace

@@ -26,7 +26,7 @@ that use all of it; every existing golden and yardstick unchanged.
 
 | Part | What | Proves |
 |---|---|---|
-| 1 | **Spawning and the things around it**: `noor.spawn(prefab, position [, rotation, parent])` and C#'s `Spawn`, returning the new entity (its scripts, bodies, sprites, sounds start the next frame); `e:teleport(v)` for characters and bodies (velocity and contacts cleared); **groups**: `noor.find_all(tag)`, `e:has_tag`, `e:add_tag`, `e:remove_tag`; Lua **`require`** for shared script files | A spawned prefab is the same as one placed in the editor (its components, to the bit); 1,000 bullets spawned and destroyed a second, measured; a respawn at a checkpoint; built game identical |
+| 1 ✅ | **Spawning and the things around it**: `noor.spawn(prefab, position [, rotation, parent])` and C#'s `Spawn`, returning the new entity (its scripts, bodies, sprites, sounds start the next frame); `e:teleport(v)` for characters and bodies (velocity and contacts cleared); **groups**: `noor.find_all(tag)`, `e:has_tag`, `e:add_tag`, `e:remove_tag`; Lua **`require`** for shared script files | A spawned prefab is the same as one placed in the editor (its components, to the bit); 1,000 bullets spawned and destroyed a second, measured; a respawn at a checkpoint; built game identical |
 | 2 | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
 | 3 | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
 | 4 | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
@@ -42,6 +42,30 @@ Why this order: spawning, time and messages (1–3) are what every later part is
 make things move without code per frame; UI (6) needs time (pause) and messages (buttons); saving (7) needs to know
 what's in the world; levels (8) need saving to carry state across; navigation (9) is the biggest and the most
 independent, so it goes last before the samples tie everything together.
+
+## Part 1 result (2026-11-21)
+Done. **Spawning:** `noor.spawn(prefab, position [, euler, parent])` / `Noor.Spawn`, by asset id or path; the prefab
+is expanded as an editor instance would be (nested prefabs and all), then **flattened**: its root takes the placement's
+place, so the returned entity is the bullet itself and destroying it leaves nothing behind. Ids are deterministic (the
+scene's id and a spawn count), so built games stay identical. **Teleport:** `e:teleport` / `Teleport`, through physics
+for characters (velocity, run, jump, buffered jump, coyote time and contacts reset; a 2D character stays in its plane)
+and bodies (velocities zeroed), anything else by its transform; the drawing's smoothing starts again from there.
+**Groups:** `noor.find_all`, `e:has_tag` / `add_tag` / `remove_tag` (and C#). **`require`:** shared Lua files by name
+or path, loaded once and shared, kept inside the project, cycles reported. rt API v13.
+
+Proved: a spawned prefab is its root, placed and turned with its children, by id or path, the same ids in two worlds;
+under a parent; started the next frame (unit); 1,000 bullets a second (about 1,000 alive, dynamic bodies) spawned,
+simulated and destroyed at **about 2 ms a frame**, nothing left over (unit); a character teleported mid-jump stops,
+keeps neither its run nor its jump, falls from rest and lands; a body stopped and turned (unit); tags (unit); `require`
+shares one table, finds `Scripts/` by name, refuses paths outside and cycles, missing files are errors (unit); the same
+spawning, tags, teleport and trail lookup from Lua in a project, Lua in a built game and C# in a built game, the first
+bullet in the same place to the centimetre (`player.spawn_lua_csharp`).
+
+Found on the way: an editor instance is a placement entity *above* the prefab's root (where overrides live); spawning it
+that way would have left an empty entity behind every destroyed bullet and teleported the placement instead of the
+body. Hence the flattening.
+
+Not here: the samples' respawns and the like come with part 10, as planned.
 
 ## Highest risks (settle early)
 

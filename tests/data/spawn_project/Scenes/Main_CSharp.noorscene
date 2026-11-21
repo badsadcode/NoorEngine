@@ -1,0 +1,144 @@
+{
+  "noor_scene": 2,
+  "id": "4ceac0e6-3180-5ad8-a63b-1dcf70c6199f",
+  "name": "Main_CSharp",
+  "entities": [
+    {
+      "id": "003048d3-5300-51e7-af15-41c4caa46729",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          3,
+          12
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "534d931c-3781-507d-a4d3-91431c6d6b35",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 90000,
+          "shadows": false
+        }
+      }
+    },
+    {
+      "id": "77e39de2-afb3-514c-b696-7d1c13fee15e",
+      "name": "Floor",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            20,
+            1,
+            6
+          ],
+          "color": "#4A4370"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            20,
+            1,
+            6
+          ]
+        }
+      }
+    },
+    {
+      "id": "109b4da1-de5d-5b31-bc6d-3a41750918a7",
+      "name": "Spawner",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/CsSpawner.cs"
+        }
+      }
+    }
+  ]
+}

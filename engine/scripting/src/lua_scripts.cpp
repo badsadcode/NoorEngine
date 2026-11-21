@@ -12,6 +12,8 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
+#include <filesystem>
 #include <format>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +35,7 @@ struct LuaScriptSystem::Impl {
 
     std::unordered_map<std::string, std::string> sources;  // virtual files
     std::unordered_map<std::string, int> modules;          // file -> module table ref (-1: failed)
+    std::unordered_set<std::string> loading;               // files being loaded now (a require cycle)
     struct Instance {
         int ref = 0;
         std::string file;
@@ -59,6 +62,10 @@ struct LuaScriptSystem::Impl {
     void report(std::string message) {
         NOOR_LOG_ERROR("Script", "{}", message);
         errors.push_back(std::move(message));
+    }
+    std::unordered_set<std::string> warned;
+    void warn_once(std::string message) {
+        if (warned.insert(message).second) NOOR_LOG_WARN("Script", "{}", message);
     }
 
     // ---- Lua <-> JSON ----
@@ -190,7 +197,36 @@ struct LuaScriptSystem::Impl {
         return 1;
     }
 
+    // require("util") / require("Scripts/util.luau") (gameplay foundations, part 1): another script file's table, loaded
+    // once and shared (the same table for every script that requires it). Project-relative, inside the project.
+    static int lua_require(lua_State* L) {
+        Impl* self = of(L);
+        std::string name = luaL_checkstring(L, 1);
+        std::replace(name.begin(), name.end(), '\\', '/');
+        if (name.empty() || name.front() == '/' || name.find(':') != std::string::npos || name.find("..") != std::string::npos)
+            luaL_errorL(L, "require: '%s' must be a path inside the project, like \"Scripts/util.luau\" or \"util\"", name.c_str());
+        if (!name.ends_with(".luau") && !name.ends_with(".lua")) name += ".luau";
+        std::error_code ec;
+        const auto known = [&](const std::string& f) { return self->sources.contains(f) || std::filesystem::exists(self->options.project_root / f, ec); };
+        std::string file = name;
+        if (!known(file) && known("Scripts/" + name)) file = "Scripts/" + name;
+        if (self->loading.contains(file)) luaL_errorL(L, "require: '%s' requires itself (a cycle)", file.c_str());
+        self->loading.insert(file);
+        const int ref = self->module(file);
+        self->loading.erase(file);
+        if (ref < 0) {
+            // Say why (the first line of what went wrong loading it: a syntax error, a cycle further down...).
+            std::string why = self->errors.empty() ? std::string("see the Console") : self->errors.back();
+            why = why.substr(0, why.find('\n'));
+            luaL_errorL(L, "require: '%s' couldn't be loaded: %s", file.c_str(), why.c_str());
+        }
+        lua_getref(L, ref);
+        return 1;
+    }
+
     void register_api() {
+        lua_pushcfunction(L, lua_require, "require");
+        lua_setglobal(L, "require");
         // Entity methods.
         static const luaL_Reg entity_methods[] = {
             {"id", [](lua_State* L) {
@@ -264,6 +300,26 @@ struct LuaScriptSystem::Impl {
              }},
             {"destroy", [](lua_State* L) {
                  api::destroy(world_of(L), check_entity(L, 1));
+                 return 0;
+             }},
+            // e:teleport(position [, euler]): at once, velocity and jumps reset (gameplay foundations, part 1)
+            {"teleport", [](lua_State* L) {
+                 std::optional<math::Quat> rot;
+                 if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) rot = api::quat_from_euler(check_vec(L, 3));
+                 lua_pushboolean(L, api::teleport(world_of(L), check_entity(L, 1), check_vec(L, 2), rot));
+                 return 1;
+             }},
+            // Groups (tags)
+            {"has_tag", [](lua_State* L) {
+                 lua_pushboolean(L, api::has_tag(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2)));
+                 return 1;
+             }},
+            {"add_tag", [](lua_State* L) {
+                 api::add_tag(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2));
+                 return 0;
+             }},
+            {"remove_tag", [](lua_State* L) {
+                 api::remove_tag(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2));
                  return 0;
              }},
             // ---- Physics (needs a collider + rigidbody) ----
@@ -459,6 +515,32 @@ struct LuaScriptSystem::Impl {
             {"find", [](lua_State* L) {
                  if (auto e = api::find(world_of(L), luaL_checkstring(L, 1))) push_entity(L, *e);
                  else lua_pushnil(L);
+                 return 1;
+             }},
+            // noor.find_all(tag) -> the entities with that tag, in scene order (a group)
+            {"find_all", [](lua_State* L) {
+                 const auto all = api::find_all(world_of(L), luaL_checkstring(L, 1));
+                 lua_createtable(L, static_cast<int>(all.size()), 0);
+                 for (std::size_t i = 0; i < all.size(); ++i) {
+                     push_entity(L, all[i]);
+                     lua_rawseti(L, -2, static_cast<int>(i + 1));
+                 }
+                 return 1;
+             }},
+            // noor.spawn(prefab, position [, euler [, parent]]) -> the new instance (it starts next frame), or nil
+            {"spawn", [](lua_State* L) {
+                 const char* prefab = luaL_checkstring(L, 1);
+                 const math::Vec3 at = check_vec(L, 2);
+                 math::Quat rot{};
+                 if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) rot = api::quat_from_euler(check_vec(L, 3));
+                 std::optional<Guid> parent;
+                 if (lua_gettop(L) >= 4 && !lua_isnil(L, 4)) parent = check_entity(L, 4);
+                 if (auto e = api::spawn(world_of(L), prefab, at, rot, parent)) {
+                     push_entity(L, *e);
+                 } else {
+                     of(L)->warn_once(std::format("noor.spawn: no prefab '{}' (an asset id, or a path like Assets/Bullet.noorprefab)", prefab));
+                     lua_pushnil(L);
+                 }
                  return 1;
              }},
             // noor.play_sound(clip [, position [, volume [, bus]]]) -> true if it started
@@ -668,9 +750,11 @@ struct LuaScriptSystem::Impl {
             lua_pop(L, 1);
             return -1;
         }
-        deadline = lua_clock() + options.call_budget_seconds;
+        // A file required while another loads (or from a hook) runs within the time the caller already has.
+        const double outer = deadline;
+        if (outer <= 0.0) deadline = lua_clock() + options.call_budget_seconds;
         const int status = lua_pcall(T, 0, 1, 0);
-        deadline = 0.0;
+        deadline = outer;
         if (status != LUA_OK) {
             report(std::format("{}\n{}", lua_tostring(T, -1), lua_debugtrace(T)));
             lua_pop(L, 1);

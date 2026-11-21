@@ -1,0 +1,85 @@
+{
+  "noor_prefab": 1,
+  "id": "5ea96b6c-48cb-509c-8441-d721722a96d5",
+  "name": "Bullet",
+  "entities": [
+    {
+      "id": "56cc49e0-a799-53bf-a38e-dea426861d79",
+      "name": "Bullet",
+      "layer": "default",
+      "tags": [
+        "bullet"
+      ],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.2,
+          "color": "#FFC857"
+        },
+        "collider": {
+          "shape": "sphere",
+          "radius": 0.2
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "mass": 0.2
+        }
+      }
+    },
+    {
+      "id": "eae6a4b3-93fa-5266-b203-2c52e6f1e362",
+      "name": "Trail",
+      "layer": "default",
+      "tags": [],
+      "parent": "56cc49e0-a799-53bf-a38e-dea426861d79",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0.3
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.1,
+            0.1,
+            0.4
+          ],
+          "color": "#FF6B6B"
+        }
+      }
+    }
+  ]
+}

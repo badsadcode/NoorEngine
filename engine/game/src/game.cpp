@@ -47,6 +47,12 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
     auto input_map = runtime::InputMap::load(project.root() / "Settings" / "input.json");
     if (!input_map) return std::unexpected(input_map.error());
     auto world = std::make_unique<runtime::World>(scene::expand_prefabs(scene, prefabs.resolver()).scene, std::move(*input_map));
+    // Spawning prefabs while playing (gameplay foundations, part 1): by id, or by path through the registry. The library
+    // and registry outlive the world (the caller owns them).
+    world->set_prefabs(prefabs.resolver(), [&registry](std::string_view path) -> std::optional<Guid> {
+        const auto* rec = registry.find_path(path);
+        return rec ? std::optional(rec->guid) : std::nullopt;
+    });
 
     world->add_system(std::make_unique<scripting::LuaScriptSystem>(scripting::LuaScriptSystem::Options{project.root()}));
     world->add_system(std::make_unique<scripting::CSharpScriptSystem>(static_cast<const noor_rt_host*>(options.script_host)));

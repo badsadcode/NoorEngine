@@ -18,6 +18,23 @@ and attaches it. Under the hood the entity gets:
 
 Edit `params` in the Inspector (**+ Param**); the script reads them as `self.params.speed`.
 
+## Shared code: `require`
+
+Put functions several scripts use in their own file that returns a table, and `require` it:
+
+```lua
+-- Scripts/util.luau
+local util = {}
+function util.clamp(x, a, b) return math.max(a, math.min(b, x)) end
+return util
+
+-- any script
+local util = require("util")            -- Scripts/util.luau (or require("Scripts/util.luau"), or a path in the project)
+```
+
+A file is loaded once and every script gets the same table (so it can hold shared state too). Paths stay inside the
+project; a file that requires itself through others is an error that says so (gameplay foundations, part 1).
+
 ## A script
 
 ```lua
@@ -60,6 +77,8 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.log(...)`, `noor.warn(...)` | Writes to the Console with the script's file and line |
 | `noor.time()` | Seconds since play started |
 | `noor.find(name)` | The first entity with that name, or `nil` |
+| `noor.find_all(tag)` | Every entity with that tag, in scene order (a **group**: `"enemy"`, `"pickup"`...). Tags are set in the Inspector or by `e:add_tag` |
+| `noor.spawn(prefab, position [, euler [, parent]])` | A new copy of a prefab (its asset id, or its path like `"Assets/Bullet.noorprefab"`) at `position`, turned by `euler` (degrees), under `parent` if given (then position and turn are local to it). Returns the prefab's root entity (destroying it takes the rest with it), or `nil` if there's no such prefab. It starts next frame: its scripts' `on_start`, bodies, sprites and sounds |
 | `noor.input.down(action)` | Action held this frame |
 | `noor.input.pressed(action)` | Action went down this frame |
 | `noor.input.released(action)` | Action went up this frame |
@@ -108,6 +127,8 @@ degrees; Euler angles are the Inspector's (pitch X, yaw Y, roll Z). Vectors are 
 | `e:get(component)` | The component's data as a table (a copy), or `nil` |
 | `e:set(component, table)` | Replaces the component's data (`nil` removes it) |
 | `e:destroy()` | Removes the entity and its children at the end of the frame |
+| `e:teleport(position [, euler])` | Puts it there **at once** (world position): a character or physics body through physics, with its velocity, jump and walking speed reset (a respawn, a portal); anything else just moves. `euler` turns it too. `true` if it exists. (`set_position` on a character or body is undone by physics: use this) |
+| `e:has_tag(tag)`, `e:add_tag(tag)`, `e:remove_tag(tag)` | Groups (Godot's `is_in_group`, `add_to_group`) |
 | `e:velocity()`, `e:set_velocity(v)` | Linear velocity of its physics body (m/s). On a character: with `"motion": "script"` it's the character's own velocity (see below); otherwise `set_velocity` replaces its velocity for the next step (a double jump, a dash, a knockback) |
 | `e:is_on_floor()`, `e:is_on_wall()`, `e:is_on_ceiling()`, `e:floor_normal()` | Character: what it touched in its last step (Godot's names) |
 | `e:tile(x, y)`, `e:set_tile(x, y, tile)` | A `tilemap`'s cell ((0, 0) its bottom-left): the tile there (-1 empty; nil without a tilemap); set one (-1 or nil empties it; true if inside the map). Drawing and collision follow ([Tilemaps](../fx/TILEMAPS.md)) |
@@ -256,6 +277,5 @@ and Latin Extended-A (Polish, Czech, German, French…) plus € ° – — … 
 show as `?`. Everything is drawn over the scene in the order you draw it (later on top).
 
 ## Not yet
-Pause and fades, spawning prefabs, timers and coroutine-based waits, and `require`-ing other script files. Milestone 4
-left them as exceptions; they're planned in the gameplay foundations group (see the
-[Milestone 9 plan](../milestones/M9_PLAN.md#the-order-from-here-sage-2026-11-20)).
+Pause and fades, timers and coroutine-based waits, messages between scripts: the gameplay foundations
+([plan](../milestones/M9_GAMEPLAY_PLAN.md)), parts 2 and 3.

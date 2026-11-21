@@ -1058,6 +1058,44 @@ void PhysicsSystem::set_velocity(const Guid& entity, math::Vec3 v) {
     impl_->system.GetBodyInterface().SetLinearVelocity(it->second.id, to_j(v));
 }
 
+void PhysicsSystem::attached(runtime::World& world) {
+    world.set_teleporter([this](runtime::World& w, const Guid& e, math::Vec3 p, std::optional<math::Quat> r) { return teleport(w, e, p, r); });
+}
+
+bool PhysicsSystem::teleport(runtime::World& world, const Guid& entity, math::Vec3 position, std::optional<math::Quat> rotation) {
+    auto& d = *impl_;
+    const math::Quat rot = rotation ? *rotation : runtime::api::world_rotation(world, entity).value_or(math::Quat{});
+    bool character = false;
+    if (const auto c = d.characters.find(entity); c != d.characters.end()) {
+        Impl::Character& ch = c->second;
+        if (ch.plane) position.z = ch.plane_z;  // a 2D character stays in its plane
+        ch.controller->SetPosition(to_j(position));
+        if (rotation) ch.controller->SetRotation(to_j(*rotation));
+        ch.controller->SetLinearVelocity(JPH::Vec3::sZero());
+        ch.wanted = ch.horizontal = ch.velocity = ch.script_velocity = {0, 0, 0};
+        ch.override_velocity.reset();
+        ch.jump = ch.buffered_jump = ch.buffer_left = 0.0f;
+        ch.jumped = ch.release = ch.cut = false;
+        ch.since_ground = 1e9f;  // no coyote jump from where it was
+        ch.contacts = {};
+        character = true;
+    } else if (const auto b = d.bodies.find(entity); b != d.bodies.end()) {
+        auto& bi = d.system.GetBodyInterface();
+        const bool moving = b->second.type != Impl::Type::Static;
+        bi.SetPositionAndRotation(b->second.id, to_j(position), to_j(rot), moving ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
+        if (moving) {
+            bi.SetLinearVelocity(b->second.id, JPH::Vec3::sZero());
+            bi.SetAngularVelocity(b->second.id, JPH::Vec3::sZero());
+        }
+    } else {
+        return false;
+    }
+    runtime::api::set_world_pose(world, entity, position, rot);
+    // Drawn there at once, not slid from where it was.
+    if (const auto p = d.poses.find(entity); p != d.poses.end()) p->second = {position, position, rot, rot, character};
+    return true;
+}
+
 std::optional<CharacterContacts> PhysicsSystem::character_contacts(const Guid& entity) const {
     const auto it = impl_->characters.find(entity);
     if (it == impl_->characters.end()) return std::nullopt;

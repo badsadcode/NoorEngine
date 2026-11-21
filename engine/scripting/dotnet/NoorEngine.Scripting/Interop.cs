@@ -89,6 +89,11 @@ public unsafe struct RtApi
     // v12: tilemaps (2D part 4)
     public delegate* unmanaged<RtEntity, int, int, int> Tile;
     public delegate* unmanaged<RtEntity, int, int, int, int> SetTile;
+    // v13: spawning, teleport, groups (gameplay foundations, part 1)
+    public delegate* unmanaged<byte*, RtVec3, RtVec3, RtEntity*, RtEntity*, int> Spawn;
+    public delegate* unmanaged<RtEntity, RtVec3, RtVec3*, int> Teleport;
+    public delegate* unmanaged<RtEntity, int, byte*, int> Tag;
+    public delegate* unmanaged<byte*, RtEntity*, int, int> FindAll;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -104,7 +109,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 12;
+    public const uint ExpectedVersion = 13;
     public static RtApi* Api;
 
     public static ref RtApi A

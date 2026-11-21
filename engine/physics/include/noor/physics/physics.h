@@ -134,6 +134,7 @@ public:
     PhysicsSystem& operator=(const PhysicsSystem&) = delete;
 
     [[nodiscard]] std::string_view name() const override { return "physics"; }
+    void attached(runtime::World& world) override;  // offers teleport to the script API
     void entity_started(runtime::World& world, scene::Entity& entity) override;
     void update(runtime::World& world, double dt) override;  // built-in platformer controls
     void fixed_update(runtime::World& world, double dt) override;
@@ -153,6 +154,11 @@ public:
     [[nodiscard]] std::optional<math::Vec3> velocity(const Guid& entity) const;
     void set_velocity(const Guid& entity, math::Vec3 v);
     void add_impulse(const Guid& entity, math::Vec3 impulse);  // kg·m/s, now
+    // Gameplay foundations, part 1: puts the entity's body or character at `position` (world; turned to `rotation` if
+    // given) at once, without sweeping through what's between, and stops it: velocity, a pending or buffered jump,
+    // walking speed, last step's contacts and the drawing's smoothing all start again from there (a respawn, a
+    // portal). The entity's transform follows. False if it has neither a body nor a character.
+    bool teleport(runtime::World& world, const Guid& entity, math::Vec3 position, std::optional<math::Quat> rotation = std::nullopt);
     void add_force(const Guid& entity, math::Vec3 force);      // newtons, during the next step
 
     // ---- Characters ----

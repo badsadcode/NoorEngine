@@ -40,6 +40,13 @@ scene::Entity& World::spawn(scene::Entity entity) {
 
 void World::destroy(const Guid& id) { destroy_queue_.push_back(id); }
 
+Guid World::next_spawn_id() {
+    Guid count;
+    std::uint64_t n = ++spawned_;
+    for (int i = 0; i < 8; ++i) count.bytes[static_cast<std::size_t>(15 - i)] = static_cast<std::uint8_t>(n >> (8 * i));
+    return Guid::derive(scene_.id, count);
+}
+
 void World::start_new_entities() {
     // Entities may be spawned while starting others: iterate by index, re-reading the size.
     for (std::size_t i = 0; i < scene_.entities.size(); ++i) {

@@ -139,6 +139,17 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public int? Tile(int x, int y) => Engine.A.Tile(Id, x, y) is var t && t >= -1 ? t : null;
     /// <summary>Tilemap: sets cell (x, y) (-1 empties it); false outside the map. Drawing and collision follow.</summary>
     public bool SetTile(int x, int y, int tile) => Engine.A.SetTile(Id, x, y, tile) != 0;
+    /// <summary>Moves it at once (gameplay foundations, part 1): a body or character through physics, its velocity and
+    /// jumps reset; `euler` null keeps its rotation. A respawn, a portal.</summary>
+    public unsafe bool Teleport(Vector3 position, Vector3? euler = null)
+    {
+        var e = euler.HasValue ? new RtVec3(euler.Value) : default;
+        return Engine.A.Teleport(Id, new RtVec3(position), euler.HasValue ? &e : null) != 0;
+    }
+    /// <summary>Groups (Godot's): whether it has the tag; add one; remove one.</summary>
+    public unsafe bool HasTag(string tag) { fixed (byte* t = Engine.Utf8(tag)) return Engine.A.Tag(Id, 0, t) != 0; }
+    public unsafe void AddTag(string tag) { fixed (byte* t = Engine.Utf8(tag)) Engine.A.Tag(Id, 1, t); }
+    public unsafe void RemoveTag(string tag) { fixed (byte* t = Engine.Utf8(tag)) Engine.A.Tag(Id, 2, t); }
     /// <summary>Character (2D part 2b, Godot-style): what it touched in its last step.</summary>
     public unsafe bool IsOnFloor => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 1) != 0;
     public unsafe bool IsOnWall => Engine.A.CharacterContacts(Id, null) is var c && c > 0 && (c & 2) != 0;
@@ -244,6 +255,36 @@ public static unsafe class Noor
     {
         RtEntity e;
         fixed (byte* n = Engine.Utf8(name)) return Engine.A.Find(n, &e) != 0 ? new Entity(e) : null;
+    }
+
+    /// <summary>A new instance of a prefab (its asset id, or a path like "Assets/Bullet.noorprefab") at `position`,
+    /// turned by `euler` (degrees), under `parent` if given; null if there's no such prefab. It starts next frame.</summary>
+    public static Entity? Spawn(string prefab, Vector3 position, Vector3? euler = null, Entity? parent = null)
+    {
+        RtEntity e;
+        var p = parent?.Id ?? default;
+        fixed (byte* s = Engine.Utf8(prefab))
+            return Engine.A.Spawn(s, new RtVec3(position), new RtVec3(euler ?? Vector3.Zero), parent is not null ? &p : null, &e) != 0 ? new Entity(e) : null;
+    }
+
+    /// <summary>Every entity with the tag (a group), in scene order.</summary>
+    public static Entity[] FindAll(string tag)
+    {
+        var found = new RtEntity[64];
+        int count;
+        fixed (byte* t = Engine.Utf8(tag))
+        fixed (RtEntity* o = found)
+            count = Engine.A.FindAll(t, o, found.Length);
+        if (count > found.Length)
+        {
+            found = new RtEntity[count];
+            fixed (byte* t = Engine.Utf8(tag))
+            fixed (RtEntity* o = found)
+                count = Engine.A.FindAll(t, o, found.Length);
+        }
+        var result = new Entity[Math.Min(count, found.Length)];
+        for (var i = 0; i < result.Length; i++) result[i] = new Entity(found[i]);
+        return result;
     }
 
     /// <summary>

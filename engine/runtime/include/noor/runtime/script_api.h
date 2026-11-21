@@ -26,6 +26,23 @@ namespace noor::runtime::api {
 [[nodiscard]] std::optional<Guid> bone(World& w, const Guid& e, std::string_view name);
 void destroy(World& w, const Guid& e);  // at the end of the frame, with its children
 
+// ---- Spawning (gameplay foundations, part 1) ----
+// A new instance of a prefab (its asset id, or its path like "Assets/Bullet.noorprefab") at `position`, turned by
+// `rotation` (world, or local to `parent` if given). Returns the prefab's root entity (the bullet itself: destroying it
+// takes everything spawned with it); its entities start next frame, like everything spawned (scripts' on_start, bodies,
+// sprites, sounds). Ids are deterministic. Nothing if the prefab can't be found or is empty.
+[[nodiscard]] std::optional<Guid> spawn(World& w, std::string_view prefab, math::Vec3 position, math::Quat rotation = {},
+                                        std::optional<Guid> parent = std::nullopt);
+// Moves an entity at once, without physics in between: a character or body via the physics system (its velocity and
+// jump state reset), anything else by its transform. `rotation`: keep the current one if not given.
+bool teleport(World& w, const Guid& e, math::Vec3 position, std::optional<math::Quat> rotation = std::nullopt);
+
+// ---- Groups: entity tags (gameplay foundations, part 1; Godot's groups) ----
+[[nodiscard]] bool has_tag(World& w, const Guid& e, std::string_view tag);
+void add_tag(World& w, const Guid& e, std::string_view tag);
+void remove_tag(World& w, const Guid& e, std::string_view tag);
+[[nodiscard]] std::vector<Guid> find_all(World& w, std::string_view tag);  // in scene order
+
 // ---- Transform (local) ----
 [[nodiscard]] std::optional<math::Vec3> position(World& w, const Guid& e);
 void set_position(World& w, const Guid& e, math::Vec3 p);

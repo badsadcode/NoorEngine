@@ -11,6 +11,12 @@
 #include "noor/runtime/input.h"
 #include "noor/scene/scene.h"
 
+#include <functional>
+
+namespace noor::scene {
+struct Prefab;
+}
+
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -157,6 +163,25 @@ public:
         return water_query_ ? water_query_(*this, x, z) : std::nullopt;
     }
 
+    // ---- Spawning prefabs (gameplay foundations, part 1) ----
+    // The host (game::make_world) says how to find prefabs: by asset id, and an asset path ("Assets/Bullet.noorprefab")
+    // to its id. Without them nothing can be spawned.
+    using PrefabLookup = std::function<const scene::Prefab*(const Guid&)>;
+    using AssetIdLookup = std::function<std::optional<Guid>(std::string_view path)>;
+    void set_prefabs(PrefabLookup prefabs, AssetIdLookup asset_ids) {
+        prefabs_ = std::move(prefabs);
+        asset_ids_ = std::move(asset_ids);
+    }
+    [[nodiscard]] const scene::Prefab* prefab(const Guid& id) const { return prefabs_ ? prefabs_(id) : nullptr; }
+    [[nodiscard]] std::optional<Guid> asset_id(std::string_view path) const { return asset_ids_ ? asset_ids_(path) : std::nullopt; }
+    // The id the next spawned instance gets: the same in every run of the same game (the scene's id and a count),
+    // so built games stay identical to the bit (a random id would change the order systems meet entities in).
+    [[nodiscard]] Guid next_spawn_id();
+    // Who moves bodies and characters at once (the physics system, when attached): true if it handled the entity.
+    using Teleporter = std::function<bool(World&, const Guid&, math::Vec3, std::optional<math::Quat>)>;
+    void set_teleporter(Teleporter t) { teleporter_ = std::move(t); }
+    [[nodiscard]] const Teleporter& teleporter() const noexcept { return teleporter_; }
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -178,6 +203,10 @@ private:
     std::vector<Event> events_;
     std::map<std::string, CommandHandler, std::less<>> commands_;
     std::optional<bool> mouse_capture_request_;
+    PrefabLookup prefabs_;
+    AssetIdLookup asset_ids_;
+    Teleporter teleporter_;
+    std::uint64_t spawned_ = 0;
     WaterQuery water_query_;
     std::unordered_map<Guid, math::Mat4> render_poses_;
     std::vector<UiCommand> ui_;

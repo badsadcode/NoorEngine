@@ -41,7 +41,8 @@ struct WorldOptions {
 };
 
 // The playing world for `scene` (prefabs are expanded here): Lua and C# scripts, physics, audio and
-// the built-in behaviours, in that order, with the project's Settings/input.json.
+// the built-in behaviours, in that order, with the project's Settings/input.json. `registry` and `prefabs` must outlive
+// the world: scripts spawn prefabs through them while it plays.
 [[nodiscard]] Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project,
                                                                  const asset::AssetRegistry& registry,
                                                                  scene::PrefabLibrary& prefabs,

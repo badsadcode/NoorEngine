@@ -4,6 +4,19 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 1: spawning, teleport, groups, require
+**Added**
+- `noor.spawn(prefab, position [, euler, parent])` / `Noor.Spawn`: prefabs at run time, by id or path, flattened to
+  their root, deterministic ids (`World::set_prefabs`, `next_spawn_id`; `runtime::api::spawn`).
+- `e:teleport` / `Entity.Teleport` (`PhysicsSystem::teleport`, registered as the world's teleporter).
+- Groups: `noor.find_all`, `e:has_tag` / `add_tag` / `remove_tag`; C# `Noor.FindAll`, `HasTag`, `AddTag`, `RemoveTag`.
+- Lua `require` for shared script files.
+- rt API v13 (`spawn`, `teleport`, `tag`, `find_all`).
+- [docs/milestones/M9_GAMEPLAY_PLAN.md](docs/milestones/M9_GAMEPLAY_PLAN.md).
+
+**Tests:** `test_spawn.cpp` (spawning, parents, starting, a thousand bullets a second measured, teleport, groups,
+`require`); `tests/data/spawn_project` and `player.spawn_lua_csharp` (Lua and C#, project and built game).
+
 ### 2026-11-21 — Alden swims forwards
 **Fixed**
 - Alden's `SwimForward` (8D part 8) turned his arms the wrong way round: the hand pulled from his hips towards his head

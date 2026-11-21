@@ -1,6 +1,7 @@
 #include "noor/runtime/script_api.h"
 
 #include "noor/asset/tileset_asset.h"
+#include "noor/scene/prefab.h"
 
 #include <algorithm>
 #include <unordered_set>
@@ -75,6 +76,67 @@ std::optional<Guid> bone(World& w, const Guid& e, std::string_view n) {
 
 void destroy(World& w, const Guid& e) {
     if (w.find(e)) w.destroy(e);
+}
+
+std::optional<Guid> spawn(World& w, std::string_view prefab, math::Vec3 position, math::Quat rotation, std::optional<Guid> parent) {
+    std::optional<Guid> id;
+    if (auto parsed = Guid::parse(prefab)) id = *parsed;
+    else id = w.asset_id(prefab);
+    const scene::Prefab* p = id ? w.prefab(*id) : nullptr;
+    if (!p) return std::nullopt;
+    if (parent && !w.find(*parent)) parent.reset();
+    // One instance entity, expanded as a scene's would be (nested prefabs and all): the same entities, components and
+    // derived ids an instance placed in the editor gets, under a fresh deterministic instance id.
+    scene::Scene one;
+    one.id = w.scene().id;
+    scene::Entity instance = scene::make_instance(*id, p->name, scene::Transform{position, rotation, {1, 1, 1}}, parent);
+    instance.id = w.next_spawn_id();
+    const Guid placement = instance.id;
+    one.entities.push_back(std::move(instance));
+    auto expanded = scene::expand_prefabs(one, [&w](const Guid& g) { return w.prefab(g); });
+    // Flattened: an editor instance keeps its placement entity (overrides live there), but a spawned one doesn't need
+    // it, and destroying "the bullet" mustn't leave an empty placement behind. The prefab's roots take the placement's
+    // place: its parent, and its transform composed with their own.
+    std::optional<Guid> root;
+    for (auto& e : expanded.scene.entities) {
+        if (e.id == placement) continue;
+        if (e.parent == placement) {
+            e.parent = parent;
+            e.transform.position = position + math::rotate(rotation, e.transform.position);
+            e.transform.rotation = rotation * e.transform.rotation;
+            if (!root) root = e.id;
+        }
+        w.spawn(std::move(e));
+    }
+    return root;
+}
+
+bool teleport(World& w, const Guid& e, math::Vec3 position, std::optional<math::Quat> rotation) {
+    if (!w.find(e)) return false;
+    // A body or character: physics does it (it registers itself, since the runtime doesn't know physics).
+    if (w.teleporter() && w.teleporter()(w, e, position, rotation)) return true;
+    set_world_pose(w, e, position, rotation ? *rotation : world_rotation(w, e).value_or(math::Quat{}));
+    return true;
+}
+
+bool has_tag(World& w, const Guid& e, std::string_view tag) {
+    const auto* x = w.find(e);
+    return x && std::ranges::find(x->tags, tag) != x->tags.end();
+}
+
+void add_tag(World& w, const Guid& e, std::string_view tag) {
+    if (auto* x = w.find(e); x && !tag.empty() && std::ranges::find(x->tags, tag) == x->tags.end()) x->tags.emplace_back(tag);
+}
+
+void remove_tag(World& w, const Guid& e, std::string_view tag) {
+    if (auto* x = w.find(e)) std::erase(x->tags, std::string(tag));
+}
+
+std::vector<Guid> find_all(World& w, std::string_view tag) {
+    std::vector<Guid> out;
+    for (const auto& e : w.scene().entities)
+        if (std::ranges::find(e.tags, tag) != e.tags.end()) out.push_back(e.id);
+    return out;
 }
 
 std::optional<math::Vec3> position(World& w, const Guid& e) {

@@ -52,6 +52,7 @@ add_executable(noor_unit_tests
     unit/test_tilemap.cpp
     unit/test_display.cpp
     unit/test_templates.cpp
+    unit/test_spawn.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -831,6 +832,17 @@ if(TARGET noor_scripting_managed)
             -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_built_csharp_game -DCSHARP=ON -DHUD_VERTICES=60
             -P ${CMAKE_CURRENT_SOURCE_DIR}/player_check.cmake)
     set_tests_properties(player.built_csharp_game PROPERTIES LABELS "gpu;player" TIMEOUT 60 FIXTURES_REQUIRED built_csharp_game)
+
+    # Spawning, teleport, groups and require from Lua and C# (gameplay foundations, part 1), in a project and a built game.
+    add_test(NAME cli.build_spawn_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/spawn_project ${CMAKE_CURRENT_BINARY_DIR}/built_spawn_project)
+    set_tests_properties(cli.build_spawn_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_spawn_project
+                         PASS_REGULAR_EXPRESSION "Built 'Spawn Test'")
+    add_test(NAME player.spawn_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_spawn_project/Spawn Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/spawn_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_spawn
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/spawn_check.cmake)
+    set_tests_properties(player.spawn_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_spawn_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.
