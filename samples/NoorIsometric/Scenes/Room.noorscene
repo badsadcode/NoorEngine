@@ -1,0 +1,342 @@
+{
+  "noor_scene": 2,
+  "id": "14785615-3855-57e6-8cb7-d6007f620ce2",
+  "name": "Room",
+  "entities": [
+    {
+      "id": "ed452268-fafe-5969-8e7c-d5d316e24d67",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          3.0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 9,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 6
+        },
+        "camera_follow": {
+          "target": "Coth",
+          "offset": [
+            0,
+            1
+          ],
+          "dead_zone": [
+            2,
+            1
+          ],
+          "smoothing": 0.25
+        }
+      }
+    },
+    {
+      "id": "d13a6a28-92ea-55a4-9404-d18e9041b078",
+      "name": "Moonlight",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#8090C0",
+          "illuminance": 700,
+          "shadows": false,
+          "sky_color": "#202030",
+          "sky_luminance": 1
+        }
+      }
+    },
+    {
+      "id": "ba68ba1d-6528-51e0-8ea6-56a650a5312a",
+      "name": "Room",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "tilemap": {
+          "tileset": "a922d187-f2df-5797-9d11-af02266bf4b2",
+          "rows": [
+            "3 3 3 3 3 3 3 3 3 3 3 3",
+            "1 0 1 1 0 2 0 0 0 0 0 3",
+            "0 0 5 5 2 0 2 1 0 0 2 3",
+            "0 0 1 0 1 1 0 0 2 0 2 3",
+            "0 0 1 0 4 1 0 4 0 0 0 3",
+            "2 1 1 0 1 1 1 2 0 2 0 3",
+            "1 1 2 2 1 1 0 0 2 1 0 3",
+            "0 1 1 2 4 1 2 4 0 2 1 3",
+            "0 0 0 0 0 2 2 2 1 0 1 3",
+            "0 0 1 0 2 0 2 2 0 0 2 3",
+            "0 1 2 2 2 0 0 0 0 1 0 3",
+            "0 0 0 0 1 2 0 2 0 0 0 3"
+          ],
+          "layout": "isometric",
+          "cell": [
+            2.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "b8cee09b-1c42-511b-a4f2-080bfee319c7",
+      "name": "Torch 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          7.0,
+          8.1,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FFB060",
+          "intensity": 6000,
+          "range": 9
+        }
+      }
+    },
+    {
+      "id": "7e5aa713-f0df-533c-909a-6429a85031d8",
+      "name": "Torch 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          2.0,
+          10.6,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FFB060",
+          "intensity": 6000,
+          "range": 9
+        }
+      }
+    },
+    {
+      "id": "cff798b7-f3ba-5bdf-9b77-5433010518fe",
+      "name": "Torch 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -7.0,
+          8.1,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FFB060",
+          "intensity": 6000,
+          "range": 9
+        }
+      }
+    },
+    {
+      "id": "8c8fa73f-3b73-5cf0-b93c-c589d5c698cd",
+      "name": "Torch 4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -2.0,
+          10.6,
+          1.5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FFB060",
+          "intensity": 6000,
+          "range": 9
+        }
+      }
+    },
+    {
+      "id": "c2c050d0-fa5e-5a4a-b286-d107b8f3ed95",
+      "name": "Coth",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "ccb22c51-c678-5476-b14c-78fd7c043515",
+          "animation": "idle",
+          "billboard": "none",
+          "cast_shadows": false,
+          "y_depth": true
+        },
+        "script": {
+          "file": "Scripts/Walker.luau",
+          "params": {
+            "map": "Room"
+          }
+        }
+      }
+    },
+    {
+      "id": "e1b85db0-c02c-50a8-a717-7454ed81195d",
+      "name": "Lantern",
+      "layer": "default",
+      "tags": [],
+      "parent": "c2c050d0-fa5e-5a4a-b286-d107b8f3ed95",
+      "transform": {
+        "position": [
+          0,
+          1.2,
+          1.2
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "color": "#FFD9A0",
+          "intensity": 2500,
+          "range": 6
+        }
+      }
+    }
+  ]
+}

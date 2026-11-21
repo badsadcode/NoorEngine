@@ -1,0 +1,208 @@
+{
+  "noor_scene": 2,
+  "id": "d6c3a95c-7f3f-5278-ab99-b6cf4c23320a",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "20f369c5-2650-53fa-9216-73d6734c5af7",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          8,
+          6.125,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 11.25,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14,
+          "pixel_snap": true
+        },
+        "camera_follow": {
+          "target": "Player",
+          "offset": [
+            0,
+            1.5
+          ],
+          "dead_zone": [
+            3,
+            2
+          ],
+          "smoothing": 0.15,
+          "bounds": [
+            -0.5,
+            -0.5,
+            39.5,
+            14
+          ]
+        }
+      }
+    },
+    {
+      "id": "c63d97d1-4c2e-569f-aac7-b8ca96c32160",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -5
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          80,
+          40,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "98cbb90d-755b-516a-8017-a26ab9ce72f2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        },
+        "parallax": {
+          "factor": [
+            0,
+            0
+          ],
+          "anchor": [
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": "f552dd49-b015-5eb7-99cb-ff332ad0682c",
+      "name": "Level",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "tilemap": {
+          "tileset": "60179bfa-a7bc-566f-be4d-e35c14781f83",
+          "rows": [
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . 3 3 3 3 . . . . . . . . . . . . . . 2",
+            "2 . . . . . 3 3 3 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2",
+            "2 . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 2 2 . . . . . . . . 2",
+            "2 . . 4 . . . . . . . 4 . . 2 2 2 2 . . . . . . . . 5 . . . . . . . 5 . . . . 2",
+            "0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 2 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+            "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1"
+          ],
+          "unlit": true
+        }
+      }
+    },
+    {
+      "id": "7d7ed46f-bf25-52cc-b918-1029e1edc05c",
+      "name": "Player",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3,
+          1.51,
+          0.1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "2a623859-55f8-54cb-b903-ab934c625fa6",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "idle",
+          "order": 1
+        },
+        "character": {
+          "radius": 0.3,
+          "height": 0.85,
+          "plane": "xy",
+          "gravity_scale": 3,
+          "acceleration": 40,
+          "deceleration": 50,
+          "air_acceleration": 25,
+          "coyote_time": 0.1,
+          "jump_buffer": 0.1
+        },
+        "platformer": {
+          "speed": 6,
+          "jump_height": 2.2,
+          "animations": {
+            "idle": "idle",
+            "run": "run",
+            "jump": "jump",
+            "fall": "fall"
+          }
+        },
+        "script": {
+          "file": "Scripts/Player.luau"
+        }
+      }
+    }
+  ]
+}

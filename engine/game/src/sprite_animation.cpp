@@ -17,6 +17,14 @@ double number(const Json& j, const char* key, double fallback) {
 
 } // namespace
 
+int sprite_view_for(float x, float y, int count) {
+    if (count <= 1 || std::abs(x) + std::abs(y) < 1e-6f) return 0;
+    const double angle = std::atan2(-static_cast<double>(x), -static_cast<double>(y));  // 0 facing down, + to the left
+    const double step = 2.0 * 3.14159265358979323846 / count;
+    const long long k = std::llround(angle / step);
+    return static_cast<int>(((k % count) + count) % count);
+}
+
 int sprite_direction(const math::Mat4& world, Vec3 eye, int count) {
     if (count <= 1) return 0;
     const Vec3 pos = world.transform_point({0, 0, 0});
@@ -44,7 +52,12 @@ double sprite_time(const Json& c, double seconds) {
 
 int sprite_frame(const asset::SpriteSheet& sheet, const Json& c, const math::Mat4& world, Vec3 eye, double seconds) {
     if (sheet.frames.empty()) return 0;
-    const int direction = sprite_direction(world, eye, sheet.directions);
+    int direction = sprite_direction(world, eye, sheet.directions);
+    // "facing": [x, y] (2D part 7): a flat game's own direction on screen picks the view: down (towards the viewer) is
+    // view 0, left 2, up 4, right 6, as the columns turn.
+    if (sheet.directions > 1 && c.is_object() && c.contains("facing") && c["facing"].is_array() && c["facing"].size() == 2 &&
+        c["facing"][0].is_number() && c["facing"][1].is_number())
+        direction = sprite_view_for(c["facing"][0].get<float>(), c["facing"][1].get<float>(), sheet.directions);
     int frame = static_cast<int>(number(c, "frame", 0.0));
     if (c.is_object() && c.contains("animation") && c["animation"].is_string()) {
         frame = sheet.frame_at(c["animation"].get<std::string>(), sprite_time(c, seconds), direction);

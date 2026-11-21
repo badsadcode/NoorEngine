@@ -654,6 +654,8 @@ struct LuaScriptSystem::Impl {
             }
             source = std::move(*text);
         }
+        // Windows editors (Notepad, PowerShell) may save UTF-8 with a byte-order mark; Luau refuses it, so skip it.
+        if (source.starts_with("\xEF\xBB\xBF")) source.erase(0, 3);
         size_t bytecode_size = 0;
         char* bytecode = luau_compile(source.data(), source.size(), nullptr, &bytecode_size);
         lua_State* T = lua_newthread(L);  // per-file globals

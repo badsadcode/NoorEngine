@@ -50,9 +50,10 @@ With `expand` the bars are filled with more world instead: in `viewport` mode, m
 200 at 1280 × 800); the camera's height (or field of view) grows to match, so the middle of the picture is exactly what
 `keep` shows, never squashed (tested pixel for pixel).
 
-**The HUD** (`noor.ui`) is laid out at the base resolution's size and scaled with the picture, so text designed for a
-320 × 180 game is as big on screen as it was meant to be, and sits inside the picture, not in the bars. It's drawn at
-the screen's resolution (crisp, not blocky).
+**The HUD** (`noor.ui`) is placed in the game's picture: its 720 units of height ([The HUD](../scripting/LUA_API.md#the-hud))
+are the picture's height, not the window's, so it never spills into the bars. (It was already the same size at any
+resolution; part 6 only moved it into the picture. An earlier version of this page said the base resolution changed
+its size: it doesn't.) It's drawn at the screen's resolution, crisp, not blocky.
 
 **What pixel-art games may want to turn off.** The scene is still anti-aliased (MSAA) and tonemapped at the base
 resolution. Sprites with `"filter": "nearest"` and `"unlit": true` come out exactly as painted; lit, rotated or 3D things

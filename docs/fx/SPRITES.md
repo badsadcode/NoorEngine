@@ -54,6 +54,16 @@ turns a step further to the viewer's left (2 faces left, 4 away, 6 right). Rows 
   many columns along.
 - Which view shows comes from the angle between where the entity faces (its −Z, like every NoorEngine entity) and the
   camera, rounded to the nearest view.
+- **In a flat game** (2D, top-down, isometric: the XY plane seen straight on) there is no "turning to the camera". The
+  script says which way the character faces on screen instead: `"facing": [x, y]` on the sprite (down `[0, -1]` is
+  view 0, left view 2, up 4, right 6). `NoorIsometric` and the Top-Down 2D template set it from the walking direction:
+
+  ```lua
+  local sprite = e:get("sprite")
+  sprite.facing = { dir.x, dir.y }
+  e:set("sprite", sprite)
+  ```
+- Sheets with 4 views work the same way (down, left, up, right).
 - `"directional": false` shows the frames as they are from every side (lying down, a puff of dust).
 - The columns must be a multiple of the directions, or the sheet is refused.
 
@@ -81,6 +91,8 @@ default (BC7) is very close, but not identical.
 | `sort` | `"y"`: within its layer, the lower its pivot, the nearer it is: top-down and isometric scenes, where a character walks behind a tree and then in front of it. Godot's `y_sort_enabled`. |
 | `blend` | `true`: soft edges (alpha blending), for glows, smoke, anti-aliased art. |
 | `unlit` | `true`: shows its own colours exactly, whatever the light (no sun, no shadow, no fog). Godot's unshaded material. |
+| `facing` | `[x, y]`: in a flat game, which way it faces on screen; picks the view of a directional sheet (above). |
+| `y_depth` | `true`: an **isometric** character among wall tiles: it's given the map's depth rule (by its pivot's height), so a pillar in front hides it and it hides a pillar behind it, pixel by pixel (below). |
 
 The entity's position is where the pivot goes; its scale multiplies the frame's size.
 
@@ -91,6 +103,13 @@ same depth, so the artist decides instead. A sprite with `layer`, `order`, `sort
 see-through pass in that order: by layer, then order (or height, with `"sort": "y"`), then back to front. One without
 any of them is a lit cut-out, depth-tested like any 3D surface: right for sprites standing in a 3D world (The
 Uncounted's style), and every scene made before this works as it did.
+
+**Isometric walls and characters** (2D part 7). Sorting can't put a character *between* two tiles of a tilemap: a
+chunk of tiles is one draw. So isometric and hexagonal maps sort by depth instead: each tile sits a hair further back
+the higher it is on screen (a thousandth of a metre per metre), and a sprite with `"y_depth": true` (and no `layer`,
+`order`, `sort` or `blend`) follows the same rule from its pivot. Depth testing then sorts every pixel: Coth's legs
+disappear behind a pillar's base while his head shows above it. Hard-edged sprites only: soft-edged ones don't write
+depth.
 
 A sprite only ever shows its own frame: its edges are sampled half a texel inside the frame, so the frame next to it
 in the sheet (or the opposite edge) can't bleed in, even magnified.

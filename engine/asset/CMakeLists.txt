@@ -2,6 +2,7 @@ noor_add_module(asset
     SOURCES
         src/json.cpp
         src/project.cpp
+        src/project_template.cpp
         src/registry.cpp
         src/gltf_import.cpp
         src/fbx_import.cpp

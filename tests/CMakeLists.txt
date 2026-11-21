@@ -51,6 +51,7 @@ add_executable(noor_unit_tests
     unit/test_scatter.cpp
     unit/test_tilemap.cpp
     unit/test_display.cpp
+    unit/test_templates.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -873,12 +874,59 @@ if(WIN32)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/noorpong_check.cmake)
     set_tests_properties(player.noorpong PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120 FIXTURES_REQUIRED built_noorpong)
 
+    # The 2D samples (2D part 7): NoorPlatformer (Tom's own art, a tilemap level, the platformer character) mid-level,
+    # and finished by its autopilot; NoorIsometric (an isometric room, Coth half behind a pillar: "y_depth").
+    foreach(entry IN ITEMS "NoorPlatformer|Scenes/Level.noorscene|300" "NoorIsometric|Scenes/Room.noorscene|420")
+        string(REPLACE "|" ";" parts "${entry}")
+        list(GET parts 0 name)
+        list(GET parts 1 scene)
+        list(GET parts 2 frames)
+        add_test(NAME render.golden_${name}
+            COMMAND ${CMAKE_COMMAND}
+                -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+                -DPROJECT=${PROJECT_SOURCE_DIR}/samples/${name} -DSCENE=${scene}
+                -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/${name}.png -DFRAMES=${frames} -DEXTRA=--windowed
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_${name}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+        set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render;sample" TIMEOUT 120)
+    endforeach()
+    add_test(NAME sample.noorplatformer_finishes
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${PROJECT_SOURCE_DIR}/samples/NoorPlatformer
+            -DSCENE=Scenes/Level.noorscene -DFRAMES=900 "-DEXPECT=You made it!"
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/sample_noorplatformer_finishes -P ${CMAKE_CURRENT_SOURCE_DIR}/sample_finish_check.cmake)
+    set_tests_properties(sample.noorplatformer_finishes PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120)
+    # ...and each plays exactly the same in a built game (the hero's place and the HUD, to the bit, eight seconds in).
+    foreach(entry IN ITEMS "NoorPlatformer|Hero" "NoorIsometric|Coth")
+        string(REPLACE "|" ";" parts "${entry}")
+        list(GET parts 0 name)
+        list(GET parts 1 who)
+        string(TOLOWER ${name} lower)
+        add_test(NAME cli.build_${lower}
+            COMMAND $<TARGET_FILE:noor_cli> build ${PROJECT_SOURCE_DIR}/samples/${name} ${CMAKE_CURRENT_BINARY_DIR}/built_${lower})
+        set_tests_properties(cli.build_${lower} PROPERTIES LABELS "cli;sample" TIMEOUT 120 FIXTURES_SETUP built_${lower}
+                             PASS_REGULAR_EXPRESSION "Built '${name}'")
+        add_test(NAME player.${lower}_built_same
+            COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_${lower}/${name}.exe"
+                -DPROJECT=${PROJECT_SOURCE_DIR}/samples/${name} -DFRAMES=480 -DENTITY=${who}
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_${lower}_built -P ${CMAKE_CURRENT_SOURCE_DIR}/built_same_check.cmake)
+        set_tests_properties(player.${lower}_built_same PROPERTIES LABELS "gpu;player;sample" TIMEOUT 120 FIXTURES_REQUIRED built_${lower})
+    endforeach()
+    # Project templates (2D part 7): each makes a project that plays.
+    foreach(template IN ITEMS Empty2D Platformer2D TopDown2D)
+        add_test(NAME cli.template_${template}
+            COMMAND ${CMAKE_COMMAND} -DCLI=$<TARGET_FILE:noor_cli> -DPLAYER=$<TARGET_FILE:noor_player> -DTEMPLATE=${template}
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/template_${template} -P ${CMAKE_CURRENT_SOURCE_DIR}/template_check.cmake)
+        set_tests_properties(cli.template_${template} PROPERTIES LABELS "gpu;cli;template" TIMEOUT 120)
+    endforeach()
+
     # Each yardstick against its baseline (tests/yardsticks.json, tools/samples/measure_yardsticks.py). Timing tests: run
     # alone, so a busy machine doesn't fail them.
     foreach(entry IN ITEMS "cube|tests/data/yardstick_cube|Scenes/Main.noorscene"
                            "pong|samples/NoorPong|Scenes/Pong.noorscene"
                            "fps|samples/NoorFPS-lite|Scenes/Main_Lua.noorscene"
-                           "hillside|samples/Hillside|Scenes/Hillside.noorscene")
+                           "hillside|samples/Hillside|Scenes/Hillside.noorscene"
+                           "platformer|samples/NoorPlatformer|Scenes/Level.noorscene"
+                           "isometric|samples/NoorIsometric|Scenes/Room.noorscene")
         string(REPLACE "|" ";" parts "${entry}")
         list(GET parts 0 name)
         list(GET parts 1 project)

@@ -1,6 +1,7 @@
 #include "document.h"
 
 #include "noor/asset/water_asset.h"
+#include "noor/asset/project_template.h"
 #include "noor/asset/environment_asset.h"
 #include "noor/fx/fx_asset.h"
 #include "noor/fx/particle_system.h"
@@ -68,8 +69,15 @@ Result<std::unique_ptr<Document>> Document::open(const stdfs::path& project) {
     return doc;
 }
 
-Result<std::unique_ptr<Document>> Document::create(const stdfs::path& folder, std::string_view name) {
-    auto p = asset::Project::create(folder, name);
+Result<std::unique_ptr<Document>> Document::create(const stdfs::path& folder, std::string_view name, const stdfs::path& template_folder) {
+    Result<asset::Project> p = std::unexpected(Error{ErrorCode::InvalidArgument, ""});
+    if (template_folder.empty()) {
+        p = asset::Project::create(folder, name);
+    } else {
+        auto t = asset::load_template(template_folder);
+        if (!t) return std::unexpected(t.error());
+        p = asset::create_project_from_template(*t, folder, name);
+    }
     if (!p) return std::unexpected(p.error());
     std::unique_ptr<Document> doc(new Document(std::move(*p)));
     if (auto r = doc->registry_.scan(doc->project_); !r) return std::unexpected(r.error());

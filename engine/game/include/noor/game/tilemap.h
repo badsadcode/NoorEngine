@@ -36,6 +36,17 @@
 
 namespace noor::game {
 
+// Isometric and hexagonal tiles sit a hair further back the higher they are (metres of world height x this, along Z),
+// so the nearer ones hide the ones behind; sprites with "y_depth" follow the same rule (2D part 7).
+inline constexpr float kTileDepthPerMetre = 1e-3f;
+// Where along Z (relative to the map) a tile whose centre is `centre_y` metres up sits: floor tiles (the tileset's
+// "floor") a cell further back, so a character standing anywhere on one is in front of it.
+[[nodiscard]] constexpr float tile_depth(float centre_y, float cell_height, bool floor) noexcept {
+    return -kTileDepthPerMetre * (centre_y + (floor ? cell_height : 0.0f));
+}
+// The same for a "y_depth" sprite whose pivot (its feet) is `feet_y` metres up.
+[[nodiscard]] constexpr float standing_depth(float feet_y) noexcept { return -kTileDepthPerMetre * feet_y; }
+
 enum class TileLayout : std::uint8_t { Square, Isometric, Hexagonal };
 
 // Chunks of this many cells a side are one draw each.

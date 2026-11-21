@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cmath>
 
 using namespace noor;
 using asset::Json;
@@ -201,4 +202,28 @@ TEST_CASE("tilemap editing: painting grows the map, erasing never does, hexagona
     r = game::paint_tiles(h, below, 2);
     CHECK(r.shift == game::Cell{0, 2});
     CHECK(h["rows"] == Json::array({"1", "2", "."}));
+}
+
+TEST_CASE("isometric depth: floor tiles never cover a character standing on them, walls in front do") {
+    // A 2 x 1 m isometric map. A character with "y_depth" walks across every point of the floor; at each, every floor
+    // tile whose diamond is under its feet must be behind it (Tom saw the tile in front cover Coth's feet, part 7).
+    using game::TileLayout;
+    const math::Vec2 cell{2, 1};
+    for (int cx = 0; cx < 4; ++cx)
+        for (int cy = 0; cy < 4; ++cy) {
+            const math::Vec2 c = game::cell_centre(TileLayout::Isometric, cell, cx, cy);
+            for (float fx = -0.95f; fx <= 0.95f; fx += 0.1f)
+                for (float fy = -0.45f; fy <= 0.45f; fy += 0.05f) {
+                    if (std::abs(fx) / 1.0f + std::abs(fy) / 0.5f > 1.0f) continue;  // outside the diamond
+                    const float feet = c.y + fy;
+                    CHECK(game::standing_depth(feet) > game::tile_depth(c.y, cell.y, true));
+                }
+        }
+    // A wall block in the cell in front (lower on screen) is nearer than a character at its own cell's centre; one in
+    // the cell behind is farther.
+    const math::Vec2 here = game::cell_centre(TileLayout::Isometric, cell, 2, 2);
+    const math::Vec2 front = game::cell_centre(TileLayout::Isometric, cell, 1, 2);
+    const math::Vec2 behind = game::cell_centre(TileLayout::Isometric, cell, 2, 3);
+    CHECK(game::tile_depth(front.y, cell.y, false) > game::standing_depth(here.y));
+    CHECK(game::tile_depth(behind.y, cell.y, false) < game::standing_depth(here.y));
 }

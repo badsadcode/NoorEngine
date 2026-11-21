@@ -105,6 +105,58 @@
         "threads": 32,
         "first_frame_s": 2.401
       }
+    },
+    "platformer": {
+      "about": "NoorPlatformer: a 320 x 180 pixel-art tilemap level, the platformer character, Lua",
+      "project": "samples/NoorPlatformer",
+      "scene": "Scenes/Level.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 0.387,
+        "cpu_p95_ms": 0.592,
+        "gpu_median_ms": 0.357,
+        "working_set_mb": 197.641,
+        "private_mb": 352.613,
+        "gpu_resident_mb": 67.618,
+        "threads": 30,
+        "first_frame_s": 0.641
+      },
+      "limits": {
+        "cpu_median_ms": 0.703,
+        "cpu_p95_ms": 1.288,
+        "gpu_median_ms": 0.564,
+        "working_set_mb": 251.287,
+        "private_mb": 429.505,
+        "gpu_resident_mb": 78.998,
+        "threads": 32,
+        "first_frame_s": 1.462
+      }
+    },
+    "isometric": {
+      "about": "NoorIsometric: an isometric tilemap room, an 8-direction sprite, point lights, Lua",
+      "project": "samples/NoorIsometric",
+      "scene": "Scenes/Room.noorscene",
+      "frames": 600,
+      "measured": {
+        "cpu_median_ms": 0.234,
+        "cpu_p95_ms": 0.414,
+        "gpu_median_ms": 1.014,
+        "working_set_mb": 197.109,
+        "private_mb": 418.824,
+        "gpu_resident_mb": 118.056,
+        "threads": 30,
+        "first_frame_s": 0.621
+      },
+      "limits": {
+        "cpu_median_ms": 0.505,
+        "cpu_p95_ms": 1.02,
+        "gpu_median_ms": 1.418,
+        "working_set_mb": 250.676,
+        "private_mb": 505.648,
+        "gpu_resident_mb": 131.958,
+        "threads": 32,
+        "first_frame_s": 1.431
+      }
     }
   }
 }

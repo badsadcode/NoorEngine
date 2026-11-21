@@ -1,0 +1,53 @@
+{
+  "noor_sprite": 1,
+  "name": "hero",
+  "texture": "eb48eba6-57a9-5e85-94a8-b649d565a0c4",
+  "grid": {
+    "columns": 11,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.0
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {
+    "idle": {
+      "frames": [
+        0,
+        1,
+        2
+      ],
+      "fps": 7,
+      "loop": true
+    },
+    "run": {
+      "frames": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "jump": {
+      "frames": [
+        10
+      ],
+      "fps": 5,
+      "loop": true
+    },
+    "fall": {
+      "frames": [
+        10
+      ],
+      "fps": 5,
+      "loop": true
+    }
+  }
+}

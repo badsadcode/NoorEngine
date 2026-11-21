@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 30;
+    public const uint ExpectedApiVersion = 31;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -74,6 +74,10 @@ public static class Native
     [DllImport(Dll)] public static extern IntPtr noor_doc_open_project([MarshalAs(UnmanagedType.LPUTF8Str)] string projectPath);
     [DllImport(Dll)] public static extern IntPtr noor_doc_create_project([MarshalAs(UnmanagedType.LPUTF8Str)] string folder, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
     [DllImport(Dll)] public static extern void noor_doc_close(IntPtr doc);
+    // v31 (2D part 7): project templates.
+    [DllImport(Dll)] private static extern IntPtr noor_templates([MarshalAs(UnmanagedType.LPUTF8Str)] string dir);
+    [DllImport(Dll)] public static extern IntPtr noor_doc_create_project_from_template([MarshalAs(UnmanagedType.LPUTF8Str)] string folder, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string templateFolder);
+    public static string Templates(string dir) => Str(noor_templates(dir)) ?? "[]";
     [DllImport(Dll)] private static extern IntPtr noor_doc_project_info(IntPtr doc);
     [DllImport(Dll)] private static extern IntPtr noor_doc_assets(IntPtr doc, int rescan);
     [DllImport(Dll)] private static extern IntPtr noor_doc_asset_details(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string assetId);

@@ -1,0 +1,6 @@
+{
+  "noor_template": 1,
+  "name": "2D Platformer",
+  "description": "A pixel-art tilemap level and a character that runs and jumps (coyote time, jump buffering, one-way platforms), with a follow camera.",
+  "order": 20
+}

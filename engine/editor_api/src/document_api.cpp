@@ -2,6 +2,7 @@
 // noor_last_error(), never let a C++ exception cross the DLL boundary.
 
 #include "noor/asset/environment_asset.h"
+#include "noor/asset/project_template.h"
 #include "noor/asset/water_asset.h"
 #include "noor/fx/presets.h"
 #include "noor_editor_api.h"
@@ -74,6 +75,26 @@ NOOR_API noor_doc* noor_doc_open_project(const char* project_path) {
 NOOR_API noor_doc* noor_doc_create_project(const char* folder, const char* name) {
     return guarded<>(static_cast<noor_doc*>(nullptr), [&]() -> noor_doc* {
         auto d = noor::editor::Document::create(folder ? folder : "", name ? name : "");
+        if (!d) {
+            fail_with(d.error());
+            return nullptr;
+        }
+        return new noor_doc{std::move(*d)};
+    });
+}
+
+NOOR_API const char* noor_templates(const char* dir) {
+    return guarded<>(static_cast<const char*>(nullptr), [&] {
+        noor::asset::Json list = noor::asset::Json::array();
+        for (const auto& t : noor::asset::list_templates(dir ? dir : ""))
+            list.push_back({{"id", t.id}, {"name", t.name}, {"description", t.description}, {"folder", t.folder.generic_string()}});
+        return give(list);
+    });
+}
+
+NOOR_API noor_doc* noor_doc_create_project_from_template(const char* folder, const char* name, const char* template_folder) {
+    return guarded<>(static_cast<noor_doc*>(nullptr), [&]() -> noor_doc* {
+        auto d = noor::editor::Document::create(folder ? folder : "", name ? name : "", template_folder ? template_folder : "");
         if (!d) {
             fail_with(d.error());
             return nullptr;

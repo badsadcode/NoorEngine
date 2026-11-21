@@ -25,7 +25,16 @@ pixel art says how many pixels make a metre (`pixels_per_metre`, as sprites alre
   too: a body that must stay upright). 2D shapes are thin slabs: `rectangle` (`size` [w, h]), `circle` (`radius`: a
   sphere, which touches a plane exactly as a disc does, given a disc's inertia so it rolls like one), `polygon` (convex `points` [[x, y], ...], extruded); `depth`
   (1 m by default) is how thick the slab is, so 2D bodies in the same plane always meet. Static bodies need no lock.
-- **Sprites, tiles, cameras and the editor** (parts 3–6): decided in those parts, here.
+- **Sprites, tiles, cameras and the editor** (parts 3–7), as built:
+  - 2D drawing order is the artist's: `layer`, `order`, `"sort": "y"` put sprites and tilemaps in the see-through pass
+    in that order (part 3). Unsorted sprites stay lit, depth-tested cut-outs (3D's way).
+  - Tilemaps are drawn in chunks (one draw per 32 × 32 cells), so order *within* a map can't come from sorting draws.
+    Isometric and hexagonal maps use depth instead: each tile a hair further back (10⁻³ of its world height in metres),
+    floors (`"floor"`) a cell further, and `"y_depth"` sprites by their feet by the same rule, so depth testing orders
+    characters and walls per pixel (part 7). Hard-edged sprites only: blended ones don't write depth.
+  - Display (part 6): the scene is drawn at its own size and placed on the screen by the tonemap pass, so a base
+    resolution, stretch modes and a render scale cost the renderer nothing when unused (the editor never sets one).
+  - Directional sheets in flat games: the script names the facing on screen (`"facing"`, part 7).
 
 ## Consequences
 - One physics engine: determinism and built-game checks work for 2D as they do for 3D. If Jolt can't make 2D physics

@@ -11,7 +11,9 @@ set(payload_commands
     # The built-in HUD font's licence (SIL OFL 1.1): games carry it in licenses/.
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:noor_cli>/licenses
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PROJECT_SOURCE_DIR}/third_party/fonts/OFL.txt
-            $<TARGET_FILE_DIR:noor_cli>/licenses/AtkinsonHyperlegible-OFL.txt)
+            $<TARGET_FILE_DIR:noor_cli>/licenses/AtkinsonHyperlegible-OFL.txt
+    # Project templates (2D part 7): `noor_cli new --template` and the editor's New Project read them from here.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${PROJECT_SOURCE_DIR}/templates $<TARGET_FILE_DIR:noor_cli>/templates)
 if(TARGET noor_scripting_managed)
     list(APPEND payload_commands
         COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${NOOR_MANAGED_DIR} $<TARGET_FILE_DIR:noor_cli>/managed)

@@ -27,6 +27,7 @@
 #include "noor/asset/model_import.h"
 #include "noor/asset/interchange.h"
 #include "noor/asset/project.h"
+#include "noor/asset/project_template.h"
 #include "noor/asset/registry.h"
 #include "noor/asset/material.h"
 #include "noor/asset/texture.h"
@@ -70,7 +71,8 @@ using namespace noor;
 
 int usage() {
     std::fputs("usage:\n"
-               "  noor_cli new <folder> <name>\n"
+               "  noor_cli new <folder> <name> [--template <id or folder>]\n"
+               "  noor_cli templates\n"
                "  noor_cli scan <project>\n"
                "  noor_cli info <file.glb>\n"
                "  noor_cli texture <image files...>\n"
@@ -93,9 +95,32 @@ int report(const Error& e) {
     return 1;
 }
 
+stdfs::path executable_dir();
+
+// NoorEngine's own templates: templates/ next to noor_cli (copied there by the build).
+stdfs::path templates_dir() { return executable_dir() / "templates"; }
+
+int cmd_templates(const std::vector<std::string>& a) {
+    if (!a.empty()) return usage();
+    const auto list = asset::list_templates(templates_dir());
+    if (list.empty()) std::printf("No templates in %s\n", templates_dir().generic_string().c_str());
+    for (const auto& t : list) std::printf("  %-14s %s: %s\n", t.id.c_str(), t.name.c_str(), t.description.c_str());
+    return 0;
+}
+
 int cmd_new(const std::vector<std::string>& a) {
-    if (a.size() != 2) return usage();
-    auto p = asset::Project::create(a[0], a[1]);
+    if (a.size() != 2 && !(a.size() == 4 && a[2] == "--template")) return usage();
+    Result<asset::Project> p = std::unexpected(Error{ErrorCode::InvalidArgument, ""});
+    if (a.size() == 4) {
+        // A template's id (NoorEngine's own) or a folder holding one.
+        const stdfs::path by_id = templates_dir() / a[3];
+        std::error_code ec;
+        auto t = asset::load_template(stdfs::is_directory(by_id, ec) ? by_id : stdfs::path(a[3]));
+        if (!t) return report(t.error());
+        p = asset::create_project_from_template(*t, a[0], a[1]);
+    } else {
+        p = asset::Project::create(a[0], a[1]);
+    }
     if (!p) return report(p.error());
     std::printf("Created project '%s' (%s)\n", p->info().name.c_str(), p->file().generic_string().c_str());
     return 0;
@@ -938,6 +963,7 @@ int main(int argc, char** argv) {
     const std::string cmd = argv[1];
     const std::vector<std::string> args(argv + 2, argv + argc);
     if (cmd == "new") return cmd_new(args);
+    if (cmd == "templates") return cmd_templates(args);
     if (cmd == "scan") return cmd_scan(args);
     if (cmd == "info") return cmd_info(args);
     if (cmd == "texture") return cmd_texture(args);

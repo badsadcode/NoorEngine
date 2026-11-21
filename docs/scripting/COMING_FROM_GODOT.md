@@ -45,6 +45,9 @@ The list of Godot features below comes from a real game: an old 2D platformer of
 | Project Settings ▸ Display: window size, fullscreen, stretch mode (`viewport`, `canvas_items`) and aspect, 3D scaling | `Settings/display.json`: `window`, `base_resolution`, `stretch` (`viewport`, `canvas`, `off`), `aspect`, `integer_scale`, `render_scale` ([Display](../rendering/DISPLAY.md)) | ✅ (2D part 6) |
 | **TileMap**, TileSet, `set_cell` / `get_cell` | `tilemap` + a `.noortileset`; `e:set_tile(x, y, t)`, `e:tile(x, y)` ([Tilemaps](../fx/TILEMAPS.md)) | ✅ square, isometric, hexagonal (2D part 4); painted in the editor's 2D view (part 5) |
 | ParallaxBackground / ParallaxLayer (`motion_scale`) | `parallax`: `factor`, `anchor` | ✅ (2D part 6); repeating layers not yet |
+| AnimatedSprite2D with a direction per animation (`walk_down`, `walk_left`...) | a directional sheet and the sprite's `"facing": [x, y]` ([Sprites](../fx/SPRITES.md#8-direction-characters)) | ✅ (2D part 7) |
+| TileSet Y-sort origin; a character Y-sorted with a TileMap's walls | the tileset's `"floor"`; the sprite's `"y_depth": true` | ✅ isometric (2D part 7) |
+| Project Manager ▸ New Project, templates in the Asset Library | New Project with a template ([Templates](../TEMPLATES.md)), `noor_cli new --template` | ✅ Empty 2D, 2D Platformer, Top-Down 2D (2D part 7) |
 | GPUParticles2D | `emitter` + `.noorfx` (works in 2D and 3D) | ✅ |
 | Light2D, normal-mapped 2D sprites | | Later (after the 2D foundations) |
 | AudioStreamPlayer (2D/3D) | `audio_source`, `noor.play_sound` | ✅ |

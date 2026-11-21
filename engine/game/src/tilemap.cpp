@@ -389,7 +389,8 @@ void TilemapLibrary::build(Built& b, const SceneView::Tilemap& map, const Tilema
             std::vector<render::Vertex> verts;
             std::vector<std::uint32_t> idx;
             // Back to front within the chunk: isometric cells further up (x + y larger) first, hexagonal rows from the
-            // top; each drawn a hair further back too, so depth testing agrees with that order wherever tiles overlap.
+            // top; each a hair further back too (kTileDepthPerMetre of its height), so depth testing agrees with that order
+            // wherever tiles overlap, and characters with "y_depth" (sprites.cpp) slot in between them by the same rule.
             std::vector<std::pair<int, int>> cells;
             for (int y = cy; y < std::min(cy + kTileChunk, g.height); ++y)
                 for (int x = cx; x < std::min(cx + kTileChunk, g.width); ++x)
@@ -401,7 +402,11 @@ void TilemapLibrary::build(Built& b, const SceneView::Tilemap& map, const Tilema
             for (const auto& [x, y] : cells) {
                 const auto& f = s.sheet.frames[static_cast<std::size_t>(g.at(x, y))];
                 const Vec2 c = cell_centre(st.layout, st.cell, x, y);
-                const float z = -1e-3f * static_cast<float>(depth_rank(x, y));
+                // Floor tiles a whole cell further back: their diamond reaches half a cell above their centre, so by
+                // the centre alone the tile in front of a character would cover its feet while it stands on the far
+                // half of that tile (Tom spotted it in NoorIsometric).
+                const bool flat = s.tileset.floor.contains(g.at(x, y));
+                const float z = st.layout == TileLayout::Square ? 0.0f : tile_depth(c.y, st.cell.y, flat);
                 const float x0 = c.x - pivot.x * size.x, y0 = c.y - pivot.y * size.y;
                 const float u0 = f.uv_offset.x + inset_u, u1 = f.uv_offset.x + f.uv_scale.x - inset_u;
                 const float v0 = f.uv_offset.y + inset_v, v1 = f.uv_offset.y + f.uv_scale.y - inset_v;  // v0: the frame's top
@@ -441,7 +446,10 @@ void TilemapLibrary::add_draws(std::span<const SceneView::Tilemap> maps, std::ve
         for (auto mesh : b.chunks) {
             render::DrawItem item;
             item.mesh = mesh;
-            item.world_from_object = map.world;
+            // The depth rule is by height in the world, wherever the map is (2D part 7).
+            item.world_from_object = st.layout == TileLayout::Square
+                                         ? map.world
+                                         : math::translation({0, 0, -kTileDepthPerMetre * map.world.m[3].y}) * map.world;
             item.material = mat;
             item.cast_shadow = map.settings.value("cast_shadows", false);
             item.sort_layer = st.layer;

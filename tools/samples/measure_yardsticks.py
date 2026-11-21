@@ -1,12 +1,13 @@
 """Measures Milestone 9's yardsticks (9A part 1) and writes their baseline.
 
-    python tools/samples/measure_yardsticks.py [--runs 3] [--check]
+    python tools/samples/measure_yardsticks.py [--runs 3] [--check] [--only name,name]
 
 Runs each yardstick project in noor_player (RelWithDebInfo) for ten seconds, three times, and takes the median of each
 number: the CPU per frame (the game, the view and recording, vsync aside), the GPU per frame, memory, threads and the
 time to the first frame. Writes tests/yardsticks.json (each measurement and its limit: the measurement plus a margin for
 a busy machine) and prints the table for docs/milestones/M9_YARDSTICKS.md. With --check it only compares a fresh
-measurement with the file already there.
+measurement with the file already there. With --only it measures just those yardsticks and keeps the others' baselines
+as they are (adding a yardstick shouldn't re-baseline the rest).
 
 Hillside needs its graphs cooked first (noor_cli cook samples/Hillside; the test suite's hillside_cooked fixture does it).
 """
@@ -28,6 +29,8 @@ PROJECTS = {
     "pong": ("samples/NoorPong", "Scenes/Pong.noorscene", "NoorPong: 2D, an orthographic camera, a sprite, Lua"),
     "fps": ("samples/NoorFPS-lite", "Scenes/Main_Lua.noorscene", "NoorFPS-lite: a compact hand-made 3D level, physics, Lua"),
     "hillside": ("samples/Hillside", "Scenes/Hillside.noorscene", "Hillside: a procedural landscape (graph terrain, scatter)"),
+    "platformer": ("samples/NoorPlatformer", "Scenes/Level.noorscene", "NoorPlatformer: a 320 x 180 pixel-art tilemap level, the platformer character, Lua"),
+    "isometric": ("samples/NoorIsometric", "Scenes/Room.noorscene", "NoorIsometric: an isometric tilemap room, an 8-direction sprite, point lights, Lua"),
 }
 
 # measured key: (path in the report, limit = value * scale + margin)
@@ -64,10 +67,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--only", default="")
     a = ap.parse_args()
+    only = [n for n in a.only.split(",") if n]
     results = {}
     with tempfile.TemporaryDirectory() as tmp:
         for name, (project, scene, _) in PROJECTS.items():
+            if only and name not in only:
+                continue
             runs = [run(project, scene, pathlib.Path(tmp)) for _ in range(a.runs)]
             results[name] = {k: statistics.median(r[k] for r in runs) for k in METRICS}
             print(f"{name}: " + ", ".join(f"{k} {v:.3f}" for k, v in results[name].items()), file=sys.stderr)
@@ -79,8 +86,10 @@ def main():
     out = {"about": "Milestone 9's yardsticks (9A part 1): what small projects cost before big worlds arrive. Written by "
                     "tools/samples/measure_yardsticks.py; checked by tests/yardstick_check.cmake.",
            "machine": "NVIDIA RTX 3080, Windows 10, 1280x720, RelWithDebInfo",
-           "projects": {}}
+           "projects": json.loads(BASELINE.read_text(encoding="utf-8"))["projects"] if only else {}}
     for name, (project, scene, about) in PROJECTS.items():
+        if name not in results:
+            continue
         m = results[name]
         limits = {}
         for k, (_, scale, margin) in METRICS.items():
@@ -93,6 +102,8 @@ def main():
     print("| Yardstick | CPU/frame median (p95) | GPU/frame | Working set | Private | GPU resident | Threads | First frame |")
     print("|---|---|---|---|---|---|---|---|")
     for name, (_, _, about) in PROJECTS.items():
+        if name not in results:
+            continue
         m = results[name]
         print(f"| {about} | {m['cpu_median_ms']:.2f} ms ({m['cpu_p95_ms']:.2f}) | {m['gpu_median_ms']:.2f} ms | "
               f"{m['working_set_mb']:.0f} MB | {m['private_mb']:.0f} MB | {m['gpu_resident_mb']:.0f} MB | {m['threads']:.0f} | "

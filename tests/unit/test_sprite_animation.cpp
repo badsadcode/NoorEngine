@@ -50,6 +50,15 @@ TEST_CASE("sprite directions: 0 faces the viewer, 2 their left, 4 away, 6 their 
     // facing +Z faces the viewer's left.
     CHECK(game::sprite_direction(placed({0, 0, 0}, 180), {10, 1.7f, 0}, 8) == 2);
 
+    // A flat game's own facing on screen ("facing": [x, y], 2D part 7): down is 0, then to the viewer's left.
+    CHECK(game::sprite_view_for(0, -1, 8) == 0);
+    CHECK(game::sprite_view_for(-1, 0, 8) == 2);
+    CHECK(game::sprite_view_for(0, 1, 8) == 4);
+    CHECK(game::sprite_view_for(1, 0, 8) == 6);
+    CHECK(game::sprite_view_for(-0.7f, -0.7f, 8) == 1);   // down-left
+    CHECK(game::sprite_view_for(1, 0, 4) == 3);           // a 4-view sheet: down, left, up, right
+    CHECK(game::sprite_view_for(0, 0, 8) == 0);           // standing still: facing the viewer
+
     const auto sheet = coth_sheet();
     CHECK(sheet.directions == 8);
     // Walk frames name the direction-0 column; direction d is d columns along. "die" isn't directional.

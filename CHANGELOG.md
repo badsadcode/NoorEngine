@@ -4,6 +4,37 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — 2D foundations, part 7: samples, templates and review (2D foundations done)
+**Added**
+- `samples/NoorPlatformer` (Tom's pixel art; `tools/samples/make_noorplatformer.py`) and `samples/NoorIsometric`
+  (`make_noorisometric.py`); both yardsticks (`measure_yardsticks.py --only`, the other baselines untouched).
+- Project templates ([docs/TEMPLATES.md](docs/TEMPLATES.md)): `templates/Empty2D`, `Platformer2D`, `TopDown2D`
+  (`make_templates.py`); `asset/project_template.h` (`list_templates`, `load_template`, `create_project_from_template`);
+  `noor_cli templates`, `noor_cli new ... --template <id or folder>`; editor API v31 (`noor_templates`,
+  `noor_doc_create_project_from_template`); the Project Hub's New Project picks one. Templates are copied next to
+  noor_cli and the editor by the build.
+- Sprites: `"facing": [x, y]` picks a directional sheet's view in flat games (`game::sprite_view_for`); `"y_depth": true`
+  gives a sprite the isometric map's depth rule. Tilesets: `"floor"` (flat tiles a cell further back:
+  `game::tile_depth`, `standing_depth`).
+- [docs/milestones/M9_2D_REVIEW.md](docs/milestones/M9_2D_REVIEW.md), the gate review.
+
+**Changed**
+- Isometric and hexagonal tiles sit back in depth by their height in metres in the world (was: by row number in the
+  map); orders are the same, so the existing goldens are unchanged.
+
+**Fixed**
+- Lua scripts saved with a UTF-8 byte-order mark failed to load.
+- NoorEditor's build took noor_cli, noor_player and the managed scripting from the **Debug** build folder whatever
+  configuration its DLL came from: the smoke test's RelWithDebInfo editor had been packing games with a three-day-old
+  Debug player (and its C# exception check failed for it). It now takes them from the DLL's own configuration.
+- Floor tiles of an isometric map covered a character's feet for a moment (Tom spotted it).
+- DISPLAY.md (part 6) said the HUD's size follows the base resolution; it was already resolution-independent (720
+  units), part 6 only placed it in the picture.
+
+**Tests:** `test_templates.cpp`; `facing`, BOM and isometric-depth cases; goldens `NoorPlatformer`, `NoorIsometric`;
+`sample.noorplatformer_finishes`; `cli.build_noorplatformer` / `_noorisometric` and `player.*_built_same`;
+`cli.template_*`; yardsticks `platformer`, `isometric`; the editor smoke test makes a project from a template.
+
 ### 2026-11-21 — 2D foundations, part 6: resolution, display and cameras for 2D
 **Added**
 - `Settings/display.json` ([docs/rendering/DISPLAY.md](docs/rendering/DISPLAY.md)): `window` (size, `windowed` /

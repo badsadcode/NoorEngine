@@ -1,0 +1,13 @@
+{
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "mode": "windowed"
+  },
+  "base_resolution": [
+    1280,
+    720
+  ],
+  "stretch": "canvas",
+  "aspect": "keep"
+}

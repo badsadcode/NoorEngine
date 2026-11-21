@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "tiles",
+  "texture": "69c5148e-f91e-5971-acb7-411156b029e2",
+  "grid": {
+    "columns": 19,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.5
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {}
+}

@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "dungeon",
+  "texture": "c7645316-c1fe-5450-9448-41dd093c930d",
+  "grid": {
+    "columns": 6,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.16666666666666666
+  ],
+  "pixels_per_metre": 64,
+  "filter": "linear",
+  "animations": {}
+}

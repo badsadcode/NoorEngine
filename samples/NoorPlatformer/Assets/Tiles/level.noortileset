@@ -1,0 +1,21 @@
+{
+  "noor_tileset": 1,
+  "name": "Level",
+  "sheet": "715e1cac-a726-5ed3-8f34-f3faa4a4eadd",
+  "solid": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    15
+  ],
+  "one_way": [
+    14
+  ]
+}

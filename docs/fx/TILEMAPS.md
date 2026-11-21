@@ -22,6 +22,9 @@ maps collide.
   pixel art stays crisp.
 - **`solid`** tiles collide on every side; **`one_way`** tiles are platforms you stand on from above and jump up
   through (2D part 2). Everything else is decoration.
+- **`floor`** (isometric and hexagonal maps, 2D part 7): flat tiles. They never cover anything standing on them (they
+  sit a cell further back in depth; Godot's Y-sort origin does the same). List the floor tiles; walls, pillars and
+  anything tall stay off the list.
 
 ## The `tilemap` component
 
@@ -45,7 +48,8 @@ maps collide.
   - `square`: cell (x, y) at (x × cell.x, y × cell.y).
   - `isometric`: the usual 2:1 diamonds. x runs up and to the right, y up and to the left (`cell` is the diamond's
     width and height, e.g. `[2, 1]`). Tall tiles (walls, trees, blocks) rise above their diamond and hide what's
-    behind them: tiles further back are drawn first.
+    behind them: tiles further back are drawn first, and sit a hair further back in depth, so characters with
+    `"y_depth": true` slot in between them ([Sprites](SPRITES.md#drawing-order-in-2d); the `NoorIsometric` sample).
   - `hexagonal`: pointy-topped hexes, odd rows shifted half a cell right, rows ¾ of a cell apart.
 - **`layer`, `order`, `sort`, `unlit`, `color`**: as for sprites ([Sprites](SPRITES.md#drawing-order-in-2d)). A tilemap
   on layer −1 sits behind characters on layer 0.

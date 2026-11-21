@@ -100,6 +100,25 @@ internal static class SmokeTest
         }
         Check(worst < 1e-3, $"euler ↔ quaternion round trip (worst {worst:0.######}°)");
 
+        // 0b. Project templates (2D part 7): New Project offers them, and a project made from one opens with its scene.
+        var templates = Hub.ProjectHub.TemplateChoices();
+        Check(templates.Any(t => t.Name == "Empty 2D") && templates.Any(t => t.Name == "2D Platformer") && templates.Any(t => t.Name == "Top-Down 2D"),
+              $"New Project offers the 2D templates ({string.Join(", ", templates.Select(t => t.Name))})");
+        if (templates.FirstOrDefault(t => t.Name == "2D Platformer") is { Folder: not null } platformer)
+        {
+            var from = Path.Combine(dir, "FromTemplate");
+            if (Directory.Exists(from)) Directory.Delete(from, recursive: true);
+            using var fromTemplate = EditorDocument.Create(from, "FromTemplate", out var templateError, platformer.Folder);
+            Check(fromTemplate != null, $"a project made from 2D Platformer ({templateError})");
+            if (fromTemplate != null)
+            {
+                Check(fromTemplate.OpenScene("Scenes/Main.noorscene") && fromTemplate.Scene.Entities.Any(e => e.Name == "Player") && fromTemplate.Scene.Entities.Any(e => e.Name == "Level"),
+                      "its Main scene opens with the player and the level");
+                fromTemplate.RefreshAssets(rescan: false);
+                Check(fromTemplate.Assets.Count >= 5, $"with the template's assets ({fromTemplate.Assets.Count})");
+            }
+        }
+
         // 1. Viewport comes up on the document.
         var stats = await WaitFor(() => VulkanViewport.Active?.Stats, s => s is { State: Native.ViewportState.Running, FramesPresented: > 0 } or { State: Native.ViewportState.Failed }, 15);
         Check(stats is { State: Native.ViewportState.Running }, "viewport renders");

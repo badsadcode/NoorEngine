@@ -1,0 +1,13 @@
+{
+  "guid": "84d8bf26-e61b-5c4d-81db-39f0353e7e0d",
+  "importer": "texture",
+  "noor_meta": 1,
+  "settings": {
+    "kind": "color",
+    "max_size": 4096,
+    "mips": false,
+    "normal_convention": "opengl",
+    "compression": "none"
+  },
+  "source_sha256": "6a727cdb0f5e00d3c172484d04bd1f6aae11a57d08ab97db75428882f3891cdb"
+}

@@ -4,7 +4,10 @@
 // A tileset (`.noortileset`) says which sprite sheet the tiles come from and how each tile behaves:
 //
 //   {"noor_tileset": 1, "name": "Cave", "sheet": "<.noorsprite id>",
-//    "solid": [0, 1, 2, 8], "one_way": [5]}
+//    "solid": [0, 1, 2, 8], "one_way": [5], "floor": [0, 1]}
+//
+// "floor" (2D part 7): flat tiles of an isometric or hexagonal map, which never cover anything standing on them (they
+// sit a cell further back in depth; Godot sets the same with a tile's Y-sort origin).
 //
 // Tiles are the sheet's frames (numbered left to right, top to bottom, as sprites count them). A `tilemap` component
 // (game/tilemap.h) places them in a grid, one text line per row, top row first, so maps stay readable and diff well:
@@ -37,6 +40,7 @@ struct Tileset {
     std::optional<Guid> sheet;  // the .noorsprite the tiles are cut from
     std::set<int> solid;        // collide on every side
     std::set<int> one_way;      // stood on from above, jumped up through
+    std::set<int> floor;        // isometric / hexagonal: flat, always behind what stands on them
 };
 
 [[nodiscard]] Result<Tileset> parse_tileset(const Json& file);

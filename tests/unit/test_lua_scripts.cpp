@@ -195,3 +195,14 @@ TEST_CASE("script api: Euler angles use the editor's convention and round-trip")
     CHECK(out.y == doctest::Approx(in.y).epsilon(1e-3));
     CHECK(out.z == doctest::Approx(in.z).epsilon(1e-3));
 }
+
+TEST_CASE("lua: a script saved with a UTF-8 byte-order mark (Notepad, PowerShell) still loads") {
+    Fixture f("\xEF\xBB\xBF" R"(
+        local S = {}
+        function S:on_start() self.entity:set_position(vector.create(5, 0, 0)) end
+        return S
+    )");
+    f.world.frame(0.05, {});
+    CHECK(f.lua->errors().empty());
+    CHECK(f.entity().transform.position.x == doctest::Approx(5.0f));
+}

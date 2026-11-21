@@ -30,8 +30,8 @@ the bit; every existing golden and yardstick unchanged.
 | 3 ✅ | **Sprites for 2D**: sorting layers and order in layer, sorting by Y (top-down, isometric), soft-edged (alpha) sprites, unlit sprites; frames sampled inside their own rectangle (part 2 found them bleeding) | Goldens: overlapping sprites ordered by layer, not distance; a character walking behind and in front of a tree by its Y; 3D scenes' goldens unchanged |
 | 4 ✅ | **Tilemaps**: a tileset asset (from a sprite sheet: which tiles are solid, one-way, animated), a `tilemap` component (square, isometric, hexagonal), drawn in batches, colliders merged from solid tiles | A 256 × 256 map draws in one batch per chunk (cost measured); its colliders are rectangles merged along rows; goldens of each layout |
 | 5 ✅ | **The editor in 2D**: a 2D view (XY, orthographic, pan and zoom), snapping to pixels or tiles, tile painting with undo, sprites dragged in from the Content Browser | API tests (paint, erase, undo; snapping); the smoke test paints a tile and sees it |
-| 6 | **Resolution, display and cameras for 2D** (widened 2026-11-21: Tom asked whether a game can run full screen at the screen's own resolution yet look like a lower one, as Godot's stretch modes do): project display settings (window size, fullscreen, borderless); a **base resolution** with stretch modes like Godot's (`viewport`: the game drawn at e.g. 320 × 180 and scaled up with whole-pixel steps and nearest filtering, black bars where the shape differs; `canvas`: drawn at the screen's resolution but laid out for the base one; off) and aspect handling (keep, expand); a **render scale** for 3D (draw at 50-100% and scale up, for speed); pixel-perfect cameras (whole pixels at a chosen pixels per unit), following with a dead zone and bounds, parallax layers | A 320 × 180 game full screen at 1920 × 1080 is exactly 6 screen pixels per game pixel (readback); a moving pixel-perfect camera never draws a sprite between pixels; parallax layers move by their factor (golden at two moments); a 3D scene at 50% scale costs less GPU (measured) |
-| 7 | **Samples, templates and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks. The first **project templates** (spec 24.1): Empty 2D, 2D Platformer, Top-Down 2D, each a small working start made only of public features; the review | The gate |
+| 6 ✅ | **Resolution, display and cameras for 2D** (widened 2026-11-21: Tom asked whether a game can run full screen at the screen's own resolution yet look like a lower one, as Godot's stretch modes do): project display settings (window size, fullscreen, borderless); a **base resolution** with stretch modes like Godot's (`viewport`: the game drawn at e.g. 320 × 180 and scaled up with whole-pixel steps and nearest filtering, black bars where the shape differs; `canvas`: drawn at the screen's resolution but laid out for the base one; off) and aspect handling (keep, expand); a **render scale** for 3D (draw at 50-100% and scale up, for speed); pixel-perfect cameras (whole pixels at a chosen pixels per unit), following with a dead zone and bounds, parallax layers | A 320 × 180 game full screen at 1920 × 1080 is exactly 6 screen pixels per game pixel (readback); a moving pixel-perfect camera never draws a sprite between pixels; parallax layers move by their factor (golden at two moments); a 3D scene at 50% scale costs less GPU (measured) |
+| 7 ✅ | **Samples, templates and review**: a small platformer (our own pixel art) and an isometric scene (Diablo-1-style: tiles, Y-sorted sprites, an orthographic camera at the isometric angle); both join the yardsticks. The first **project templates** (spec 24.1): Empty 2D, 2D Platformer, Top-Down 2D, each a small working start made only of public features; the review | The gate |
 
 ## Part 1 result (2026-11-20)
 Done. `"plane": "xy"` on a rigidbody (Jolt's `EAllowedDOFs::Plane2D`), `lock_position` / `lock_rotation` for any axes,
@@ -163,6 +163,25 @@ Not as planned: the 1920 × 1080 readback is a unit test of the layout, not a sc
 720 and 800, which the same code serves); the parallax golden is one moment, not two (the unit tests cover the motion).
 Not yet: a display page in the editor's project settings, keep_width / keep_height, MSAA off per project, repeating
 parallax.
+
+## Part 7 result (2026-11-21)
+Done; **the 2D foundations are done** ([review](M9_2D_REVIEW.md)). **Samples:** `NoorPlatformer` (Tom's own pixel art,
+a tilemap level, the platformer hero, coins, spikes, a door, 320 × 180, a follow camera, parallax; an autopilot) and
+`NoorIsometric` (a lit isometric dungeon room, Coth walking in eight directions round pillars); both yardsticks, both
+identical in built games. **Templates** ([TEMPLATES.md](../TEMPLATES.md)): Empty 2D, 2D Platformer, Top-Down 2D, from
+`noor_cli new --template` or the editor's New Project (editor API v31). **Added on the way:** the sprite's `"facing"`
+(flat games pick a directional view), `"y_depth"` (isometric characters sorted against wall tiles pixel by pixel), the
+tileset's `"floor"` (Tom spotted floors covering Coth's feet), scripts with a byte-order mark load.
+
+Proved: the platformer can be finished (`sample.noorplatformer_finishes`); goldens `NoorPlatformer`, `NoorIsometric`;
+built games to the bit (`player.*_built_same`); each template makes a project that plays under validation
+(`cli.template_*`); templates listed and created, refused when they should be (unit); `facing` views, the BOM, floors
+never in front of a standing character while walls in front are (unit); the editor offers the templates and opens a
+project made from one (smoke); every earlier golden and yardstick unchanged.
+
+Not as planned: "an orthographic camera at the isometric angle" became an isometric tilemap seen straight on (ADR-040's
+2D plane; a tilted 3D camera over 3D tiles is the 2.5D route and works already); the top-down game is a template, not a
+sample.
 
 ## Highest risks (settle early)
 

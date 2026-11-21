@@ -221,9 +221,10 @@ public sealed class EditorDocument : IDisposable
         return h == IntPtr.Zero ? null : new EditorDocument(h);
     }
 
-    public static EditorDocument? Create(string folder, string name, out string error)
+    public static EditorDocument? Create(string folder, string name, out string error, string? templateFolder = null)
     {
-        var h = Native.noor_doc_create_project(folder, name);
+        var h = templateFolder == null ? Native.noor_doc_create_project(folder, name)
+                                       : Native.noor_doc_create_project_from_template(folder, name, templateFolder);
         error = h == IntPtr.Zero ? Native.LastError() : "";
         return h == IntPtr.Zero ? null : new EditorDocument(h);
     }

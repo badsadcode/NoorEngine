@@ -218,7 +218,9 @@ private:
 class Document {
 public:
     [[nodiscard]] static Result<std::unique_ptr<Document>> open(const std::filesystem::path& project);
-    [[nodiscard]] static Result<std::unique_ptr<Document>> create(const std::filesystem::path& folder, std::string_view name);
+    // An empty project, or (2D part 7) one made from the project template in `template_folder`.
+    [[nodiscard]] static Result<std::unique_ptr<Document>> create(const std::filesystem::path& folder, std::string_view name,
+                                                                   const std::filesystem::path& template_folder = {});
 
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;

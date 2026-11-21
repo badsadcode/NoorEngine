@@ -1,0 +1,6 @@
+{
+  "noor_template": 1,
+  "name": "Top-Down 2D",
+  "description": "A tilemap meadow with water and trees that block, and a character you steer in every direction with your own script, with a follow camera.",
+  "order": 30
+}

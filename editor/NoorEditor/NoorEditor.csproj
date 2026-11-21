@@ -20,7 +20,11 @@
     <NoorRepo>$(MSBuildThisFileDirectory)..\..\</NoorRepo>
     <NoorNativeDir Condition="'$(NoorNativeDir)' == '' And Exists('$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\noor_editor_api.dll')">$(NoorRepo)build\ninja\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
     <NoorNativeDir Condition="'$(NoorNativeDir)' == ''">$(NoorRepo)build\windows\engine\editor_api\$(NoorNativeConfig)\</NoorNativeDir>
-    <NoorToolsDir Condition="'$(NoorToolsDir)' == ''">$(NoorNativeDir)..\..\..\tools\noor_cli\$(NoorNativeConfig)\</NoorToolsDir>
+    <!-- noor_cli, noor_player, managed\ and templates\ from the same configuration folder as the DLL. (It used to be
+         NoorNativeConfig's, Debug unless set, so a RelWithDebInfo editor, the smoke test's, packed games with a stale
+         Debug player: found in 2D part 7.) -->
+    <NoorNativeDirConfig>$([System.IO.Path]::GetFileName($(NoorNativeDir.TrimEnd('\').TrimEnd('/'))))</NoorNativeDirConfig>
+    <NoorToolsDir Condition="'$(NoorToolsDir)' == ''">$(NoorNativeDir)..\..\..\tools\noor_cli\$(NoorNativeDirConfig)\</NoorToolsDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -63,6 +67,9 @@
     <None Include="$(NoorToolsDir)managed\*" Link="managed\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NoorToolsDir)licenses\*" Link="licenses\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+    <!-- Project templates for New Project (2D part 7), as the engine build put them next to noor_cli. -->
+    <None Include="$(NoorToolsDir)templates\**\*" Link="templates\%(RecursiveDir)%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

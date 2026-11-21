@@ -1,0 +1,18 @@
+{
+  "noor_sprite": 1,
+  "name": "sky",
+  "texture": "44aa2a38-baaa-5bbc-aeb0-26c3166a63ed",
+  "grid": {
+    "columns": 1,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.5
+  ],
+  "pixels_per_metre": 1,
+  "filter": "nearest",
+  "animations": {}
+}

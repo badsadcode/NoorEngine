@@ -1,0 +1,1175 @@
+{
+  "noor_scene": 2,
+  "id": "aa05652a-121c-5323-af30-b7585a577edd",
+  "name": "Level",
+  "entities": [
+    {
+      "id": "4ee3ca95-9553-5d76-be25-ef16a7eebfe8",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          9.0,
+          6.125,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 11.25,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14,
+          "pixel_snap": true
+        },
+        "camera_follow": {
+          "target": "Hero",
+          "offset": [
+            2,
+            2
+          ],
+          "dead_zone": [
+            3,
+            2
+          ],
+          "smoothing": 0.15,
+          "bounds": [
+            -0.5,
+            -0.5,
+            63.5,
+            13.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "8655149c-0d3a-58b3-ae47-6bb25a4730ad",
+      "name": "Sky",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -10
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          60,
+          30,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "eb6bc6fe-756c-5523-b8ba-827f9d341e2f",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -3
+        },
+        "parallax": {
+          "factor": [
+            0,
+            0
+          ],
+          "anchor": [
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "id": "e64da766-59a4-5297-acd8-c5ef38b1f637",
+      "name": "Mountains",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -8
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "parallax": {
+          "factor": [
+            0.15,
+            0.3
+          ],
+          "anchor": [
+            9.0,
+            6.125
+          ]
+        }
+      }
+    },
+    {
+      "id": "c2fb5af1-80b6-5225-91ef-f7b64fa601be",
+      "name": "Mountains 1",
+      "layer": "default",
+      "tags": [],
+      "parent": "e64da766-59a4-5297-acd8-c5ef38b1f637",
+      "transform": {
+        "position": [
+          -10.0,
+          -2.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "a39ddac3-e598-5189-81b8-5dcaa62b889f",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -2
+        }
+      }
+    },
+    {
+      "id": "0117f4ae-bc1c-565d-9f11-ce03c1e0228a",
+      "name": "Mountains 2",
+      "layer": "default",
+      "tags": [],
+      "parent": "e64da766-59a4-5297-acd8-c5ef38b1f637",
+      "transform": {
+        "position": [
+          8.75,
+          -2.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "a39ddac3-e598-5189-81b8-5dcaa62b889f",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -2
+        }
+      }
+    },
+    {
+      "id": "51428e5a-d418-5b78-a1b1-e3b7e8d0f781",
+      "name": "Mountains 3",
+      "layer": "default",
+      "tags": [],
+      "parent": "e64da766-59a4-5297-acd8-c5ef38b1f637",
+      "transform": {
+        "position": [
+          27.5,
+          -2.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "a39ddac3-e598-5189-81b8-5dcaa62b889f",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -2
+        }
+      }
+    },
+    {
+      "id": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "name": "Pines",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          -6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "parallax": {
+          "factor": [
+            0.5,
+            0.7
+          ],
+          "anchor": [
+            9.0,
+            6.125
+          ]
+        }
+      }
+    },
+    {
+      "id": "e9129e87-1ee7-570d-a8f9-a05863f8fe00",
+      "name": "Pine 1",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          -4,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "520b8791-3660-51d0-a42a-819e41888c6f",
+      "name": "Pine 2",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          3,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "1ff8903a-8c82-50cf-88d7-1a3fa311459b",
+      "name": "Pine 3",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          10,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "c743ca86-31ab-5df0-b13f-c0a687e2e18c",
+      "name": "Pine 4",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          17,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "e5c23667-eb92-58b5-90c2-371ad314d48c",
+      "name": "Pine 5",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          24,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "b18c7429-a2bb-5e05-afdd-290aa2658cd3",
+      "name": "Pine 6",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          31,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "4691ddcd-a1c8-5925-9339-77e6092810ac",
+      "name": "Pine 7",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          38,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "d37b5131-461b-55c1-8845-531133bd2235",
+      "name": "Pine 8",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          45,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "546288a1-86cd-5170-ac48-f032b0aca37f",
+      "name": "Pine 9",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          52,
+          -0.5,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "a55eb26a-cfe5-5b1c-bc72-092f10602884",
+      "name": "Pine 10",
+      "layer": "default",
+      "tags": [],
+      "parent": "b74eb463-3fed-58e6-9c9d-ef09811f4c69",
+      "transform": {
+        "position": [
+          59,
+          0.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "50e77854-8e24-54a6-b874-5efbb18040e2",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "layer": -1
+        }
+      }
+    },
+    {
+      "id": "e592c5d7-e41f-51c7-98aa-5ed4a41d5119",
+      "name": "Level",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "tilemap": {
+          "tileset": "1cebb7b2-ddf0-5cf0-869a-18ac86dbdce9",
+          "rows": [
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 13 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8",
+            "8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14 14 14 14 14 . . . . . . . . . . . . . . . . . . 8",
+            "8 16 . . . . . . . . . . . . . . . . . . . . 6 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 8",
+            "8 . . . . . . . . . . 14 14 14 14 . . . . . 6 6 6 6 . . . . 7 7 7 . . . 14 14 14 14 14 . . . . . . 14 14 14 14 14 14 14 . . . . . . . . . . . 8",
+            "8 . . 10 . 12 . . 15 . . . . . . 11 . . 6 6 6 6 6 6 10 17 17 17 7 7 7 . . 12 . . . . . . . . . . . . 17 17 17 17 17 . . 11 . 9 9 . 10 . 18 . . 8",
+            "0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0 1 2 0",
+            "3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3 4 4 3"
+          ],
+          "unlit": true
+        }
+      }
+    },
+    {
+      "id": "eac8c703-4685-50bd-a545-00c8013d75e6",
+      "name": "Coin 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          8,
+          3.5,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "b6766b06-ba49-5e20-a1f1-4524e96e59f4",
+      "name": "Coin 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          12.5,
+          4.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "e67dd3dd-5dc9-5b7d-b541-08b8b0362d69",
+      "name": "Coin 3",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          23,
+          5.5,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "4efe2239-bb47-5350-8ff5-685c4d15a33f",
+      "name": "Coin 4",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          29,
+          4.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "c5be8b0b-e6d7-5ba8-8351-e6b93167c58e",
+      "name": "Coin 5",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          36,
+          4.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "0e49b1ad-b555-5c3f-8db5-d302e83ffd0c",
+      "name": "Coin 6",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          42,
+          6.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "e5646e51-1974-5584-81db-b594e34c0c19",
+      "name": "Coin 7",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          48,
+          4.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "17d75cf2-824b-5915-a893-d09803cbb5c9",
+      "name": "Coin 8",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          55.5,
+          3.6,
+          0.05
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "3020794c-05f3-5089-b565-94a5764d7156",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "spin",
+          "order": 1
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.6,
+            0.8
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "00cc35d6-6bd8-5bb4-995d-408636eb44bf",
+      "name": "Spikes 1",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          26.0,
+          2.2,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            2.8,
+            0.5
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "2f617c4a-5692-5f56-b230-7dfd64c3cc44",
+      "name": "Spikes 2",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          48.0,
+          2.2,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            4.8,
+            0.5
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "01cb255c-688e-5910-9e10-2df9183164da",
+      "name": "Door",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          60,
+          2,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            0.8,
+            1
+          ],
+          "trigger": true
+        }
+      }
+    },
+    {
+      "id": "9cc20322-7862-55d0-9f28-def5f78825af",
+      "name": "Hero",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          3.0,
+          1.51,
+          0.1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "326eea1a-5a59-5aba-9105-36693b7dc65f",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true,
+          "animation": "idle",
+          "order": 2
+        },
+        "character": {
+          "radius": 0.3,
+          "height": 1.05,
+          "plane": "xy",
+          "gravity_scale": 3,
+          "acceleration": 40,
+          "deceleration": 50,
+          "air_acceleration": 25,
+          "coyote_time": 0.1,
+          "jump_buffer": 0.1
+        },
+        "platformer": {
+          "speed": 6.5,
+          "jump_height": 2.2,
+          "animations": {
+            "idle": "idle",
+            "run": "run",
+            "jump": "jump",
+            "fall": "fall"
+          }
+        },
+        "script": {
+          "file": "Scripts/Hero.luau"
+        }
+      }
+    }
+  ]
+}

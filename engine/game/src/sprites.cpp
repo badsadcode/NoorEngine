@@ -1,4 +1,5 @@
 #include "noor/game/sprites.h"
+#include "noor/game/tilemap.h"
 
 #include "noor/asset/texture.h"
 #include "noor/foundation/log.h"
@@ -162,7 +163,10 @@ void SpriteLibrary::add_draws(std::span<const SpriteInstance> sprites, Vec3 eye,
         Sheet& s = *sheet(sp.sheet);
         const Json& c = sp.component;
         const math::Mat4& w = sp.world;
-        const Vec3 pos = w.transform_point({0, 0, 0});
+        Vec3 pos = w.transform_point({0, 0, 0});
+        // "y_depth" (2D part 7): the isometric map's depth rule by the pivot's height, so walls in front hide the sprite
+        // and it hides walls behind, pixel by pixel (hard-edged sprites only: those write depth).
+        if (c.is_object() && c.value("y_depth", false)) pos.z += standing_depth(pos.y);
         const Vec3 scale{math::length(Vec3{w.m[0].x, w.m[0].y, w.m[0].z}), math::length(Vec3{w.m[1].x, w.m[1].y, w.m[1].z}), 1.0f};
         // Turned to the camera: +Z of the quad towards the eye (upright: about the vertical only).
         math::Mat4 turn = math::Mat4::identity();

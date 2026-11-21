@@ -1,0 +1,11 @@
+{
+  "noor_tileset": 1,
+  "name": "meadow",
+  "sheet": "6b2ea73f-655f-5499-b6f9-1e3776502083",
+  "solid": [
+    3,
+    4,
+    5
+  ],
+  "one_way": []
+}

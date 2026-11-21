@@ -52,6 +52,7 @@ Result<Tileset> parse_tileset(const Json& file) {
     t.sheet = guid_field(file, "sheet");
     t.solid = int_set(file, "solid");
     t.one_way = int_set(file, "one_way");
+    t.floor = int_set(file, "floor");
     return t;
 }
 
@@ -70,6 +71,10 @@ Json tileset_file_json(const Tileset& t) {
     if (t.sheet) j["sheet"] = t.sheet->to_string();
     for (int s : t.solid) j["solid"].push_back(s);
     for (int s : t.one_way) j["one_way"].push_back(s);
+    if (!t.floor.empty()) {  // only when there are any: older files stay as they were
+        j["floor"] = Json::array();
+        for (int s : t.floor) j["floor"].push_back(s);
+    }
     return j;
 }
 

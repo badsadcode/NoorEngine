@@ -1,0 +1,6 @@
+{
+  "noor_template": 1,
+  "name": "Empty 2D",
+  "description": "An orthographic camera, pixel-perfect display settings, one sprite and one script. Start here for any 2D game.",
+  "order": 10
+}

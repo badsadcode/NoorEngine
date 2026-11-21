@@ -46,6 +46,61 @@ public static class Dialogs
         return string.IsNullOrWhiteSpace(result) ? null : result;
     }
 
+    /// <summary>A project template the New Project dialog offers (2D part 7); Folder null: an empty project.</summary>
+    public sealed record TemplateChoice(string Name, string Description, string? Folder);
+
+    /// <summary>New Project: a name and a template. Returns null on cancel.</summary>
+    public static async Task<(string Name, TemplateChoice Template)?> NewProject(Window owner, IReadOnlyList<TemplateChoice> templates)
+    {
+        var window = Shell("New Project");
+        window.Width = 520;
+        (string, TemplateChoice)? result = null;
+        var box = new TextBox { Text = "MyGame", Classes = { "field" } };
+        var list = new ListBox { MaxHeight = 300, SelectedIndex = 0 };
+        foreach (var t in templates)
+        {
+            list.Items.Add(new ListBoxItem
+            {
+                Tag = t,
+                Padding = new Thickness(10, 6),
+                Content = new StackPanel
+                {
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock { Text = t.Name, FontSize = 13, FontWeight = FontWeight.SemiBold },
+                        new TextBlock { Text = t.Description, FontSize = 11, Classes = { "muted" }, TextWrapping = TextWrapping.Wrap },
+                    },
+                },
+            });
+        }
+        list.SelectedIndex = 0;
+        var ok = new Button { Content = "Create", Classes = { "primary" }, IsDefault = true };
+        var cancel = new Button { Content = "Cancel", Classes = { "tool" }, IsCancel = true };
+        ok.Click += (_, _) =>
+        {
+            var name = box.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || list.SelectedItem is not ListBoxItem { Tag: TemplateChoice t }) return;
+            result = (name, t);
+            window.Close();
+        };
+        cancel.Click += (_, _) => window.Close();
+        window.Content = Body(
+            new StackPanel
+            {
+                Spacing = 6,
+                Children =
+                {
+                    new TextBlock { Text = "Project name", FontSize = 12, Classes = { "muted" } }, box,
+                    new TextBlock { Text = "Start from", FontSize = 12, Classes = { "muted" }, Margin = new Thickness(0, 10, 0, 0) }, list,
+                },
+            },
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { ok, cancel } });
+        window.Opened += (_, _) => { box.Focus(); box.SelectAll(); };
+        await window.ShowDialog(owner);
+        return result;
+    }
+
     private static Window Shell(string title) => new()
     {
         Title = title,

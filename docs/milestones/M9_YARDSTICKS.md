@@ -14,6 +14,8 @@ beyond its limit fails the build.
 | pong | [`samples/NoorPong`](../../samples/NoorPong) | A 2D game: an orthographic camera, a pixel-art sprite, Lua, a HUD |
 | fps | [`samples/NoorFPS-lite`](../../samples/NoorFPS-lite) (`Main_Lua`) | A compact hand-made 3D level: physics, a player, Lua |
 | hillside | [`samples/Hillside`](../../samples/Hillside) (`Hillside`) | A procedural landscape: graph terrain, scattered forest |
+| platformer | [`samples/NoorPlatformer`](../../samples/NoorPlatformer) | A pixel-art 2D game at 320 × 180: a tilemap, the platformer character, Lua (added in 2D part 7) |
+| isometric | [`samples/NoorIsometric`](../../samples/NoorIsometric) | An isometric tilemap room, an 8-direction sprite, point lights (added in 2D part 7) |
 | *(from 9A part 5)* | the streamed test world | Big worlds themselves |
 
 ## The baseline (2026-11-20, before 9A)
@@ -28,6 +30,8 @@ frame together (what the CPU spends, vsync aside); its 95th percentile in bracke
 | NoorPong (2D) | 0.28 ms (0.37) | 1.23 ms | 197 MB | 418 MB | 117 MB | 30 | 0.65 s |
 | NoorFPS-lite | 0.43 ms (0.60) | 2.16 ms | 199 MB | 418 MB | 121 MB | 30 | 0.71 s |
 | Hillside | 6.21 ms (7.13) | 4.80 ms | 219 MB | 507 MB | 199 MB | 30 | 1.27 s |
+| NoorPlatformer (2026-11-21) | 0.39 ms (0.59) | 0.36 ms | 198 MB | 353 MB | 68 MB | 30 | 0.64 s |
+| NoorIsometric (2026-11-21) | 0.23 ms (0.41) | 1.01 ms | 197 MB | 419 MB | 118 MB | 30 | 0.62 s |
 
 **The limits** (`tests/yardsticks.json`) are each measurement plus a margin for a busy machine: CPU median ×1.3 + 0.2 ms,
 CPU p95 ×1.5 + 0.4 ms, GPU ×1.3 + 0.1 ms, memory ×1.15 + 24 MB, GPU memory ×1.05 + 8 MB, threads +2, first frame ×1.5 +

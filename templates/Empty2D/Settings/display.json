@@ -1,0 +1,14 @@
+{
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "mode": "windowed"
+  },
+  "base_resolution": [
+    320,
+    180
+  ],
+  "stretch": "viewport",
+  "aspect": "keep",
+  "integer_scale": true
+}

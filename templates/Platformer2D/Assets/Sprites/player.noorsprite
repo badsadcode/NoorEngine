@@ -1,0 +1,51 @@
+{
+  "noor_sprite": 1,
+  "name": "player",
+  "texture": "84d8bf26-e61b-5c4d-81db-39f0353e7e0d",
+  "grid": {
+    "columns": 7,
+    "rows": 1,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.0
+  ],
+  "pixels_per_metre": 16,
+  "filter": "nearest",
+  "animations": {
+    "idle": {
+      "frames": [
+        0,
+        1
+      ],
+      "fps": 3,
+      "loop": true
+    },
+    "run": {
+      "frames": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "jump": {
+      "frames": [
+        6
+      ],
+      "fps": 5,
+      "loop": true
+    },
+    "fall": {
+      "frames": [
+        6
+      ],
+      "fps": 5,
+      "loop": true
+    }
+  }
+}

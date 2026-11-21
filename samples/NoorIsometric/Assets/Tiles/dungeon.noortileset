@@ -1,0 +1,12 @@
+{
+  "noor_tileset": 1,
+  "name": "Dungeon",
+  "sheet": "dbfce5e9-f2ce-5185-af0f-64991df41567",
+  "solid": [],
+  "one_way": [],
+  "floor": [
+    0,
+    1,
+    2
+  ]
+}

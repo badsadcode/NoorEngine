@@ -1,0 +1,35 @@
+{
+  "noor_sprite": 1,
+  "name": "coth",
+  "texture": "0897eb10-933d-55f3-b7b4-a76d1d418912",
+  "grid": {
+    "columns": 8,
+    "rows": 6,
+    "margin": 0,
+    "spacing": 0
+  },
+  "pivot": [
+    0.5,
+    0.078125
+  ],
+  "pixels_per_metre": 64,
+  "filter": "linear",
+  "animations": {
+    "idle": {
+      "frames": [
+        0
+      ],
+      "fps": 2,
+      "loop": true
+    },
+    "walk": {
+      "frames": [
+        8,
+        16
+      ],
+      "fps": 6,
+      "loop": true
+    }
+  },
+  "directions": 8
+}

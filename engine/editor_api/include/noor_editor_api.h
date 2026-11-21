@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 30u
+#define NOOR_EDITOR_API_VERSION 31u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -103,6 +103,10 @@ typedef struct noor_doc noor_doc;
 
 NOOR_API noor_doc* noor_doc_open_project(const char* project_path);
 NOOR_API noor_doc* noor_doc_create_project(const char* folder, const char* name);
+/* v31 (2D part 7): project templates. The templates in a folder: [{"id", "name", "description", "folder"}] (by their
+   order); a new project made from one (template_folder: a template's "folder"). */
+NOOR_API const char* noor_templates(const char* dir);
+NOOR_API noor_doc* noor_doc_create_project_from_template(const char* folder, const char* name, const char* template_folder);
 NOOR_API void noor_doc_close(noor_doc* doc);
 
 NOOR_API const char* noor_doc_project_info(noor_doc* doc);           /* {id, name, root, engine} */

@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using NoorEditor.Interop;
 using NoorEditor.Model;
 using NoorEditor.Shell;
 
@@ -118,22 +119,41 @@ public sealed class ProjectHub : Window
         if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path) Open(path);
     }
 
+    /// <summary>NoorEngine's project templates, next to the editor (copied there by the build).</summary>
+    public static IReadOnlyList<Dialogs.TemplateChoice> TemplateChoices()
+    {
+        var choices = new List<Dialogs.TemplateChoice> { new("Empty project", "Nothing but an empty scene: for a 3D game, or to set up everything yourself.", null) };
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(Native.Templates(Path.Combine(AppContext.BaseDirectory, "templates")));
+            foreach (var t in json.RootElement.EnumerateArray())
+                choices.Add(new(t.GetProperty("name").GetString() ?? "", t.GetProperty("description").GetString() ?? "", t.GetProperty("folder").GetString()));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // No templates readable: an empty project is still offered.
+        }
+        return choices;
+    }
+
     private async Task NewProject()
     {
-        var name = await Dialogs.Prompt(this, "New Project", "Project name", "MyGame");
-        if (name == null) return;
+        var picked = await Dialogs.NewProject(this, TemplateChoices());
+        if (picked == null) return;
+        var (name, template) = picked.Value;
         var parents = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = $"Where should the '{name}' folder go?" });
         if (parents.Count == 0 || parents[0].TryGetLocalPath() is not { } parent) return;
 
         var folder = Path.Combine(parent, name);
-        var doc = EditorDocument.Create(folder, name, out var error);
+        var doc = EditorDocument.Create(folder, name, out var error, template.Folder);
         if (doc == null)
         {
             _error.Text = $"Could not create the project: {error}";
             return;
         }
-        // A fresh project starts with an empty, saved main scene.
-        if (doc.NewScene("Scenes/Main.noorscene", "Main")) doc.Save();
+        // A fresh empty project starts with an empty, saved main scene; a template's has its own.
+        if (template.Folder == null) { if (doc.NewScene("Scenes/Main.noorscene", "Main")) doc.Save(); }
+        else doc.OpenScene("Scenes/Main.noorscene");
         _settings.AddRecent(folder);
         ProjectOpened?.Invoke(doc);
     }

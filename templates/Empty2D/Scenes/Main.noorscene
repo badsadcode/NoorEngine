@@ -1,0 +1,81 @@
+{
+  "noor_scene": 2,
+  "id": "7c192805-a05d-546c-ad3f-0f78dfdeeb40",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "3729c972-1ac7-5f8c-aba2-b16f57a44629",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 11.25,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14,
+          "pixel_snap": true
+        }
+      }
+    },
+    {
+      "id": "bfc03f8a-4b98-58d5-876f-b87f39d61b67",
+      "name": "Icon",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "sprite": {
+          "sheet": "b21391fb-1ff7-594d-b8a7-055496aeff75",
+          "billboard": "none",
+          "cast_shadows": false,
+          "unlit": true
+        },
+        "script": {
+          "file": "Scripts/Main.luau",
+          "params": {
+            "speed": 90
+          }
+        }
+      }
+    }
+  ]
+}

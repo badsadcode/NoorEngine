@@ -22,6 +22,9 @@ namespace noor::game {
 
 // The direction (0..count-1) an entity at `world` shows to a viewer at `eye`. 0 when count <= 1.
 [[nodiscard]] int sprite_direction(const math::Mat4& world, math::Vec3 eye, int count);
+// The view of `count` for a flat game's facing (x, y) on screen: 0 down (towards the viewer), then turning to the
+// viewer's left (2 of 8: left, 4: up, 6: right). The sprite component's "facing".
+[[nodiscard]] int sprite_view_for(float x, float y, int count);
 
 // Seconds into its animation a sprite is at `seconds` of game (or scene) time.
 [[nodiscard]] double sprite_time(const asset::Json& component, double seconds);
