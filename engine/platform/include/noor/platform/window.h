@@ -14,6 +14,9 @@ struct WindowDesc {
     std::uint32_t width = 1280;  // logical size; actual pixels depend on display scale
     std::uint32_t height = 720;
     bool resizable = true;
+    // 2D part 6: a window, the whole screen (the desktop's own resolution, without changing the monitor's mode), or a
+    // window without a frame.
+    enum class Mode : std::uint8_t { Windowed, Fullscreen, Borderless } mode = Mode::Windowed;
 };
 
 // A top-level OS window owned by the engine (SDL3), able to host a Vulkan surface.
@@ -36,6 +39,7 @@ public:
     void minimize();
     void restore();
     void set_size(std::uint32_t width, std::uint32_t height);  // logical size
+    void set_fullscreen(bool on);  // the whole screen at the desktop's resolution, or back to a window
     [[nodiscard]] std::uint32_t display_index() const;
     bool move_to_display(std::uint32_t index);  // centres the window there; false if no such display
 

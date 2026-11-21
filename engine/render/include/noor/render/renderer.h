@@ -159,6 +159,32 @@ struct MaterialHandle {
 
 // ---- Frames -----------------------------------------------------------------------------
 
+// ---- Display (2D part 6): the size the scene is drawn at, and where it goes on the screen ---------------------------
+//
+// Like Godot's stretch modes. Off: the scene is drawn at the window's own size (times render_scale, then scaled back up:
+// a cheaper 3D picture). Viewport: drawn at the base resolution (say 320 x 180) and scaled up to the screen, in whole
+// steps when integer_scale (each game pixel exactly k x k screen pixels), with nearest filtering: pixel art. Canvas:
+// drawn at the screen's resolution but kept to the base's shape. keep_aspect: black bars where the screen's shape
+// differs; otherwise the picture grows to fill it (the game sees more of its world, never stretched).
+struct DisplayDesc {
+    enum class Stretch : std::uint8_t { Off, Viewport, Canvas } stretch = Stretch::Off;
+    std::uint32_t base_width = 0, base_height = 0;  // 0: none (Viewport and Canvas then act as Off)
+    bool keep_aspect = true;
+    bool integer_scale = true;  // Viewport: whole-number steps only
+    float render_scale = 1.0f;  // Off and Canvas: 0.25 .. 2
+};
+struct DisplayLayout {
+    std::uint32_t render_width = 0, render_height = 0;  // what the scene is drawn at
+    std::int32_t x = 0, y = 0;                          // where it goes on the screen (pixels, top-left)
+    std::uint32_t width = 0, height = 0;
+    bool nearest = false;                               // scaled up without smoothing
+    // How much taller the view is than the camera asks for: with "expand" a screen taller than the base shows more of the
+    // world above and below (a camera's height, or its field of view, is for the base picture); 1 otherwise.
+    float view_scale = 1.0f;
+};
+// Pure: the layout for a screen of `screen_width` x `screen_height` pixels.
+[[nodiscard]] DisplayLayout layout_display(const DisplayDesc& desc, std::uint32_t screen_width, std::uint32_t screen_height) noexcept;
+
 struct Camera {
     math::Mat4 view = math::Mat4::identity();  // world -> view (see math::look_at)
     float fov_y = math::radians(60.0f);
@@ -167,6 +193,9 @@ struct Camera {
     // 0 = perspective. A parallel view has a far plane.
     float ortho_height = 0.0f;
     float far_plane = 1000.0f;
+    // Orthographic: the view moves in whole pixels of the drawn picture (2D part 6), so pixel art never shimmers as the
+    // camera moves.
+    bool pixel_snap = false;
     [[nodiscard]] bool orthographic() const noexcept { return ortho_height > 0.0f; }
     // How far away something `distance` metres off looks, for choosing levels of detail: a parallel view shows everything
     // at one size, as a perspective view of fov_y would at the distance where it shows ortho_height.
@@ -626,6 +655,10 @@ public:
     [[nodiscard]] std::uint64_t swapchain_rebuilds() const noexcept;
     // Size of the images currently being presented (zero before the first swapchain).
     [[nodiscard]] platform::PixelSize swapchain_size() const noexcept;
+    // Display settings (2D part 6): applied at the next frame (the scene's images are made again at the new size).
+    void set_display(const DisplayDesc& desc);
+    // Where the picture is on the screen now, and the size it's drawn at (the HUD is laid out in this rectangle).
+    [[nodiscard]] DisplayLayout display_layout() const noexcept;
 
 private:
     struct Impl;

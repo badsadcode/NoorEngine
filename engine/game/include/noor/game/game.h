@@ -106,6 +106,7 @@ struct SceneView {
         // "projection": "orthographic" (9A part 1): the whole height shown in metres ("height"), and a far plane ("far").
         float ortho_height = 0.0f;  // 0: perspective
         float far_plane = 1000.0f;
+        bool pixel_snap = false;  // "pixel_snap": true (2D part 6): orthographic views move in whole picture pixels
     };
     std::vector<Mesh> meshes;
     // CSG models (`csg_model` entities): drawn from their cooked files (noor/game/cooked_csg.h).

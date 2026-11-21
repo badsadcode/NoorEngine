@@ -130,7 +130,7 @@ Status Renderer::Impl::create_depth_buffer() {
     VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image_info.imageType = VK_IMAGE_TYPE_2D;
     image_info.format = kDepthFormat;
-    image_info.extent = {extent.width, extent.height, 1};
+    image_info.extent = {render_extent.width, render_extent.height, 1};
     image_info.mipLevels = 1;
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -176,7 +176,7 @@ Status Renderer::Impl::create_msaa_targets() {
         VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         image_info.imageType = VK_IMAGE_TYPE_2D;
         image_info.format = format;
-        image_info.extent = {extent.width, extent.height, 1};
+        image_info.extent = {render_extent.width, render_extent.height, 1};
         image_info.mipLevels = 1;
         image_info.arrayLayers = 1;
         image_info.samples = static_cast<VkSampleCountFlagBits>(scene_samples);
@@ -601,8 +601,8 @@ void Renderer::Impl::record_draws(VkCommandBuffer cmd, const FrameDesc& frame, D
     (void)frame;  // planned in plan_frame
     const auto& batches = pass == DrawPass::Opaque ? plan.opaque : pass == DrawPass::Transparent ? plan.transparent : plan.gizmos;
     if (pass == DrawPass::Transparent ? plan.see_through.empty() && plan.weather.empty() : batches.empty()) return;  // particles alone still draw
-    const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
-    const VkRect2D scissor{{0, 0}, extent};
+    const VkViewport vp{0.0f, 0.0f, static_cast<float>(render_extent.width), static_cast<float>(render_extent.height), 0.0f, 1.0f};
+    const VkRect2D scissor{{0, 0}, render_extent};
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};

@@ -68,7 +68,7 @@ Status Renderer::Impl::record_capture(VkCommandBuffer cmd, VkImage image) {
 
 // The scene's depth buffer (no MSAA) into a host-visible buffer: depth attachment -> copy -> depth attachment again.
 Status Renderer::Impl::record_depth_capture(VkCommandBuffer cmd) {
-    const VkDeviceSize size = static_cast<VkDeviceSize>(extent.width) * extent.height * 4;
+    const VkDeviceSize size = static_cast<VkDeviceSize>(render_extent.width) * render_extent.height * 4;
     auto buffer = create_buffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, true);
     if (!buffer) return std::unexpected(buffer.error());
     set_name(VK_OBJECT_TYPE_BUFFER, buffer->buffer, "Depth capture readback");
@@ -77,7 +77,7 @@ Status Renderer::Impl::record_depth_capture(VkCommandBuffer cmd) {
                   VK_ACCESS_2_TRANSFER_READ_BIT);
     VkBufferImageCopy region{};
     region.imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
-    region.imageExtent = {extent.width, extent.height, 1};
+    region.imageExtent = {render_extent.width, render_extent.height, 1};
     vkCmdCopyImageToBuffer(cmd, depth_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer->buffer, 1, &region);
     image_barrier(cmd, depth_image, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                   VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,

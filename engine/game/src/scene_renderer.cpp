@@ -245,6 +245,7 @@ render::Camera SceneRenderer::camera(const SceneView& view) {
         cam.near_plane = view.camera->near_plane;
         cam.ortho_height = view.camera->ortho_height;
         cam.far_plane = view.camera->far_plane;
+        cam.pixel_snap = view.camera->pixel_snap;
     } else {
         cam.view = math::look_at({0, 6, 12}, {0, 0, 0}, {0, 1, 0});
         cam.fov_y = math::radians(60.0f);

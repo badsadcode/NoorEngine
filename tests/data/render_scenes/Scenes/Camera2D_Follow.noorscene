@@ -1,0 +1,905 @@
+{
+  "noor_scene": 2,
+  "id": "0b00bfb3-ee0e-5392-92e6-10e2389ba8fc",
+  "name": "Camera2D_Follow",
+  "entities": [
+    {
+      "id": "b5d9c3da-8f38-53d5-a1a1-a832940b1a30",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -6,
+          7,
+          20
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "projection": "orthographic",
+          "height": 10,
+          "near": 0.1,
+          "far": 60,
+          "ev100": 14,
+          "pixel_snap": true
+        },
+        "camera_follow": {
+          "target": "Ball",
+          "offset": [
+            0,
+            1
+          ],
+          "dead_zone": [
+            3,
+            2
+          ],
+          "smoothing": 0.2,
+          "bounds": [
+            -14,
+            -8,
+            44,
+            14
+          ]
+        }
+      }
+    },
+    {
+      "id": "80b270d1-d60a-568c-ae85-8527a509fead",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          30
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "color": "#FFFFFF",
+          "illuminance": 90000,
+          "shadows": false,
+          "sky_color": "#B8B0FF",
+          "sky_luminance": 3000
+        }
+      }
+    },
+    {
+      "id": "f619b70c-51e0-5275-b428-beaf30086cc5",
+      "name": "Backdrop",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          15,
+          3,
+          -6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            120,
+            60,
+            0.2
+          ],
+          "color": "#141127",
+          "roughness": 0.9
+        }
+      }
+    },
+    {
+      "id": "c25ffc27-3749-560b-8adb-f1cf1f671f63",
+      "name": "Slope",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          15,
+          -1,
+          0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          -0.12186934340514748,
+          0.992546151641322
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            60,
+            1,
+            1
+          ],
+          "color": "#4A4370"
+        },
+        "collider": {
+          "shape": "rectangle",
+          "size": [
+            60,
+            1
+          ]
+        }
+      }
+    },
+    {
+      "id": "c93f7e8b-6464-5fd4-af17-ad2883c17baf",
+      "name": "Ball",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -10,
+          7,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 0.6,
+          "color": "#FFC857"
+        },
+        "collider": {
+          "shape": "circle",
+          "radius": 0.6
+        },
+        "rigidbody": {
+          "type": "dynamic",
+          "plane": "xy"
+        }
+      }
+    },
+    {
+      "id": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "name": "Far hills",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          3,
+          -4
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "parallax": {
+          "factor": [
+            0.2,
+            0.2
+          ],
+          "anchor": [
+            -6,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "id": "fb498ae4-208d-552e-8473-19f7b1a30ea7",
+      "name": "Hill 1",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          -12.0,
+          1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 2.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "693b3ffe-501e-5ed0-9082-c0810e55b918",
+      "name": "Hill 2",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          -7.0,
+          1.8,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 3.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "a858051b-60d6-5dcf-b874-0eb08de45728",
+      "name": "Hill 3",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          -2.0,
+          2.6,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 2.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "19b73bad-3a89-5c0d-9b53-2c0d96a63e93",
+      "name": "Hill 4",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          3.0,
+          1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 3.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "6cf603da-79d4-50d9-b53b-f739a61fc2cb",
+      "name": "Hill 5",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          8.0,
+          1.8,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 2.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "511ffdfc-2a8c-5163-988b-0690a1f22e49",
+      "name": "Hill 6",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          13.0,
+          2.6,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 3.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "e205a259-d849-54dc-8057-35dc83f1a68e",
+      "name": "Hill 7",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          18.0,
+          1.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 2.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "e2eb0ddb-2d5a-58f5-b2d5-90d314c08a25",
+      "name": "Hill 8",
+      "layer": "default",
+      "tags": [],
+      "parent": "fb64d612-c3de-5f35-b9df-9e145e0d4a8b",
+      "transform": {
+        "position": [
+          23.0,
+          1.8,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          0.1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "sphere",
+          "radius": 3.5,
+          "color": "#2C2550"
+        }
+      }
+    },
+    {
+      "id": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "name": "Posts",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          4,
+          -1
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "parallax": {
+          "factor": [
+            0.5,
+            0.5
+          ],
+          "anchor": [
+            -6,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "id": "e434a34b-068c-57a2-bbd5-d80358aee446",
+      "name": "Post 1",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          -12.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "129ad505-9a65-5651-9036-ecb4fd677140",
+      "name": "Post 2",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          -8.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "a517b085-973c-5a90-a82b-c09c1f638f56",
+      "name": "Post 3",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          -4.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "130d38c2-0953-5258-9a76-3e4cfb215285",
+      "name": "Post 4",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          0.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "0d4294ab-be33-5a63-8f76-574380ded0e8",
+      "name": "Post 5",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          4.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "0fd578db-bf7c-58ea-9ccd-d2dc57a23229",
+      "name": "Post 6",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          8.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "366b3f55-3341-57eb-b008-ade7467a60f4",
+      "name": "Post 7",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          12.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "729ccfcd-9fb2-5220-8cdb-89049e996bae",
+      "name": "Post 8",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          16.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "57dba447-7cde-5520-b124-8219c885cba3",
+      "name": "Post 9",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          20.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    },
+    {
+      "id": "370e5e7d-9646-5ce5-940e-ac2876afc7a8",
+      "name": "Post 10",
+      "layer": "default",
+      "tags": [],
+      "parent": "6b289802-7dda-5f61-ba4a-9293c6d53718",
+      "transform": {
+        "position": [
+          24.0,
+          2.0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            0.4,
+            3,
+            0.2
+          ],
+          "color": "#6BB8FF"
+        }
+      }
+    }
+  ]
+}

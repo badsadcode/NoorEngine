@@ -138,6 +138,32 @@ one undo step, and one undo takes it back (smoke test).
 drag-the-sprite yet); a 2D grid drawn in the view; rectangle and fill tools; an eyedropper. Sprites from the Content
 Browser can be added to the scene as before (Add to scene).
 
+## Part 6 result (2026-11-21)
+Done. **Display settings** (`Settings/display.json`, [docs](../rendering/DISPLAY.md)): the window's size and mode
+(windowed, fullscreen at the desktop's resolution, borderless); a **base resolution** with Godot-like stretch modes
+(`viewport`: drawn at the base size and scaled up nearest, in whole steps by default; `canvas`: the screen's resolution
+in the base's shape; `off`) and `keep` / `expand` aspect (expand shows more world, the camera's height or field of view
+grown to match); a **render scale** for 3D; the HUD laid out at the base size and scaled with the picture; built games
+read the same file. **Cameras**: `pixel_snap` on orthographic cameras, `camera_follow` (target, offset, dead zone,
+frame-rate-independent smoothing, level bounds), `parallax` layers (factor, anchor; children follow). The renderer draws
+the scene at its own size (`render_extent`) and the tonemap pass places it on the screen; the editor never sets a display,
+so it's unchanged.
+
+Proved: the layouts (off, render scale, viewport keep at 1280 × 720 / 800, 1920 × 1080, 1366 × 768, smaller than the
+base, expand including ultrawide, canvas keep and expand) and the settings file (unit); a 320 × 180 tilemap level read
+back at 1280 × 720 and 1280 × 800 is exactly 4 × 4 screen pixels per game pixel with pure black bars, `expand` at
+1280 × 800 is 320 × 200 game pixels whose middle is identical to `keep`'s picture, canvas at 0.5 draws 640 × 360, all
+under Vulkan validation (`render.display_stretch`); the follow step (dead zone, the same position after one second at 60
+and 30 fps, bounds, a level narrower than the view) and the system following a named target in `late_update` (unit);
+parallax offsets (unit) and a ball followed past two parallax layers (golden `Camera2D_Follow`, four seconds in; post
+positions match the formula to a pixel); every existing golden unchanged. Measured: Hillside at 1920 × 1080, render
+scale 0.5, scene pass about 1.1-1.6 ms → 0.4-0.65 ms (a busy machine; the drop is consistent).
+
+Not as planned: the 1920 × 1080 readback is a unit test of the layout, not a screenshot (the window test runs at 1280 ×
+720 and 800, which the same code serves); the parallax golden is one moment, not two (the unit tests cover the motion).
+Not yet: a display page in the editor's project settings, keep_width / keep_height, MSAA off per project, repeating
+parallax.
+
 ## Highest risks (settle early)
 
 1. **Jolt in a plane.** Locked degrees of freedom are Jolt's own feature (`EAllowedDOFs`), but contacts between slabs,

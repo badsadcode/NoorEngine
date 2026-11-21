@@ -50,6 +50,7 @@ add_executable(noor_unit_tests
     unit/test_lod.cpp
     unit/test_scatter.cpp
     unit/test_tilemap.cpp
+    unit/test_display.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -219,6 +220,25 @@ foreach(name IN ITEMS Sprites2D_Layers Sprites2D_Unlit Sprites2D_YSort Sprites2D
             -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
     set_tests_properties(render.golden_${name} PROPERTIES LABELS "gpu;render" TIMEOUT 60)
 endforeach()
+# Cameras for 2D (part 6): a ball rolling down a slope, followed by a pixel-snapped camera (dead zone, smoothing, level
+# bounds) past two parallax layers, four seconds in (tools/samples/make_2d_test_scenes.py).
+add_test(NAME render.golden_Camera2D_Follow
+    COMMAND ${CMAKE_COMMAND}
+        -DPLAYER=$<TARGET_FILE:noor_player> -DCOMPARE=$<TARGET_FILE:noor_image_compare>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DSCENE=Scenes/Camera2D_Follow.noorscene
+        -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/golden/Camera2D_Follow.png -DFRAMES=240
+        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/render_golden_Camera2D_Follow
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/render_golden.cmake)
+set_tests_properties(render.golden_Camera2D_Follow PROPERTIES LABELS "gpu;render" TIMEOUT 60)
+# Display settings (2D part 6): a base resolution scaled up in whole steps, with bars or more of the world, and a
+# render scale (tests/display_check.cmake, tests/tools/display_check.cpp).
+add_executable(noor_display_check tools/display_check.cpp)
+target_link_libraries(noor_display_check PRIVATE stb::image)
+add_test(NAME render.display_stretch
+    COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DCHECK=$<TARGET_FILE:noor_display_check>
+        -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes -DWORK=${CMAKE_CURRENT_BINARY_DIR}/display_stretch
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/display_check.cmake)
+set_tests_properties(render.display_stretch PROPERTIES LABELS "gpu;render" TIMEOUT 120)
 add_test(NAME render.tilemap_batches
     COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/render_scenes
         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/tilemap_batches -P ${CMAKE_CURRENT_SOURCE_DIR}/tilemap_batches_check.cmake)

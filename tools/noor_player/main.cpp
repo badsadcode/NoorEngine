@@ -28,6 +28,7 @@
 #include "noor/game/animator.h"
 #include "noor/game/game.h"
 #include "noor/game/hud.h"
+#include "noor/game/display.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/water.h"
 #include "noor/platform/input.h"
@@ -76,6 +77,9 @@ struct Options {
     std::uint32_t water_probes = 0;  // N: the last frame's depth read back at N x N pixels, compared with water_height
     std::uint32_t water_debug = 0;   // 8D part 7: none, depth, flow, waves, normals, cost (render::FrameDesc::water_debug)
     double stall_ms = 0;             // 9A part 1: a deliberate stall in every game update, to prove the yardstick check catches it
+    std::uint32_t window_width = 0, window_height = 0;  // --window WxH: overrides Settings/display.json (tests)
+    bool windowed = false;                              // --windowed: never fullscreen or borderless (tests)
+    std::string display;                                // --display <file.json>: in place of Settings/display.json (tests)
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -95,6 +99,15 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--cpu-sky") o.cpu_sky = true;
         else if (a == "--stall-ms" && more) o.stall_ms = std::stod(argv[++i]);
         else if (a == "--trace-environment") o.trace_environment = true;
+        else if (a == "--windowed") o.windowed = true;
+        else if (a == "--display" && more) o.display = argv[++i];
+        else if (a == "--window" && more) {
+            const std::string size = argv[++i];
+            const auto x = size.find('x');
+            if (x == std::string::npos) return false;
+            o.window_width = static_cast<std::uint32_t>(std::stoul(size.substr(0, x)));
+            o.window_height = static_cast<std::uint32_t>(std::stoul(size.substr(x + 1)));
+        }
         else if (a == "--water-probes" && more) o.water_probes = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         else if (a == "--water-debug" && more) {
             const std::string view = argv[++i];
@@ -281,7 +294,24 @@ int run(const Options& o) {
     }
     int exit_code = 0;
     {
-        auto window = noor::platform::Window::create({.title = game->title, .width = 1280, .height = 720});
+        // Display settings (2D part 6): the window, and how the game's picture fills it.
+        auto display = noor::game::load_display_settings(project->root());
+        if (!o.display.empty()) {
+            auto text = noor::fs::read_file(o.display, 1u << 20);
+            const Json j = text ? Json::parse(*text, nullptr, false) : Json();
+            if (j.is_discarded() || !j.is_object()) {
+                NOOR_LOG_FATAL("Player", "--display {}: not a JSON object", o.display);
+                noor::platform::shutdown();
+                return 1;
+            }
+            display = noor::game::display_settings(j);
+        }
+        if (o.window_width) display.window_width = std::max(160u, o.window_width);
+        if (o.window_height) display.window_height = std::max(120u, o.window_height);
+        if (o.windowed) display.window_mode = noor::game::DisplaySettings::WindowMode::Windowed;
+        noor::platform::WindowDesc window_desc{.title = game->title, .width = display.window_width, .height = display.window_height};
+        window_desc.mode = static_cast<noor::platform::WindowDesc::Mode>(display.window_mode);
+        auto window = noor::platform::Window::create(window_desc);
         if (!window) {
             NOOR_LOG_FATAL("Player", "{}", window.error().describe());
             noor::platform::shutdown();
@@ -294,6 +324,7 @@ int run(const Options& o) {
             noor::platform::shutdown();
             return 1;
         }
+        (*renderer)->set_display(display.display);
         {
             noor::scene::PrefabLibrary prefabs(*project, registry);
             noor::game::WorldOptions world_options;
@@ -403,8 +434,17 @@ int run(const Options& o) {
                     const bool last_frame = o.frames && (*world)->frame_count() == o.frames;
                     if (last_frame && (!o.report.empty() || !o.screenshot.empty())) (*renderer)->request_capture(o.water_probes > 0);
                     overlay.clear();
-                    const auto pixels = (*renderer)->swapchain_size();
-                    hud.build((*world)->ui_commands(), static_cast<float>(pixels.width), static_cast<float>(pixels.height), overlay);
+                    // The HUD fills the game's picture: laid out at the base resolution's size (so a 320 x 180 game's
+                    // text is as big as designed), then scaled to the picture and moved to where it is on screen.
+                    const auto& layout = (*renderer)->display_layout();
+                    const auto& dd = display.display;
+                    float hud_scale = 1.0f;
+                    if (dd.stretch != noor::render::DisplayDesc::Stretch::Off && dd.base_width > 0 && dd.base_height > 0)
+                        hud_scale = std::max(0.01f, std::min(static_cast<float>(layout.width) / static_cast<float>(dd.base_width),
+                                                             static_cast<float>(layout.height) / static_cast<float>(dd.base_height)));
+                    hud.build((*world)->ui_commands(), static_cast<float>(layout.width) / hud_scale, static_cast<float>(layout.height) / hud_scale, overlay);
+                    for (auto& v : overlay)
+                        v.position = {v.position.x * hud_scale + static_cast<float>(layout.x), v.position.y * hud_scale + static_cast<float>(layout.y)};
                     // Effect particles (Milestone 8B), seen from this frame's camera.
                     const auto frame_camera = noor::game::SceneRenderer::camera(view);
                     std::span<const noor::render::ParticleDraw> particle_draws;
@@ -535,6 +575,14 @@ int run(const Options& o) {
                         report["ui_pixel_40_40"] = {p[0], p[1], p[2]};
                     }
                     report["hud_vertices"] = overlay.size();
+                    {
+                        const auto l = (*renderer)->display_layout();
+                        const auto screen = (*renderer)->swapchain_size();
+                        report["display"] = {{"screen", {screen.width, screen.height}},
+                                             {"render", {l.render_width, l.render_height}},
+                                             {"rect", {l.x, l.y, l.width, l.height}},
+                                             {"nearest", l.nearest}};
+                    }
                     // The last frame's HUD text, so a test can read what the game shows (a score, a timer).
                     Json hud_text = Json::array();
                     for (const auto& c : (*world)->ui_commands())

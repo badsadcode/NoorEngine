@@ -4,6 +4,27 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — 2D foundations, part 6: resolution, display and cameras for 2D
+**Added**
+- `Settings/display.json` ([docs/rendering/DISPLAY.md](docs/rendering/DISPLAY.md)): `window` (size, `windowed` /
+  `fullscreen` / `borderless`), `base_resolution`, `stretch` (`viewport`, `canvas`, `off`), `aspect` (`keep`, `expand`),
+  `integer_scale`, `render_scale`. Read by noor_player and built games (`game/display.h`).
+- Renderer: `DisplayDesc`, `DisplayLayout`, `layout_display`, `Renderer::set_display` / `display_layout`; the scene is
+  drawn at its own size (`render_extent`) and placed by the tonemap pass (nearest or linear); `Camera::pixel_snap`.
+- Platform: `WindowDesc::Mode`, `Window::set_fullscreen`.
+- `camera_follow` component (`game/camera_follow.h`: target, offset, dead zone, smoothing, bounds; `follow_step`);
+  `parallax` component (factor, anchor; `parallax_offset`); the camera's `"pixel_snap": true`.
+- noor_player: `--window WxH`, `--windowed`, `--display <file>`; the report's `display` (screen, render size, rectangle).
+- `noor_display_check` (tests/tools): every game pixel one exact block, bars black; two pictures' regions identical.
+
+**Changed**
+- The HUD is laid out at the base resolution's size and scaled into the picture's rectangle; the overlay pass sets the
+  whole screen as its viewport.
+
+**Tests:** `test_display.cpp` (layouts, settings, follow step and system, parallax); `render.display_stretch` (readback
+at 1280 × 720 and 800: 4 × 4 blocks, black bars, expand's middle identical to keep, canvas at half scale); golden
+`Camera2D_Follow`. Existing goldens unchanged.
+
 ### 2026-11-21 — 2D foundations, part 5: the editor in 2D
 **Added**
 - The 2D view: viewport option `"view": "2d"` (editor API v30), a 2D toggle in the toolbar; `EditorCamera::flat`,

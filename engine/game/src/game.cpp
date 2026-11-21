@@ -1,5 +1,7 @@
 #include "noor/game/game.h"
 #include "noor/game/tilemap.h"
+#include "noor/game/camera_follow.h"
+#include "noor/game/display.h"
 
 #include "noor/asset/environment_asset.h"
 #include "noor/asset/water_asset.h"
@@ -288,6 +290,8 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
         return p ? std::optional(*p) : std::nullopt;
     }));
     world->add_system(std::make_unique<runtime::BehavioursSystem>());
+    // Last: cameras follow where things are drawn this frame (after physics' render poses and scripts).
+    world->add_system(std::make_unique<CameraFollowSystem>(load_display_settings(project.root()).aspect()));
     return world;
 }
 
@@ -439,6 +443,22 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     for (std::size_t i = 0; i < entities.size(); ++i) index.emplace(entities[i].id, i);
     std::vector<std::optional<math::Mat4>> memo(entities.size());
     const bool blended = render_poses && !render_poses->empty();
+    // Parallax layers (2D part 6): "parallax": {"factor": [fx, fy], "anchor": [ax, ay]} moves an entity (and so its
+    // children) by (viewer - anchor) x (1 - factor) in X and Y: factor 0 stays with the camera (a far sky), 1 is the
+    // world itself, between is depth. The viewer is found first, without parallax.
+    bool parallax_ready = false;
+    math::Vec3 viewer{0, 0, 0};
+    const auto parallax_shift = [&](const scene::Entity& e) -> math::Vec3 {
+        const Json& p = e.components.at("parallax");
+        math::Vec2 f{1, 1}, a{0, 0};
+        if (const auto v = p.find("factor"); v != p.end() && v->is_array() && v->size() == 2 && (*v)[0].is_number() && (*v)[1].is_number())
+            f = {(*v)[0].get<float>(), (*v)[1].get<float>()};
+        else if (v != p.end() && v->is_number())
+            f = {v->get<float>(), v->get<float>()};
+        if (const auto v = p.find("anchor"); v != p.end() && v->is_array() && v->size() == 2 && (*v)[0].is_number() && (*v)[1].is_number())
+            a = {(*v)[0].get<float>(), (*v)[1].get<float>()};
+        return parallax_offset({viewer.x, viewer.y}, a, f);
+    };
     std::function<math::Mat4(std::size_t, int)> world_of = [&](std::size_t i, int depth) -> math::Mat4 {
         if (memo[i]) return *memo[i];
         math::Mat4 m;
@@ -452,6 +472,11 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             m = entities[i].transform.matrix();
             const auto parent = entities[i].parent ? index.find(*entities[i].parent) : index.end();
             if (parent != index.end() && depth < 256) m = world_of(parent->second, depth + 1) * m;  // depth: cycle guard
+        }
+        if (parallax_ready && entities[i].has("parallax") && entities[i].components["parallax"].is_object()) {
+            const math::Vec3 s = parallax_shift(entities[i]);
+            m.m[3].x += s.x;
+            m.m[3].y += s.y;
         }
         memo[i] = m;
         return m;
@@ -489,12 +514,15 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
     };
     std::vector<Zone> zones;
     std::vector<std::size_t> zone_entities;  // every zone, on or not (their atmospheres are built up front)
-    math::Vec3 viewer{0, 0, 0};
     for (std::size_t i = 0; i < entities.size(); ++i)
         if (entities[i].has("camera") && entities[i].components["camera"].is_object()) {
             viewer = world_of(i, 0).transform_point({0, 0, 0});
             break;
         }
+    if (std::ranges::any_of(entities, [](const scene::Entity& e) { return e.has("parallax"); })) {
+        std::ranges::fill(memo, std::nullopt);  // the viewer's chain was resolved without parallax
+        parallax_ready = true;
+    }
     for (std::size_t i = 0; i < entities.size(); ++i) {
         if (!entities[i].has("weather_zone") || !entities[i].components["weather_zone"].is_object()) continue;
         const auto& z = entities[i].components["weather_zone"];
@@ -621,6 +649,7 @@ SceneView collect_view(const scene::Scene& scene, const AssetPath& asset_path, c
             if (cam.value("projection", std::string("perspective")) == "orthographic") {
                 view.camera->ortho_height = std::clamp(number(cam, "height", 10.0f), 0.01f, 1.0e5f);
                 view.camera->far_plane = std::clamp(number(cam, "far", 1000.0f), view.camera->near_plane * 2.0f, 1.0e6f);
+                view.camera->pixel_snap = cam.value("pixel_snap", false);
             }
             view.lighting.ev100 = std::clamp(number(cam, "ev100", view.lighting.ev100), -10.0f, 25.0f);
             auto_exposure = cam.contains("ev100") && cam["ev100"].is_string() && cam["ev100"].get<std::string>() == "auto";

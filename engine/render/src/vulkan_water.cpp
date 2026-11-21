@@ -87,7 +87,7 @@ Status Renderer::Impl::create_scene_copies() {
         VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         image_info.imageType = VK_IMAGE_TYPE_2D;
         image_info.format = format;
-        image_info.extent = {extent.width, extent.height, 1};
+        image_info.extent = {render_extent.width, render_extent.height, 1};
         image_info.mipLevels = 1;
         image_info.arrayLayers = 1;
         image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -168,7 +168,7 @@ void Renderer::Impl::record_scene_copy(VkCommandBuffer cmd, bool msaa) {
     VkImageCopy color_region{};
     color_region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     color_region.dstSubresource = color_region.srcSubresource;
-    color_region.extent = {extent.width, extent.height, 1};
+    color_region.extent = {render_extent.width, render_extent.height, 1};
     vkCmdCopyImage(cmd, hdr_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, scene_color_copy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &color_region);
     image_barrier(cmd, scene_color_copy, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                   VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
@@ -191,7 +191,7 @@ void Renderer::Impl::record_scene_copy(VkCommandBuffer cmd, bool msaa) {
         VkImageCopy depth_region{};
         depth_region.srcSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
         depth_region.dstSubresource = depth_region.srcSubresource;
-        depth_region.extent = {extent.width, extent.height, 1};
+        depth_region.extent = {render_extent.width, render_extent.height, 1};
         vkCmdCopyImage(cmd, depth_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, scene_depth_copy, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &depth_region);
         image_barrier(cmd, scene_depth_copy, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                       VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
@@ -533,8 +533,8 @@ void Renderer::Impl::destroy_water_pipeline() {
 void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
     if (frame.water.empty() || water_pipeline == VK_NULL_HANDLE) return;
     begin_label(cmd, "Water", {0.2f, 0.5f, 0.9f, 1.0f});
-    const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
-    const VkRect2D scissor{{0, 0}, extent};
+    const VkViewport vp{0.0f, 0.0f, static_cast<float>(render_extent.width), static_cast<float>(render_extent.height), 0.0f, 1.0f};
+    const VkRect2D scissor{{0, 0}, render_extent};
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     const VkDescriptorSet sets[2] = {frame_sets[frame_index], texture_set};
@@ -582,8 +582,8 @@ void Renderer::Impl::record_water(VkCommandBuffer cmd, const FrameDesc& frame) {
         push.scatter[3] = std::max(0.001f, w.shore_fade);
         push.params[0] = std::clamp(w.roughness, 0.0f, 1.0f);
         push.params[1] = static_cast<float>(std::fmod(w.time, 3600.0));
-        push.params[2] = 1.0f / static_cast<float>(std::max(1u, extent.width));
-        push.params[3] = 1.0f / static_cast<float>(std::max(1u, extent.height));
+        push.params[2] = 1.0f / static_cast<float>(std::max(1u, render_extent.width));
+        push.params[3] = 1.0f / static_cast<float>(std::max(1u, render_extent.height));
         push.grid[3] = index + 1;  // its settings (entry 0 is the header)
         // The camera's body seen from inside: the environment's underwater settings, if any, over the water's.
         const UnderwaterLook look = underwater_look(w, static_cast<int>(index) == water_camera_body);

@@ -20,7 +20,7 @@ Status Renderer::Impl::create_hdr_target() {
     VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     image_info.imageType = VK_IMAGE_TYPE_2D;
     image_info.format = kHdrFormat;
-    image_info.extent = {extent.width, extent.height, 1};
+    image_info.extent = {render_extent.width, render_extent.height, 1};
     image_info.mipLevels = 1;
     image_info.arrayLayers = 1;
     image_info.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -207,7 +207,7 @@ Status Renderer::Impl::ensure_frame_uniforms() {
 }
 
 void Renderer::Impl::update_frame_uniforms(const FrameDesc& frame) {
-    const float aspect_ratio = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
+    const float aspect_ratio = static_cast<float>(render_extent.width) / static_cast<float>(std::max(1u, render_extent.height));
     const bool shadows_on = frame.lighting.sun_shadows && frame.lighting.sun_illuminance > 0.0f && shadow_size > 0;
     if (shadows_on) {
         ShadowCascadeParams params;
@@ -358,6 +358,8 @@ Status Renderer::Impl::ensure_tonemap(VkFormat color_format) {
         sampler_info.minFilter = VK_FILTER_NEAREST;
         sampler_info.addressModeU = sampler_info.addressModeV = sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &tonemap.sampler));
+        sampler_info.magFilter = sampler_info.minFilter = VK_FILTER_LINEAR;  // scaled up smoothly (2D part 6)
+        NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &tonemap.linear_sampler));
         VkDescriptorSetLayoutBinding binding{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo set_layout_info{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
         set_layout_info.bindingCount = 1;
@@ -452,7 +454,9 @@ Status Renderer::Impl::ensure_tonemap(VkFormat color_format) {
 }
 
 void Renderer::Impl::write_tonemap_descriptor() {
-    VkDescriptorImageInfo image{tonemap.sampler, hdr_view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    // Scaled up smoothly (a render scale, canvas) or crisply (pixel art, or the same size).
+    VkDescriptorImageInfo image{display_layout.nearest || render_extent.width == extent.width ? tonemap.sampler : tonemap.linear_sampler, hdr_view,
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     write.dstSet = tonemap.set;
     write.descriptorCount = 1;
@@ -463,8 +467,10 @@ void Renderer::Impl::write_tonemap_descriptor() {
 
 void Renderer::Impl::record_tonemap(VkCommandBuffer cmd, const Lighting& lighting) {
     begin_label(cmd, "Tonemap", {0.95f, 0.76f, 0.31f, 1.0f});  // gold
-    const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
-    const VkRect2D scissor{{0, 0}, extent};
+    // Into the picture's rectangle on the screen (2D part 6: the whole screen unless display settings say otherwise).
+    const auto& d = display_layout;
+    const VkViewport vp{static_cast<float>(d.x), static_cast<float>(d.y), static_cast<float>(d.width), static_cast<float>(d.height), 0.0f, 1.0f};
+    const VkRect2D scissor{{d.x, d.y}, {d.width, d.height}};
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tonemap.pipeline);
@@ -507,6 +513,7 @@ void Renderer::Impl::destroy_frame_resources() {
     if (tonemap.pool) vkDestroyDescriptorPool(device, tonemap.pool, nullptr);
     if (tonemap.set_layout) vkDestroyDescriptorSetLayout(device, tonemap.set_layout, nullptr);
     if (tonemap.sampler) vkDestroySampler(device, tonemap.sampler, nullptr);
+    if (tonemap.linear_sampler) vkDestroySampler(device, tonemap.linear_sampler, nullptr);
     tonemap = {};
 }
 

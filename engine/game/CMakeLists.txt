@@ -14,6 +14,8 @@ noor_add_module(game
         src/sprite_animation.cpp
         src/sprites.cpp
         src/tilemap.cpp
+        src/display.cpp
+        src/camera_follow.cpp
         src/texture_library.cpp
         src/material_library.cpp
         src/environment_library.cpp

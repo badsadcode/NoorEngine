@@ -41,9 +41,10 @@ The list of Godot features below comes from a real game: an old 2D platformer of
 |---|---|---|
 | Sprite2D, AnimatedSprite2D (SpriteFrames) | `sprite` + a `.noorsprite` sheet with animations | ✅ |
 | `z_index`, `y_sort_enabled`, an unshaded material | the sprite's `layer` / `order`, `"sort": "y"`, `"unlit": true` | ✅ (2D part 3) |
-| Camera2D (follow, smoothing, limits) | an orthographic `camera` | Follow, smoothing, limits and pixel-perfect: 2D part 6 |
+| Camera2D (follow, smoothing, drag margins, limits) | an orthographic `camera` + `camera_follow` (`smoothing`, `dead_zone`, `bounds`), `"pixel_snap": true` ([Display](../rendering/DISPLAY.md)) | ✅ (2D part 6) |
+| Project Settings ▸ Display: window size, fullscreen, stretch mode (`viewport`, `canvas_items`) and aspect, 3D scaling | `Settings/display.json`: `window`, `base_resolution`, `stretch` (`viewport`, `canvas`, `off`), `aspect`, `integer_scale`, `render_scale` ([Display](../rendering/DISPLAY.md)) | ✅ (2D part 6) |
 | **TileMap**, TileSet, `set_cell` / `get_cell` | `tilemap` + a `.noortileset`; `e:set_tile(x, y, t)`, `e:tile(x, y)` ([Tilemaps](../fx/TILEMAPS.md)) | ✅ square, isometric, hexagonal (2D part 4); painted in the editor's 2D view (part 5) |
-| ParallaxBackground | | 2D part 6 |
+| ParallaxBackground / ParallaxLayer (`motion_scale`) | `parallax`: `factor`, `anchor` | ✅ (2D part 6); repeating layers not yet |
 | GPUParticles2D | `emitter` + `.noorfx` (works in 2D and 3D) | ✅ |
 | Light2D, normal-mapped 2D sprites | | Later (after the 2D foundations) |
 | AudioStreamPlayer (2D/3D) | `audio_source`, `noor.play_sound` | ✅ |

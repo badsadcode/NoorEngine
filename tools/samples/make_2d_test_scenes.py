@@ -18,6 +18,8 @@ Writes into tests/data/render_scenes:
   Scenes/Tilemap_Hex.noorscene      part 4: a hexagonal map of grass, sand and water
   Scenes/Tilemap_Big.noorscene      part 4: 256 x 256 square tiles, for what a big map costs (64 chunks)
   Assets/Tiles/*.png, *.noorsprite, *.noortileset   the tiles for those, drawn here pixel by pixel
+  Scenes/Camera2D_Follow.noorscene  part 6: a ball rolling down a long slope, followed by a pixel-snapped camera (a dead
+                                    zone, smoothing, level bounds) past parallax layers (far hills, nearer posts)
 """
 import hashlib
 import json
@@ -315,10 +317,41 @@ def tilemaps():
     write_scene("Tilemap_Big", ents)
 
 
+def follow():
+    ents = camera_and_sun(10, at=(-6, 7, 20))
+    cam = ents[0]["components"]
+    cam["camera"]["pixel_snap"] = True
+    cam["camera_follow"] = {"target": "Ball", "offset": [0, 1], "dead_zone": [3, 2], "smoothing": 0.2, "bounds": [-14, -8, 44, 14]}
+    ents[2]["transform"]["position"] = [15, 3, -6]  # the backdrop far behind, wide enough for the whole run
+    ents[2]["components"]["primitive"]["size"] = [120, 60, 0.2]
+    ents.append(entity("Slope", (15, -1, 0), {"primitive": {"shape": "box", "size": [60, 1, 1], "color": "#4A4370"},
+                                              "collider": {"shape": "rectangle", "size": [60, 1]}}, z_turn(-14)))
+    ents.append(entity("Ball", (-10, 7, 0), {"primitive": {"shape": "sphere", "radius": 0.6, "color": "#FFC857"},
+                                             "collider": {"shape": "circle", "radius": 0.6},
+                                             "rigidbody": {"type": "dynamic", "plane": "xy"}}))
+    # Parallax: hills that move at a fifth of the camera's speed, posts at half, anchored where the camera starts.
+    hills = entity("Far hills", (0, 3, -4), {"parallax": {"factor": [0.2, 0.2], "anchor": [-6, 7]}})
+    ents.append(hills)
+    for i in range(8):
+        h = entity(f"Hill {i + 1}", (-12 + i * 5.0, 1.0 + (i % 3) * 0.8, 0),
+                   {"primitive": {"shape": "sphere", "radius": 2.5 + (i % 2), "color": "#2C2550"}})
+        h["parent"] = hills["id"]
+        h["transform"]["scale"] = [1, 1, 0.1]  # flat discs: a painted backdrop, not balls poking through the posts
+        ents.append(h)
+    posts = entity("Posts", (0, 4, -1), {"parallax": {"factor": [0.5, 0.5], "anchor": [-6, 7]}})
+    ents.append(posts)
+    for i in range(10):
+        p = entity(f"Post {i + 1}", (-12 + i * 4.0, 2.0, 0), {"primitive": {"shape": "box", "size": [0.4, 3, 0.2], "color": "#6BB8FF"}})
+        p["parent"] = posts["id"]
+        ents.append(p)
+    write_scene("Camera2D_Follow", ents)
+
+
 if __name__ == "__main__":
     pile()
     layers()
     ysort()
     bleed()
     tilemaps()
+    follow()
     print("2D test scenes written to", ROOT / "Scenes")

@@ -425,6 +425,9 @@ Status Renderer::Impl::rebuild_swapchain() {
     }
     swapchain = new_swapchain;
     extent = new_extent;
+    // What the scene is drawn at, and where it goes (2D part 6): the window's size unless display settings say otherwise.
+    display_layout = layout_display(display_desc, extent.width, extent.height);
+    render_extent = {std::max(1u, display_layout.render_width), std::max(1u, display_layout.render_height)};
 
     std::uint32_t count = 0;
     vkGetSwapchainImagesKHR(device, swapchain, &count, nullptr);
@@ -495,6 +498,9 @@ Status Renderer::Impl::rebuild_swapchain() {
     ++swapchain_rebuilds;
     NOOR_LOG_INFO("Render", "Swapchain built: {}x{}, {} images, format {}", extent.width, extent.height, count,
                   string_VkFormat(surface_format.format));
+    if (render_extent.width != extent.width || render_extent.height != extent.height)
+        NOOR_LOG_INFO("Render", "The scene is drawn at {}x{}, shown {}x{} at ({}, {}){}", render_extent.width, render_extent.height,
+                      display_layout.width, display_layout.height, display_layout.x, display_layout.y, display_layout.nearest ? ", pixel-sharp" : "");
     return {};
 }
 
@@ -647,7 +653,7 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     if (msaa) depth.imageView = msaa_depth_view;
 
     VkRenderingInfo rendering{VK_STRUCTURE_TYPE_RENDERING_INFO};
-    rendering.renderArea = {{0, 0}, extent};
+    rendering.renderArea = {{0, 0}, render_extent};
     rendering.layerCount = 1;
     rendering.colorAttachmentCount = 1;
     rendering.pColorAttachments = &hdr_color;
@@ -737,14 +743,21 @@ Result<FrameResult> Renderer::Impl::render_frame(const FrameDesc& frame_desc) {
     VkRenderingAttachmentInfo color{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
     color.imageView = image_views[image_index];
     color.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;  // the tonemap pass writes every pixel
+    // The picture may be smaller than the screen (2D part 6: display settings): then the rest is black, and the scene's
+    // depth buffer (its size, not the screen's) can't be the screen pass's: no gizmos there (games have none).
+    const bool same_size = render_extent.width == extent.width && render_extent.height == extent.height;
+    const bool full = display_layout.x == 0 && display_layout.y == 0 && display_layout.width == extent.width && display_layout.height == extent.height;
+    color.loadOp = full ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_CLEAR;  // the tonemap pass writes the rest
+    color.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     color.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     rendering.pColorAttachments = &color;
+    rendering.renderArea = {{0, 0}, extent};
+    if (!same_size) rendering.pDepthAttachment = nullptr;
     begin_label(frame.cmd, "Screen (tonemap, gizmos, HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBeginRendering(frame.cmd, &rendering);
     record_tonemap(frame.cmd, lighting);
     stamp(6, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-    record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
+    if (same_size) record_draws(frame.cmd, frame_desc, DrawPass::Gizmos);
     stamp(7, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     if (auto status = record_overlay(frame.cmd, frame_desc.overlay); !status) {
         NOOR_LOG_ERROR("Render", "Overlay skipped: {}", status.error().describe());
@@ -903,7 +916,7 @@ std::uint64_t Renderer::mesh_memory() const noexcept {
     return bytes;
 }
 std::uint64_t Renderer::render_target_memory() const noexcept {
-    const std::uint64_t pixels = static_cast<std::uint64_t>(impl_->extent.width) * impl_->extent.height;
+    const std::uint64_t pixels = static_cast<std::uint64_t>(impl_->render_extent.width) * impl_->render_extent.height;
     const std::uint64_t samples = impl_->scene_samples;
     std::uint64_t bytes = pixels * (8 + 4);                  // HDR (RGBA16F) + depth (D32)
     if (samples > 1) bytes += pixels * samples * (8 + 4);   // the multisampled scene images
@@ -984,10 +997,81 @@ void Renderer::destroy_mesh(MeshHandle mesh) { impl_->destroy_mesh(mesh); }
 Result<FrameResult> Renderer::render_frame(const FrameDesc& frame) {
     // Under water the exposure opens up part of the way (8D part 4, vulkan_water.cpp): eyes and cameras adapt.
     const float shift = underwater_exposure_shift(frame);
-    if (shift == 0.0f) return impl_->render_frame(frame);
+    // A pixel-snapped orthographic camera (2D part 6) moves in whole pixels of the picture as drawn: its view's sideways
+    // and upward translation rounded to a pixel's size (ortho_height / the picture's height in pixels).
+    const bool snap = frame.camera.pixel_snap && frame.camera.orthographic() && impl_->render_extent.height > 0;
+    const float view_scale = impl_->display_layout.view_scale;
+    if (shift == 0.0f && !snap && view_scale == 1.0f) return impl_->render_frame(frame);
     FrameDesc adapted = frame;
     adapted.lighting.ev100 -= shift;
+    if (view_scale != 1.0f) {  // "expand" on a taller screen: more world above and below
+        adapted.camera.ortho_height *= view_scale;
+        adapted.camera.fov_y = 2.0f * std::atan(std::tan(adapted.camera.fov_y * 0.5f) * view_scale);
+    }
+    if (snap) {
+        const float step = adapted.camera.ortho_height / static_cast<float>(impl_->render_extent.height);
+        adapted.camera.view.m[3].x = std::round(adapted.camera.view.m[3].x / step) * step;
+        adapted.camera.view.m[3].y = std::round(adapted.camera.view.m[3].y / step) * step;
+    }
     return impl_->render_frame(adapted);
+}
+
+void Renderer::set_display(const DisplayDesc& desc) {
+    impl_->display_desc = desc;
+    impl_->swapchain_dirty = true;  // the scene's images are made again at the new size
+}
+
+DisplayLayout Renderer::display_layout() const noexcept { return impl_->display_layout; }
+
+// ---- display layout (2D part 6) ----
+
+DisplayLayout layout_display(const DisplayDesc& d, std::uint32_t sw, std::uint32_t sh) noexcept {
+    DisplayLayout out;
+    sw = std::max(1u, sw);
+    sh = std::max(1u, sh);
+    const auto scaled = [](std::uint32_t v, float s) { return std::max(1u, static_cast<std::uint32_t>(std::lround(static_cast<float>(v) * s))); };
+    const float rs = std::clamp(d.render_scale, 0.25f, 2.0f);
+    const bool base = d.base_width > 0 && d.base_height > 0;
+    if (!base || d.stretch == DisplayDesc::Stretch::Off) {
+        out.render_width = scaled(sw, rs);
+        out.render_height = scaled(sh, rs);
+        out.width = sw;
+        out.height = sh;
+        return out;
+    }
+    const float bw = static_cast<float>(d.base_width), bh = static_cast<float>(d.base_height);
+    const float fit = std::min(static_cast<float>(sw) / bw, static_cast<float>(sh) / bh);
+    const auto centre = [&](std::uint32_t w, std::uint32_t h) {
+        out.width = std::min(w, sw);
+        out.height = std::min(h, sh);
+        out.x = static_cast<std::int32_t>((sw - out.width) / 2);
+        out.y = static_cast<std::int32_t>((sh - out.height) / 2);
+    };
+    if (d.stretch == DisplayDesc::Stretch::Viewport) {
+        // The base resolution, scaled up by k: a whole number if asked (and the screen is big enough), else the fit.
+        const float k = d.integer_scale && fit >= 1.0f ? std::floor(fit) : fit;
+        if (d.keep_aspect) {
+            out.render_width = d.base_width;
+            out.render_height = d.base_height;
+        } else {  // expand: as many base-sized pixels as fill the screen
+            out.render_width = std::max(d.base_width, static_cast<std::uint32_t>(std::floor(static_cast<float>(sw) / k)));
+            out.render_height = std::max(d.base_height, static_cast<std::uint32_t>(std::floor(static_cast<float>(sh) / k)));
+            out.view_scale = static_cast<float>(out.render_height) / bh;
+        }
+        centre(static_cast<std::uint32_t>(std::lround(static_cast<float>(out.render_width) * k)),
+               static_cast<std::uint32_t>(std::lround(static_cast<float>(out.render_height) * k)));
+        out.nearest = true;
+        return out;
+    }
+    // Canvas: the screen's own resolution, kept to the base's shape (or the whole screen).
+    if (d.keep_aspect) centre(static_cast<std::uint32_t>(std::lround(bw * fit)), static_cast<std::uint32_t>(std::lround(bh * fit)));
+    else {
+        centre(sw, sh);
+        out.view_scale = static_cast<float>(sh) / (bh * fit);
+    }
+    out.render_width = scaled(out.width, rs);
+    out.render_height = scaled(out.height, rs);
+    return out;
 }
 void Renderer::request_capture(bool with_depth) noexcept {
     impl_->capture_depth_requested = with_depth;

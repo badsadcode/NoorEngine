@@ -15,6 +15,8 @@ Result<std::unique_ptr<Window>> Window::create(const WindowDesc& desc) {
     if (desc.resizable) {
         flags |= SDL_WINDOW_RESIZABLE;
     }
+    if (desc.mode == WindowDesc::Mode::Fullscreen) flags |= SDL_WINDOW_FULLSCREEN;  // no display mode set: the desktop's
+    if (desc.mode == WindowDesc::Mode::Borderless) flags |= SDL_WINDOW_BORDERLESS;
     SDL_Window* window = SDL_CreateWindow(desc.title.c_str(), static_cast<int>(desc.width),
                                           static_cast<int>(desc.height), flags);
     if (!window) {
@@ -55,6 +57,11 @@ void Window::minimize() {
 
 void Window::restore() {
     SDL_RestoreWindow(sdl(handle_));
+    SDL_SyncWindow(sdl(handle_));
+}
+
+void Window::set_fullscreen(bool on) {
+    SDL_SetWindowFullscreen(sdl(handle_), on);
     SDL_SyncWindow(sdl(handle_));
 }
 

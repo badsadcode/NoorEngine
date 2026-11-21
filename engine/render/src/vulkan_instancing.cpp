@@ -125,7 +125,7 @@ Status Renderer::Impl::plan_frame(const FrameDesc& frame) {
     stats.particle_draws = 0;
     stats.particles = 0;
 
-    const float aspect = static_cast<float>(extent.width) / static_cast<float>(std::max(1u, extent.height));
+    const float aspect = static_cast<float>(render_extent.width) / static_cast<float>(std::max(1u, render_extent.height));
     const Frustum frustum(frame.camera, aspect);
     const math::Vec3 eye = math::inverse(frame.camera.view).transform_point({0, 0, 0});
     const bool shadows_on = frame.lighting.sun_shadows && frame.lighting.sun_illuminance > 0.0f && shadow_size > 0;

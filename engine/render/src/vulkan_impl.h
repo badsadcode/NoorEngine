@@ -286,7 +286,12 @@ struct Renderer::Impl {
     // Swapchain and per-image resources
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     VkSurfaceFormatKHR surface_format{};
-    VkExtent2D extent{};
+    VkExtent2D extent{};         // the swapchain's (the window's) size
+    // The size the scene is drawn at, and where it goes on the screen (2D part 6: DisplayDesc); the same as extent
+    // unless display settings say otherwise.
+    VkExtent2D render_extent{};
+    DisplayDesc display_desc{};
+    DisplayLayout display_layout{};
     std::vector<VkImage> images;
     std::vector<VkImageView> image_views;
     std::vector<VkSemaphore> render_finished;  // one per swapchain image
@@ -491,7 +496,8 @@ struct Renderer::Impl {
         VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
         VkDescriptorPool pool = VK_NULL_HANDLE;
         VkDescriptorSet set = VK_NULL_HANDLE;
-        VkSampler sampler = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;         // nearest: the same size, or pixel art scaled up
+        VkSampler linear_sampler = VK_NULL_HANDLE;  // smooth: a render scale or canvas stretch (2D part 6)
         VkFormat color_format = VK_FORMAT_UNDEFINED;
     } tonemap;
 

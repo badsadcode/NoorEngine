@@ -47,7 +47,7 @@ Status Renderer::Impl::create_cloud_volume_targets() {
         NOOR_VK_TRY(vkCreateSampler(device, &sampler_info, nullptr, &cv.noise_sampler));
         set_name(VK_OBJECT_TYPE_SAMPLER, cv.noise_sampler, "Cloud volume noise (tiles)");
     }
-    cv.size = {std::max(1u, (extent.width + 1) / 2), std::max(1u, (extent.height + 1) / 2)};
+    cv.size = {std::max(1u, (render_extent.width + 1) / 2), std::max(1u, (render_extent.height + 1) / 2)};
     for (std::uint32_t i = 0; i < kFramesInFlight; ++i) {
         auto& t = cv.targets[i];
         VkImageCreateInfo image_info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};

@@ -272,6 +272,11 @@ Status Renderer::Impl::record_overlay(VkCommandBuffer cmd, std::span<const Overl
 
     begin_label(cmd, "Overlay (HUD)", {0.49f, 0.30f, 1.0f, 1.0f});  // purple
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, overlay.pipeline);
+    // The whole screen (the tonemap pass may have drawn a smaller picture, 2D part 6): vertices are screen pixels.
+    const VkViewport vp{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
+    const VkRect2D scissor{{0, 0}, extent};
+    vkCmdSetViewport(cmd, 0, 1, &vp);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, overlay.layout, 0, 1, &overlay.descriptor_set, 0, nullptr);
     const float scale[2] = {2.0f / static_cast<float>(extent.width), 2.0f / static_cast<float>(extent.height)};
     vkCmdPushConstants(cmd, overlay.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(scale), scale);
