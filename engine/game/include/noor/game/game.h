@@ -38,6 +38,9 @@ struct WorldOptions {
     // The editor's live heights for a terrain (its sculpting may not be saved yet), from its component
     // and settings; null (or no callback): generated from the settings and files, like a game.
     std::function<std::shared_ptr<const terrain::Heights>(const asset::Json& component, const terrain::Settings& settings)> terrain_heights;
+    // The player's own settings folder (part 6e): their changed bindings are read from input.json there, over the
+    // project's, and saved there. Empty: the project's bindings only, nothing saved.
+    std::filesystem::path user_dir;
 };
 
 // The playing world for `scene` (prefabs are expanded here): Lua and C# scripts, physics, audio and

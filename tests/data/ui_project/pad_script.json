@@ -1,0 +1,78 @@
+{
+ "events": [
+  {
+   "frame": 1,
+   "player": 1,
+   "connect": "Test pad"
+  },
+  {
+   "frame": 10,
+   "press": [
+    "Pad.Down"
+   ]
+  },
+  {
+   "frame": 12,
+   "release": [
+    "Pad.Down"
+   ]
+  },
+  {
+   "frame": 20,
+   "press": [
+    "Pad.South"
+   ]
+  },
+  {
+   "frame": 22,
+   "release": [
+    "Pad.South"
+   ]
+  },
+  {
+   "frame": 40,
+   "disconnect": true
+  },
+  {
+   "frame": 60,
+   "player": 1,
+   "connect": "Test pad"
+  },
+  {
+   "frame": 70,
+   "axes": {
+    "LeftY": 1.0
+   }
+  },
+  {
+   "frame": 75,
+   "axes": {
+    "LeftY": 0.0
+   }
+  },
+  {
+   "frame": 80,
+   "press": [
+    "Pad.South"
+   ]
+  },
+  {
+   "frame": 82,
+   "release": [
+    "Pad.South"
+   ]
+  },
+  {
+   "frame": 85,
+   "player": 2,
+   "connect": "Second pad"
+  },
+  {
+   "frame": 90,
+   "player": 2,
+   "press": [
+    "Pad.South"
+   ]
+  }
+ ]
+}

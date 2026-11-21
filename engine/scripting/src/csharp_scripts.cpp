@@ -140,6 +140,16 @@ int32_t rt_input(int32_t query, const char* action) {
     }
 }
 float rt_axis(const char* name) { return t_world && name ? api::input_axis(*t_world, name) : 0.0f; }
+int32_t rt_input_player(int32_t query, const char* action, int32_t player) {
+    if (!t_world || !action) return 0;
+    switch (query) {
+    case NOOR_RT_DOWN: return api::input_down(*t_world, action, player) ? 1 : 0;
+    case NOOR_RT_PRESSED: return api::input_pressed(*t_world, action, player) ? 1 : 0;
+    case NOOR_RT_RELEASED: return api::input_released(*t_world, action, player) ? 1 : 0;
+    default: return 0;
+    }
+}
+float rt_axis_player(const char* name, int32_t player) { return t_world && name ? api::input_axis(*t_world, name, player) : 0.0f; }
 void rt_capture_mouse(int32_t capture) {
     if (t_world) api::capture_mouse(*t_world, capture != 0);
 }
@@ -406,6 +416,19 @@ const char* rt_ui(noor_rt_entity caller, const char* request_json) {
     return t_text.c_str();
 }
 
+const char* rt_input_op(const char* request_json) {
+    t_error.clear();
+    if (!t_world || !request_json) return nullptr;
+    const Json request = Json::parse(request_json, nullptr, false);
+    auto r = api::input(*t_world, request.is_discarded() ? Json() : request);
+    if (auto* why = std::get_if<std::string>(&r)) {
+        t_error = *why;
+        return nullptr;
+    }
+    t_text = std::get<Json>(r).dump();
+    return t_text.c_str();
+}
+
 double rt_clock(int32_t which) {
     if (!t_world) return 0.0;
     switch (which) {
@@ -454,6 +477,7 @@ const noor_rt_api kApi = {
     rt_tween, rt_tween_op, rt_last_error,
     rt_timeline,
     rt_ui,
+    rt_input_player, rt_axis_player, rt_input_op,
 };
 
 } // namespace

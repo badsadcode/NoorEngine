@@ -120,9 +120,9 @@ TEST_CASE("runtime input: input.json overrides defaults and rejects unknown keys
     auto map = InputMap::from_json(asset::Json::parse(R"({"actions": {"jump": ["J", "space"]},
         "axes": {"turn": {"negative": ["Q"], "positive": ["E"]}}})"));
     REQUIRE(map);
-    CHECK(map->actions["jump"] == std::vector<Key>{Key::J, Key::Space});
+    CHECK(map->actions["jump"] == std::vector<Binding>{Key::J, Key::Space});
     CHECK(map->actions.contains("fire"));  // defaults kept
-    CHECK(map->axes["turn"].positive == std::vector<Key>{Key::E});
+    CHECK(map->axes["turn"].positive == std::vector<Binding>{Key::E});
     CHECK_FALSE(InputMap::from_json(asset::Json::parse(R"({"actions": {"jump": ["Hyperdrive"]}})")));
     CHECK(key_from_name("mouseleft") == Key::MouseLeft);
     CHECK(key_name(Key::Num7) == "7");

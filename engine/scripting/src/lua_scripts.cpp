@@ -286,6 +286,14 @@ struct LuaScriptSystem::Impl {
         return 1;
     }
 
+    // noor.input's requests (part 6e): the result on the stack, or a Lua error with the reason.
+    static int input_request(lua_State* L, const Json& request) {
+        auto r = api::input(world_of(L), request);
+        if (auto* why = std::get_if<std::string>(&r)) luaL_errorL(L, "%s", why->c_str());
+        push_json(L, std::get<Json>(r));
+        return 1;
+    }
+
     // ---- Game UI documents (gameplay foundations part 6b): a document is a noor.UiDocument; everything goes through
     // api::ui, the same as C#'s. ----
     struct UiDoc {
@@ -1036,22 +1044,39 @@ struct LuaScriptSystem::Impl {
             {nullptr, nullptr},
         };
         static const luaL_Reg input_functions[] = {
+            // noor.input.down(action [, player]) and friends; player 1 to 4 (1: keyboard, mouse and the first pad)
             {"down", [](lua_State* L) {
-                 lua_pushboolean(L, api::input_down(world_of(L), luaL_checkstring(L, 1)));
+                 lua_pushboolean(L, api::input_down(world_of(L), luaL_checkstring(L, 1), luaL_optinteger(L, 2, 1)));
                  return 1;
              }},
             {"pressed", [](lua_State* L) {
-                 lua_pushboolean(L, api::input_pressed(world_of(L), luaL_checkstring(L, 1)));
+                 lua_pushboolean(L, api::input_pressed(world_of(L), luaL_checkstring(L, 1), luaL_optinteger(L, 2, 1)));
                  return 1;
              }},
             {"released", [](lua_State* L) {
-                 lua_pushboolean(L, api::input_released(world_of(L), luaL_checkstring(L, 1)));
+                 lua_pushboolean(L, api::input_released(world_of(L), luaL_checkstring(L, 1), luaL_optinteger(L, 2, 1)));
                  return 1;
              }},
             {"axis", [](lua_State* L) {
-                 lua_pushnumber(L, api::input_axis(world_of(L), luaL_checkstring(L, 1)));
+                 lua_pushnumber(L, api::input_axis(world_of(L), luaL_checkstring(L, 1), luaL_optinteger(L, 2, 1)));
                  return 1;
              }},
+            // Gamepads and rebinding (part 6e): api::input, the same as C#'s.
+            {"pads", [](lua_State* L) { return input_request(L, Json{{"op", "pads"}}); }},
+            {"bindings", [](lua_State* L) { return input_request(L, Json{{"op", "bindings"}, {"name", luaL_checkstring(L, 1)}}); }},
+            {"rebind", [](lua_State* L) {
+                 Json r{{"op", "rebind"}, {"name", luaL_checkstring(L, 1)}};
+                 if (!lua_isnoneornil(L, 2)) r["old"] = luaL_checkstring(L, 2);
+                 if (!lua_isnoneornil(L, 3)) r["new"] = luaL_checkstring(L, 3);
+                 return input_request(L, r);
+             }},
+            {"reset_bindings", [](lua_State* L) {
+                 Json r{{"op", "reset"}};
+                 if (!lua_isnoneornil(L, 1)) r["name"] = luaL_checkstring(L, 1);
+                 return input_request(L, r);
+             }},
+            {"save_bindings", [](lua_State* L) { return input_request(L, Json{{"op", "save"}}); }},
+            {"last_pressed", [](lua_State* L) { return input_request(L, Json{{"op", "last_pressed"}, {"player", luaL_optinteger(L, 1, 1)}}); }},
             {"capture_mouse", [](lua_State* L) {
                  api::capture_mouse(world_of(L), lua_isnoneornil(L, 1) ? true : lua_toboolean(L, 1) != 0);
                  return 0;

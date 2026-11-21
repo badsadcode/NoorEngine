@@ -6,13 +6,12 @@ game. ([ADR-041](../decisions/ADR-041-game-ui.md): RmlUi does the layout and sty
 For a score in the corner or a health bar, the **HUD** is still the quick way (`noor.ui.text`, `noor.ui.rect` from a
 script, redrawn every frame). Documents are for anything with layout: panels, lists, buttons, pictures.
 
-**What works today (gameplay foundations parts 6a to 6d):** pages built in the editor's **UI tab** without writing
+**What works today (gameplay foundations parts 6a to 6e):** pages built in the editor's **UI tab** without writing
 markup ([below](#building-pages-in-the-editor)) or by hand; shown in a running game (the editor's Play, noor_player and
 built games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; gradients, shadows, blur
 and other filters, frosted glass over the game, 2D and 3D transforms, masks ([Effects](#effects)); scripts (Lua and C#)
 open, show, hide and close them, change what's in them, read and set their controls and react to clicks and changes;
-the mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** gamepads (6e); binding data to a page
-(a later step).
+the mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. Gamepads move focus and press (6e). **Coming:** binding data to a page (a later step).
 
 ## Building pages in the editor
 
@@ -126,6 +125,9 @@ takes the keyboard when it's opened or shown. In a **text box**, typing goes in 
 Windows' own input), with Backspace, Delete, Home, End, the arrows and Ctrl+A / C / V / X (the Windows clipboard: paste a name copied
 from anywhere). Make focus visible with a
 `:focus` style. Keys also reach the game as usual: a pause menu pauses the game, so its keys don't move the player.
+
+**Gamepads:** the first pad's d-pad or left stick moves focus, South presses, East is Escape
+([Input](../scripting/INPUT.md)).
 
 **In the editor's Play** pages work with the mouse and the keys that move focus and press (Tab, arrows, Enter, Space,
 Escape), but typing into a text box doesn't yet: the viewport doesn't pass typed letters on. In noor_player and built

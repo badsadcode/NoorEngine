@@ -7,7 +7,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace noor::platform {
 
@@ -41,6 +43,9 @@ void set_text_input(Window& window, bool enabled);
 // The system clipboard's text (UTF-8): copy and paste between a game's text boxes and other programs.
 void set_clipboard_text(const std::string& text);
 [[nodiscard]] std::string clipboard_text();
+// A game's folder for its players' own settings and saves (part 6e): %APPDATA%\NoorEngine\<game> on Windows, made if
+// it isn't there. Empty if it can't be made.
+[[nodiscard]] std::filesystem::path user_data_dir(std::string_view game);
 
 // Called when the OS wants the window redrawn while the normal loop is blocked, e.g. while
 // the user drags a window edge on Windows (the OS runs its own modal loop then). The callback

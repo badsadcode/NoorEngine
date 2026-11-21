@@ -1,0 +1,17 @@
+<rml>
+<head>
+    <title>Pad menu</title>
+    <!-- A menu driven by a gamepad (part 6e): the built-in theme's buttons move focus with the d-pad or stick. -->
+    <style>
+        body { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        #menu { width: 300dp; }
+    </style>
+</head>
+<body>
+    <div id="menu" class="noor-panel">
+        <div id="start" class="noor-button">Start</div>
+        <div id="options" class="noor-button">Options</div>
+        <div id="quit" class="noor-button">Quit</div>
+    </div>
+</body>
+</rml>

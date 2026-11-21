@@ -4,6 +4,25 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 6e: gamepads and rebinding
+**Added**
+- `platform::Gamepads` (SDL3): hot-plugging, four slots, a pad back in its old slot; `platform::user_data_dir`.
+- Runtime input: `PadButton`, `PadAxis`, `PadState`, `InputState::pads`; `Binding` (key, pad button, stick or trigger
+  direction) with `binding_name` / `binding_from_name`; `InputMap` actions and axes of bindings, `dead_zone`, `press`,
+  `to_json`, `save_overrides`, `bindings(name)`; `Input` with players (`down(action, player)`...), `last_pressed`,
+  `pads_connected` / `pads_disconnected`, `base` (the game's own map). The default map has pad controls.
+- World: `pad_connected` / `pad_disconnected` messages, `set_input_overrides`; `game::WorldOptions::user_dir`.
+- Scripts: `runtime::api::input` (pads, bindings, rebind, reset, save, last_pressed); Lua `noor.input.*` with players
+  and the new functions; C# `Input` with players, `Pads`, `Bindings`, `Rebind`, `ResetBindings`, `SaveBindings`,
+  `LastPressed`; rt API v19.
+- noor_player: real pads, `--pad-script`, `--user-dir`; menus follow the first pad.
+- [docs/scripting/INPUT.md](docs/scripting/INPUT.md).
+
+**Changed:** `InputMap`'s lists hold `Binding`s (a `Key` converts to one).
+
+**Tests:** `test_gamepads.cpp` (6 cases); `player.gamepads` (`tests/pad_check.cmake`, `tests/data/ui_project` Pad and
+Rebind scenes).
+
 ### 2026-11-21 — Gameplay foundations, part 6d: the UI tab
 **Added**
 - NoorEditor's **UI tab** (`Panels/UiPanel.cs`): pages from templates, the element tree, an inspector (id, class, text,

@@ -8,6 +8,10 @@
 //          [--cpu-sky] [--trace-environment]
 // --cpu-sky: build an atmosphere sky on the CPU (the reference implementation) instead of the GPU, to
 // compare the two (tests); a moving sun then costs about 120 ms a move.
+// --pad-script <file.json>: a simulated gamepad (tests): {"events": [{"frame": 30, "player": 1, "connect": "Test pad"},
+// {"frame": 40, "press": ["Pad.South"]}, {"frame": 42, "release": ["Pad.South"]}, {"frame": 50, "axes": {"LeftX": 1}},
+// {"frame": 90, "disconnect": true}]}; real pads are left alone while it runs.
+// --user-dir <folder>: the player's own settings (their bindings, part 6e) here instead of %APPDATA%\NoorEngine\<game>.
 // --trace-environment: the report gets "environment_trace", one entry a frame: the camera's position, the fog density,
 // the exposure and each weather zone's weight (tests of blending, Milestone 8A part 7).
 // --no-input: the game gets no keyboard or mouse (automated tests: a click on the window by
@@ -31,6 +35,7 @@
 #include "noor/game/display.h"
 #include "noor/game/scene_renderer.h"
 #include "noor/game/water.h"
+#include "noor/platform/gamepad.h"
 #include "noor/platform/input.h"
 #include "noor/platform/platform.h"
 #include "noor/platform/process.h"
@@ -81,6 +86,8 @@ struct Options {
     std::uint32_t window_width = 0, window_height = 0;  // --window WxH: overrides Settings/display.json (tests)
     bool windowed = false;                              // --windowed: never fullscreen or borderless (tests)
     std::string display;                                // --display <file.json>: in place of Settings/display.json (tests)
+    std::string pad_script;                             // --pad-script <file.json>: a simulated gamepad (tests)
+    std::string user_dir;                               // --user-dir <folder>: the player's own settings (tests)
 };
 
 bool parse(int argc, char** argv, Options& o) {
@@ -102,6 +109,8 @@ bool parse(int argc, char** argv, Options& o) {
         else if (a == "--trace-environment") o.trace_environment = true;
         else if (a == "--windowed") o.windowed = true;
         else if (a == "--display" && more) o.display = argv[++i];
+        else if (a == "--pad-script" && more) o.pad_script = argv[++i];
+        else if (a == "--user-dir" && more) o.user_dir = argv[++i];
         else if (a == "--window" && more) {
             const std::string size = argv[++i];
             const auto x = size.find('x');
@@ -182,6 +191,33 @@ noor::runtime::InputState game_input(const noor::platform::InputState& in, bool 
     out.wheel = in.wheel;
     out.mouse_captured = captured;
     return out;
+}
+
+// One event of a --pad-script: a pad plugged in or out, buttons pressed or let go, sticks and triggers moved.
+void apply_pad_event(const Json& e, std::array<noor::runtime::PadState, noor::runtime::kMaxPlayers>& pads) {
+    const int player = std::clamp(e.value("player", 1), 1, static_cast<int>(noor::runtime::kMaxPlayers));
+    auto& pad = pads[static_cast<std::size_t>(player - 1)];
+    if (e.contains("connect")) {
+        pad = {};
+        pad.connected = true;
+        pad.name = e["connect"].is_string() ? e["connect"].get<std::string>() : "Simulated pad";
+    }
+    if (e.value("disconnect", false)) pad = {};
+    for (const char* key : {"press", "release"})
+        if (e.contains(key))
+            for (const auto& n : e[key]) {
+                const auto b = noor::runtime::binding_from_name(n.is_string() ? n.get<std::string>() : "");
+                if (b && b->kind == noor::runtime::Binding::Kind::Button) pad.buttons.set(static_cast<std::size_t>(b->button), key[0] == 'p');
+                else NOOR_LOG_WARN("Player", "--pad-script: {} isn't a pad button", n.dump());
+            }
+    if (e.contains("axes") && e["axes"].is_object()) {
+        static constexpr const char* kAxes[] = {"LeftX", "LeftY", "RightX", "RightY", "LeftTrigger", "RightTrigger"};
+        for (const auto& [name, v] : e["axes"].items()) {
+            const auto* it = std::find(std::begin(kAxes), std::end(kAxes), name);
+            if (it != std::end(kAxes) && v.is_number()) pad.axes[static_cast<std::size_t>(it - std::begin(kAxes))] = v.get<float>();
+            else NOOR_LOG_WARN("Player", "--pad-script: {} isn't a pad axis (LeftX, LeftY, RightX, RightY, LeftTrigger, RightTrigger)", name);
+        }
+    }
 }
 
 bool save_bmp(const noor::render::CapturedFrame& frame, const std::string& path) {
@@ -330,6 +366,7 @@ int run(const Options& o) {
             noor::scene::PrefabLibrary prefabs(*project, registry);
             noor::game::WorldOptions world_options;
             world_options.audio_device = o.audio;
+            world_options.user_dir = o.user_dir.empty() ? noor::platform::user_data_dir(game->title) : std::filesystem::path(o.user_dir);
             if (!game->csharp.empty()) {
                 // The game's C# scripts: start .NET (the runtime installed on this PC) with them.
                 if (auto host = noor::scripting::start_dotnet(game->csharp.parent_path(), game->csharp))
@@ -364,6 +401,24 @@ int run(const Options& o) {
                 game_ui.attach(**world);
                 noor::render::UiFrame ui_frame;
                 bool text_input = false;
+                // Gamepads (part 6e): SDL's, or a test's simulated pad (--pad-script) in their place.
+                std::unique_ptr<noor::platform::Gamepads> gamepads;
+                if (o.input && o.pad_script.empty()) {
+                    if (auto pads = noor::platform::Gamepads::open()) gamepads = std::move(*pads);
+                    else NOOR_LOG_WARN("Player", "Gamepads won't work: {}", pads.error().describe());
+                }
+                std::vector<Json> pad_events;
+                std::size_t next_pad_event = 0;
+                std::array<noor::runtime::PadState, noor::runtime::kMaxPlayers> simulated_pads{};
+                noor::runtime::PadState last_ui_pad;
+                if (!o.pad_script.empty()) {
+                    const auto text = noor::fs::read_file(o.pad_script);
+                    const Json j = text ? Json::parse(*text, nullptr, false) : Json();
+                    if (!j.is_object() || !j.contains("events") || !j["events"].is_array())
+                        NOOR_LOG_ERROR("Player", "--pad-script {}: expected {{\"events\": [...]}}", o.pad_script);
+                    else
+                        pad_events = j["events"].get<std::vector<Json>>();
+                }
                 bool captured = false;
                 int ignore_motion = 0;  // frames of mouse movement to drop after capture changes
                 bool warned_no_camera = false;
@@ -415,9 +470,49 @@ int run(const Options& o) {
                         --ignore_motion;
                         game_in.mouse_delta = {0, 0};
                     }
+                    // Gamepads (part 6e): the real ones, or a test's simulated one.
+                    if (!pad_events.empty() || !o.pad_script.empty()) {
+                        const auto frame_now = (*world)->frame_count();
+                        while (next_pad_event < pad_events.size() && pad_events[next_pad_event].value("frame", 0ull) <= frame_now)
+                            apply_pad_event(pad_events[next_pad_event++], simulated_pads);
+                        game_in.pads = simulated_pads;
+                    } else if (gamepads) {
+                        gamepads->poll();
+                        for (std::size_t i = 0; i < noor::runtime::kMaxPlayers; ++i) {
+                            const auto& r = gamepads->pads()[i];
+                            auto& p = game_in.pads[i];
+                            p.connected = r.connected;
+                            p.name = r.name;
+                            for (std::size_t b = 0; b < noor::runtime::kPadButtonCount; ++b) p.buttons.set(b, r.buttons.test(b));
+                            for (std::size_t a = 0; a < noor::runtime::kPadAxisCount; ++a) p.axes[a] = r.axes[a];
+                        }
+                    }
                     const double t_game = noor::platform::time_seconds();
-                    if (game_ui.ui() && o.input) {  // the UI's input first: what it does reaches scripts this frame
+                    if (game_ui.ui()) {  // the UI's input first: what it does reaches scripts this frame
                         noor::ui::WorldUi::Input ui_in;
+                        ui_in.mouse = false;
+                        // The first pad moves focus (d-pad or left stick), South presses, East is Escape (part 6e).
+                        {
+                            using K = noor::ui::Key;
+                            using PB = noor::runtime::PadButton;
+                            const auto& pad = game_in.pads[0];
+                            const auto& was = last_ui_pad;
+                            const auto edge = [&](bool now, bool before, K key) {
+                                if (now != before) ui_in.keys.emplace_back(key, now);
+                            };
+                            const float lx = pad.connected ? pad.axis(noor::runtime::PadAxis::LeftX) : 0.0f;
+                            const float ly = pad.connected ? pad.axis(noor::runtime::PadAxis::LeftY) : 0.0f;
+                            const float wx = was.connected ? was.axis(noor::runtime::PadAxis::LeftX) : 0.0f;
+                            const float wy = was.connected ? was.axis(noor::runtime::PadAxis::LeftY) : 0.0f;
+                            edge(pad.down(PB::DpadUp) || ly < -0.5f, was.down(PB::DpadUp) || wy < -0.5f, K::Up);
+                            edge(pad.down(PB::DpadDown) || ly > 0.5f, was.down(PB::DpadDown) || wy > 0.5f, K::Down);
+                            edge(pad.down(PB::DpadLeft) || lx < -0.5f, was.down(PB::DpadLeft) || wx < -0.5f, K::Left);
+                            edge(pad.down(PB::DpadRight) || lx > 0.5f, was.down(PB::DpadRight) || wx > 0.5f, K::Right);
+                            edge(pad.down(PB::South), was.down(PB::South), K::Enter);
+                            edge(pad.down(PB::East), was.down(PB::East), K::Escape);
+                            last_ui_pad = pad;
+                        }
+                        if (o.input) {
                         using B = noor::platform::MouseButton;
                         using P = noor::platform::Key;
                         using K = noor::ui::Key;
@@ -460,8 +555,9 @@ int run(const Options& o) {
                         ui_in.modifiers = {in.down(P::LeftCtrl) || in.down(P::RightCtrl), in.down(P::LeftShift) || in.down(P::RightShift),
                                            in.down(P::LeftAlt) || in.down(P::RightAlt)};
                         ui_in.text = in.text;
+                        }
                         game_ui.input(ui_in);
-                        if (game_ui.wants_text() != text_input) {  // a text box got or lost focus
+                        if (o.input && game_ui.wants_text() != text_input) {  // a text box got or lost focus
                             text_input = game_ui.wants_text();
                             noor::platform::set_text_input(**window, text_input);
                         }

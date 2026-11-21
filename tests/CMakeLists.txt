@@ -60,6 +60,7 @@ add_executable(noor_unit_tests
     unit/test_ui.cpp
     unit/test_ui_scripts.cpp
     unit/test_page_source.cpp
+    unit/test_gamepads.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -927,6 +928,13 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/ui_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_ui
             -P ${CMAKE_CURRENT_SOURCE_DIR}/ui_check.cmake)
     set_tests_properties(player.ui_lua_csharp PROPERTIES LABELS "gpu;player;ui" TIMEOUT 120 FIXTURES_REQUIRED built_ui_project)
+    # Gamepads and rebinding (gameplay foundations, part 6e): a simulated pad drives a menu (Lua and C#), is unplugged and
+    # back, a second pad plays as player 2; rebinding survives a restart; the pad runs and jumps in NoorPlatformer.
+    add_test(NAME player.gamepads
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_ui_project/UI Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/ui_project -DPLATFORMER=${PROJECT_SOURCE_DIR}/samples/NoorPlatformer
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_gamepads -P ${CMAKE_CURRENT_SOURCE_DIR}/pad_check.cmake)
+    set_tests_properties(player.gamepads PROPERTIES LABELS "gpu;player;input" TIMEOUT 180 FIXTURES_REQUIRED built_ui_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.

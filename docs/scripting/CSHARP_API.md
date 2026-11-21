@@ -68,8 +68,9 @@ line); the game keeps running.
 | `Water.Normal(x, z)` | `Vector3?`: its normal there |
 | `Noor.PlaySound(clip, position = null, volume = 1, bus = "sfx")` | A one-shot sound (asset id or `Assets/...` path); 3D with a position. `true` if it started |
 | `Noor.SetVolume(bus, volume)` | Bus volume: `master`, `music`, `sfx`, `ui`, `voice` |
-| `Input.Down/Pressed/Released(action)` | Actions from `Settings/input.json` (`jump`, `fire`, …) |
-| `Input.Axis(name)` | `move_x`, `move_y` (−1..1), `look_x`, `look_y` (mouse) |
+| `Input.Down/Pressed/Released(action, player = 1)` | Actions from `Settings/input.json` (`jump`, `fire`, …), keys and gamepads ([Input](INPUT.md)) |
+| `Input.Axis(name, player = 1)` | `move_x`, `move_y` (−1..1, keys and sticks), `look_x`, `look_y` (mouse) |
+| `Input.Pads()`, `Bindings`, `Rebind`, `ResetBindings`, `SaveBindings`, `LastPressed` | Gamepads and rebinding ([Input](INPUT.md)) |
 | `Input.CaptureMouse(bool)`, `Input.MouseCaptured` | Mouse capture for looking; Esc releases |
 
 ## `Entity`

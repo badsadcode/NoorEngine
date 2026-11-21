@@ -187,6 +187,10 @@ void World::frame(double dt, const InputState& input) {
     start_new_entities();
     // Messages queued since last frame (UI events): before anything runs, so scripts see them this frame.
     for (auto& q : std::exchange(queued_, {})) emit(q.emitter, q.name, q.data);
+    // Gamepads plugged in or out (part 6e): game-wide messages {player, name}.
+    for (const int p : input_.pads_connected())
+        emit(std::nullopt, "pad_connected", {{"player", p}, {"name", input_.state().pads[static_cast<std::size_t>(p - 1)].name}});
+    for (const int p : input_.pads_disconnected()) emit(std::nullopt, "pad_disconnected", {{"player", p}});
     for (auto& s : systems_) s->update(*this, dt);
     // A script paused, unpaused or changed the time scale just now: the rest of the frame (physics, late update, the
     // clock) already goes by it, so a pause freezes the world at once, not a physics step later.

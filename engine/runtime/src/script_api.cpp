@@ -4,6 +4,8 @@
 #include "noor/scene/prefab.h"
 
 #include <algorithm>
+#include <format>
+#include <variant>
 #include <unordered_set>
 #include <cmath>
 
@@ -401,10 +403,84 @@ bool emitter_burst(World& w, const Guid& e, int count) {
     return w.command("emitter.burst", e, asset::Json{{"count", count}});
 }
 
-bool input_down(World& w, std::string_view a) { return w.input().down(a); }
-bool input_pressed(World& w, std::string_view a) { return w.input().pressed(a); }
-bool input_released(World& w, std::string_view a) { return w.input().released(a); }
-float input_axis(World& w, std::string_view a) { return w.input().axis(a); }
+bool input_down(World& w, std::string_view a, int player) { return w.input().down(a, player); }
+bool input_pressed(World& w, std::string_view a, int player) { return w.input().pressed(a, player); }
+bool input_released(World& w, std::string_view a, int player) { return w.input().released(a, player); }
+float input_axis(World& w, std::string_view a, int player) { return w.input().axis(a, player); }
+
+std::variant<asset::Json, std::string> input(World& w, const asset::Json& request) {
+    if (!request.is_object() || !request.contains("op") || !request["op"].is_string()) return std::string("input: a request needs an \"op\"");
+    const std::string op = request["op"];
+    auto& in = w.input();
+    const auto names = [](const std::vector<Binding>& list) {
+        asset::Json out = asset::Json::array();
+        for (const auto& b : list) out.push_back(binding_name(b));
+        return out;
+    };
+    if (op == "pads") {
+        asset::Json out = asset::Json::array();
+        for (std::size_t i = 0; i < kMaxPlayers; ++i) {
+            const auto& pad = in.state().pads[i];
+            out.push_back({{"player", i + 1}, {"name", pad.name}, {"connected", pad.connected}});
+        }
+        return out;
+    }
+    if (op == "last_pressed") {
+        const auto b = in.last_pressed(request.value("player", 1));
+        return b ? asset::Json(binding_name(*b)) : asset::Json(nullptr);
+    }
+    if (op == "save") {
+        if (w.input_overrides().empty()) return std::string("input.save: this game has nowhere to save players' settings");
+        if (auto st = in.map().save_overrides(in.base(), w.input_overrides()); !st) return st.error().message;
+        return asset::Json(nullptr);
+    }
+    const std::string name = request.value("name", std::string());
+    if (op == "reset") {
+        if (name.empty()) {
+            in.map() = in.base();
+            return asset::Json(nullptr);
+        }
+        const auto* from = in.base().bindings(name);
+        auto* to = in.map().bindings(name);
+        if (!from || !to) return std::format("input.reset: no action or axis side called \"{}\"", name);
+        *to = *from;
+        return names(*to);
+    }
+    auto* list = in.map().bindings(name);
+    if (!list) return std::format("input.{}: no action or axis side called \"{}\" (an axis side is \"move_x+\" or \"move_x-\")", op, name);
+    if (op == "bindings") return names(*list);
+    if (op == "rebind") {
+        const auto read = [&](const char* key) -> std::variant<std::optional<Binding>, std::string> {
+            if (!request.contains(key) || request[key].is_null()) return std::optional<Binding>();
+            const auto b = request[key].is_string() ? binding_from_name(request[key].get<std::string>()) : std::nullopt;
+            if (!b) return std::format("input.rebind: \"{}\" isn't a key or pad control", request[key].dump());
+            return std::optional<Binding>(*b);
+        };
+        auto old_b = read("old"), new_b = read("new");
+        if (auto* why = std::get_if<std::string>(&old_b)) return *why;
+        if (auto* why = std::get_if<std::string>(&new_b)) return *why;
+        const auto o = std::get<std::optional<Binding>>(old_b), n = std::get<std::optional<Binding>>(new_b);
+        if (!o && !n) return std::string("input.rebind: give the binding to replace (\"old\"), the new one (\"new\"), or both");
+        if (n) {  // a control does one thing: taken from wherever else it was
+            for (auto& [other, bindings] : in.map().actions)
+                if (&bindings != list) std::erase(bindings, *n);
+            for (auto& [other, axis] : in.map().axes) {
+                if (&axis.negative != list) std::erase(axis.negative, *n);
+                if (&axis.positive != list) std::erase(axis.positive, *n);
+            }
+        }
+        if (o) {
+            const auto it = std::find(list->begin(), list->end(), *o);
+            if (it == list->end()) return std::format("input.rebind: \"{}\" has no binding {}", name, binding_name(*o));
+            if (n) *it = *n;
+            else list->erase(it);
+        } else if (std::find(list->begin(), list->end(), *n) == list->end()) {
+            list->push_back(*n);
+        }
+        return names(*list);
+    }
+    return std::format("input: no operation \"{}\"", op);
+}
 double time(World& w) { return w.time(); }
 void capture_mouse(World& w, bool capture) { w.request_mouse_capture(capture); }
 bool mouse_captured(World& w) { return w.input().state().mouse_captured; }

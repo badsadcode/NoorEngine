@@ -499,22 +499,57 @@ public static unsafe class Water
     }
 }
 
-/// <summary>Input actions and axes (the project's Settings/input.json) and mouse capture.</summary>
+/// <summary>
+/// Input actions and axes (the project's Settings/input.json, with the player's own changes over it), mouse capture,
+/// gamepads and rebinding. `player` is 1 to 4: 1 is the keyboard, mouse and first pad; 2 to 4 the other pads.
+/// </summary>
 public static unsafe class Input
 {
-    public static bool Down(string action) => Query(0, action);
-    public static bool Pressed(string action) => Query(1, action);
-    public static bool Released(string action) => Query(2, action);
+    public static bool Down(string action, int player = 1) => Query(0, action, player);
+    public static bool Pressed(string action, int player = 1) => Query(1, action, player);
+    public static bool Released(string action, int player = 1) => Query(2, action, player);
 
-    private static bool Query(int q, string action)
+    private static bool Query(int q, string action, int player)
     {
-        fixed (byte* a = Engine.Utf8(action)) return Engine.A.Input(q, a) != 0;
+        fixed (byte* a = Engine.Utf8(action)) return (player == 1 ? Engine.A.Input(q, a) : Engine.A.InputPlayer(q, a, player)) != 0;
     }
 
-    /// <summary>-1..1 for key axes; mouse movement for look_x / look_y.</summary>
-    public static float Axis(string name)
+    /// <summary>-1..1: keys whole steps, sticks smooth past their dead zone; mouse movement for look_x / look_y.</summary>
+    public static float Axis(string name, int player = 1)
     {
-        fixed (byte* n = Engine.Utf8(name)) return Engine.A.Axis(n);
+        fixed (byte* n = Engine.Utf8(name)) return player == 1 ? Engine.A.Axis(n) : Engine.A.AxisPlayer(n, player);
+    }
+
+    /// <summary>The four players' pads: (player, name, connected).</summary>
+    public static (int Player, string Name, bool Connected)[] Pads() =>
+        (Op(new JsonObject { ["op"] = "pads" }) as JsonArray ?? [])
+            .Select(p => (p!["player"]!.GetValue<int>(), p["name"]!.GetValue<string>(), p["connected"]!.GetValue<bool>())).ToArray();
+
+    /// <summary>What an action (or an axis side: "move_x+", "move_x-") is bound to: "Space", "Pad.South"...</summary>
+    public static string[] Bindings(string name) => Names(Op(new JsonObject { ["op"] = "bindings", ["name"] = name }));
+
+    /// <summary>Replaces `old` with `newBinding` (no old: adds it; no new: removes old). A control taken from another
+    /// action moves here. Returns the bindings now.</summary>
+    public static string[] Rebind(string name, string? old, string? newBinding) =>
+        Names(Op(new JsonObject { ["op"] = "rebind", ["name"] = name, ["old"] = old, ["new"] = newBinding }));
+
+    /// <summary>The game's own bindings back, for one name or (null) all.</summary>
+    public static void ResetBindings(string? name = null) => Op(new JsonObject { ["op"] = "reset", ["name"] = name });
+
+    /// <summary>The player's changes kept: read again at the next start.</summary>
+    public static void SaveBindings() => Op(new JsonObject { ["op"] = "save" });
+
+    /// <summary>What was pressed this frame ("J", "Pad.North"...), or null: a settings menu's "press a key".</summary>
+    public static string? LastPressed(int player = 1) => (string?)Op(new JsonObject { ["op"] = "last_pressed", ["player"] = player });
+
+    private static string[] Names(JsonNode? list) => (list as JsonArray ?? []).Select(n => n!.GetValue<string>()).ToArray();
+
+    private static JsonNode? Op(JsonObject request)
+    {
+        byte* result;
+        fixed (byte* r = Engine.Utf8(request.ToJsonString())) result = Engine.A.InputOp(r);
+        if (result == null) throw new InvalidOperationException(Engine.Str(Engine.A.LastError()));
+        return JsonNode.Parse(Engine.Str(result)!);
     }
 
     /// <summary>Ask to capture the mouse for looking (works once the player clicked into the game view; Esc releases it).</summary>

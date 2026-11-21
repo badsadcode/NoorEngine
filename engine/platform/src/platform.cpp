@@ -3,6 +3,7 @@
 #include "noor/foundation/log.h"
 #include "noor/platform/window.h"
 
+#include <cctype>
 #include <SDL3/SDL.h>
 #include <format>
 
@@ -182,6 +183,21 @@ std::string clipboard_text() {
     std::string out = text ? text : "";
     SDL_free(text);
     return out;
+}
+
+std::filesystem::path user_data_dir(std::string_view game) {
+    // Letters, digits, spaces and a few marks only: the game's title becomes a folder name.
+    std::string safe;
+    for (const char c : game) safe += (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '-' || c == '_' || c == '.') ? c : '_';
+    if (safe.empty()) safe = "Game";
+    char* path = SDL_GetPrefPath("NoorEngine", safe.c_str());
+    if (!path) {
+        NOOR_LOG_WARN("Platform", "No folder for the player's settings: {}", SDL_GetError());
+        return {};
+    }
+    const std::string utf8 = path;
+    SDL_free(path);
+    return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
 }
 
 void set_live_redraw_callback(std::function<void()> callback) {

@@ -45,9 +45,19 @@ using asset::Json;
 Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project, const asset::AssetRegistry& registry,
                                                    scene::PrefabLibrary& prefabs, const scene::Scene& scene,
                                                    const WorldOptions& options) {
-    auto input_map = runtime::InputMap::load(project.root() / "Settings" / "input.json");
-    if (!input_map) return std::unexpected(input_map.error());
+    // The project's bindings, and the player's own over them (part 6e).
+    const auto project_input = project.root() / "Settings" / "input.json";
+    const auto overrides = options.user_dir.empty() ? stdfs::path() : options.user_dir / "input.json";
+    auto base_map = runtime::InputMap::load(project_input);
+    if (!base_map) return std::unexpected(base_map.error());
+    auto input_map = runtime::InputMap::load(project_input, overrides);
+    if (!input_map) {
+        NOOR_LOG_WARN("Game", "{}: {} (the game's own bindings are used)", overrides.generic_string(), input_map.error().describe());
+        input_map = *base_map;
+    }
     auto world = std::make_unique<runtime::World>(scene::expand_prefabs(scene, prefabs.resolver()).scene, std::move(*input_map));
+    world->input().set_base(std::move(*base_map));
+    world->set_input_overrides(overrides);
     // Spawning prefabs while playing (gameplay foundations, part 1): by id, or by path through the registry. The library
     // and registry outlive the world (the caller owns them).
     world->set_prefabs(prefabs.resolver(), [&registry](std::string_view path) -> std::optional<Guid> {

@@ -110,10 +110,20 @@ bool set_animation_parameter(World& w, const Guid& e, std::string_view name, con
 bool emitter_burst(World& w, const Guid& e, int count);
 
 // ---- Input, time ----
-[[nodiscard]] bool input_down(World& w, std::string_view action);
-[[nodiscard]] bool input_pressed(World& w, std::string_view action);
-[[nodiscard]] bool input_released(World& w, std::string_view action);
-[[nodiscard]] float input_axis(World& w, std::string_view axis);
+// `player` 1 to 4 (part 6e): 1 is the keyboard, mouse and first pad; 2 to 4 the other pads.
+[[nodiscard]] bool input_down(World& w, std::string_view action, int player = 1);
+[[nodiscard]] bool input_pressed(World& w, std::string_view action, int player = 1);
+[[nodiscard]] bool input_released(World& w, std::string_view action, int player = 1);
+[[nodiscard]] float input_axis(World& w, std::string_view axis, int player = 1);
+// Gamepads and rebinding (part 6e), Lua's and C#'s alike, as one request:
+//   {"op": "pads"}                               -> [{"player", "name", "connected"}] (the four players' pads)
+//   {"op": "bindings", "name"}                   -> ["Space", "Pad.South"]  (an action, or an axis side: "move_x+")
+//   {"op": "rebind", "name", "old"?, "new"?}     -> the bindings now: replaces old with new (no old: adds new; no new:
+//                                                   removes old); a binding taken from another action moves here
+//   {"op": "reset", "name"?}                     -> the game's own bindings back (for one name, or all)
+//   {"op": "save"}                               -> the player's changes written to their settings (read at the next start)
+//   {"op": "last_pressed", "player"?}            -> what was pressed this frame ("J", "Pad.North"...), or null
+[[nodiscard]] std::variant<asset::Json, std::string> input(World& w, const asset::Json& request);
 [[nodiscard]] double time(World& w);
 void capture_mouse(World& w, bool capture);
 [[nodiscard]] bool mouse_captured(World& w);

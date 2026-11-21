@@ -1,0 +1,68 @@
+{
+  "noor_scene": 2,
+  "id": "7e5d0000-0006-4e00-8000-000000000600",
+  "name": "Rebind",
+  "entities": [
+    {
+      "id": "7e5d0000-0006-4e00-8000-000000000601",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1,
+          6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "7e5d0000-0006-4e00-8000-000000000602",
+      "name": "Script",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/Rebind.luau"
+        }
+      }
+    }
+  ]
+}

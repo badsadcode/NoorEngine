@@ -79,10 +79,11 @@ running. A hook that runs longer than 0.25 s is stopped (endless loops).
 | `noor.find(name)` | The first entity with that name, or `nil` |
 | `noor.find_all(tag)` | Every entity with that tag, in scene order (a **group**: `"enemy"`, `"pickup"`...). Tags are set in the Inspector or by `e:add_tag` |
 | `noor.spawn(prefab, position [, euler [, parent]])` | A new copy of a prefab (its asset id, or its path like `"Assets/Bullet.noorprefab"`) at `position`, turned by `euler` (degrees), under `parent` if given (then position and turn are local to it). Returns the prefab's root entity (destroying it takes the rest with it), or `nil` if there's no such prefab. It starts next frame: its scripts' `on_start`, bodies, sprites and sounds |
-| `noor.input.down(action)` | Action held this frame |
-| `noor.input.pressed(action)` | Action went down this frame |
-| `noor.input.released(action)` | Action went up this frame |
-| `noor.input.axis(name)` | `-1..1` for key axes; mouse movement in pixels for `look_x` / `look_y` |
+| `noor.input.down(action [, player])` | Action held this frame (player 1 to 4: [Input](INPUT.md)) |
+| `noor.input.pressed(action [, player])` | Action went down this frame |
+| `noor.input.released(action [, player])` | Action went up this frame |
+| `noor.input.axis(name [, player])` | `-1..1` for keys and sticks; mouse movement in pixels for `look_x` / `look_y` |
+| `noor.input.pads()`, `bindings`, `rebind`, `reset_bindings`, `save_bindings`, `last_pressed` | Gamepads and rebinding: [Input](INPUT.md) |
 | `noor.raycast(origin, direction, max_distance [, ignore])` | The first physics body hit: `{entity, point, normal, distance}`, or `nil` |
 | `noor.shape_cast(shape, from, to [, ignore])` | A shape swept from `from` to `to`: the first hit, as raycast (`distance` along the way). `shape` is a table like a collider: `{shape = "circle", radius = 0.3}`, box, sphere, capsule, rectangle |
 | `noor.overlap(shape, at [, ignore])` | A list of the entities whose bodies overlap `shape` placed at `at` |

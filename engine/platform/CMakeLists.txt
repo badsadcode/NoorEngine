@@ -3,6 +3,7 @@ noor_add_module(platform
         src/platform.cpp
         src/window.cpp
         src/window_vulkan.cpp
+        src/gamepad.cpp
         $<$<PLATFORM_ID:Windows>:src/native_child_window_win32.cpp>
         $<$<PLATFORM_ID:Windows>:src/process_win32.cpp>
     PUBLIC_DEPS

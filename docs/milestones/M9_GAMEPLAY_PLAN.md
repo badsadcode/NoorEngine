@@ -31,8 +31,8 @@ that use all of it; every existing golden and yardstick unchanged.
 | 3 ✅ | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
 | 4 ✅ | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
 | 5 ✅ | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
-| 6 | **Game UI**: retained widgets (panel, label, button, image, slider, toggle, list, text box), layout (anchors, stacks, grids), themes, **focus and keyboard / gamepad navigation**; `.noorui` files built in a UI editor or from scripts; it lives in the display's picture (2D part 6) | A pause menu and an inventory made in the editor work with mouse, keyboard and gamepad; layout at three resolutions by readback; cost of 500 widgets measured |
-| 6b | **Gamepads and rebinding**: SDL gamepads in the input map (buttons, sticks, triggers, dead zones), several players, hot-plugging, rebinding at run time from a settings menu (saved) | A simulated gamepad drives the platformer and the menus; a pad unplugged and back; rebinding survives a restart |
+| 6 ✅ | **Game UI**: retained widgets (panel, label, button, image, slider, toggle, list, text box), layout (anchors, stacks, grids), themes, **focus and keyboard / gamepad navigation**; `.noorui` files built in a UI editor or from scripts; it lives in the display's picture (2D part 6) | A pause menu and an inventory made in the editor work with mouse, keyboard and gamepad; layout at three resolutions by readback; cost of 500 widgets measured |
+| 6b ✅ | **Gamepads and rebinding**: SDL gamepads in the input map (buttons, sticks, triggers, dead zones), several players, hot-plugging, rebinding at run time from a settings menu (saved) | A simulated gamepad drives the platformer and the menus; a pad unplugged and back; rebinding survives a restart |
 | 7 | **Saving and loading**: `noor.save(slot, table)` / `noor.load(slot)` (versioned JSON in the user's save folder, written atomically, a backup kept); a `persist` component that saves chosen entities' state (transform, chosen fields) and restores it; settings saved apart from games | A save from one version loads in the next (a migration test); a crash while saving loses nothing (the atomic write, simulated); a level restored to the bit |
 | 8 | **Levels**: `noor.change_scene(path)` with a fade and a loading screen, additive scenes (load a room into the level), entities that survive a change (`"keep": true`, Godot's autoload), spawn points | Three levels walked through and back with the game's state intact; no leaks across 100 changes; the first frame after a change measured |
 | 9 | **Navigation and agents**: navmeshes baked from colliders and terrain (Recast/Detour, zlib licence), a `nav_agent` component (path following, simple avoidance, off-mesh links for jumps and ladders), grid paths for tilemaps (2D, isometric); the navmesh drawn in the editor, baked by a button and by `noor_cli` | Agents reach their goals round obstacles in 3D and on a tilemap; paths against hand-made answers; a crowd of 100 agents measured; built game identical |
@@ -272,6 +272,36 @@ Exceptions: typing into a text box in the editor's Play doesn't work yet (the vi
 works in noor_player and built games); the tab edits one element at a time (no multi-select, drag and drop, or copy and
 paste of elements); styles beyond the inspector's nine common ones are written in NoorCode; while a page is previewed,
 clicks on it select its elements, not the scene's entities behind it.
+
+## Part 6e result (2026-11-21)
+Done. **Gamepads:** SDL's (`platform::Gamepads`): Xbox, PlayStation, Switch and generic pads read alike, plugged in and
+out any time; four players' slots, a pad plugged back in getting its old slot. **Bindings** are keys, pad buttons or one
+direction of a stick or trigger, by name (`Space`, `Pad.South`, `Pad.LeftX-`, `Pad.RT`), in `Settings/input.json`; the
+default map has the usual pad controls; sticks read smoothly past a round dead zone (`dead_zone`), sticks and triggers
+press past `press`. **Players** 1 to 4 (1: keyboard, mouse and the first pad): `noor.input.down(action, player)` and C#'s
+`Input.Down(action, player)`; `pad_connected` / `pad_disconnected` game-wide messages. **Rebinding:** `bindings`,
+`rebind` (a control taken from another action moves), `reset_bindings`, `last_pressed` (a settings menu's "press a
+key"), `save_bindings` (only what changed, to the player's own `input.json` in `%APPDATA%\NoorEngine\<game>`, read over
+the game's map at the next start); one request for Lua and C# alike (`runtime::api::input`, rt API v19). **Menus** follow
+the first pad (d-pad or stick moves focus, South presses, East is Escape). noor_player gained `--pad-script` (a
+simulated pad, for tests) and `--user-dir`.
+
+Proved: binding names both ways, the default map's pad controls, the round dead zone and smooth values, the keyboard
+being player 1's only, button, stick and trigger presses, what was pressed, pads plugged in and out as messages,
+rebinding, moving, resetting, saving only what changed and reading it back over the game's map (unit); a simulated pad
+moves a menu's focus with the d-pad and the stick, presses its buttons, is unplugged and back as player 1 again, and a
+second pad jumps as player 2, the same from Lua in the project and Lua and C# in a built game; rebinding survives a
+restart in Lua and C#; the pad runs NoorPlatformer's hero left and jumps (`player.gamepads`).
+
+Exceptions: pads in the editor's Play (its viewport has no SDL: pads work in noor_player and built games); rumble, gyro,
+touchpads, lights; button pictures by the pad's make; the right stick isn't part of `look_x` / `look_y` (scripts read
+`look_stick_x` / `look_stick_y` with their own speed); the tests drive a simulated pad, so reading a real pad through SDL
+is checked only as far as it starts cleanly with none plugged in: it needs a try with a real one.
+
+## Part 6: done
+UI documents (RmlUi behind our API, [ADR-041](../decisions/ADR-041-game-ui.md)), shown in games and the editor's Play,
+driven by scripts in Lua and C#, with the effects that make menus look good, built in the editor's UI tab, and driven by
+mouse, keyboard and gamepads, with bindings players can change and keep. Next: part 7, saving and loading.
 
 ## Highest risks (settle early)
 

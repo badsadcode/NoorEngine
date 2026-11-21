@@ -114,6 +114,10 @@ public:
     [[nodiscard]] scene::Scene& scene() noexcept { return scene_; }
     [[nodiscard]] const scene::Scene& scene() const noexcept { return scene_; }
     [[nodiscard]] const Input& input() const noexcept { return input_; }
+    [[nodiscard]] Input& input() noexcept { return input_; }
+    // Where players' own bindings are saved (part 6e: rebinding from a settings menu); empty: they can't be saved.
+    void set_input_overrides(std::filesystem::path file) { input_overrides_ = std::move(file); }
+    [[nodiscard]] const std::filesystem::path& input_overrides() const noexcept { return input_overrides_; }
     [[nodiscard]] double time() const noexcept { return time_; }           // seconds of game time
 
     // ---- Pause and time scale (gameplay foundations, part 2) ----
@@ -299,6 +303,7 @@ private:
     };
     std::vector<Queued> queued_;
     UiDocuments* ui_documents_ = nullptr;
+    std::filesystem::path input_overrides_;
     std::map<std::uint32_t, Guid> ui_owners_;
     void emit_events_as_messages();
     double time_scale_ = 1.0;
