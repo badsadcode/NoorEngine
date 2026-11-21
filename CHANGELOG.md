@@ -4,6 +4,14 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Alden swims forwards
+**Fixed**
+- Alden's `SwimForward` (8D part 8) turned his arms the wrong way round: the hand pulled from his hips towards his head
+  under the water and recovered over his back towards his feet, a stroke that would swim him backwards (Tom spotted it).
+  The circle's direction is reversed in `tools/samples/make_alden.py`; checked by following the hand through the clip
+  (under the water it now travels towards his feet, above it towards his head). The `Hillside_Water` golden is
+  refreshed; the water and Alden tests, built games included, pass.
+
 ### 2026-11-21 — 2D foundations, part 7: samples, templates and review (2D foundations done)
 **Added**
 - `samples/NoorPlatformer` (Tom's pixel art; `tools/samples/make_noorplatformer.py`) and `samples/NoorIsometric`

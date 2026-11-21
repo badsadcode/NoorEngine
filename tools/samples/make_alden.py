@@ -121,7 +121,9 @@ def swim_forward():
     forward (0.6 m/s, for root motion)."""
     t = [0, 0.3, 0.6, 0.9, 1.2]
     q, qm = mtc.quat, mtc.qmul
-    circle = [0, -90, -180, -270, -360]
+    # The arms turn so the hand pulls from the head towards the feet under the body and recovers over the back (Tom
+    # spotted the first version circling the other way: a stroke that would have swum him backwards).
+    circle = [0, 90, 180, 270, 360]
     return [
         ('DEF-hips', 'rotation', 'LINEAR', t, [q((1, 0, 0), 65)] * 5),
         ('DEF-hips', 'translation', 'LINEAR', t, [[0, y, z] for y, z in zip((0.95, 0.96, 0.95, 0.96, 0.95), (0, 0.18, 0.36, 0.54, 0.72))]),
