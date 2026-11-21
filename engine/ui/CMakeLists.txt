@@ -5,6 +5,7 @@ noor_add_module(ui
     SOURCES
         src/ui.cpp
         src/world_ui.cpp
+        src/page_source.cpp
     PUBLIC_DEPS
         noor::foundation
         noor::asset

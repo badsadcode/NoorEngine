@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 32;
+    public const uint ExpectedApiVersion = 33;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -102,6 +102,8 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_graph_node_types();
     [DllImport(Dll)] private static extern IntPtr noor_graph_check([MarshalAs(UnmanagedType.LPUTF8Str)] string graph);
     [DllImport(Dll)] public static extern void noor_viewport_set_brush(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? brush);
+    /// <summary>v33: the page the UI tab previews over the scene ({"root", "page", "selected"}; null: none).</summary>
+    [DllImport(Dll)] public static extern void noor_viewport_set_ui(IntPtr viewport, [MarshalAs(UnmanagedType.LPUTF8Str)] string? json);
     [DllImport(Dll)] private static extern IntPtr noor_doc_export_csg(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string modelId,
                                                                     [MarshalAs(UnmanagedType.LPUTF8Str)] string glbPath);
     [DllImport(Dll)] private static extern IntPtr noor_doc_texture(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string texturePath);
@@ -144,6 +146,9 @@ public static class Native
     [DllImport(Dll)] private static extern IntPtr noor_doc_timeline(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
     /// <summary>The Timeline panel (v32, gameplay foundations part 5): list, info, new, set, key, event, remove_key, preview.</summary>
     public static string? Timeline(IntPtr doc, string command) => Str(noor_doc_timeline(doc, command));
+    [DllImport(Dll)] private static extern IntPtr noor_doc_ui(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
+    /// <summary>The UI tab (v33, gameplay foundations part 6d): templates, list, new, tree, edit, source, set_source, undo, redo.</summary>
+    public static string? Ui(IntPtr doc, string command) => Str(noor_doc_ui(doc, command));
     // v26: sprite sheets (Milestone 8B, part 5).
     public static string? Sprite(IntPtr doc, string command) => Str(noor_doc_sprite(doc, command));
     // v27: the Animation panel (Milestone 8C, part 6): models, bone maps, controllers, characters, the preview.

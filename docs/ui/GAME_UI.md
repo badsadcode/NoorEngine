@@ -6,16 +6,44 @@ game. ([ADR-041](../decisions/ADR-041-game-ui.md): RmlUi does the layout and sty
 For a score in the corner or a health bar, the **HUD** is still the quick way (`noor.ui.text`, `noor.ui.rect` from a
 script, redrawn every frame). Documents are for anything with layout: panels, lists, buttons, pictures.
 
-**What works today (gameplay foundations parts 6a to 6c):** documents shown in a running game (noor_player and built
-games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; gradients, shadows, blur and
-other filters, frosted glass over the game, 2D and 3D transforms, masks ([Effects](#effects)); scripts (Lua and C#)
+**What works today (gameplay foundations parts 6a to 6d):** pages built in the editor's **UI tab** without writing
+markup ([below](#building-pages-in-the-editor)) or by hand; shown in a running game (the editor's Play, noor_player and
+built games), laid out and styled, with text, rounded boxes, borders, images and clipped areas; gradients, shadows, blur
+and other filters, frosted glass over the game, 2D and 3D transforms, masks ([Effects](#effects)); scripts (Lua and C#)
 open, show, hide and close them, change what's in them, read and set their controls and react to clicks and changes;
-the mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** a UI builder in the editor, and
-documents in the editor's Play (6d); gamepads (6e); binding data to a page (a later step).
+the mouse, the keyboard (Tab, arrows, Enter) and typing in text boxes. **Coming:** gamepads (6e); binding data to a page
+(a later step).
+
+## Building pages in the editor
+
+The **UI tab** (in the bottom row, beside Timeline) builds pages without markup:
+
+![The editor with the UI tab open: a pause menu ("Paused", Resume, Quit) shown over the scene in the viewport with Quit outlined in orange; below, the page's elements as a tree (body, the panel, the title, two buttons) and the selected button's Id, Class and Text](../devlog/img/devlog098_ui_tab.png)
+
+1. **A page:** pick one, or choose a template (Blank, Pause menu, HUD, Settings), type a name (`UI/menu.noorui`) and
+   press **New page**. The viewport shows the page over your scene while you work.
+2. **Select** an element by clicking it in the viewport or in the tree. It's outlined in orange.
+3. **Change it:** its id (scripts find it by that), classes, text, and common styles (width, height, margin, padding,
+   colours, font size, rounded corners, alignment). Enter or leaving the field applies it.
+4. **Add inside it** from the palette: Panel, Title, Label, Button, Image, Slider, Checkbox, Text box. Each gets an id of
+   its own (`button`, `button-2`...), ready for scripts. **Move up**, **Move down** and **Delete** arrange them.
+5. **Undo** and **Redo** step through the page's changes.
+6. **Put in the scene** adds an entity with the page as its `ui_document`, and **Play** shows it in the game. (Or use
+   the Inspector: **+ Add component ▸ UI document…**.)
+
+Every change is written to the page's file at once, and only its own part of the file changes: comments, formatting and
+the style sheet you wrote stay as they were. For anything the tab doesn't offer, **Edit text in NoorCode** opens the
+page itself; the viewport and the tab follow the file whichever way it changes (the tab reads it again within a
+second, and an edit started from its old tree is refused rather than made in the wrong place).
+
+**The built-in theme.** The palette's widgets look right on any page: the default style sheet has `noor-panel` (a
+dark rounded panel), `noor-button` (with hover, focus and pressed looks), and a look for sliders, checkboxes, radio
+buttons and text boxes (RmlUi's own inputs have none: a slider without styles is invisible). Your own styles win over
+all of it.
 
 ## Showing a document
 
-Put an entity in the scene with a `ui_document` component:
+Put an entity in the scene with a `ui_document` component (the UI tab's **Put in the scene** does it):
 
 ```json
 "components": {
@@ -99,6 +127,10 @@ Windows' own input), with Backspace, Delete, Home, End, the arrows and Ctrl+A / 
 from anywhere). Make focus visible with a
 `:focus` style. Keys also reach the game as usual: a pause menu pauses the game, so its keys don't move the player.
 
+**In the editor's Play** pages work with the mouse and the keys that move focus and press (Tab, arrows, Enter, Space,
+Escape), but typing into a text box doesn't yet: the viewport doesn't pass typed letters on. In noor_player and built
+games it does.
+
 ## Writing one
 
 A `.noorui` file is RML: HTML-like markup. Its look is RCSS: CSS, inline in `<style>` or in a `.rcss` file linked from
@@ -138,7 +170,8 @@ animations. RCSS isn't CSS in every detail; RmlUi's documentation lists the prop
 1080p or 4K and in a small window. `px` are real pixels. `em` and `%` work as in CSS.
 
 **Defaults.** Every document starts from a small default style sheet: `div`, `p`, `h1`…`h6` and friends are blocks, text
-is the built-in font (Atkinson Hyperlegible) at 24 dp in a light colour. Anything in your own styles wins.
+is the built-in font (Atkinson Hyperlegible) at 24 dp in a light colour, and the [built-in theme](#building-pages-in-the-editor)
+styles `noor-panel`, `noor-button` and inputs. Anything in your own styles wins.
 
 **Fonts.** The built-in font is always there (`font-family: "Atkinson Hyperlegible"`). Your own fonts (TrueType or
 OpenType) come in with `@font-face { font-family: "My Font"; src: url("/Fonts/MyFont.ttf"); }`. Check that a font's
@@ -196,3 +229,13 @@ through one function, `runtime::api::ui(world, caller, {"op": ...})`, Lua's and 
 `tests/unit/test_ui.cpp` and `test_ui_scripts.cpp` (no GPU), `render.golden_UI_Menu` and `render.golden_UI_Effects`
 (the pictures, under Vulkan validation), `player.ui_lua_csharp` (a pause menu from Lua in a project, Lua and C# in a built game).
 `tests/data/ui_project`'s `Scenes/Try` is a menu to play with by hand.
+
+The UI tab (6d) works on files: `noor::ui::PageSource` (`page_source.h`) reads a page's `<body>` with where each element
+is in its text, and makes each edit as a small splice of that text (re-read afterwards: an edit that would break the page
+is refused), plus the palette and templates. The editor API's `noor_doc_ui` (v33) lists, makes, reads and edits pages,
+with an undo per page; `noor_viewport_set_ui` shows a page over the scene, reloads it when its file changes, turns
+clicks into `ui_pick` events (an element's path, counted the same way in RmlUi's document: `Ui::element_at`) and outlines
+the selection (`Ui::element_box`). The viewport owns the editor's one UI: the preview while editing, the game's
+documents (`WorldUi`, attached to the playing world) in Play; `noor_viewport_set_play(null)` detaches it from the world
+before the document stops it. Tests: `test_page_source.cpp`, `api/test_ui_api.cpp`, and the editor smoke test builds a
+menu, picks a button in the viewport, undoes, and plays the page.

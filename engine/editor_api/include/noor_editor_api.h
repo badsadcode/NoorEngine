@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 32u
+#define NOOR_EDITOR_API_VERSION 33u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -220,6 +220,24 @@ NOOR_API const char* noor_doc_tilemap(noor_doc* doc, const char* command);
          edit, undo, save or Play does too).
    Timeline files are written at once (key edits aren't undoable steps). NULL on error (noor_last_error). */
 NOOR_API const char* noor_doc_timeline(noor_doc* doc, const char* command);
+
+/* v33: the UI tab (gameplay foundations, part 6d). noor_doc_ui runs one command on the project's .noorui pages:
+     {"op": "templates"} -> {"templates": [{"name", "label"}], "palette": [{"name", "label", "markup"}]}
+     {"op": "list"} -> {"pages": ["UI/pause.noorui", ...]}
+     {"op": "new", "path", "template"?, "title"?}, {"op": "tree", "path"}, {"op": "edit", "path", "edit"},
+     {"op": "set_source", "path", "text"}, {"op": "undo" | "redo", "path"}
+         -> {"path", "tree": {path, tag, id, class, style, text, attributes, children}, "can_undo", "can_redo",
+             "selected"? (an inserted or moved element's path), "error"? (the page doesn't read: no tree)}
+     {"op": "source", "path"} -> {"path", "text"}
+   Edits (noor/ui/page_source.h): set_attribute, set_text, set_style, insert (a palette widget or markup), remove, move;
+   each changes only its part of the page's text and is written at once, with an undo per page. NULL on error. */
+NOOR_API const char* noor_doc_ui(noor_doc* doc, const char* command);
+/* v33: the viewport shows a page over the scene while editing: {"root": the project's folder, "page": "UI/x.noorui",
+   "selected": [path]?} (page "" or NULL: none). It reloads when the file changes; a click on the page reports
+   {"type": "ui_pick", "path": [...]} (instead of picking an entity) and the selected element is outlined. Not while
+   playing: in Play the viewport shows the game's own documents (ui_document components, scripts). Its render stats
+   have "ui": {"page", "playing", "commands", "selected_box": [x, y, w, h] | null}. */
+NOOR_API void noor_viewport_set_ui(noor_viewport* viewport, const char* json);
 /* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
      {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
         "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),

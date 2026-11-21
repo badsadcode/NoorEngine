@@ -29,6 +29,9 @@ public:
     // Becomes the world's UI and opens the scene's ui_document components ({"document": path, "visible": true}), each
     // belonging to its entity. Problems are logged with the entity's name. Detaches in the destructor.
     void attach(runtime::World& world);
+    // Lets go of the world (before it's destroyed): no more messages to it; the documents stay until this goes. The
+    // editor's viewport calls it from another thread while no frame runs, so it touches the world and nothing else.
+    void detach();
     // The UI, once something opened a document.
     [[nodiscard]] Ui* ui() noexcept { return ui_.get(); }
 

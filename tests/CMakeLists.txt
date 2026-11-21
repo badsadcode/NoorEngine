@@ -59,6 +59,7 @@ add_executable(noor_unit_tests
     unit/test_timeline.cpp
     unit/test_ui.cpp
     unit/test_ui_scripts.cpp
+    unit/test_page_source.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -82,7 +83,7 @@ doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit" FAIL_REGULAR_EXP
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
     # The viewport maths is internal to the DLL, so its source is compiled into the test too.
-    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp api/test_sprite_api.cpp api/test_animation_api.cpp api/test_water_api.cpp api/test_tilemap_api.cpp api/test_timeline_api.cpp
+    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp api/test_sprite_api.cpp api/test_animation_api.cpp api/test_water_api.cpp api/test_tilemap_api.cpp api/test_timeline_api.cpp api/test_ui_api.cpp
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
     target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph noor::game doctest::doctest)

@@ -17,6 +17,7 @@
 #include "noor/foundation/error.h"
 #include "noor/render/renderer.h"
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -115,6 +116,16 @@ public:
 
     // What happened since the last call, in order.
     [[nodiscard]] std::vector<UiEvent> take_events();
+
+    // For the editor's UI builder (part 6d). The element under a point on the screen (pixels): its document and its path
+    // from <body> (the indices of elements at each level, as page_source.h counts them); nothing over empty space.
+    struct ElementAt {
+        DocumentId document;
+        std::vector<int> path;
+    };
+    [[nodiscard]] std::optional<ElementAt> element_at(float x, float y) const;
+    // Where an element's box (its border) is on the screen: x, y, width, height in pixels.
+    [[nodiscard]] std::optional<std::array<float, 4>> element_box(DocumentId document, const std::vector<int>& path) const;
 
     // Where the UI is drawn: the game's picture on the screen, in pixels (render::Renderer::display_layout()).
     void set_viewport(std::int32_t x, std::int32_t y, std::int32_t width, std::int32_t height);

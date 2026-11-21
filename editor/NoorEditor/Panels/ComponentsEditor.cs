@@ -1009,7 +1009,19 @@ public sealed class ComponentsEditor : StackPanel
             }
             AddCSharpScript(name);
         };
-        button.Flyout = new MenuFlyout { Items = { lua, csharp, physics, sound, shapes, marker, custom } };
+        // A UI page shown in the game (gameplay foundations part 6d; the UI tab builds them).
+        var page = new MenuItem { Header = "UI document…", IsEnabled = _entity?.Components.ContainsKey("ui_document") == false };
+        page.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+            var pages = _doc.Ui(new JsonObject { ["op"] = "list" })?["pages"] as JsonArray;
+            var first = pages?.FirstOrDefault()?.GetValue<string>() ?? "UI/menu.noorui";
+            var hint = pages is { Count: > 0 } ? $"Pages: {string.Join(", ", pages.Select(p => p!.GetValue<string>()).Take(6))}" : "Make pages in the UI tab";
+            var path = await Dialogs.Prompt(owner, "Add UI document", $"The page this entity shows in the game. {hint}", first);
+            if (string.IsNullOrWhiteSpace(path)) return;
+            SetComponent("ui_document", new JsonObject { ["document"] = path.Trim(), ["visible"] = true });
+        };
+        button.Flyout = new MenuFlyout { Items = { lua, csharp, physics, sound, shapes, page, marker, custom } };
         return button;
     }
 

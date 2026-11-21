@@ -311,6 +311,23 @@ NOOR_API const char* noor_doc_timeline(noor_doc* doc, const char* command) {
     });
 }
 
+NOOR_API const char* noor_doc_ui(noor_doc* doc, const char* command) {
+    if (!doc || !command) return nullptr;
+    return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
+        auto json = noor::asset::parse_json(command, "ui command");
+        if (!json) {
+            fail_with(json.error());
+            return nullptr;
+        }
+        auto r = doc->doc->ui(*json);
+        if (!r) {
+            fail_with(r.error());
+            return nullptr;
+        }
+        return give(*r);
+    });
+}
+
 NOOR_API const char* noor_doc_sprite(noor_doc* doc, const char* command) {
     if (!doc || !command) return nullptr;
     return guarded<>(static_cast<const char*>(nullptr), [&]() -> const char* {
@@ -572,6 +589,9 @@ NOOR_API const char* noor_doc_poll_files(noor_doc* doc) {
 std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_channel(noor_doc* doc) {
     return doc ? doc->doc->channel() : nullptr;
 }
+
+noor::runtime::World* noor_doc_play_world_internal(noor_doc* doc) { return doc ? doc->doc->play_world() : nullptr; }
+std::filesystem::path noor_doc_root_internal(noor_doc* doc) { return doc ? doc->doc->project_root() : std::filesystem::path(); }
 
 // For viewport.cpp: the material preview's channel.
 std::shared_ptr<noor::editor::SnapshotChannel> noor_doc_preview_channel(noor_doc* doc) {

@@ -60,6 +60,29 @@ td { box-sizing: border-box; display: table-cell; }
 thead, tbody, tfoot { display: table-row-group; }
 col { display: table-column; }
 colgroup { display: table-column-group; }
+
+/* The built-in theme (part 6d): what the UI builder's widgets use, so they look right and react with no style sheet.
+   Inputs have no look of their own in RmlUi (a slider without styles is invisible); these give them one. */
+.noor-panel { display: block; padding: 24dp; background-color: #191623F2; border-radius: 12dp; }
+.noor-button { display: block; padding: 10dp 20dp; margin: 8dp 0; text-align: center; background-color: #2A2140;
+               border-radius: 8dp; tab-index: auto; focus: auto; nav: auto; }
+.noor-button:hover { background-color: #3A2D5C; }
+.noor-button:focus { background-color: #4B1AF2; }
+.noor-button:active { background-color: #3612C0; }
+input { tab-index: auto; nav: auto; }
+input.text { display: block; box-sizing: border-box; width: 100%; padding: 6dp 10dp; margin: 4dp 0; background-color: #0E0C16;
+             border: 2dp #3A3150; border-radius: 6dp; }
+input.text:focus { border-color: #FFC857; }
+input.range { display: block; width: 100%; height: 20dp; margin: 8dp 0; }
+input.range slidertrack { height: 6dp; margin-top: 7dp; background-color: #3A3150; border-radius: 3dp; }
+input.range sliderbar { width: 20dp; height: 20dp; background-color: #EDE8F7; border-radius: 10dp; }
+input.range:focus sliderbar { background-color: #FFC857; }
+input.range sliderarrowdec, input.range sliderarrowinc { width: 0; height: 0; }
+input.checkbox, input.radio { display: inline-block; width: 20dp; height: 20dp; margin-right: 6dp; background-color: #3A3150;
+                              border-radius: 4dp; vertical-align: middle; }
+input.radio { border-radius: 10dp; }
+input.checkbox:checked, input.radio:checked { background-color: #FFC857; }
+input.checkbox:focus, input.radio:focus { border: 2dp #EDE8F7; }
 )";
 
 // A path RmlUi asks for, as a file inside the root, or nothing when it would leave it.
@@ -793,6 +816,56 @@ bool Ui::click(DocumentId document, std::string_view element) {
 }
 
 std::vector<UiEvent> Ui::take_events() { return std::exchange(impl_->events, {}); }
+
+namespace {
+// The elements among a parent's children, as the page's markup has them (no text, no inputs' insides).
+std::vector<Rml::Element*> markup_children(Rml::Element* parent) {
+    std::vector<Rml::Element*> out;
+    for (int i = 0; i < parent->GetNumChildren(false); ++i) {
+        Rml::Element* c = parent->GetChild(i);
+        if (c && c->GetTagName() != "#text") out.push_back(c);
+    }
+    return out;
+}
+} // namespace
+
+std::optional<Ui::ElementAt> Ui::element_at(float x, float y) const {
+    Rml::Element* e = impl_->context->GetElementAtPoint({x - static_cast<float>(impl_->x), y - static_cast<float>(impl_->y)});
+    if (!e) return std::nullopt;
+    Rml::ElementDocument* doc = e->GetOwnerDocument();
+    std::optional<DocumentId> id;
+    for (const auto& [n, d] : impl_->documents)
+        if (d.doc == doc) id = DocumentId{n};
+    if (!id) return std::nullopt;
+    // Up to the document, past what the markup doesn't have (text, an input's slider parts).
+    std::vector<int> path;
+    for (Rml::Element* at = e; at && at != doc;) {
+        Rml::Element* parent = at->GetParentNode();
+        if (!parent) return std::nullopt;
+        const auto siblings = markup_children(parent);
+        const auto it = std::find(siblings.begin(), siblings.end(), at);
+        if (it == siblings.end()) {
+            path.clear();  // inside something the markup doesn't show: that something is what was hit
+        } else {
+            path.insert(path.begin(), static_cast<int>(it - siblings.begin()));
+        }
+        at = parent;
+    }
+    return ElementAt{*id, path};
+}
+
+std::optional<std::array<float, 4>> Ui::element_box(DocumentId document, const std::vector<int>& path) const {
+    Rml::Element* e = impl_->find(document);
+    if (!e) return std::nullopt;
+    for (const int i : path) {
+        const auto children = markup_children(e);
+        if (i < 0 || static_cast<std::size_t>(i) >= children.size()) return std::nullopt;
+        e = children[static_cast<std::size_t>(i)];
+    }
+    const auto at = e->GetAbsoluteOffset(Rml::BoxArea::Border);
+    const auto size = e->GetBox().GetSize(Rml::BoxArea::Border);
+    return std::array<float, 4>{at.x + static_cast<float>(impl_->x), at.y + static_cast<float>(impl_->y), size.x, size.y};
+}
 
 void Ui::key(Key key, bool down, Modifiers modifiers) {
     static constexpr Rml::Input::KeyIdentifier kKeys[] = {

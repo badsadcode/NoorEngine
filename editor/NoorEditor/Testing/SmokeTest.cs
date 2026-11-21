@@ -987,6 +987,119 @@ internal static class SmokeTest
         check(doc.Scene.Entities.Count == count, "water: undo removes it");
         await TilemapChecks(window, check, shot);
         await TimelineChecks(window, check, shot);
+        await UiChecks(window, check, shot);
+    }
+
+    // Gameplay foundations, part 6d: the UI tab builds a menu on a blank page (a panel, a title, two buttons, ids, text,
+    // a style), the viewport shows it over the scene and outlines the selection, a click on a button in the viewport
+    // selects it, undo and redo step through the file, and playing a scene with the page as a ui_document shows it in
+    // the game.
+    private static async Task UiChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        if (window.FindDockable("UI") is { } dockable) window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(300);
+        var panel = window.GetVisualDescendants().OfType<UiPanel>().FirstOrDefault();
+        if (panel == null)
+        {
+            check(false, "ui: Window has a UI tab");
+            return;
+        }
+        const string page = "UI/smoke_menu.noorui";
+        check(panel.NewPage(page, "blank") && doc.UiPage == page, "ui: New page makes a blank page and shows it");
+        JsonArray Path(params int[] p) => new(p.Select(i => (JsonNode?)i).ToArray());
+        var built = panel.Insert("panel");                 // into the body: selected
+        panel.Select(Path(0));
+        built &= panel.Insert("title");
+        panel.Select(Path(0));
+        built &= panel.Insert("button");
+        panel.Select(Path(0));
+        built &= panel.Insert("button");
+        panel.Select(Path(0, 0));
+        built &= panel.SetText("Paused");
+        panel.Select(Path(0, 1));
+        built &= panel.SetAttribute("id", "resume") && panel.SetText("Resume");
+        panel.Select(Path(0, 2));
+        built &= panel.SetAttribute("id", "quit") && panel.SetText("Quit");
+        panel.Select(Path(0));
+        built &= panel.SetStyle("width", "360dp") && panel.SetStyle("margin", "120dp auto");
+        var file = File.ReadAllText(System.IO.Path.Combine(doc.ProjectRoot, page));
+        check(built && file.Contains("<div id=\"panel\" class=\"noor-panel\" style=\"width: 360dp; margin: 120dp auto;\">") &&
+              file.Contains("<h1 id=\"title\">Paused</h1>") && file.Contains("<div id=\"resume\" class=\"noor-button\">Resume</div>") &&
+              file.Contains("<div id=\"quit\" class=\"noor-button\">Quit</div>"),
+              "ui: a panel, a title and two buttons built in the tab, with ids, text and a style, written to the page");
+        // The viewport shows the page and outlines the selected element.
+        panel.Select(Path(0, 2));
+        JsonNode? UiStats() => VulkanViewport.Active?.RenderStats() is { } text ? JsonNode.Parse(text)?["ui"] : null;
+        JsonNode? stats = null;
+        for (var i = 0; i < 40; i++)
+        {
+            await Task.Delay(100);
+            stats = UiStats();
+            if (stats?["page"]?.GetValue<string>() == page && stats["selected_box"] is JsonArray) break;
+        }
+        var commands = stats?["commands"]?.GetValue<int>() ?? 0;
+        check(stats?["page"]?.GetValue<string>() == page && commands > 0 && stats["selected_box"] is JsonArray,
+              $"ui: the viewport shows the page over the scene ({commands} commands) and outlines the selected button");
+        shot(window, "editor_46_ui_builder.png");
+        // A click on Resume in the viewport selects it.
+        var viewport = VulkanViewport.Active?.EngineHandle ?? IntPtr.Zero;
+        if (stats?["selected_box"] is JsonArray quitBox && viewport != IntPtr.Zero)
+        {
+            // Resume is just above Quit: the same width, one button up.
+            var x = quitBox[0]!.GetValue<double>() + quitBox[2]!.GetValue<double>() / 2;
+            var y = quitBox[1]!.GetValue<double>() - quitBox[3]!.GetValue<double>() / 2;
+            var previous = _testViewport;
+            _testViewport = viewport;
+            await Click(IntPtr.Zero, x, y);
+            Native.noor_viewport_test_pointer(viewport, 0, 0, 0, 0);
+            _testViewport = previous;
+            for (var i = 0; i < 20 && !(doc.UiSelected is { Count: 2 } picked && picked[1]!.GetValue<int>() == 1); i++) await Task.Delay(100);
+        }
+        check(doc.UiSelected is { Count: 2 } sel && sel[0]!.GetValue<int>() == 0 && sel[1]!.GetValue<int>() == 1 && panel.Element?["id"]?.GetValue<string>() == "resume",
+              $"ui: a click on Resume in the viewport selects it ({doc.UiSelected?.ToJsonString()})");
+        // Undo takes the last style back off, redo puts it on again.
+        var undone = panel.Undo() && !File.ReadAllText(System.IO.Path.Combine(doc.ProjectRoot, page)).Contains("margin: 120dp auto");
+        var redone = panel.Redo() && File.ReadAllText(System.IO.Path.Combine(doc.ProjectRoot, page)).Contains("margin: 120dp auto");
+        check(undone && redone, "ui: undo and redo step through the page's changes");
+        // The page edited elsewhere (NoorCode, a text editor): the tab reads it again, and an edit from its old tree waits.
+        var pagePath = System.IO.Path.Combine(doc.ProjectRoot, page);
+        File.WriteAllText(pagePath, File.ReadAllText(pagePath).Replace(">Quit<", ">Exit<"));
+        string? quitText = null;
+        for (var i = 0; i < 30; i++)
+        {
+            await Task.Delay(100);
+            quitText = (panel.Tree?["children"]?[0]?["children"]?[2]?["text"])?.GetValue<string>();
+            if (quitText == "Exit") break;
+        }
+        check(quitText == "Exit", $"ui: the page changed outside the tab is read again ({quitText})");
+        // In the game: an entity with the page as its ui_document, played.
+        var count = doc.Scene.Entities.Count;
+        var menu = panel.PutInScene();  // an entity with the page as its ui_document
+        window.TogglePlay();
+        JsonNode? playing = null;
+        for (var i = 0; i < 50; i++)
+        {
+            await Task.Delay(100);
+            playing = UiStats();
+            if (playing?["playing"]?.GetValue<bool>() == true && playing["commands"]?.GetValue<int>() > 0) break;
+        }
+        shot(window, "editor_47_ui_in_play.png");
+        window.TogglePlay();
+        check(menu != null && playing?["playing"]?.GetValue<bool>() == true && playing["commands"]?.GetValue<int>() > 0,
+              $"ui: playing, the game shows the page from its ui_document ({playing?["commands"]} commands)");
+        JsonNode? after = null;
+        for (var i = 0; i < 30; i++)  // the viewport's stats come twice a second
+        {
+            await Task.Delay(100);
+            after = UiStats();
+            if (after?["playing"]?.GetValue<bool>() == false && after["page"]?.GetValue<string>() == page) break;
+        }
+        check(after?["playing"]?.GetValue<bool>() == false && after["page"]?.GetValue<string>() == page,
+              $"ui: after Stop the viewport shows the page being built again ({after?.ToJsonString()})");
+        doc.Undo();  // the Menu entity
+        check(doc.Scene.Entities.Count == count, "ui: undo takes the Menu entity away again");
+        doc.ShowUiPage(null);
     }
 
     // 2D foundations, part 5: the Tilemaps panel makes a tilemap from the project's tileset; in the 2D view a drag with

@@ -4,6 +4,21 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 6d: the UI tab
+**Added**
+- NoorEditor's **UI tab** (`Panels/UiPanel.cs`): pages from templates, the element tree, an inspector (id, class, text,
+  nine style properties), a palette of eight widgets, move, delete, undo and redo, Put in the scene, Edit text in
+  NoorCode; the Inspector's + Add component ▸ UI document….
+- `noor::ui::PageSource` (`page_source.h`): `parse_page`, `find_element`, `page_tree`, `edit_page` (set_attribute,
+  set_text, set_style, insert, remove, move), `page_palette`, `page_templates`, `page_template`.
+- `Ui::element_at`, `Ui::element_box`; `WorldUi::detach`.
+- Editor API v33: `noor_doc_ui` (templates, list, new, tree, edit, source, set_source, undo, redo),
+  `noor_viewport_set_ui`; the viewport's `ui_pick` event and its render stats' `ui`.
+- Documents in the editor's Play: the viewport runs the game's UI (ui_document components, scripts' pages).
+- The built-in theme in the default style sheet: `noor-panel`, `noor-button`, sliders, checkboxes, radios, text boxes.
+
+**Tests:** `test_page_source.cpp` (4 cases), `api/test_ui_api.cpp` (2 cases), the editor smoke test's UI checks.
+
 ### 2026-11-21 — Gameplay foundations, part 6c: UI effects
 **Added**
 - Renderer: `UiCommand` (draw, gradient, clip mask, push / composite / pop layer, save texture, save mask), `UiGradient`,

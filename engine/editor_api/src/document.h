@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -249,6 +250,8 @@ public:
     // Gameplay foundations, part 5: the Timeline panel (document_timeline.cpp).
     [[nodiscard]] Result<asset::Json> timeline(const asset::Json& command);
     void end_timeline_preview();  // what a timeline preview moved, back as it was
+    // Gameplay foundations, part 6d: the UI tab's pages (document_ui.cpp).
+    [[nodiscard]] Result<asset::Json> ui(const asset::Json& command);
     [[nodiscard]] asset::Json scenes() const;
 
     [[nodiscard]] Status open_scene(std::string_view relative);
@@ -268,6 +271,8 @@ public:
     [[nodiscard]] Status play();
     void stop();
     [[nodiscard]] bool playing() const noexcept { return world_ != nullptr; }
+    [[nodiscard]] runtime::World* play_world() noexcept { return world_.get(); }  // the viewport's game UI (6d)
+    [[nodiscard]] const std::filesystem::path& project_root() const noexcept { return project_.root(); }
     void tick(double seconds, const runtime::InputState& input = {});
     // The managed C# script host (noor_rt_host) for play mode; null: C# scripts are skipped.
     void set_script_host(const void* host) noexcept { script_host_ = host; }
@@ -416,6 +421,10 @@ private:
     mutable scene::PrefabLibrary prefabs_;  // a cache of prefab files: filling it isn't a change
     std::optional<scene::Scene> scene_;
     std::unordered_map<Guid, scene::Entity> timeline_preview_;  // entities a timeline preview moved, as they really are
+    struct PageHistory {
+        std::vector<std::string> undo, redo;  // a page's text before each change (part 6d)
+    };
+    std::map<std::string, PageHistory> ui_history_;
     std::filesystem::path scene_file_;
     scene::History history_;
     std::uint64_t revision_ = 0;

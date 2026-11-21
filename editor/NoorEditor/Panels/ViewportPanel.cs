@@ -83,6 +83,7 @@ public sealed class ViewportPanel : DockPanel
         _doc.SceneChanged += SyncViewport;
         _doc.ToolChanged += OnToolChanged;
         _doc.SculptChanged += SyncViewport;
+        _doc.UiChanged += SyncUi;
         _doc.SnapStepRequested += SnapStep;
         _settings.PreferencesChanged += ApplyPreferences;
         ApplyPreferences();
@@ -95,6 +96,7 @@ public sealed class ViewportPanel : DockPanel
     {
         base.OnDetachedFromVisualTree(e);
         _events.Stop();
+        _doc.UiChanged -= SyncUi;
         _doc.SelectionChanged -= SyncViewport;
         _doc.SceneChanged -= SyncViewport;
         _doc.ToolChanged -= OnToolChanged;
@@ -218,6 +220,19 @@ public sealed class ViewportPanel : DockPanel
         if (_doc.Tilemap(command) == null) _tiling = false;
     }
 
+    // The UI tab's page over the scene, its selected element outlined (6d).
+    private void SyncUi()
+    {
+        if (_doc.UiPage == null)
+        {
+            Viewport.SetUi(null);
+            return;
+        }
+        var json = new JsonObject { ["root"] = _doc.ProjectRoot, ["page"] = _doc.UiPage };
+        if (_doc.UiSelected != null) json["selected"] = _doc.UiSelected.DeepClone();
+        Viewport.SetUi(json.ToJsonString());
+    }
+
     /// <summary>Handles the viewport's clicks and gizmo results (also called by the smoke test).</summary>
     public void DrainEvents()
     {
@@ -238,6 +253,9 @@ public sealed class ViewportPanel : DockPanel
                     _doc.Select(target);
                     // A CSG face: when the click selected the brush itself, remember which face.
                     _doc.SelectFace(target != null && target == hitId && ev["face"] is JsonValue f ? f.GetValue<int>() : null);
+                    break;
+                case "ui_pick":  // a click on the UI tab's page selects its element
+                    _doc.SelectUiElement(ev["path"] as JsonArray ?? new JsonArray());
                     break;
                 case "stroke":
                     Stroke(ev);

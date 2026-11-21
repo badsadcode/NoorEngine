@@ -7,8 +7,11 @@ namespace noor::ui {
 
 WorldUi::WorldUi(UiDesc desc) : desc_(std::move(desc)) {}
 
-WorldUi::~WorldUi() {
+WorldUi::~WorldUi() { detach(); }
+
+void WorldUi::detach() {
     if (world_ && world_->ui_documents() == this) world_->set_ui_documents(nullptr);
+    world_ = nullptr;
 }
 
 void WorldUi::attach(runtime::World& world) {

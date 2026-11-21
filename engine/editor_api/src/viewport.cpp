@@ -38,6 +38,8 @@
 #include "noor/terrain/terrain.h"
 #include "noor/platform/native_child_window.h"
 #include "noor/render/renderer.h"
+#include "noor/ui/ui.h"
+#include "noor/ui/world_ui.h"
 
 #include <algorithm>
 #include <atomic>
@@ -119,6 +121,15 @@ struct noor_viewport {
     noor_doc* play_doc = nullptr;
     std::chrono::steady_clock::time_point last_play_tick{};
     bool play_ticked = false;
+
+    // Game UI (gameplay foundations part 6d). The page the UI tab previews over the scene and its selected element, under
+    // doc_mutex (noor_viewport_set_ui); Play's documents, made by the render thread, under play_mutex (set_play(nullptr)
+    // lets go of the world while no tick runs; the render thread destroys the UI, its textures on its own renderer).
+    std::string ui_root, ui_page;
+    std::vector<int> ui_selected;
+    bool ui_has_selection = false;
+    std::uint64_t ui_version = 0;
+    std::unique_ptr<noor::ui::WorldUi> play_ui;
 
     // Written by the render thread, drained by the UI thread.
     std::mutex event_mutex;
@@ -461,6 +472,23 @@ void render_thread_main(noor_viewport* vp) {
     ed::Handle hovered = ed::Handle::None;
     bool click_pending = false;
     noor::platform::PointerState press{};
+    // Game UI (6d): the UI tab's preview of a page (not while playing), and what Play's UI has seen of the input.
+    std::unique_ptr<noor::ui::Ui> preview_ui;
+    noor::ui::DocumentId preview_doc;
+    std::string preview_root, preview_page;
+    std::filesystem::file_time_type preview_time{};
+    auto preview_checked = std::chrono::steady_clock::now();
+    std::uint64_t seen_ui_version = ~0ull;
+    std::vector<int> ui_selected;
+    bool ui_has_selection = false;
+    std::optional<std::array<float, 4>> ui_box;
+    noor_doc* ui_play_doc = nullptr;
+    noor::platform::PointerState ui_last_pointer{};
+    std::array<bool, 256> ui_keys{};
+    noor::render::UiFrame ui_frame;
+    std::vector<noor::render::UiVertex> ui_vertices;  // the preview's frame with the selection's outline added
+    std::vector<std::uint32_t> ui_indices;
+    std::vector<noor::render::UiCommand> ui_commands;
 
     noor::platform::PixelSize last_size = vp->window->pixel_size();
     noor::platform::PointerState last_pointer = vp->window->pointer_state();
@@ -532,6 +560,48 @@ void render_thread_main(noor_viewport* vp) {
         // with the screen (the UI thread's timers can't: they ticked ~35 times a second).
         {
             std::scoped_lock lock(vp->play_mutex);
+            if (vp->play_doc != ui_play_doc) {  // Play started or ended: its UI made or gone (6d)
+                vp->play_ui.reset();
+                ui_play_doc = vp->play_doc;
+                if (ui_play_doc) {
+                    if (auto* world = noor_doc_play_world_internal(ui_play_doc)) {
+                        preview_ui.reset();  // one UI at a time (RmlUi keeps global state)
+                        preview_page.clear();
+                        preview_doc = {};
+                        vp->play_ui = std::make_unique<noor::ui::WorldUi>(noor::ui::UiDesc{
+                            noor_doc_root_internal(ui_play_doc), noor::ui::renderer_textures(r), [world] { return world->real_time(); }});
+                        vp->play_ui->attach(*world);
+                    }
+                }
+            }
+            if (vp->play_ui && vp->play_ui->ui()) {  // the game's documents get the mouse and keys first
+                const auto p = vp->window->pointer_state();
+                noor::ui::WorldUi::Input in;
+                in.mouse = !vp->window->mouse_captured() && !p.right_down;
+                in.mouse_x = static_cast<float>(p.x);
+                in.mouse_y = static_cast<float>(p.y);
+                in.pressed = {p.left_down && !ui_last_pointer.left_down, p.right_down && !ui_last_pointer.right_down,
+                              p.middle_down && !ui_last_pointer.middle_down};
+                in.released = {!p.left_down && ui_last_pointer.left_down, !p.right_down && ui_last_pointer.right_down,
+                               !p.middle_down && ui_last_pointer.middle_down};
+                ui_last_pointer = p;
+#if defined(_WIN32)
+                if (vp->window->has_focus()) {
+                    using K = noor::ui::Key;
+                    static constexpr std::pair<int, K> kKeys[] = {
+                        {0x09, K::Tab}, {0x0D, K::Enter}, {0x20, K::Space}, {0x1B, K::Escape}, {0x08, K::Backspace}, {0x2E, K::Delete},
+                        {0x25, K::Left}, {0x27, K::Right}, {0x26, K::Up}, {0x28, K::Down}, {0x24, K::Home}, {0x23, K::End},
+                        {0x21, K::PageUp}, {0x22, K::PageDown}};
+                    for (const auto& [code, key] : kKeys) {
+                        const bool down = vp->window->key_down(code);
+                        if (down != ui_keys[static_cast<std::size_t>(code)]) in.keys.emplace_back(key, down);
+                        ui_keys[static_cast<std::size_t>(code)] = down;
+                    }
+                    in.modifiers = {vp->window->key_down(0x11), vp->window->key_down(0x10), vp->window->key_down(0x12)};
+                }
+#endif
+                vp->play_ui->input(in);
+            }
             if (vp->play_doc) {
                 const auto now = std::chrono::steady_clock::now();
                 const double dt = vp->play_ticked ? std::chrono::duration<double>(now - vp->last_play_tick).count() : 1.0 / 60.0;
@@ -1199,6 +1269,12 @@ void render_thread_main(noor_viewport* vp) {
                     preview.reset();
                 }
             } else if (click_pending && std::abs(pointer.x - press.x) + std::abs(pointer.y - press.y) <= 4 && shown) {
+                // The UI tab's page (6d): a click on it picks its element, not what's behind.
+                std::optional<noor::ui::Ui::ElementAt> ui_hit;
+                if (preview_ui && !ui_play_doc) ui_hit = preview_ui->element_at(static_cast<float>(pointer.x), static_cast<float>(pointer.y));
+                if (ui_hit) {
+                    push_event(vp, {{"type", "ui_pick"}, {"path", ui_hit->path}});
+                } else {
                 // Pick the nearest mesh or marker under the pointer.
                 float best = std::numeric_limits<float>::max();
                 std::optional<Guid> hit;
@@ -1235,6 +1311,7 @@ void render_thread_main(noor_viewport* vp) {
                 noor::asset::Json click{{"type", "click"}, {"entity", hit ? noor::asset::Json(hit->to_string()) : noor::asset::Json(nullptr)}};
                 if (hit && hit_face) click["face"] = *hit_face;
                 push_event(vp, std::move(click));
+                }
             }
             drag.reset();
             click_pending = false;
@@ -1563,6 +1640,98 @@ void render_thread_main(noor_viewport* vp) {
                 for (const auto& bone : shown->bones)  // dots on top of the lines
                     if (const auto b = ed::world_to_screen(basis, w, h, bone.to)) dot(*b, bone.joint ? 4.0f : 2.0f, bone.joint ? picked : joint);
             }
+            // Game UI (6d): Play's documents, or else the UI tab's page over the scene with its selected element outlined.
+            ui_frame = {};
+            {
+                std::scoped_lock lock(vp->play_mutex);  // set_play(nullptr) may be letting go of the world
+                if (vp->play_ui && vp->play_doc) {
+                    const auto px = r.swapchain_size();
+                    ui_frame = vp->play_ui->draw(0, 0, static_cast<std::int32_t>(px.width), static_cast<std::int32_t>(px.height));
+                }
+            }
+            if (!ui_play_doc) {
+                std::string root, page;
+                std::uint64_t version = 0;
+                {
+                    std::scoped_lock lock(vp->doc_mutex);
+                    root = vp->ui_root;
+                    page = vp->ui_page;
+                    version = vp->ui_version;
+                    if (version != seen_ui_version) {
+                        ui_selected = vp->ui_selected;
+                        ui_has_selection = vp->ui_has_selection;
+                    }
+                }
+                if (page.empty() || root.empty()) {
+                    preview_ui.reset();
+                    preview_page.clear();
+                } else {
+                    if (preview_ui && root != preview_root) preview_ui.reset();
+                    if (!preview_ui) {
+                        auto made = noor::ui::Ui::create({std::filesystem::path(std::u8string(root.begin(), root.end())), noor::ui::renderer_textures(r), {}});
+                        if (made) preview_ui = std::move(*made);
+                        else if (preview_page != page) NOOR_LOG_ERROR("Viewport", "UI preview: {}", made.error().describe());
+                        preview_root = root;
+                        preview_page.clear();
+                    }
+                    if (preview_ui) {
+                        // The page again when it's another one, or its file changed (the UI tab, NoorCode, anything).
+                        const auto file = std::filesystem::path(std::u8string(root.begin(), root.end())) / std::filesystem::path(std::u8string(page.begin(), page.end()));
+                        std::error_code ec;
+                        auto changed = preview_page != page || version != seen_ui_version;
+                        if (!changed && std::chrono::steady_clock::now() - preview_checked > 250ms) {
+                            preview_checked = std::chrono::steady_clock::now();
+                            changed = std::filesystem::last_write_time(file, ec) != preview_time;
+                        }
+                        if (changed) {
+                            preview_time = std::filesystem::last_write_time(file, ec);
+                            if (preview_doc.valid()) preview_ui->close(preview_doc);
+                            preview_doc = {};
+                            auto opened = preview_ui->open(page);
+                            if (opened) preview_doc = *opened;
+                            else NOOR_LOG_WARN("Viewport", "UI preview: {}", opened.error().describe());
+                            preview_page = page;
+                        }
+                        const auto px = r.swapchain_size();
+                        preview_ui->set_viewport(0, 0, static_cast<std::int32_t>(px.width), static_cast<std::int32_t>(px.height));
+                        if (pointer.inside) preview_ui->mouse_move(static_cast<float>(pointer.x), static_cast<float>(pointer.y));
+                        preview_ui->update();
+                        ui_frame = preview_ui->draw();
+                        ui_box.reset();
+                        if (preview_doc.valid() && ui_has_selection) ui_box = preview_ui->element_box(preview_doc, ui_selected);
+                        if (ui_box) {
+                            // The selection's outline, drawn last in the UI itself (the HUD is drawn under the UI).
+                            ui_vertices.assign(ui_frame.vertices.begin(), ui_frame.vertices.end());
+                            ui_indices.assign(ui_frame.indices.begin(), ui_frame.indices.end());
+                            ui_commands.assign(ui_frame.commands.begin(), ui_frame.commands.end());
+                            const auto first = static_cast<std::uint32_t>(ui_indices.size());
+                            const auto base = static_cast<std::uint32_t>(ui_vertices.size());
+                            const float x0 = (*ui_box)[0] - ui_frame.origin.x, y0 = (*ui_box)[1] - ui_frame.origin.y;
+                            const float x1 = x0 + (*ui_box)[2], y1 = y0 + (*ui_box)[3], t = 2.0f;
+                            const auto rect = [&](float ax, float ay, float bx, float by) {
+                                const auto v = static_cast<std::uint32_t>(ui_vertices.size()) - base;
+                                for (const auto& [px, py] : {std::pair{ax, ay}, std::pair{bx, ay}, std::pair{bx, by}, std::pair{ax, by}})
+                                    ui_vertices.push_back({{px, py}, {255, 158, 64, 255}, {0, 0}});
+                                for (const std::uint32_t k : {0u, 1u, 2u, 0u, 2u, 3u}) ui_indices.push_back(v + k);
+                            };
+                            rect(x0 - t, y0 - t, x1 + t, y0);
+                            rect(x0 - t, y1, x1 + t, y1 + t);
+                            rect(x0 - t, y0, x0, y1);
+                            rect(x1, y0, x1 + t, y1);
+                            noor::render::UiCommand outline;
+                            outline.first_index = first;
+                            outline.index_count = static_cast<std::uint32_t>(ui_indices.size()) - first;
+                            outline.vertex_offset = static_cast<std::int32_t>(base);
+                            ui_commands.push_back(outline);
+                            ui_frame.vertices = ui_vertices;
+                            ui_frame.indices = ui_indices;
+                            ui_frame.commands = ui_commands;
+                        }
+                    }
+                }
+                seen_ui_version = version;
+            }
+            frame.ui = ui_frame;
             frame.overlay = overlay;
         } else {
             r.set_clear_color(demo_clear_color(pointer, size));
@@ -1610,7 +1779,11 @@ void render_thread_main(noor_viewport* vp) {
                                            {"render_target_bytes", r.render_target_memory()},
                                            {"width", size.width},
                                            {"height", size.height},
-                                           {"fps", fps}}
+                                           {"fps", fps},
+                                           {"ui", {{"page", ui_play_doc ? std::string() : preview_page},
+                                                   {"playing", ui_play_doc != nullptr},
+                                                   {"commands", ui_frame.commands.size()},
+                                                   {"selected_box", ui_box ? noor::asset::Json(*ui_box) : noor::asset::Json(nullptr)}}}}
                              .dump();
         }
 
@@ -1861,8 +2034,26 @@ NOOR_API void noor_viewport_test_pointer(noor_viewport* viewport, int32_t enable
 NOOR_API void noor_viewport_set_play(noor_viewport* viewport, noor_doc* doc) {
     if (!viewport) return;
     std::scoped_lock lock(viewport->play_mutex);  // waits for a tick in progress
+    // Play's UI lets go of the world now, while it still exists (the editor stops the document right after this).
+    if (viewport->play_ui && doc != viewport->play_doc) viewport->play_ui->detach();
     viewport->play_doc = doc;
     viewport->play_ticked = false;
+}
+
+NOOR_API void noor_viewport_set_ui(noor_viewport* viewport, const char* json) {
+    if (!viewport) return;
+    const auto j = json ? noor::asset::Json::parse(json, nullptr, false) : noor::asset::Json();
+    std::scoped_lock lock(viewport->doc_mutex);
+    viewport->ui_root = j.is_object() ? j.value("root", std::string()) : std::string();
+    viewport->ui_page = j.is_object() ? j.value("page", std::string()) : std::string();
+    viewport->ui_selected.clear();
+    viewport->ui_has_selection = false;
+    if (j.is_object() && j.contains("selected") && j["selected"].is_array()) {
+        for (const auto& i : j["selected"])
+            if (i.is_number_integer()) viewport->ui_selected.push_back(i.get<int>());
+        viewport->ui_has_selection = true;
+    }
+    ++viewport->ui_version;
 }
 
 NOOR_API void noor_viewport_set_mouse_capture(noor_viewport* viewport, int32_t capture) {

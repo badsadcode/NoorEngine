@@ -84,6 +84,40 @@ public sealed class EditorDocument : IDisposable
         SculptChanged?.Invoke();
     }
 
+    // ---- The UI tab (gameplay foundations, part 6d) ----
+
+    /// <summary>The page the UI tab works on (shown over the scene in the viewport while editing), or null.</summary>
+    public string? UiPage { get; private set; }
+    /// <summary>The selected element's path from the page's body (null: none).</summary>
+    public JsonArray? UiSelected { get; private set; }
+    /// <summary>The UI page or its selection changed (the viewport and the UI tab follow).</summary>
+    public event Action? UiChanged;
+
+    public void ShowUiPage(string? page, JsonArray? selected = null)
+    {
+        UiPage = page;
+        UiSelected = selected?.DeepClone() as JsonArray;
+        UiChanged?.Invoke();
+    }
+
+    public void SelectUiElement(JsonArray? path)
+    {
+        UiSelected = path?.DeepClone() as JsonArray;
+        UiChanged?.Invoke();
+    }
+
+    /// <summary>One UI tab command (noor_doc_ui). A failure is logged and gives null.</summary>
+    public JsonNode? Ui(JsonObject command)
+    {
+        var json = Native.Ui(_handle, command.ToJsonString());
+        if (json == null)
+        {
+            Interop.EngineLog.Warn("UI", Native.LastError());
+            return null;
+        }
+        return JsonNode.Parse(json);
+    }
+
     /// <summary>The snap step a panel asks the viewport for (metres): tiles, or pixels. The viewport panel applies it.</summary>
     public event Action<double>? SnapStepRequested;
     public void RequestSnapStep(double metres) => SnapStepRequested?.Invoke(metres);

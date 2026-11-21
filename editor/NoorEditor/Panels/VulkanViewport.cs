@@ -115,6 +115,16 @@ public sealed class VulkanViewport : NativeControlHost
         if (_viewport != IntPtr.Zero) Native.noor_viewport_set_brush(_viewport, json);
     }
 
+    private string? _uiJson;
+
+    /// <summary>The page the UI tab previews over the scene and its selected element (null: none; 6d).</summary>
+    public void SetUi(string? json)
+    {
+        if (json == _uiJson) return;
+        _uiJson = json;
+        if (_viewport != IntPtr.Zero) Native.noor_viewport_set_ui(_viewport, json);
+    }
+
     /// <summary>Outlines one face of a CSG brush (null: none).</summary>
     public void SetFaceHighlight(string? brush, int face)
     {
@@ -161,6 +171,7 @@ public sealed class VulkanViewport : NativeControlHost
         if (Flat) Native.noor_viewport_set_options(_viewport, "{\"view\":\"2d\"}");
         if (_faceBrush != null) Native.noor_viewport_set_face_highlight(_viewport, _faceBrush, _face);
         if (_brushJson != null) Native.noor_viewport_set_brush(_viewport, _brushJson);
+        if (_uiJson != null) Native.noor_viewport_set_ui(_viewport, _uiJson);
         if (!_preview)
         {
             CreatedCount++;

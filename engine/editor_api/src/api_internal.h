@@ -2,6 +2,11 @@
 
 #include "noor/runtime/input.h"
 
+namespace noor::runtime {
+class World;
+}
+
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,3 +36,6 @@ noor::runtime::InputState noor_viewport_game_input(noor_viewport* viewport);
 // One play-mode frame of `doc` (document_api.cpp); returns a script's mouse capture request, if any.
 // Exceptions are caught and logged. Any thread (the document locks its world).
 std::optional<bool> noor_doc_tick_internal(noor_doc* doc, double seconds, const noor::runtime::InputState& input);
+// For viewport.cpp (game UI in Play, 6d): the playing world (null when not playing) and the project's folder.
+noor::runtime::World* noor_doc_play_world_internal(noor_doc* doc);
+std::filesystem::path noor_doc_root_internal(noor_doc* doc);

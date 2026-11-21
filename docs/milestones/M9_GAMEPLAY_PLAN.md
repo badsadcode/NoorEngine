@@ -244,6 +244,35 @@ up in one filtered step (RmlUi adds a second, exact one; a slowly moving blurred
 between UI passes are conservative (correct, not the fastest); a swapchain that can't be copied (none we've seen) loses
 backdrop filters and blends the UI over the screen in linear light.
 
+## Part 6d result (2026-11-21)
+Done. **The UI tab.** Pages from four templates (blank, pause menu, HUD, settings), shown over the scene in the viewport
+while they're built; elements selected by a click in the viewport or the tree and outlined; their id, classes, text and
+common styles changed in an inspector; eight widgets from a palette (panel, title, label, button, image, slider,
+checkbox, text box), each with an id of its own; move up, move down, delete; undo and redo per page; **Put in the
+scene** and the Inspector's **+ Add component ▸ UI document…**; NoorCode for anything else, the viewport and the tab
+following the file (the tab reads a page changed elsewhere again within a second, and refuses an edit started from its
+old tree rather than make it in the wrong place). Underneath: `noor::ui::PageSource` (`page_source.h`) reads a page's body with where each element sits in its text
+and makes each edit a small splice of it, so hand-written formatting, comments and style sheets survive (an edit that
+would break the page is refused); `noor_doc_ui` (editor API v33); `noor_viewport_set_ui`, `ui_pick` events and
+`Ui::element_at` / `element_box`. A **built-in theme** in the default style sheet (`noor-panel`, `noor-button`, inputs:
+RmlUi's have no look of their own). **Documents in the editor's Play:** the viewport attaches a `WorldUi` to the
+playing world (ui_document components and scripts' pages, with the mouse and focus keys), and lets go of the world
+before the document stops it.
+
+Proved: pages read with paths and attributes in any quoting, a `<body>` inside a style sheet's comment not taken for the
+body (a bug the test caught), edits that change only their own text (attributes, text escaped, style properties one at
+a time, widgets on lines of their own with unique ids, removal with the line, moves), broken markup refused with its
+line, every template taking every widget (unit); new pages, edits written to the file, undo and redo, an edit made by
+hand meanwhile kept by undo, mistakes refused with nothing written, a page that doesn't read answering with the reason
+(API test); the smoke test builds a menu in the tab on a blank page (a panel, a title, two buttons, ids, text, styles),
+sees the viewport show it with the selection outlined, clicks Resume in the viewport and gets it selected, undoes and
+redoes, changes the file behind the tab's back and sees the tab read it again, puts the page in the scene and plays it: the game shows it, and after Stop the builder's preview is back.
+
+Exceptions: typing into a text box in the editor's Play doesn't work yet (the viewport passes keys, not typed text; it
+works in noor_player and built games); the tab edits one element at a time (no multi-select, drag and drop, or copy and
+paste of elements); styles beyond the inspector's nine common ones are written in NoorCode; while a page is previewed,
+clicks on it select its elements, not the scene's entities behind it.
+
 ## Highest risks (settle early)
 
 1. **UI: our own or a library.** A retained UI with layout, focus, gamepad navigation, text input and themes is a big
