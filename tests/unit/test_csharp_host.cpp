@@ -92,10 +92,11 @@ TEST_CASE("csharp host: instances are created, hooks run in order, scripts call 
     REQUIRE(Fake::calls.size() > 3);
     CHECK(Fake::calls[0] == "create");
     CHECK(Fake::calls[1] == "hook 0");  // OnStart
-    CHECK(Fake::calls[2] == "hook 1");  // OnUpdate
-    CHECK(Fake::calls[3] == "hook 2");  // OnFixedUpdate (2 per 1/30 s frame)
-    CHECK(Fake::calls[4] == "hook 2");
-    CHECK(Fake::calls[5] == "hook 3");  // OnLateUpdate
+    CHECK(Fake::calls[2] == "hook 5");  // timers and waits (v14), every script's before any OnUpdate
+    CHECK(Fake::calls[3] == "hook 1");  // OnUpdate
+    CHECK(Fake::calls[4] == "hook 2");  // OnFixedUpdate (2 per 1/30 s frame)
+    CHECK(Fake::calls[5] == "hook 2");
+    CHECK(Fake::calls[6] == "hook 3");  // OnLateUpdate
 }
 
 TEST_CASE("csharp host: sprites through the ABI, and the animation end event carries its name") {
@@ -112,7 +113,7 @@ TEST_CASE("csharp host: sprites through the ABI, and the animation end event car
     w.frame(1.0 / 60.0, {});
     CHECK(std::ranges::find(Fake::calls, "event 4") != Fake::calls.end());
     CHECK(std::ranges::find(Fake::calls, "animation attack") != Fake::calls.end());
-    CHECK(api->version == 13u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop; v11: shape casts, overlaps, contacts; v12: tiles; v13: spawn, teleport, tags
+    CHECK(api->version == 14u);  // v5 (8C part 3): cross-fades and animation parameters; v6 (part 4): bones, events; v7 (8D): water; v8: characters in water; v9: flow; v10: jump release, drop; v11: shape casts, overlaps, contacts; v12: tiles; v13: spawn, teleport, tags; v14: clocks
     REQUIRE(api->spawn != nullptr);
     REQUIRE(api->teleport != nullptr);
     REQUIRE(api->tag != nullptr);

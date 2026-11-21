@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace noor::scripting {
@@ -49,6 +50,7 @@ private:
 
     const noor_rt_host* host_;
     std::unordered_map<Guid, std::int64_t> instances_;
+    std::unordered_set<Guid> always_;  // "pause": "always" (gameplay foundations, part 2)
     std::vector<Guid> order_;
     std::vector<std::string> errors_;
     bool reported_missing_host_ = false;

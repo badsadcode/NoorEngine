@@ -84,12 +84,26 @@ void World::flush_destroyed() {
 }
 
 void World::frame(double dt, const InputState& input) {
-    dt = std::clamp(dt, 0.0, max_dt);
+    real_dt_ = std::clamp(dt, 0.0, max_dt);
+    dt = paused_ ? 0.0 : real_dt_ * time_scale_;  // the game's clock (gameplay foundations, part 2)
     render_poses_.clear();
-    ui_.clear();
+    // Paused: the HUD the paused scripts drew last frame stays (they don't run to draw it again); the scripts that run
+    // while paused draw over it afresh.
+    if (paused_) {
+        if (frozen_ui_.empty())
+            for (const auto& c : ui_)
+                if (!c.runs_while_paused) frozen_ui_.push_back(c);
+        ui_ = frozen_ui_;
+    } else {
+        frozen_ui_.clear();
+        ui_.clear();
+    }
     input_.begin_frame(input);
     start_new_entities();
     for (auto& s : systems_) s->update(*this, dt);
+    // A script paused, unpaused or changed the time scale just now: the rest of the frame (physics, late update, the
+    // clock) already goes by it, so a pause freezes the world at once, not a physics step later.
+    dt = paused_ ? 0.0 : real_dt_ * time_scale_;
 
     accumulator_ += dt;
     int steps = 0;
@@ -105,6 +119,7 @@ void World::frame(double dt, const InputState& input) {
     events_.clear();
     flush_destroyed();
     time_ += dt;
+    real_time_ += real_dt_;
     ++frames_;
 }
 

@@ -1,0 +1,178 @@
+{
+  "noor_scene": 2,
+  "id": "110bcc1c-2978-5b6f-a5e3-7988baa27d26",
+  "name": "Main",
+  "entities": [
+    {
+      "id": "6d05665c-00aa-5108-a21b-e0a00519c365",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2,
+          10
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "a62b5b7a-90de-5fbb-8bf9-955b4c47d1b8",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 90000,
+          "shadows": false
+        }
+      }
+    },
+    {
+      "id": "6dbdd20d-6e58-5813-8498-02e5d56fd5b4",
+      "name": "Box",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          20,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "color": "#FFC857"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            1,
+            1,
+            1
+          ]
+        },
+        "rigidbody": {
+          "type": "dynamic"
+        }
+      }
+    },
+    {
+      "id": "2f253429-cac6-5291-b526-f372c0b8ad35",
+      "name": "Clock",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/Clock.luau"
+        }
+      }
+    },
+    {
+      "id": "739b95ca-b09f-5fd0-9be1-c45fc5c7515e",
+      "name": "Pauser",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/Pauser.luau",
+          "pause": "always"
+        }
+      }
+    }
+  ]
+}

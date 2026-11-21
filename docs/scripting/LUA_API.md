@@ -245,6 +245,43 @@ Spatial sounds get quieter with distance (full volume inside `min_distance`, no 
 past `max_distance`) and pan with the listener's orientation. Without an `audio_listener` the
 first `camera` hears.
 
+## Time: timers, waiting, pause
+
+Gameplay foundations, part 2. All of it is on the **game's clock** (`noor.time()`), which stops while paused and runs
+slower in slow motion, unless you ask for the real one.
+
+```lua
+noor.after(2, function() door:destroy() end)              -- once, two seconds from now
+local blink = noor.every(0.5, function() lamp_on = not lamp_on end)
+blink:cancel()                                            -- stop it
+noor.every(1, function() hp += 1; return hp < 100 end)    -- returning false stops it too
+
+noor.start(function()                                     -- a little sequence that waits
+    noor.wait(1)
+    self.entity:play_animation("open")
+    noor.wait(0.5)
+    noor.play_sound("Assets/Audio/creak.wav")
+end)
+```
+
+| Function | |
+|---|---|
+| `noor.after(seconds, fn [, {real = true}])` | Calls `fn` once, that much later. Returns a timer (`t:cancel()`) |
+| `noor.every(seconds, fn [, {real = true}])` | Calls `fn` every `seconds` (at most once a frame) until it returns `false` or is cancelled |
+| `noor.start(fn)` | Runs `fn` now as a **sequence**: inside it, `noor.wait` pauses it and carries on later |
+| `noor.wait(seconds [, {real = true}])` | Inside a sequence only (anywhere else it's an error that says so) |
+| `noor.set_paused(on)`, `noor.paused()` | Pause the game: its clock stops, so physics, animation, particles and game-time timers stop. Only scripts with **Runs while paused** (`"pause": "always"` on the script component) keep running: a pause menu. The paused scripts' HUD stays on screen under it |
+| `noor.set_time_scale(s)`, `noor.time_scale()` | How fast game time runs: `0.25` slow motion, `1` normal (0..10). Physics keeps its fixed step size and takes fewer of them, so it stays deterministic |
+| `noor.real_time()` | Seconds really passed since play started, paused or not |
+
+- Timers and sequences belong to the script that made them: when its entity is destroyed, they go too.
+- `{real = true}` puts them on the real clock (they run while paused, on scripts that run while paused).
+- They're checked once a frame, before any `on_update`, in the order they were made: a timer for 0.5 s fires on the first
+  frame at or after 0.5 s. Built games replay them exactly.
+- A timer or sequence that errors is reported and stopped; the script carries on.
+- A pause or time-scale change made in a script applies to the rest of that frame at once (the world doesn't take one
+  more physics step).
+
 ## The HUD
 
 Text and rectangles drawn over the game. Draw them **every frame** you want them shown (in

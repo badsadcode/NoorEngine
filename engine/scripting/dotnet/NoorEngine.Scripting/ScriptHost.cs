@@ -173,6 +173,7 @@ public static unsafe class ScriptHost
                 case 2: s.OnFixedUpdate(dt); break;
                 case 3: s.OnLateUpdate(dt); break;
                 case 4: s.OnDestroy(); break;
+                case 5: s.Jobs.Run(); break;  // timers and waits (gameplay foundations, part 2)
             }
             return 1;
         }

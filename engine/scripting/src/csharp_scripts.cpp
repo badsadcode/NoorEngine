@@ -326,6 +326,22 @@ int32_t rt_find_all(const char* tag, noor_rt_entity* out, int32_t max) {
     return static_cast<int32_t>(all.size());
 }
 
+double rt_clock(int32_t which) {
+    if (!t_world) return 0.0;
+    switch (which) {
+    case NOOR_RT_CLOCK_GAME: return t_world->time();
+    case NOOR_RT_CLOCK_REAL: return t_world->real_time();
+    case NOOR_RT_CLOCK_SCALE: return t_world->time_scale();
+    case NOOR_RT_CLOCK_PAUSED: return t_world->paused() ? 1.0 : 0.0;
+    default: return 0.0;
+    }
+}
+void rt_set_clock(int32_t which, double value) {
+    if (!t_world) return;
+    if (which == NOOR_RT_CLOCK_SCALE) t_world->set_time_scale(value);
+    else if (which == NOOR_RT_CLOCK_PAUSED) t_world->set_paused(value != 0.0);
+}
+
 int32_t rt_water_flow(float x, float z, noor_rt_vec3* flow) {
     if (!t_world) return 0;
     const auto s = t_world->water_at(x, z);
@@ -353,6 +369,7 @@ const noor_rt_api kApi = {
     rt_shape_cast, rt_overlap, rt_character_contacts,
     rt_tile, rt_set_tile,
     rt_spawn, rt_teleport, rt_tag, rt_find_all,
+    rt_clock, rt_set_clock,
 };
 
 } // namespace
@@ -387,6 +404,7 @@ void CSharpScriptSystem::release(const Guid& id) {
     if (const auto it = instances_.find(id); it != instances_.end()) {
         if (host_) host_->release(it->second);
         instances_.erase(it);
+        always_.erase(id);
     }
 }
 
@@ -411,6 +429,7 @@ void CSharpScriptSystem::entity_started(runtime::World& world, scene::Entity& en
         return;
     }
     instances_[id] = handle;
+    if (it->value("pause", std::string()) == "always") always_.insert(id);
     order_.push_back(id);
     call(world, id, NOOR_RT_START, 0.0);
 }
@@ -419,9 +438,12 @@ bool CSharpScriptSystem::call(runtime::World& world, const Guid& id, int hook, d
     const auto it = instances_.find(id);
     if (it == instances_.end()) return true;
     WorldScope scope(world);
-    if (host_->call(it->second, hook, static_cast<float>(dt)) != 0) return true;
+    world.set_drawing_while_paused(always_.contains(id));
+    const bool ok = host_->call(it->second, hook, static_cast<float>(dt)) != 0;
+    world.set_drawing_while_paused(false);
+    if (ok) return true;
     const char* why = host_->last_error ? host_->last_error() : nullptr;
-    static constexpr const char* kHooks[] = {"OnStart", "OnUpdate", "OnFixedUpdate", "OnLateUpdate", "OnDestroy"};
+    static constexpr const char* kHooks[] = {"OnStart", "OnUpdate", "OnFixedUpdate", "OnLateUpdate", "OnDestroy", "a timer or wait"};
     report(std::format("{} ({} on '{}'); the script is stopped for this entity", why ? why : "exception",
                        kHooks[hook], api::name(world, id).value_or("?")));
     release(id);
@@ -430,11 +452,21 @@ bool CSharpScriptSystem::call(runtime::World& world, const Guid& id, int hook, d
 
 void CSharpScriptSystem::each(runtime::World& world, int hook, double dt) {
     const auto ids = order_;
-    for (const Guid& id : ids) call(world, id, hook, dt);
+    // Paused (gameplay foundations, part 2): only scripts marked "pause": "always", on the real clock.
+    const bool paused = world.paused();
+    if (paused) dt = world.real_dt();
+    for (const Guid& id : ids)
+        if (!paused || always_.contains(id)) call(world, id, hook, dt);
     std::erase_if(order_, [&](const Guid& id) { return !instances_.contains(id); });
 }
 
-void CSharpScriptSystem::update(runtime::World& world, double dt) { each(world, NOOR_RT_UPDATE, dt); }
+void CSharpScriptSystem::update(runtime::World& world, double dt) {
+    // Timers and waits first, every script's, as Lua does: a pause menu's "resume" timer lets the other scripts update
+    // this same frame (gameplay foundations, part 2). Paused, only the scripts that run while paused.
+    for (const Guid& id : std::vector<Guid>(order_))
+        if (!world.paused() || always_.contains(id)) call(world, id, NOOR_RT_JOBS, dt);
+    each(world, NOOR_RT_UPDATE, dt);
+}
 void CSharpScriptSystem::fixed_update(runtime::World& world, double dt) { each(world, NOOR_RT_FIXED_UPDATE, dt); }
 
 void CSharpScriptSystem::late_update(runtime::World& world, double dt) {

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 13u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags */
+#define NOOR_RT_API_VERSION 14u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -50,13 +50,16 @@ enum { NOOR_RT_SOUND_PLAY = 0, NOOR_RT_SOUND_STOP = 1, NOOR_RT_SOUND_IS_PLAYING 
 /* input queries */
 enum { NOOR_RT_DOWN = 0, NOOR_RT_PRESSED = 1, NOOR_RT_RELEASED = 2 };
 /* hooks (noor_rt_host.call) */
-enum { NOOR_RT_START = 0, NOOR_RT_UPDATE = 1, NOOR_RT_FIXED_UPDATE = 2, NOOR_RT_LATE_UPDATE = 3, NOOR_RT_DESTROY = 4 };
+enum { NOOR_RT_START = 0, NOOR_RT_UPDATE = 1, NOOR_RT_FIXED_UPDATE = 2, NOOR_RT_LATE_UPDATE = 3, NOOR_RT_DESTROY = 4,
+       NOOR_RT_JOBS = 5 /* v14: run the script's due timers and waits; every script's, before any UPDATE */ };
 /* events (noor_rt_host.event), same order as runtime::Event::Kind. ANIMATION_END, ANIMATION_EVENT (v6): `other` is the
  * entity itself and noor_rt_api.event_name() gives the animation, or the event's name. */
 enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_ENTER = 2, NOOR_RT_TRIGGER_EXIT = 3, NOOR_RT_ANIMATION_END = 4,
        NOOR_RT_ANIMATION_EVENT = 5 };
 /* sprite(): ops (an animator's clips too, since 8C part 2: the name stayed for the ABI) */
 enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2, NOOR_RT_SPRITE_CROSS_FADE = 3 /* v5: speed = seconds */ };
+/* clock(), set_clock() (v14) */
+enum { NOOR_RT_CLOCK_GAME = 0, NOOR_RT_CLOCK_REAL = 1, NOOR_RT_CLOCK_SCALE = 2, NOOR_RT_CLOCK_PAUSED = 3 };
 /* tag(): ops (v13) */
 enum { NOOR_RT_TAG_HAS = 0, NOOR_RT_TAG_ADD = 1, NOOR_RT_TAG_REMOVE = 2 };
 /* animation_parameter(): kinds */
@@ -154,6 +157,12 @@ typedef struct noor_rt_api {
     int32_t (*tag)(noor_rt_entity e, int32_t op, const char* tag);
     /* The entities with a tag, in scene order: up to `max` written to `out`; returns how many there are. */
     int32_t (*find_all)(const char* tag, noor_rt_entity* out, int32_t max);
+
+    /* v14 (gameplay foundations, part 2): the clocks. clock(): CLOCK_GAME (seconds of game time, = time()), CLOCK_REAL
+     * (seconds really passed, paused or not), CLOCK_SCALE (the time scale), CLOCK_PAUSED (1 or 0). set_clock(): SCALE,
+     * PAUSED. Timers and waits are the managed side's (NoorScript.After, Every, Wait), built on these. */
+    double (*clock)(int32_t which);
+    void (*set_clock)(int32_t which, double value);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

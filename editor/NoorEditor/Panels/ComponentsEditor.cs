@@ -434,6 +434,13 @@ public sealed class ComponentsEditor : StackPanel
     }
 
     /// <summary>Sets a field; <paramref name="path"/> may go into nested objects ("params.speed").</summary>
+    /// <summary>The script component's "pause": "always" (runs while the game is paused), on or off.</summary>
+    public bool SetRunsWhilePaused(bool on)
+    {
+        if (_entity?.Components["script"] is not JsonObject current) return false;
+        return SetComponent("script", WithPath(current, "pause", on ? JsonValue.Create("always") : null, remove: !on));
+    }
+
     public bool SetField(string type, string path, JsonNode? value)
     {
         if (_entity?.Components[type] is not JsonObject current) return false;
@@ -538,6 +545,11 @@ public sealed class ComponentsEditor : StackPanel
             var fileRow = new DockPanel { Children = { open, new TextBlock { Text = file, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis } } };
             DockPanel.SetDock(open, Avalonia.Controls.Dock.Right);
             body.Children.Add(fileRow);
+            // Gameplay foundations, part 2: a pause menu's script keeps running while the game is paused.
+            var always = new CheckBox { Content = "Runs while paused", IsChecked = script["pause"]?.GetValue<string>() == "always", FontSize = 12 };
+            ToolTip.SetTip(always, "Keep running while the game is paused (noor.set_paused): for pause menus. Its timers and waits too.");
+            always.IsCheckedChanged += (_, _) => SetRunsWhilePaused(always.IsChecked == true);
+            body.Children.Add(always);
             if (script["params"] is JsonObject parameters)
                 foreach (var (field, fieldValue) in parameters) body.Children.Add(FieldRow(type, $"params.{field}", field, fieldValue));
             var addParam = new Button { Content = "+ Param", Classes = { "tool" }, HorizontalAlignment = HorizontalAlignment.Left };

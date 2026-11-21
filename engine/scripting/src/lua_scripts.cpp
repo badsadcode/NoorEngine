@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -39,7 +40,28 @@ struct LuaScriptSystem::Impl {
     struct Instance {
         int ref = 0;
         std::string file;
+        bool always = false;  // "pause": "always": runs while the game is paused (gameplay foundations, part 2)
     };
+    // Timers and waiting sequences (gameplay foundations, part 2), each belonging to the script instance that made it
+    // (gone with its entity), in the order they were made (so they run in a stable order).
+    Guid current;  // the instance whose code is running now (nil outside hooks)
+    std::uint64_t next_job = 1;
+    struct Timer {
+        Guid owner;
+        double due = 0.0, period = 0.0;  // period 0: once
+        bool real = false;               // on the real clock (runs while paused, for "always" scripts)
+        int fn = 0;
+    };
+    std::map<std::uint64_t, Timer> timers;
+    struct Sequence {
+        Guid owner;
+        lua_State* thread = nullptr;
+        int ref = 0;  // keeps the thread alive
+        double due = -1.0;  // waiting until then (-1: not started yet)
+        bool real = false;
+    };
+    std::map<std::uint64_t, Sequence> sequences;
+    std::unordered_map<lua_State*, std::uint64_t> sequence_of;  // a running sequence's thread -> its id
     std::unordered_map<Guid, Instance> instances;
     std::vector<Guid> order;  // start order, so hooks run in a stable order
     std::vector<std::string> errors;
@@ -224,7 +246,47 @@ struct LuaScriptSystem::Impl {
         return 1;
     }
 
+    // noor.after / noor.every: a timer owned by the running script instance.
+    static int add_timer(lua_State* L, bool repeat) {
+        Impl* self = of(L);
+        const double seconds = luaL_checknumber(L, 1);
+        luaL_checktype(L, 2, LUA_TFUNCTION);
+        if (self->current == Guid{} || !self->instances.contains(self->current))
+            luaL_errorL(L, "noor.%s: call it from a script's hook (a timer belongs to its entity)", repeat ? "every" : "after");
+        if (repeat && seconds <= 0.0) luaL_errorL(L, "noor.every: the period must be more than 0 seconds");
+        bool real = false;
+        if (lua_istable(L, 3)) {
+            lua_getfield(L, 3, "real");
+            real = lua_toboolean(L, -1) != 0;
+            lua_pop(L, 1);
+        }
+        lua_pushvalue(L, 2);
+        const int fn = lua_ref(L, -1);
+        lua_pop(L, 1);
+        const std::uint64_t id = self->next_job++;
+        self->timers[id] = {self->current, self->clock(real) + std::max(0.0, seconds), repeat ? seconds : 0.0, real, fn};
+        auto* handle = static_cast<std::uint64_t*>(lua_newuserdata(L, sizeof(std::uint64_t)));
+        *handle = id;
+        luaL_getmetatable(L, "noor.Timer");
+        lua_setmetatable(L, -2);
+        return 1;
+    }
+
     void register_api() {
+        luaL_newmetatable(L, "noor.Timer");  // t:cancel()
+        lua_newtable(L);
+        lua_pushcfunction(L, [](lua_State* L) {
+            Impl* self = of(L);
+            const auto id = *static_cast<std::uint64_t*>(luaL_checkudata(L, 1, "noor.Timer"));
+            if (const auto it = self->timers.find(id); it != self->timers.end()) {
+                lua_unref(L, it->second.fn);
+                self->timers.erase(it);
+            }
+            return 0;
+        }, "cancel");
+        lua_setfield(L, -2, "cancel");
+        lua_setfield(L, -2, "__index");
+        lua_pop(L, 1);
         lua_pushcfunction(L, lua_require, "require");
         lua_setglobal(L, "require");
         // Entity methods.
@@ -512,6 +574,60 @@ struct LuaScriptSystem::Impl {
                  lua_pushnumber(L, api::time(world_of(L)));
                  return 1;
              }},
+            // ---- Time (gameplay foundations, part 2) ----
+            {"real_time", [](lua_State* L) {
+                 lua_pushnumber(L, world_of(L).real_time());
+                 return 1;
+             }},
+            {"paused", [](lua_State* L) {
+                 lua_pushboolean(L, world_of(L).paused());
+                 return 1;
+             }},
+            {"set_paused", [](lua_State* L) {
+                 world_of(L).set_paused(lua_toboolean(L, 1) != 0);
+                 return 0;
+             }},
+            {"time_scale", [](lua_State* L) {
+                 lua_pushnumber(L, world_of(L).time_scale());
+                 return 1;
+             }},
+            {"set_time_scale", [](lua_State* L) {
+                 world_of(L).set_time_scale(luaL_checknumber(L, 1));
+                 return 0;
+             }},
+            // noor.after(seconds, fn [, {real = true}]) / noor.every(seconds, fn [, ...]) -> a timer (t:cancel())
+            {"after", [](lua_State* L) { return add_timer(L, false); }},
+            {"every", [](lua_State* L) { return add_timer(L, true); }},
+            // noor.start(fn): runs fn now as a sequence that may noor.wait
+            {"start", [](lua_State* L) {
+                 Impl* self = of(L);
+                 luaL_checktype(L, 1, LUA_TFUNCTION);
+                 if (self->current == Guid{} || !self->instances.contains(self->current))
+                     luaL_errorL(L, "noor.start: call it from a script's hook (a sequence belongs to its entity)");
+                 lua_State* T = lua_newthread(L);
+                 const int ref = lua_ref(L, -1);
+                 lua_pop(L, 1);
+                 lua_pushvalue(L, 1);
+                 lua_xmove(L, T, 1);
+                 const std::uint64_t id = self->next_job++;
+                 self->sequences[id] = {self->current, T, ref, -1.0, false};
+                 self->sequence_of[T] = id;
+                 self->resume(id);
+                 return 0;
+             }},
+            // noor.wait(seconds [, {real = true}]): inside noor.start, carries on that much later
+            {"wait", [](lua_State* L) {
+                 Impl* self = of(L);
+                 const auto s = self->sequence_of.find(L);
+                 if (s == self->sequence_of.end())
+                     luaL_errorL(L, "noor.wait works inside noor.start(function() ... end), not in a hook itself");
+                 const double seconds = std::max(0.0, static_cast<double>(luaL_checknumber(L, 1)));
+                 const bool real = lua_istable(L, 2) && (lua_getfield(L, 2, "real"), lua_toboolean(L, -1) != 0);
+                 auto& seq = self->sequences[s->second];
+                 seq.real = real;
+                 seq.due = self->clock(real) + seconds;
+                 return lua_yield(L, 0);
+             }},
             {"find", [](lua_State* L) {
                  if (auto e = api::find(world_of(L), luaL_checkstring(L, 1))) push_entity(L, *e);
                  else lua_pushnil(L);
@@ -797,7 +913,11 @@ struct LuaScriptSystem::Impl {
         lua_insert(L, -2);  // function, self
         for (int i = 0; i < nargs_pushed_after; ++i) lua_pushvalue(L, base + 1 + i);
         deadline = lua_clock() + options.call_budget_seconds;
+        const Guid outer = std::exchange(current, id);
+        world->set_drawing_while_paused(it->second.always);
         const int status = lua_pcall(L, 1 + nargs_pushed_after, 0, handler);
+        current = outer;
+        world->set_drawing_while_paused(false);
         deadline = 0.0;
         if (status != LUA_OK) {
             const std::string message = lua_tostring(L, -1) ? lua_tostring(L, -1) : "error";
@@ -812,14 +932,119 @@ struct LuaScriptSystem::Impl {
         return true;
     }
 
-    void each(const char* hook, double dt) {
+    void each(const char* hook, double dt, bool only_always = false) {
         const auto ids = order;  // hooks may destroy entities
         for (const Guid& id : ids) {
-            if (!instances.contains(id)) continue;
+            const auto it = instances.find(id);
+            if (it == instances.end() || (only_always && !it->second.always)) continue;
             lua_pushnumber(L, dt);
             call(id, hook, 1);
         }
         std::erase_if(order, [&](const Guid& id) { return !instances.contains(id); });
+    }
+
+    // ---- Timers and sequences (gameplay foundations, part 2) ----
+    bool may_run(const Guid& owner) const {
+        const auto it = instances.find(owner);
+        return it != instances.end() && (!world->paused() || it->second.always);
+    }
+    double clock(bool real) const { return real ? world->real_time() : world->time(); }
+    // Due "now" or earlier: a hair of slack, because thirty steps of 1/60 s add up to 0.49999999999999994, and a 0.5 s
+    // timer mustn't wait a frame longer for that.
+    bool due(bool real, double when) const { return clock(real) + 1e-9 >= when; }
+
+    // Runs (or resumes) a sequence until it waits, ends or fails.
+    void resume(std::uint64_t id) {
+        auto it = sequences.find(id);
+        if (it == sequences.end()) return;
+        Sequence& s = it->second;
+        const Guid outer = std::exchange(current, s.owner);
+        world->set_drawing_while_paused(instances.contains(s.owner) && instances.at(s.owner).always);
+        const double outer_deadline = deadline;
+        if (outer_deadline <= 0.0) deadline = lua_clock() + options.call_budget_seconds;
+        const int nargs = 0;  // first start or after a wait: nothing passed in
+        s.due = -2.0;  // running
+        const int status = lua_resume(s.thread, nullptr, nargs);
+        deadline = outer_deadline;
+        current = outer;
+        world->set_drawing_while_paused(false);
+        it = sequences.find(id);
+        if (it == sequences.end()) return;
+        if (status == LUA_YIELD && it->second.due >= 0.0) return;  // noor.wait set when to come back
+        if (status != LUA_OK && status != LUA_YIELD) {
+            report(std::format("{}\n{} (a noor.start sequence on '{}'); that sequence is stopped", lua_tostring(it->second.thread, -1),
+                               lua_debugtrace(it->second.thread), world ? api::name(*world, it->second.owner).value_or("?") : "?"));
+        } else if (status == LUA_YIELD) {
+            report(std::format("a noor.start sequence on '{}' yielded without noor.wait; it is stopped",
+                               world ? api::name(*world, it->second.owner).value_or("?") : "?"));
+        }
+        drop_sequence(id);
+    }
+    void drop_sequence(std::uint64_t id) {
+        const auto it = sequences.find(id);
+        if (it == sequences.end()) return;
+        sequence_of.erase(it->second.thread);
+        lua_unref(L, it->second.ref);
+        sequences.erase(it);
+    }
+    void drop_jobs_of(const Guid& owner) {
+        for (auto it = timers.begin(); it != timers.end();) {
+            if (it->second.owner == owner) {
+                lua_unref(L, it->second.fn);
+                it = timers.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        std::vector<std::uint64_t> doomed;
+        for (const auto& [id, s] : sequences)
+            if (s.owner == owner) doomed.push_back(id);
+        for (auto id : doomed) drop_sequence(id);
+    }
+    // Fires the timers that are due and resumes the sequences whose wait is over, oldest first.
+    void run_jobs() {
+        std::vector<std::uint64_t> ids;
+        for (const auto& [id, t] : timers) ids.push_back(id);
+        for (const auto id : ids) {
+            auto it = timers.find(id);
+            if (it == timers.end() || !may_run(it->second.owner) || !due(it->second.real, it->second.due)) continue;
+            Timer t = it->second;
+            const bool repeat = t.period > 0.0;
+            if (repeat) it->second.due = std::max(t.due + t.period, clock(t.real));  // never more than once a frame
+            else timers.erase(it);
+            lua_pushcfunction(L, traceback_handler, "traceback");
+            const int handler = lua_gettop(L);
+            lua_getref(L, t.fn);
+            if (!repeat) lua_unref(L, t.fn);
+            deadline = lua_clock() + options.call_budget_seconds;
+            const Guid outer = std::exchange(current, t.owner);
+            world->set_drawing_while_paused(instances.contains(t.owner) && instances.at(t.owner).always);
+            const int status = lua_pcall(L, 0, 1, handler);
+            current = outer;
+            world->set_drawing_while_paused(false);
+            deadline = 0.0;
+            if (status != LUA_OK) {
+                report(std::format("{} (a timer on '{}'); the timer is stopped", lua_tostring(L, -1) ? lua_tostring(L, -1) : "error",
+                                   api::name(*world, t.owner).value_or("?")));
+                if (const auto again = timers.find(id); again != timers.end()) {
+                    lua_unref(L, again->second.fn);
+                    timers.erase(again);
+                }
+            } else if (repeat && lua_isboolean(L, -1) && !lua_toboolean(L, -1)) {  // `every` returning false stops it
+                if (const auto again = timers.find(id); again != timers.end()) {
+                    lua_unref(L, again->second.fn);
+                    timers.erase(again);
+                }
+            }
+            lua_settop(L, handler - 1);
+        }
+        ids.clear();
+        for (const auto& [id, s] : sequences) ids.push_back(id);
+        for (const auto id : ids) {
+            const auto it = sequences.find(id);
+            if (it == sequences.end() || it->second.due < 0.0 || !may_run(it->second.owner) || !due(it->second.real, it->second.due)) continue;
+            resume(id);
+        }
     }
 };
 
@@ -859,7 +1084,7 @@ void LuaScriptSystem::entity_started(runtime::World& world, scene::Entity& entit
     lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
     const Guid id = entity.id;  // `entity` may move if a hook spawns
-    d.instances[id] = {lua_ref(L, -1), file};
+    d.instances[id] = {lua_ref(L, -1), file, it->value("pause", std::string()) == "always"};
     lua_pop(L, 1);
     d.order.push_back(id);
     d.call(id, "on_start", 0);
@@ -867,7 +1092,10 @@ void LuaScriptSystem::entity_started(runtime::World& world, scene::Entity& entit
 
 void LuaScriptSystem::update(runtime::World& world, double dt) {
     impl_->world = &world;
-    impl_->each("on_update", dt);
+    impl_->run_jobs();
+    // Paused: only scripts marked "pause": "always" run, on the real clock (a pause menu).
+    if (world.paused()) impl_->each("on_update", world.real_dt(), true);
+    else impl_->each("on_update", dt);
 }
 
 void LuaScriptSystem::fixed_update(runtime::World& world, double dt) {
@@ -894,7 +1122,8 @@ void LuaScriptSystem::late_update(runtime::World& world, double dt) {
         Impl::push_entity(d.L, e.other);
         d.call(e.entity, hook, 1);
     }
-    d.each("on_late_update", dt);
+    if (world.paused()) d.each("on_late_update", world.real_dt(), true);
+    else d.each("on_late_update", dt);
 }
 
 void LuaScriptSystem::entity_destroyed(runtime::World& world, const scene::Entity& entity) {
@@ -902,6 +1131,7 @@ void LuaScriptSystem::entity_destroyed(runtime::World& world, const scene::Entit
     d.world = &world;
     if (!d.instances.contains(entity.id)) return;
     d.call(entity.id, "on_destroy", 0);
+    d.drop_jobs_of(entity.id);
     if (const auto it = d.instances.find(entity.id); it != d.instances.end()) {
         lua_unref(d.L, it->second.ref);
         d.instances.erase(it);

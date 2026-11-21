@@ -11,6 +11,7 @@
 #include "noor/runtime/input.h"
 #include "noor/scene/scene.h"
 
+#include <algorithm>
 #include <functional>
 
 namespace noor::scene {
@@ -18,6 +19,7 @@ struct Prefab;
 }
 
 #include <cstdint>
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
@@ -59,6 +61,7 @@ struct UiCommand {
     float text_size = 24.0f;        // Text: line height
     math::Vec4 color{1, 1, 1, 1};   // linear RGB, straight alpha
     std::string text;               // UTF-8; '\n' starts a new line
+    bool runs_while_paused = false; // drawn by a script that runs while paused (gameplay foundations, part 2)
 };
 
 class System {
@@ -104,6 +107,20 @@ public:
     [[nodiscard]] const scene::Scene& scene() const noexcept { return scene_; }
     [[nodiscard]] const Input& input() const noexcept { return input_; }
     [[nodiscard]] double time() const noexcept { return time_; }           // seconds of game time
+
+    // ---- Pause and time scale (gameplay foundations, part 2) ----
+    // Paused, the game's clock stops: systems' update and late_update get dt 0, no fixed steps run, so physics,
+    // animations, particles, cameras and game-time timers freeze. Scripts marked "pause": "always" keep running (their
+    // hooks get the real dt): pause menus. The time scale stretches the game's clock (0.25: slow motion; physics keeps
+    // its fixed step size, taking fewer of them, so it stays deterministic). Changed by a script during update, they
+    // apply to the rest of that frame at once (physics, late update, the clock).
+    void set_paused(bool paused) noexcept { paused_ = paused; }
+    [[nodiscard]] bool paused() const noexcept { return paused_; }
+    void set_time_scale(double scale) noexcept { time_scale_ = std::clamp(scale, 0.0, 10.0); }
+    [[nodiscard]] double time_scale() const noexcept { return time_scale_; }
+    // Seconds that really passed since play started, paused or not, and this frame's real step.
+    [[nodiscard]] double real_time() const noexcept { return real_time_; }
+    [[nodiscard]] double real_dt() const noexcept { return real_dt_; }
     [[nodiscard]] std::uint64_t frame_count() const noexcept { return frames_; }
     [[nodiscard]] std::uint64_t fixed_step_count() const noexcept { return fixed_steps_; }
     // How far between the last and next fixed step (0..1), for interpolating fixed-step state.
@@ -113,8 +130,12 @@ public:
     // What scripts drew on the HUD this frame, in order (later on top). Cleared at frame start, so
     // scripts draw every frame they want something shown (immediate mode).
     void ui(UiCommand command) {
+        command.runs_while_paused = drawing_while_paused_;
         if (ui_.size() < kMaxUiCommands) ui_.push_back(std::move(command));
     }
+    // Script systems say whether the script drawing now runs while paused. While the game is paused, what the paused
+    // scripts drew last stays on screen (the score under a pause menu) and the running ones draw over it.
+    void set_drawing_while_paused(bool on) noexcept { drawing_while_paused_ = on; }
     [[nodiscard]] const std::vector<UiCommand>& ui_commands() const noexcept { return ui_; }
     static constexpr std::size_t kMaxUiCommands = 20000;  // a runaway loop can't eat the memory
 
@@ -211,6 +232,11 @@ private:
     std::unordered_map<Guid, math::Mat4> render_poses_;
     std::vector<UiCommand> ui_;
     double time_ = 0.0;
+    bool paused_ = false;
+    bool drawing_while_paused_ = false;
+    std::vector<UiCommand> frozen_ui_;  // the paused scripts' HUD, kept while paused
+    double time_scale_ = 1.0;
+    double real_time_ = 0.0, real_dt_ = 0.0;
     double accumulator_ = 0.0;
     std::uint64_t frames_ = 0;
     std::uint64_t fixed_steps_ = 0;

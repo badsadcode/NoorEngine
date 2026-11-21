@@ -720,6 +720,9 @@ internal static class SmokeTest
             return Driver
             """);
         check(comps.SetField("script", "params.speed", System.Text.Json.Nodes.JsonValue.Create(6.0)), "Lua: set the speed param");
+        check(comps.SetRunsWhilePaused(true) && doc.Selected!.Components["script"]?["pause"]?.GetValue<string>() == "always" &&
+              comps.SetRunsWhilePaused(false) && doc.Selected!.Components["script"]?["pause"] == null,
+              "Lua: 'Runs while paused' sets and clears the script's pause");
         await Task.Delay(150);
         shot(TopLevel.GetTopLevel(window.Inspector!) as Window ?? window, "editor_10_lua_script.png");
         var yawBefore = doc.Selected!.Transform.Rotation.ToEulerDegrees().Y;
@@ -747,7 +750,8 @@ internal static class SmokeTest
         check(EngineLog.Lines.Any(l => l.Category == "Script" && l.Message.Contains("Driver ready on")), "Lua: noor.log reaches the Console");
         window.TogglePlay();
         check(doc.Selected!.Transform.Position == start, "stop: the scripted building is back");
-        check(doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("script"), "undo the script component");
+        // Undo the pause checkbox's two edits (on, off), the param, then the component itself.
+        check(doc.Undo() && doc.Undo() && doc.Undo() && doc.Undo() && !doc.Selected!.Components.ContainsKey("script"), "undo the script component");
         Native.noor_viewport_test_pointer(gameView.EngineHandle, 0, 0, 0, 0);
         doc.SetTool(EditorTool.Move);
     }

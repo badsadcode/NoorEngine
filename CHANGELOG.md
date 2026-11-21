@@ -4,6 +4,17 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 2: timers, waiting, pause, slow motion
+**Added**
+- World: `set_paused` / `paused`, `set_time_scale` / `time_scale`, `real_time` / `real_dt`; scripts' "pause": "always"
+  (Inspector: **Runs while paused**); the paused scripts' HUD kept under the running ones'.
+- Lua: `noor.after`, `noor.every` (timers with `:cancel()`), `noor.start` / `noor.wait` (sequences), `noor.set_paused`,
+  `noor.paused`, `noor.set_time_scale`, `noor.time_scale`, `noor.real_time`.
+- C#: `After`, `Every`, `await Wait` (`Timers.cs`), `Noor.Paused`, `Noor.TimeScale`, `Noor.RealTime`; rt API v14
+  (`clock`, `set_clock`, the JOBS hook).
+
+**Tests:** `test_time.cpp`; `tests/data/time_project` and `player.time_lua_csharp`; the smoke test's checkbox.
+
 ### 2026-11-21 — Gameplay foundations, part 1: spawning, teleport, groups, require
 **Added**
 - `noor.spawn(prefab, position [, euler, parent])` / `Noor.Spawn`: prefabs at run time, by id or path, flattened to

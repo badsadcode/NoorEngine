@@ -20,6 +20,20 @@ public abstract class NoorScript
     protected float Param(string name, float fallback) =>
         Params[name] is JsonValue v && v.TryGetValue<double>(out var d) ? (float)d : fallback;
 
+    // ---- Timers and waiting (gameplay foundations, part 2) ----
+    internal readonly Scheduler Jobs = new();
+
+    /// <summary>Calls `action` once, `seconds` from now (game time; `real`: real time, which runs while paused for
+    /// scripts marked "pause": "always"). Cancel with the returned timer. Gone with the entity.</summary>
+    protected Timer After(double seconds, Action action, bool real = false) => Jobs.Add(seconds, 0, () => { action(); return true; }, real);
+    /// <summary>Calls `action` every `seconds`; it stops when `action` returns false, or when cancelled.</summary>
+    protected Timer Every(double seconds, Func<bool> action, bool real = false) =>
+        Jobs.Add(seconds, seconds > 0 ? seconds : throw new ArgumentException("Every: the period must be more than 0 seconds"), action, real);
+    /// <summary>Calls `action` every `seconds` until cancelled.</summary>
+    protected Timer Every(double seconds, Action action, bool real = false) => Every(seconds, () => { action(); return true; }, real);
+    /// <summary>`await Wait(1.5)` in an async method (async void hooks too): carries on that much later.</summary>
+    protected WaitAwaitable Wait(double seconds, bool real = false) => new(Jobs, seconds, real);
+
     public virtual void OnStart() { }
     public virtual void OnUpdate(float dt) { }
     public virtual void OnFixedUpdate(float dt) { }
@@ -248,8 +262,15 @@ public static unsafe class Noor
         fixed (byte* m = Engine.Utf8(message)) Engine.A.Log(level, m);
     }
 
-    /// <summary>Seconds since play started.</summary>
+    /// <summary>Seconds of game time since play started (stops while paused, stretched by the time scale).</summary>
     public static double Time => Engine.A.Time();
+    /// <summary>Seconds really passed since play started, paused or not (gameplay foundations, part 2).</summary>
+    public static double RealTime => Engine.A.Clock(1);
+    /// <summary>Pauses the game: its clock stops (physics, animation, game-time timers); only scripts marked
+    /// "pause": "always" keep running.</summary>
+    public static bool Paused { get => Engine.A.Clock(3) != 0; set => Engine.A.SetClock(3, value ? 1 : 0); }
+    /// <summary>How fast game time runs: 1 normal, 0.25 slow motion (0..10).</summary>
+    public static double TimeScale { get => Engine.A.Clock(2); set => Engine.A.SetClock(2, value); }
 
     public static Entity? Find(string name)
     {

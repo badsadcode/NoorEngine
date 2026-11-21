@@ -100,6 +100,27 @@ Vectors are `System.Numerics.Vector3`; angles in degrees; transforms local unles
 | `CrossFade(name, seconds)`, `SetAnimationParameter(name, float or bool)`, `SetAnimationTrigger(name)` | An `animator`: blend to a clip or state over `seconds`; set its controller's parameters (a trigger resets when a transition uses it) |
 | `Burst(count)` | The entity's `emitter`: `count` particles at the next fixed step |
 
+## Time: timers, waiting, pause
+
+The same rules as Lua's (gameplay foundations, part 2; rt API v14):
+
+```csharp
+public override async void OnStart()
+{
+    After(2, () => Door.Destroy());               // once, two seconds from now
+    var blink = Every(0.5, () => _lampOn = !_lampOn);
+    Every(1, () => ++_hp < 100);                  // returning false stops it
+    await Wait(1);                                // inside any async method (async void hooks too)
+    Entity.PlayAnimation("open");
+}
+```
+
+| | |
+|---|---|
+| `After(seconds, action, real = false)`, `Every(seconds, action, real = false)` | Timers (`timer.Cancel()`); gone with the entity |
+| `await Wait(seconds, real = false)` | Carries on that much later (on the main thread, before OnUpdate) |
+| `Noor.Paused` (get/set), `Noor.TimeScale` (get/set), `Noor.RealTime` | Pause, slow motion, the real clock. Scripts with **Runs while paused** keep running while paused |
+
 ## `Ui` (the HUD)
 
 ```csharp

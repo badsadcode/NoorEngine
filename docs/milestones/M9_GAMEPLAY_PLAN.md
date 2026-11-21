@@ -27,7 +27,7 @@ that use all of it; every existing golden and yardstick unchanged.
 | Part | What | Proves |
 |---|---|---|
 | 1 ✅ | **Spawning and the things around it**: `noor.spawn(prefab, position [, rotation, parent])` and C#'s `Spawn`, returning the new entity (its scripts, bodies, sprites, sounds start the next frame); `e:teleport(v)` for characters and bodies (velocity and contacts cleared); **groups**: `noor.find_all(tag)`, `e:has_tag`, `e:add_tag`, `e:remove_tag`; Lua **`require`** for shared script files | A spawned prefab is the same as one placed in the editor (its components, to the bit); 1,000 bullets spawned and destroyed a second, measured; a respawn at a checkpoint; built game identical |
-| 2 | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
+| 2 ✅ | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
 | 3 | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
 | 4 | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
 | 5 | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
@@ -66,6 +66,31 @@ that way would have left an empty entity behind every destroyed bullet and telep
 body. Hence the flattening.
 
 Not here: the samples' respawns and the like come with part 10, as planned.
+
+## Part 2 result (2026-11-21)
+Done. **Pause and time scale** in the World: paused, systems' update and late update get dt 0 and no fixed steps run, so
+physics, animation, particles, cameras and game-time timers stop; time scale stretches the game's clock with physics
+keeping its fixed step size; a real clock beside the game's; a change made during a frame applies to the rest of it.
+**Runs while paused** (`"pause": "always"`, a checkbox in the Inspector): those scripts keep running on the real dt, and
+the paused scripts' HUD stays on screen under them. **Timers** (`noor.after`, `noor.every`, cancellable, an `every`
+returning false stops) and **sequences** (`noor.start` with `noor.wait`), owned by their entity, run before any
+`on_update`, oldest first, on the game or the real clock. **C#:** `After`, `Every`, `await Wait`, `Noor.Paused`,
+`TimeScale`, `RealTime` (rt API v14; the host runs every script's timers before any OnUpdate, as Lua does).
+
+Proved: the clock (paused: no steps, dt 0, real time on; slow motion: half the steps; clamping), a pause made during
+update freezes a falling body to the bit (unit); timers once on time, every until false or cancelled, a failing timer
+stopped alone; sequences waiting and resuming at the right times, `noor.wait` outside one an error; pause: only
+"always" scripts run, on the real dt, their real-time waits and timers, the game's timer resuming on the game clock;
+timers and sequences gone with their entity, a failing or misbehaving sequence reported; the HUD under a pause menu
+(unit); Lua in a project, Lua and C# in a built game showing exactly the same HUD: a 0.5 s timer at 0.500, waits at
+0.300 and 0.800, a half-second real pause with the falling box frozen, slow motion after (`player.time_lua_csharp`);
+the Inspector's checkbox (smoke).
+
+Not as planned: timers are checked each frame against the game clock (first frame at or after their time), not on
+fixed steps: simpler, and built games still replay them exactly. Found on the way: thirty steps of 1/60 s add up to
+0.49999999999999994, which made 0.5 s timers fire a frame late (a hair of slack fixes it); a pause made in a script
+used to let physics take one more step; C# ran each script's timers just before its own OnUpdate, so it disagreed
+with Lua by one frame after a resume; the paused game's HUD vanished under the pause menu.
 
 ## Highest risks (settle early)
 

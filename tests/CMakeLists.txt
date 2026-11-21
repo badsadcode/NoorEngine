@@ -53,6 +53,7 @@ add_executable(noor_unit_tests
     unit/test_display.cpp
     unit/test_templates.cpp
     unit/test_spawn.cpp
+    unit/test_time.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -843,6 +844,17 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/spawn_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_spawn
             -P ${CMAKE_CURRENT_SOURCE_DIR}/spawn_check.cmake)
     set_tests_properties(player.spawn_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_spawn_project)
+
+    # Timers, waits, pause and slow motion from Lua and C# (gameplay foundations, part 2), in a project and a built game.
+    add_test(NAME cli.build_time_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/time_project ${CMAKE_CURRENT_BINARY_DIR}/built_time_project)
+    set_tests_properties(cli.build_time_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_time_project
+                         PASS_REGULAR_EXPRESSION "Built 'Time Test'")
+    add_test(NAME player.time_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_time_project/Time Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/time_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_time
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/time_check.cmake)
+    set_tests_properties(player.time_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_time_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.

@@ -94,6 +94,9 @@ public unsafe struct RtApi
     public delegate* unmanaged<RtEntity, RtVec3, RtVec3*, int> Teleport;
     public delegate* unmanaged<RtEntity, int, byte*, int> Tag;
     public delegate* unmanaged<byte*, RtEntity*, int, int> FindAll;
+    // v14: the clocks (gameplay foundations, part 2)
+    public delegate* unmanaged<int, double> Clock;
+    public delegate* unmanaged<int, double, void> SetClock;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -109,7 +112,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 13;
+    public const uint ExpectedVersion = 14;
     public static RtApi* Api;
 
     public static ref RtApi A
