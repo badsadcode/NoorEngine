@@ -115,6 +115,18 @@ var open = Noor.Find("Door")!.Call("is_open", "please");             // a functi
 converted to their types); its return value comes back as a `JsonNode`. A script's own methods only, not
 `NoorScript`'s.
 
+## Tweens
+
+The same as Lua's (gameplay foundations, part 4; rt API v16):
+
+```csharp
+door.Tween("position", new Vector3(0, 3, 0), 0.5, "ease_out");                       // returns a Tween (Cancel, Active)
+Tween(door, "scale", new Vector3(1.5f, 1.5f, 1.5f), 1.0, "bounce_out", onDone: () => Noor.Log("grown"));
+platform.Tween("position", new Vector3(5, 0, 0), 2, "ease_in_out", loops: -1, yoyo: true);
+var t = lamp.Tween("light.intensity", 0, 2);
+await WaitUntil(() => !t.Active);                                                     // or any condition
+```
+
 ## Time: timers, waiting, pause
 
 The same rules as Lua's (gameplay foundations, part 2; rt API v14):

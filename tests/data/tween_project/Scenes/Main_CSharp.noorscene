@@ -1,0 +1,183 @@
+{
+  "noor_scene": 2,
+  "id": "938ece56-478a-5598-8ad4-b38016873bd2",
+  "name": "Main_CSharp",
+  "entities": [
+    {
+      "id": "8a29608f-614a-59c1-8ef2-a397fba2342e",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          2,
+          12
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "83a02a70-8016-5adf-8c9f-56e63a79715d",
+      "name": "Sun",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          10,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "directional",
+          "illuminance": 90000,
+          "shadows": false
+        }
+      }
+    },
+    {
+      "id": "53b3b86e-5693-5273-a7e4-1fedc343a2e5",
+      "name": "Door",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            2,
+            0.2
+          ],
+          "color": "#FFFFFF"
+        }
+      }
+    },
+    {
+      "id": "973506b7-6207-50f1-90df-ed967a957a9e",
+      "name": "Platform",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          -3,
+          -1,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            2,
+            0.2,
+            2
+          ],
+          "color": "#6BB8FF"
+        },
+        "collider": {
+          "shape": "box",
+          "size": [
+            2,
+            0.2,
+            2
+          ]
+        },
+        "rigidbody": {
+          "type": "kinematic"
+        }
+      }
+    },
+    {
+      "id": "6779416a-4d6e-504e-a11a-aa67ea26975c",
+      "name": "Director",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "script": {
+          "file": "Scripts/CsDirector.cs"
+        }
+      }
+    }
+  ]
+}

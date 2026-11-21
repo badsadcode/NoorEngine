@@ -102,6 +102,10 @@ public unsafe struct RtApi
     public delegate* unmanaged<RtEntity*, byte*, RtEntity, long, long> Listen;
     public delegate* unmanaged<long, void> Unlisten;
     public delegate* unmanaged<RtEntity, byte*, byte*, int*, byte*> Call;
+    // v16: tweens (gameplay foundations, part 4), the last error
+    public delegate* unmanaged<RtEntity, byte*, byte*, double, byte*, byte*, long> Tween;
+    public delegate* unmanaged<long, int, int> TweenOp;
+    public delegate* unmanaged<byte*> LastError;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -119,7 +123,7 @@ public unsafe struct RtHost
 /// <summary>The engine's function table, set by <see cref="ScriptHost.Initialize"/>.</summary>
 internal static unsafe class Engine
 {
-    public const uint ExpectedVersion = 15;
+    public const uint ExpectedVersion = 16;
     public static RtApi* Api;
 
     public static ref RtApi A

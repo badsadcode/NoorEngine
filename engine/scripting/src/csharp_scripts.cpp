@@ -18,7 +18,8 @@ using asset::Json;
 // The world whose script hook is running (scripts only call back during hooks, on this thread).
 thread_local runtime::World* t_world = nullptr;
 thread_local std::string t_text;
-thread_local std::string t_event_name;  // the event being delivered (AnimationEnd: its animation)
+thread_local std::string t_event_name;
+thread_local std::string t_error;  // rt last_error() (v16)  // the event being delivered (AnimationEnd: its animation)
 
 struct WorldScope {
     runtime::World* previous;
@@ -352,6 +353,32 @@ const char* rt_call(noor_rt_entity e, const char* function, const char* args_jso
     return t_text.c_str();
 }
 
+int64_t rt_tween(noor_rt_entity e, const char* property, const char* to_json, double seconds, const char* ease, const char* options_json) {
+    t_error.clear();
+    if (!t_world || !property || !to_json) return 0;
+    const Json to = Json::parse(to_json, nullptr, false);
+    const Json o = options_json ? Json::parse(options_json, nullptr, false) : Json::object();
+    runtime::TweenOptions opt;
+    if (o.is_object()) {
+        opt.delay = o.value("delay", 0.0);
+        opt.loops = o.value("loops", 1);
+        opt.yoyo = o.value("yoyo", false);
+        opt.real = o.value("real", false);
+    }
+    const auto r = api::tween(*t_world, from_rt(e), property, to.is_discarded() ? Json() : to, seconds, ease ? ease : "linear", opt);
+    if (const auto* why = std::get_if<std::string>(&r)) {
+        t_error = *why;
+        return 0;
+    }
+    return static_cast<int64_t>(std::get<std::uint64_t>(r));
+}
+int32_t rt_tween_op(int64_t id, int32_t op) {
+    if (!t_world) return 0;
+    if (op == NOOR_RT_TWEEN_CANCEL) api::tween_cancel(*t_world, static_cast<std::uint64_t>(id));
+    return api::tween_active(*t_world, static_cast<std::uint64_t>(id)) ? 1 : 0;
+}
+const char* rt_last_error() { return t_error.c_str(); }
+
 double rt_clock(int32_t which) {
     if (!t_world) return 0.0;
     switch (which) {
@@ -397,6 +424,7 @@ const noor_rt_api kApi = {
     rt_spawn, rt_teleport, rt_tag, rt_find_all,
     rt_clock, rt_set_clock,
     rt_emit, rt_listen, rt_unlisten, rt_call,
+    rt_tween, rt_tween_op, rt_last_error,
 };
 
 } // namespace

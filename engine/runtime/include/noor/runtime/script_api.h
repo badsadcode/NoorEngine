@@ -37,6 +37,13 @@ void destroy(World& w, const Guid& e);  // at the end of the frame, with its chi
 // jump state reset), anything else by its transform. `rotation`: keep the current one if not given.
 bool teleport(World& w, const Guid& e, math::Vec3 position, std::optional<math::Quat> rotation = std::nullopt);
 
+// ---- Tweens (gameplay foundations, part 4; runtime/tween.h) ----
+// A tween of the entity's property to `to` over `seconds`: its id, or why not.
+[[nodiscard]] std::variant<std::uint64_t, std::string> tween(World& w, const Guid& e, std::string_view property, const asset::Json& to,
+                                                             double seconds, std::string_view ease = "linear", TweenOptions options = {});
+void tween_cancel(World& w, std::uint64_t id);
+[[nodiscard]] bool tween_active(World& w, std::uint64_t id);
+
 // ---- Groups: entity tags (gameplay foundations, part 1; Godot's groups) ----
 [[nodiscard]] bool has_tag(World& w, const Guid& e, std::string_view tag);
 void add_tag(World& w, const Guid& e, std::string_view tag);

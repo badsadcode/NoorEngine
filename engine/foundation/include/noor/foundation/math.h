@@ -2,6 +2,7 @@
 // Minimal linear algebra for the engine. Conventions (ADR-022): right-handed, +Y up,
 // −Z forward, meters, radians, column vectors, column-major storage, reverse-Z clip.
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -229,6 +230,21 @@ struct Quat {
     const float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     const float s = d < 0 ? -1.0f : 1.0f;
     return normalize_quat({a.x + (b.x * s - a.x) * t, a.y + (b.y * s - a.y) * t, a.z + (b.z * s - a.z) * t, a.w + (b.w * s - a.w) * t});
+}
+
+// Spherical blend (t = 0: a, 1: b) the short way round, at a steady angular speed: for big turns (tweens) where nlerp
+// would speed up in the middle.
+[[nodiscard]] inline Quat slerp(Quat a, Quat b, float t) noexcept {
+    float d = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    if (d < 0) {
+        b = {-b.x, -b.y, -b.z, -b.w};
+        d = -d;
+    }
+    if (d > 0.9995f) return nlerp(a, b, t);  // nearly the same: nlerp is exact enough and avoids dividing by ~0
+    const float theta = std::acos(std::clamp(d, -1.0f, 1.0f));
+    const float s = std::sin(theta);
+    const float wa = std::sin((1 - t) * theta) / s, wb = std::sin(t * theta) / s;
+    return {a.x * wa + b.x * wb, a.y * wa + b.y * wb, a.z * wa + b.z * wb, a.w * wa + b.w * wb};
 }
 
 // Rotates v by the unit quaternion q.

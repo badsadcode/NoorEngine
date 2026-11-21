@@ -119,6 +119,13 @@ bool teleport(World& w, const Guid& e, math::Vec3 position, std::optional<math::
     return true;
 }
 
+std::variant<std::uint64_t, std::string> tween(World& w, const Guid& e, std::string_view property, const asset::Json& to, double seconds,
+                                               std::string_view ease, TweenOptions options) {
+    return w.tweens().start(w, e, std::string(property), to, seconds, std::string(ease), options);
+}
+void tween_cancel(World& w, std::uint64_t id) { w.tweens().cancel(id); }
+bool tween_active(World& w, std::uint64_t id) { return w.tweens().active(id); }
+
 bool has_tag(World& w, const Guid& e, std::string_view tag) {
     const auto* x = w.find(e);
     return x && std::ranges::find(x->tags, tag) != x->tags.end();

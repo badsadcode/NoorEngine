@@ -55,6 +55,7 @@ add_executable(noor_unit_tests
     unit/test_spawn.cpp
     unit/test_time.cpp
     unit/test_messages.cpp
+    unit/test_tweens.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -867,6 +868,17 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/messages_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_messages
             -P ${CMAKE_CURRENT_SOURCE_DIR}/messages_check.cmake)
     set_tests_properties(player.messages_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_messages_project)
+
+    # Tweens chained by on_done, and a yoyo platform, from Lua and C# (gameplay foundations, part 4).
+    add_test(NAME cli.build_tween_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/tween_project ${CMAKE_CURRENT_BINARY_DIR}/built_tween_project)
+    set_tests_properties(cli.build_tween_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_tween_project
+                         PASS_REGULAR_EXPRESSION "Built 'Tween Test'")
+    add_test(NAME player.tween_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_tween_project/Tween Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/tween_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_tween
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tween_check.cmake)
+    set_tests_properties(player.tween_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_tween_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.

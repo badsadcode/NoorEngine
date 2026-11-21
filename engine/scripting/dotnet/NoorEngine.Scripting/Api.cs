@@ -34,6 +34,18 @@ public abstract class NoorScript
     /// <summary>`await Wait(1.5)` in an async method (async void hooks too): carries on that much later.</summary>
     protected WaitAwaitable Wait(double seconds, bool real = false) => new(Jobs, seconds, real);
 
+    /// <summary>A tween with something to do when it ends (gameplay foundations, part 4): `onDone` runs in this script,
+    /// the frame after the tween finished (or was cancelled).</summary>
+    protected Tween Tween(Entity entity, string property, object to, double seconds, string ease = "linear", Action? onDone = null,
+                          double delay = 0, int loops = 1, bool yoyo = false, bool real = false)
+    {
+        var t = entity.Tween(property, to, seconds, ease, delay, loops, yoyo, real);
+        if (onDone != null) Jobs.Watch(() => !t.Active, onDone);
+        return t;
+    }
+    /// <summary>`await WaitUntil(() => !tween.Active)`: carries on once the condition holds (checked once a frame).</summary>
+    protected WaitAwaitable WaitUntil(Func<bool> condition) => new(Jobs, condition);
+
     // ---- Messages (gameplay foundations, part 3; Godot's signals) ----
     private readonly Dictionary<long, Action<JsonNode?, Entity?>> _handlers = new();
     private long _nextHandler = 1;
@@ -178,6 +190,31 @@ public sealed unsafe class Entity : IEquatable<Entity>
     public int? Tile(int x, int y) => Engine.A.Tile(Id, x, y) is var t && t >= -1 ? t : null;
     /// <summary>Tilemap: sets cell (x, y) (-1 empties it); false outside the map. Drawing and collision follow.</summary>
     public bool SetTile(int x, int y, int tile) => Engine.A.SetTile(Id, x, y, tile) != 0;
+    /// <summary>Tweens a property (gameplay foundations, part 4): "position", "euler", "rotation", "scale",
+    /// "world_position", or "component.field" (a number, numbers or a "#RRGGBB" colour), to `to` (a Vector3, a number,
+    /// a string colour, an array or a JsonNode) over `seconds`. Easings: linear, ease_in/out/in_out, quad_, cubic_, sine_,
+    /// back_, elastic_, bounce_ + in/out/in_out. Replaces a tween of the same property. Throws if it can't be tweened.</summary>
+    public unsafe Tween Tween(string property, object to, double seconds, string ease = "linear", double delay = 0, int loops = 1,
+                              bool yoyo = false, bool real = false)
+    {
+        var target = to switch
+        {
+            Vector3 v => $"[{F(v.X)},{F(v.Y)},{F(v.Z)}]",
+            JsonNode n => n.ToJsonString(),
+            _ => System.Text.Json.JsonSerializer.Serialize(to, to.GetType()),
+        };
+        var options = System.Text.Json.JsonSerializer.Serialize(new { delay, loops, yoyo, real });
+        long id;
+        fixed (byte* p = Engine.Utf8(property))
+        fixed (byte* t = Engine.Utf8(target))
+        fixed (byte* e = Engine.Utf8(ease))
+        fixed (byte* o = Engine.Utf8(options))
+            id = Engine.A.Tween(Id, p, t, seconds, e, o);
+        if (id == 0) throw new InvalidOperationException($"Tween '{property}' on '{Name}': {Engine.Str(Engine.A.LastError())}");
+        return new Tween(id);
+    }
+    private static string F(float f) => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>Sends a message from this entity: whoever listens to it hears it at once (gameplay foundations, part 3).
     /// Returns how many listeners did.</summary>
     public unsafe int Emit(string name, JsonNode? data = null)

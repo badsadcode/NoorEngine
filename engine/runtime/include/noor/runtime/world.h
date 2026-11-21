@@ -9,6 +9,7 @@
 // Systems (behaviours, scripts, physics, audio...) plug in without the World knowing them.
 
 #include "noor/runtime/input.h"
+#include "noor/runtime/tween.h"
 #include "noor/scene/scene.h"
 
 
@@ -226,6 +227,9 @@ public:
     [[nodiscard]] std::size_t listener_count() const noexcept { return listeners_.size(); }
     [[nodiscard]] const std::vector<std::string>& message_errors() const noexcept { return message_errors_; }
 
+    // ---- Tweens (gameplay foundations, part 4): stepped right after the systems' update ----
+    [[nodiscard]] Tweens& tweens() noexcept { return tweens_; }
+
     // ---- Entities ----
     [[nodiscard]] scene::Entity* find(const Guid& id);
     // Adds an entity; systems see it (entity_started) at the start of the next frame.
@@ -265,6 +269,7 @@ private:
         System* system = nullptr;
         std::uint64_t handle = 0;
     };
+    Tweens tweens_;
     std::map<std::uint64_t, Listener> listeners_;  // by id: the order they started listening
     std::unordered_map<std::string, int> listened_names_;
     std::uint64_t next_listener_ = 1;

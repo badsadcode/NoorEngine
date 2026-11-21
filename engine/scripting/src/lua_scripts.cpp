@@ -59,7 +59,15 @@ struct LuaScriptSystem::Impl {
         int ref = 0;  // keeps the thread alive
         double due = -1.0;  // waiting until then (-1: not started yet)
         bool real = false;
+        std::uint64_t tween = 0;  // waiting for this tween to finish instead (t:wait(), gameplay foundations, part 4)
     };
+    // Tweens' on_done (part 4): called when the tween is no longer running, by its owner's script.
+    struct TweenDone {
+        Guid owner;
+        std::uint64_t tween = 0;
+        int fn = 0;
+    };
+    std::map<std::uint64_t, TweenDone> tween_dones;
     std::map<std::uint64_t, Sequence> sequences;
     std::unordered_map<lua_State*, std::uint64_t> sequence_of;  // a running sequence's thread -> its id
     // Message listeners (gameplay foundations, part 3): our handle -> the listening instance, its function, the World's id.
@@ -302,6 +310,32 @@ struct LuaScriptSystem::Impl {
     }
 
     void register_api() {
+        luaL_newmetatable(L, "noor.Tween");  // t:cancel(), t:active(), t:wait() (inside a sequence)
+        lua_newtable(L);
+        lua_pushcfunction(L, [](lua_State* L) {
+            api::tween_cancel(world_of(L), *static_cast<std::uint64_t*>(luaL_checkudata(L, 1, "noor.Tween")));
+            return 0;
+        }, "cancel");
+        lua_setfield(L, -2, "cancel");
+        lua_pushcfunction(L, [](lua_State* L) {
+            lua_pushboolean(L, api::tween_active(world_of(L), *static_cast<std::uint64_t*>(luaL_checkudata(L, 1, "noor.Tween"))));
+            return 1;
+        }, "active");
+        lua_setfield(L, -2, "active");
+        lua_pushcfunction(L, [](lua_State* L) {
+            Impl* self = of(L);
+            const auto id = *static_cast<std::uint64_t*>(luaL_checkudata(L, 1, "noor.Tween"));
+            const auto s = self->sequence_of.find(L);
+            if (s == self->sequence_of.end()) luaL_errorL(L, "t:wait() works inside noor.start(function() ... end), not in a hook itself");
+            if (!api::tween_active(world_of(L), id)) return 0;  // finished already
+            auto& seq = self->sequences[s->second];
+            seq.tween = id;
+            seq.due = 0.0;
+            return lua_yield(L, 0);
+        }, "wait");
+        lua_setfield(L, -2, "wait");
+        lua_setfield(L, -2, "__index");
+        lua_pop(L, 1);
         luaL_newmetatable(L, "noor.Listener");  // l:cancel()
         lua_newtable(L);
         lua_pushcfunction(L, [](lua_State* L) {
@@ -428,6 +462,50 @@ struct LuaScriptSystem::Impl {
                      luaL_errorL(L, "e:call: %s has no script function '%s'",
                                  std::format("'{}'", api::name(world_of(L), e).value_or("(gone)")).c_str(), fn);
                  push_json(L, *result);
+                 return 1;
+             }},
+            // e:tween(property, to, seconds [, ease [, {delay, loops, yoyo, real, on_done}]]) -> a tween
+            // (gameplay foundations, part 4)
+            {"tween", [](lua_State* L) {
+                 Impl* self = of(L);
+                 const Guid e = check_entity(L, 1);
+                 const char* property = luaL_checkstring(L, 2);
+                 const Json to = to_json(L, 3);
+                 const double seconds = luaL_checknumber(L, 4);
+                 const char* easing = luaL_optstring(L, 5, "linear");
+                 runtime::TweenOptions opt;
+                 int on_done = 0;
+                 if (lua_istable(L, 6)) {
+                     lua_getfield(L, 6, "delay");
+                     opt.delay = luaL_optnumber(L, -1, 0.0);
+                     lua_getfield(L, 6, "loops");
+                     opt.loops = static_cast<int>(luaL_optinteger(L, -1, 1));
+                     lua_getfield(L, 6, "yoyo");
+                     opt.yoyo = lua_toboolean(L, -1) != 0;
+                     lua_getfield(L, 6, "real");
+                     opt.real = lua_toboolean(L, -1) != 0;
+                     lua_pop(L, 4);
+                     lua_getfield(L, 6, "on_done");
+                     if (lua_isfunction(L, -1)) on_done = lua_ref(L, -1);
+                     lua_pop(L, 1);
+                 }
+                 const auto r = api::tween(world_of(L), e, property, to, seconds, easing, opt);
+                 if (const auto* why = std::get_if<std::string>(&r)) {
+                     if (on_done) lua_unref(L, on_done);
+                     luaL_errorL(L, "e:tween: %s", why->c_str());
+                 }
+                 const std::uint64_t id = std::get<std::uint64_t>(r);
+                 if (on_done) {
+                     if (self->current == Guid{} || !self->instances.contains(self->current)) {
+                         lua_unref(L, on_done);
+                         luaL_errorL(L, "e:tween: on_done needs a script's hook to belong to");
+                     }
+                     self->tween_dones[self->next_job++] = {self->current, id, on_done};
+                 }
+                 auto* h = static_cast<std::uint64_t*>(lua_newuserdata(L, sizeof(std::uint64_t)));
+                 *h = id;
+                 luaL_getmetatable(L, "noor.Tween");
+                 lua_setmetatable(L, -2);
                  return 1;
              }},
             // e:teleport(position [, euler]): at once, velocity and jumps reset (gameplay foundations, part 1)
@@ -1039,13 +1117,14 @@ struct LuaScriptSystem::Impl {
         if (outer_deadline <= 0.0) deadline = lua_clock() + options.call_budget_seconds;
         const int nargs = 0;  // first start or after a wait: nothing passed in
         s.due = -2.0;  // running
+        s.tween = 0;
         const int status = lua_resume(s.thread, nullptr, nargs);
         deadline = outer_deadline;
         current = outer;
         world->set_drawing_while_paused(false);
         it = sequences.find(id);
         if (it == sequences.end()) return;
-        if (status == LUA_YIELD && it->second.due >= 0.0) return;  // noor.wait set when to come back
+        if (status == LUA_YIELD && it->second.due >= 0.0) return;  // noor.wait (or t:wait()) set when to come back
         if (status != LUA_OK && status != LUA_YIELD) {
             report(std::format("{}\n{} (a noor.start sequence on '{}'); that sequence is stopped", lua_tostring(it->second.thread, -1),
                                lua_debugtrace(it->second.thread), world ? api::name(*world, it->second.owner).value_or("?") : "?"));
@@ -1075,6 +1154,14 @@ struct LuaScriptSystem::Impl {
         for (const auto& [id, s] : sequences)
             if (s.owner == owner) doomed.push_back(id);
         for (auto id : doomed) drop_sequence(id);
+        for (auto it = tween_dones.begin(); it != tween_dones.end();) {
+            if (it->second.owner == owner) {
+                lua_unref(L, it->second.fn);
+                it = tween_dones.erase(it);
+            } else {
+                ++it;
+            }
+        }
         for (auto it = listens.begin(); it != listens.end();) {
             if (it->second.owner == owner) {
                 if (world) world->unlisten(it->second.world_id);
@@ -1122,12 +1209,37 @@ struct LuaScriptSystem::Impl {
             }
             lua_settop(L, handler - 1);
         }
+        // Tweens that finished: their on_done (gameplay foundations, part 4).
+        ids.clear();
+        for (const auto& [id, t] : tween_dones) ids.push_back(id);
+        for (const auto id : ids) {
+            const auto it = tween_dones.find(id);
+            if (it == tween_dones.end() || !may_run(it->second.owner) || world->tweens().active(it->second.tween)) continue;
+            const TweenDone t = it->second;
+            tween_dones.erase(it);
+            lua_pushcfunction(L, traceback_handler, "traceback");
+            const int handler = lua_gettop(L);
+            lua_getref(L, t.fn);
+            lua_unref(L, t.fn);
+            deadline = lua_clock() + options.call_budget_seconds;
+            const Guid outer = std::exchange(current, t.owner);
+            world->set_drawing_while_paused(instances.contains(t.owner) && instances.at(t.owner).always);
+            const int status = lua_pcall(L, 0, 0, handler);
+            world->set_drawing_while_paused(false);
+            current = outer;
+            deadline = 0.0;
+            if (status != LUA_OK)
+                report(std::format("{} (a tween's on_done on '{}')", lua_tostring(L, -1) ? lua_tostring(L, -1) : "error",
+                                   api::name(*world, t.owner).value_or("?")));
+            lua_settop(L, handler - 1);
+        }
         ids.clear();
         for (const auto& [id, s] : sequences) ids.push_back(id);
         for (const auto id : ids) {
             const auto it = sequences.find(id);
-            if (it == sequences.end() || it->second.due < 0.0 || !may_run(it->second.owner) || !due(it->second.real, it->second.due)) continue;
-            resume(id);
+            if (it == sequences.end() || it->second.due < 0.0 || !may_run(it->second.owner)) continue;
+            const bool ready = it->second.tween != 0 ? !world->tweens().active(it->second.tween) : due(it->second.real, it->second.due);
+            if (ready) resume(id);
         }
     }
 };

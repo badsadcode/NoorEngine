@@ -29,7 +29,7 @@ that use all of it; every existing golden and yardstick unchanged.
 | 1 ✅ | **Spawning and the things around it**: `noor.spawn(prefab, position [, rotation, parent])` and C#'s `Spawn`, returning the new entity (its scripts, bodies, sprites, sounds start the next frame); `e:teleport(v)` for characters and bodies (velocity and contacts cleared); **groups**: `noor.find_all(tag)`, `e:has_tag`, `e:add_tag`, `e:remove_tag`; Lua **`require`** for shared script files | A spawned prefab is the same as one placed in the editor (its components, to the bit); 1,000 bullets spawned and destroyed a second, measured; a respawn at a checkpoint; built game identical |
 | 2 ✅ | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
 | 3 ✅ | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
-| 4 | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
+| 4 ✅ | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
 | 5 | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
 | 6 | **Game UI**: retained widgets (panel, label, button, image, slider, toggle, list, text box), layout (anchors, stacks, grids), themes, **focus and keyboard / gamepad navigation**; `.noorui` files built in a UI editor or from scripts; it lives in the display's picture (2D part 6) | A pause menu and an inventory made in the editor work with mouse, keyboard and gamepad; layout at three resolutions by readback; cost of 500 widgets measured |
 | 6b | **Gamepads and rebinding**: SDL gamepads in the input map (buttons, sticks, triggers, dead zones), several players, hot-plugging, rebinding at run time from a settings menu (saved) | A simulated gamepad drives the platformer and the menus; a pad unplugged and back; rebinding survives a restart |
@@ -106,6 +106,25 @@ left after 10,000 listening entities came and went, listeners to a destroyed emi
 message loop (unit); a pressure plate's `trigger_enter` heard by a door (unit, physics); a Lua lever and a door in Lua
 (project, built game) and in C# (built game) showing the same HUD: messages Lua to C#, calls C# to Lua and Lua to C#
 (`player.messages_lua_csharp`).
+
+## Part 4 result (2026-11-21)
+Done. **Tweens** owned by the World (`runtime/tween.h`), stepped right after the systems' update on the game or real
+clock: transforms (`position`, `euler`, `rotation` by slerp the short way, `scale`, `world_position`) and component
+numbers, arrays and `#RRGGBB` colours; 22 easings; delay, loops (or forever), yoyo; a new tween of the same property
+replaces the old; exact landing; quiet stop when the entity goes. Lua: `e:tween` with `on_done`, `t:cancel()`,
+`t:active()`, `t:wait()` in sequences. C#: `Entity.Tween`, `NoorScript.Tween(..., onDone)`, `await WaitUntil(...)`; rt
+API v16 (with `last_error`). `math::slerp` added.
+
+Proved: every easing at 0 and 1 and against its formula (overshoot and dip included); a tween's midpoint and exact end,
+an easing's shape; delay, a three-play yoyo, forever until replaced, cancelling, a destroyed entity, bad requests with
+reasons; a light's intensity, a colour, a number array, rotation the short way and Euler the long way; paused,
+real-time and slow-motion tweens (unit); `on_done` and `t:wait()` in Lua (unit); a door chained by on_done (rise,
+bounce, turn red) and a kinematic yoyo platform, identical in Lua in a project and Lua and C# in a built game
+(`player.tween_lua_csharp`).
+
+Not as planned: no separate "sequence and parallel group" objects: tweens run side by side by default, and one after
+another with `on_done`, `delay` or `t:wait()` in a sequence. Found on the way: a 0.5 s tween finished a frame late
+(the same thirty-sixtieths sum as part 2's timers), fixed the same way.
 
 ## Highest risks (settle early)
 

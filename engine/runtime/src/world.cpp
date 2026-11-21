@@ -172,6 +172,7 @@ void World::frame(double dt, const InputState& input) {
     // A script paused, unpaused or changed the time scale just now: the rest of the frame (physics, late update, the
     // clock) already goes by it, so a pause freezes the world at once, not a physics step later.
     dt = paused_ ? 0.0 : real_dt_ * time_scale_;
+    tweens_.step(*this, dt, real_dt_);
 
     accumulator_ += dt;
     int steps = 0;

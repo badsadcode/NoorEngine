@@ -283,6 +283,37 @@ local open = noor.find("Door"):call("is_open")
 - Listeners go when the listening entity or the one it listens to is destroyed. A listener that errors is reported and
   stopped; the others still hear. A message sent from its own listeners 32 deep is stopped with an error (a loop).
 
+## Tweens: smooth changes in one line
+
+Gameplay foundations, part 4 (Godot's Tween):
+
+```lua
+door:tween("position", vector.create(0, 3, 0), 0.5, "ease_out")                  -- slide up in half a second
+lamp:tween("light.intensity", 0, 2.0, "sine_in_out")                             -- fade a light out
+sign:tween("sprite.color", "#FF4040", 0.3)                                       -- blend a colour
+platform:tween("position", vector.create(5, 0, 0), 2, "ease_in_out", { loops = -1, yoyo = true })  -- back and forth forever
+door:tween("position", up, 0.5, "ease_out", { on_done = function() noor.play_sound("Assets/Audio/clunk.wav") end })
+
+noor.start(function()                                                             -- one after another
+    door:tween("position", up, 0.5, "back_out"):wait()
+    door:tween("scale", vector.create(1.2, 1.2, 1.2), 0.2):wait()
+end)
+```
+
+`e:tween(property, to, seconds [, ease [, options]])` returns a tween: `t:cancel()`, `t:active()`, and `t:wait()` inside
+a `noor.start` sequence.
+
+- **Properties:** `position`, `euler` (degrees, each angle on its own: 0 to 360 is a whole turn), `rotation` (the
+  shortest turn to those Euler angles), `scale`, `world_position`, and `"component.field"` holding a number, numbers or a
+  `"#RRGGBB"` colour (`"light.intensity"`, `"camera.height"`, `"sprite.color"`).
+- **Easings:** `linear`, `ease_in` / `ease_out` / `ease_in_out`, and `quad_`, `cubic_`, `sine_`, `back_` (overshoots),
+  `elastic_`, `bounce_` with `in`, `out` or `in_out`.
+- **Options:** `delay` (seconds; it starts from wherever the value is then), `loops` (`-1` forever), `yoyo` (every other
+  play goes back), `real` (the real clock: runs while paused), `on_done` (called the frame after it ends).
+- A new tween of the same entity and property replaces the running one; a tween ends exactly on its target; one whose
+  entity goes stops quietly. On the game's clock, tweens pause with the game and follow slow motion.
+- Tween a **kinematic** body to move it (a moving platform); a dynamic body's position belongs to physics.
+
 ## Time: timers, waiting, pause
 
 Gameplay foundations, part 2. All of it is on the **game's clock** (`noor.time()`), which stops while paused and runs

@@ -4,6 +4,17 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 4: tweens
+**Added**
+- `runtime/tween.h`: `Tweens` (owned by the World, stepped after the systems' update), `ease()` (22 easings),
+  `TweenOptions`; `runtime::api::tween`, `tween_cancel`, `tween_active`; `math::slerp`.
+- Lua: `e:tween(property, to, seconds [, ease [, {delay, loops, yoyo, real, on_done}]])`, tweens with `cancel`, `active`,
+  `wait`.
+- C#: `Entity.Tween`, `NoorScript.Tween(..., onDone)`, `WaitUntil`, `Tween`; rt API v16 (`tween`, `tween_op`,
+  `last_error`).
+
+**Tests:** `test_tweens.cpp`; `tests/data/tween_project` and `player.tween_lua_csharp`.
+
 ### 2026-11-21 — Gameplay foundations, part 3: messages between scripts
 **Added**
 - World message bus: `listen`, `unlisten`, `emit`, `invoke`, `listener_count`; `System::deliver`, `System::invoke`;

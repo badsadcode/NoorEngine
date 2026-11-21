@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using NoorEngine.Interop;
 
 namespace NoorEngine;
 
@@ -13,16 +14,35 @@ public sealed class Timer
     public bool Active => !Cancelled;
 }
 
-/// <summary>What <c>await Wait(seconds)</c> waits on.</summary>
-public readonly struct WaitAwaitable(Scheduler jobs, double seconds, bool real)
+/// <summary>A tween (Entity.Tween): Cancel stops it where it is; Active while it runs.</summary>
+public sealed unsafe class Tween
 {
-    public WaitAwaiter GetAwaiter() => new(jobs, seconds, real);
+    internal readonly long Id;
+    internal Tween(long id) => Id = id;
+    public void Cancel() => Engine.A.TweenOp(Id, 0);
+    public bool Active => Engine.A.TweenOp(Id, 1) != 0;
 }
 
-public readonly struct WaitAwaiter(Scheduler jobs, double seconds, bool real) : INotifyCompletion
+/// <summary>What <c>await Wait(seconds)</c> or <c>await WaitUntil(condition)</c> waits on.</summary>
+public readonly struct WaitAwaitable
 {
-    public bool IsCompleted => false;
-    public void OnCompleted(Action continuation) => jobs.Add(seconds, 0, () => { continuation(); return true; }, real);
+    private readonly Scheduler _jobs;
+    private readonly double _seconds;
+    private readonly bool _real;
+    private readonly Func<bool>? _until;
+    public WaitAwaitable(Scheduler jobs, double seconds, bool real) => (_jobs, _seconds, _real, _until) = (jobs, seconds, real, null);
+    public WaitAwaitable(Scheduler jobs, Func<bool> until) => (_jobs, _seconds, _real, _until) = (jobs, 0, false, until);
+    public WaitAwaiter GetAwaiter() => new(_jobs, _seconds, _real, _until);
+}
+
+public readonly struct WaitAwaiter(Scheduler jobs, double seconds, bool real, Func<bool>? until) : INotifyCompletion
+{
+    public bool IsCompleted => until != null && until();
+    public void OnCompleted(Action continuation)
+    {
+        if (until != null) jobs.Watch(until, continuation);
+        else jobs.Add(seconds, 0, () => { continuation(); return true; }, real);
+    }
     public void GetResult() { }
 }
 
@@ -44,6 +64,17 @@ public sealed class Scheduler
     }
 
     private static double Now(bool real) => real ? Noor.RealTime : Noor.Time;
+
+    // Runs `action` once, on the first frame `condition` holds (tweens' onDone, WaitUntil).
+    internal void Watch(Func<bool> condition, Action action)
+    {
+        Add(0, 1e-9, () =>
+        {
+            if (!condition()) return true;  // not yet: ask again next frame
+            action();
+            return false;
+        }, false);
+    }
 
     /// <summary>Fires what's due. An exception stops that timer (reported as an error); the others carry on.</summary>
     internal void Run()
