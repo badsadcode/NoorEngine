@@ -3,6 +3,7 @@ noor_add_module(asset
         src/json.cpp
         src/project.cpp
         src/project_template.cpp
+        src/timeline_asset.cpp
         src/registry.cpp
         src/gltf_import.cpp
         src/fbx_import.cpp

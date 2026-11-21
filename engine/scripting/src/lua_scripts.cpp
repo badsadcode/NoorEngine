@@ -508,6 +508,21 @@ struct LuaScriptSystem::Impl {
                  lua_setmetatable(L, -2);
                  return 1;
              }},
+            // Timelines (gameplay foundations, part 5): e:play_timeline(name [, speed]), e:stop_timeline(), e:timeline()
+            {"play_timeline", [](lua_State* L) {
+                 lua_pushboolean(L, api::play_timeline(world_of(L), check_entity(L, 1), luaL_checkstring(L, 2),
+                                                       static_cast<float>(luaL_optnumber(L, 3, 1.0))));
+                 return 1;
+             }},
+            {"stop_timeline", [](lua_State* L) {
+                 api::stop_timeline(world_of(L), check_entity(L, 1));
+                 return 0;
+             }},
+            {"timeline", [](lua_State* L) {
+                 if (auto t = api::current_timeline(world_of(L), check_entity(L, 1))) lua_pushstring(L, t->c_str());
+                 else lua_pushnil(L);
+                 return 1;
+             }},
             // e:teleport(position [, euler]): at once, velocity and jumps reset (gameplay foundations, part 1)
             {"teleport", [](lua_State* L) {
                  std::optional<math::Quat> rot;

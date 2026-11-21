@@ -104,6 +104,25 @@ public sealed class EditorDocument : IDisposable
         return JsonNode.Parse(json);
     }
 
+    // ---- Timelines (gameplay foundations, part 5) ----
+
+    /// <summary>A Timeline panel command (noor_doc_timeline). New timelines change the scene (the animation player).</summary>
+    public JsonNode? TimelineCommand(JsonObject command)
+    {
+        var json = Native.Timeline(_handle, command.ToJsonString());
+        if (json == null)
+        {
+            Interop.EngineLog.Warn("Timeline", Native.LastError());
+            return null;
+        }
+        var op = command["op"]?.GetValue<string>();
+        if (op == "new") { Refresh(); RefreshAssets(rescan: false); }  // previews need nothing: the viewport draws the engine's scene
+        return JsonNode.Parse(json);
+    }
+
+    /// <summary>A timeline preview is showing in the viewport (the panel's scrub or Play).</summary>
+    public bool TimelinePreviewing { get; set; }
+
     // ---- Scatter editing (Milestone 7, part 7): plant and remove trees with the brush ----
 
     /// <summary>"plant" or "remove": left-drags on the selected scatter's ground plant or remove trees. Null: off.</summary>

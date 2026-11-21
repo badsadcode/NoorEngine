@@ -44,6 +44,13 @@ bool teleport(World& w, const Guid& e, math::Vec3 position, std::optional<math::
 void tween_cancel(World& w, std::uint64_t id);
 [[nodiscard]] bool tween_active(World& w, std::uint64_t id);
 
+// ---- Timelines (gameplay foundations, part 5; game/timeline.h plays them) ----
+// Plays the entity's animation_player timeline `name` from its start (false: no player or no such timeline); stops it;
+// what it's playing.
+bool play_timeline(World& w, const Guid& e, std::string_view name, float speed = 1.0f);
+void stop_timeline(World& w, const Guid& e);
+[[nodiscard]] std::optional<std::string> current_timeline(World& w, const Guid& e);
+
 // ---- Groups: entity tags (gameplay foundations, part 1; Godot's groups) ----
 [[nodiscard]] bool has_tag(World& w, const Guid& e, std::string_view tag);
 void add_tag(World& w, const Guid& e, std::string_view tag);

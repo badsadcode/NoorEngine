@@ -1,6 +1,7 @@
 #include "noor/game/game.h"
 #include "noor/game/tilemap.h"
 #include "noor/game/camera_follow.h"
+#include "noor/game/timeline.h"
 #include "noor/game/display.h"
 
 #include "noor/asset/environment_asset.h"
@@ -290,6 +291,13 @@ Result<std::unique_ptr<runtime::World>> make_world(const asset::Project& project
     }));
     // Skeletal animation (Milestone 8C, part 2): models' animators pose their bones, after scripts have had their say.
     world->add_system(std::make_unique<AnimatorSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
+        const auto* rec = registry.find(id);
+        if (!rec) return std::nullopt;
+        auto p = project.resolve(rec->path);
+        return p ? std::optional(*p) : std::nullopt;
+    }));
+    // Timelines (gameplay foundations, part 5): animation players animate any property, after scripts' update.
+    world->add_system(std::make_unique<TimelineSystem>([&project, &registry](const Guid& id) -> std::optional<stdfs::path> {
         const auto* rec = registry.find(id);
         if (!rec) return std::nullopt;
         auto p = project.resolve(rec->path);

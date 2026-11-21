@@ -1,0 +1,72 @@
+{
+  "noor_timeline": 1,
+  "name": "DoorOpen",
+  "length": 1.5,
+  "loop": false,
+  "tracks": [
+    {
+      "target": "Hinge",
+      "property": "euler",
+      "keys": [
+        {
+          "t": 0,
+          "v": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "t": 1.0,
+          "v": [
+            0,
+            100,
+            0
+          ],
+          "ease": "back_out"
+        }
+      ]
+    },
+    {
+      "target": "",
+      "property": "light.intensity",
+      "keys": [
+        {
+          "t": 0,
+          "v": 0
+        },
+        {
+          "t": 1.5,
+          "v": 600,
+          "ease": "sine_in_out"
+        }
+      ]
+    },
+    {
+      "target": "",
+      "call": true,
+      "keys": [
+        {
+          "t": 0.5,
+          "function": "creak",
+          "args": [
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "target": "Hinge",
+      "emit": true,
+      "keys": [
+        {
+          "t": 1.0,
+          "message": "latched",
+          "data": {
+            "how": "click"
+          }
+        }
+      ]
+    }
+  ]
+}

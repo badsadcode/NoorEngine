@@ -125,6 +125,7 @@ Status Document::play() {
     std::scoped_lock lock(play_mutex_);
     if (auto s = require_scene(); !s) return s;
     if (world_) return {};
+    end_timeline_preview();  // the game starts from the scene, not a scrubbed timeline
     cook_csg();  // Play loads cooked CSG models, like a game
     finish_stroke();
     game::WorldOptions options;
@@ -1087,6 +1088,7 @@ Status Document::new_scene(std::string_view relative, std::string_view name) {
 
 Status Document::save_scene() {
     if (auto s = require_scene(); !s) return s;
+    end_timeline_preview();  // never save a preview
     finish_stroke();
     if (auto s = scene_->save(scene_file_); !s) return s;
     save_terrain_layers();
@@ -1160,6 +1162,7 @@ Json Document::scene_snapshot() const {
 
 Status Document::execute(const Json& command) {
     if (auto s = require_editable(); !s) return s;
+    end_timeline_preview();  // edits apply to the scene as it really is
     if (!command.is_object() || !command.contains("op") || !command["op"].is_string()) {
         return fail(ErrorCode::InvalidArgument, "command needs an \"op\"");
     }
@@ -1303,6 +1306,7 @@ Status Document::add_asset(const Json& command) {
 
 bool Document::undo() {
     finish_stroke();
+    end_timeline_preview();
     if (!scene_ || world_ || !history_.undo(*scene_)) return false;
     changed();
     return true;
@@ -1310,6 +1314,7 @@ bool Document::undo() {
 
 bool Document::redo() {
     finish_stroke();
+    end_timeline_preview();
     if (!scene_ || world_ || !history_.redo(*scene_)) return false;
     changed();
     return true;

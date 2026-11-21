@@ -314,6 +314,19 @@ a `noor.start` sequence.
   entity goes stops quietly. On the game's clock, tweens pause with the game and follow slow motion.
 - Tween a **kinematic** body to move it (a moving platform); a dynamic body's position belongs to physics.
 
+## Timelines
+
+Gameplay foundations, part 5: keyframed animation of anything, made in the editor's **Timeline** tab
+([Timelines](../animation/TIMELINES.md)).
+
+| | |
+|---|---|
+| `e:play_timeline(name [, speed])` | Plays its animation player's timeline from the start; `false` if it has none by that name |
+| `e:stop_timeline()`, `e:timeline()` | Stops it where it is; what it's playing (or `nil`) |
+
+When one that doesn't loop ends, the entity sends the message `timeline_end` (`{name = ...}`): listen with
+`e:on("timeline_end", fn)`.
+
 ## Time: timers, waiting, pause
 
 Gameplay foundations, part 2. All of it is on the **game's clock** (`noor.time()`), which stops while paused and runs

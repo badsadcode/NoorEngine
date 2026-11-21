@@ -7,7 +7,7 @@ public static class Native
 {
     private const string Dll = "noor_editor_api";
 
-    public const uint ExpectedApiVersion = 31;
+    public const uint ExpectedApiVersion = 32;
 
     [DllImport(Dll)] public static extern uint noor_editor_api_version();
     [DllImport(Dll)] private static extern IntPtr noor_last_error();
@@ -141,6 +141,9 @@ public static class Native
     public static string? Water(IntPtr doc, string command) => Str(noor_doc_water(doc, command));
     /// <summary>The Tilemap panel (v30, 2D part 5): list, info, paint (noor_doc_tilemap).</summary>
     public static string? Tilemap(IntPtr doc, string command) => Str(noor_doc_tilemap(doc, command));
+    [DllImport(Dll)] private static extern IntPtr noor_doc_timeline(IntPtr doc, [MarshalAs(UnmanagedType.LPUTF8Str)] string command);
+    /// <summary>The Timeline panel (v32, gameplay foundations part 5): list, info, new, set, key, event, remove_key, preview.</summary>
+    public static string? Timeline(IntPtr doc, string command) => Str(noor_doc_timeline(doc, command));
     // v26: sprite sheets (Milestone 8B, part 5).
     public static string? Sprite(IntPtr doc, string command) => Str(noor_doc_sprite(doc, command));
     // v27: the Animation panel (Milestone 8C, part 6): models, bone maps, controllers, characters, the preview.

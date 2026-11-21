@@ -127,6 +127,11 @@ var t = lamp.Tween("light.intensity", 0, 2);
 await WaitUntil(() => !t.Active);                                                     // or any condition
 ```
 
+## Timelines
+
+`Entity.PlayTimeline(name, speed = 1)`, `StopTimeline()`, `Entity.Timeline` (what it plays, or null); the
+`timeline_end` message when one ends (rt API v17; [Timelines](../animation/TIMELINES.md)).
+
 ## Time: timers, waiting, pause
 
 The same rules as Lua's (gameplay foundations, part 2; rt API v14):

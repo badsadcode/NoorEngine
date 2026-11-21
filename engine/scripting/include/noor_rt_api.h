@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define NOOR_RT_API_VERSION 16u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time; 15: messages, calls; 16: tweens, last_error */
+#define NOOR_RT_API_VERSION 17u /* 2: sound; 3: HUD; 4: sprites, emitter bursts; 5: cross-fades, animation parameters; 6: bones, animation events; 7: water; 8: characters in water; 9: rivers' flow; 10: jump release, drop (push kinds 3, 4); 11: shape casts, overlaps, character contacts; 12: tiles; 13: spawning, teleport, tags; 14: pause, time scale, real time; 15: messages, calls; 16: tweens, last_error; 17: timelines */
 
 typedef struct noor_rt_entity { uint64_t lo, hi; } noor_rt_entity;
 typedef struct noor_rt_vec3 { float x, y, z; } noor_rt_vec3;
@@ -60,6 +60,8 @@ enum { NOOR_RT_COLLISION_ENTER = 0, NOOR_RT_COLLISION_EXIT = 1, NOOR_RT_TRIGGER_
 enum { NOOR_RT_SPRITE_PLAY = 0, NOOR_RT_SPRITE_STOP = 1, NOOR_RT_SPRITE_SPEED = 2, NOOR_RT_SPRITE_CROSS_FADE = 3 /* v5: speed = seconds */ };
 /* clock(), set_clock() (v14) */
 enum { NOOR_RT_CLOCK_GAME = 0, NOOR_RT_CLOCK_REAL = 1, NOOR_RT_CLOCK_SCALE = 2, NOOR_RT_CLOCK_PAUSED = 3 };
+/* timeline() (v17) */
+enum { NOOR_RT_TIMELINE_PLAY = 0, NOOR_RT_TIMELINE_STOP = 1, NOOR_RT_TIMELINE_CURRENT = 2 };
 /* tween_op() (v16) */
 enum { NOOR_RT_TWEEN_CANCEL = 0, NOOR_RT_TWEEN_ACTIVE = 1 };
 /* tag(): ops (v13) */
@@ -183,6 +185,10 @@ typedef struct noor_rt_api {
     int32_t (*tween_op)(int64_t id, int32_t op);
     /* Why the last call that can fail (tween) failed. */
     const char* (*last_error)(void);
+
+    /* v17 (gameplay foundations, part 5): an animation_player's timelines. TIMELINE_PLAY `name` at `speed` (returns
+     * `name`, or NULL if there's no such timeline), TIMELINE_STOP, TIMELINE_CURRENT (what it plays, or NULL). */
+    const char* (*timeline)(noor_rt_entity e, int32_t op, const char* name, float speed);
 } noor_rt_api;
 
 typedef struct noor_rt_host {

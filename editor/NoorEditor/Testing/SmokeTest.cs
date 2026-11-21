@@ -986,6 +986,7 @@ internal static class SmokeTest
         doc.Undo();  // the water itself
         check(doc.Scene.Entities.Count == count, "water: undo removes it");
         await TilemapChecks(window, check, shot);
+        await TimelineChecks(window, check, shot);
     }
 
     // 2D foundations, part 5: the Tilemaps panel makes a tilemap from the project's tileset; in the 2D view a drag with
@@ -1050,6 +1051,76 @@ internal static class SmokeTest
 
     // Milestone 8D, part 7: the Water panel gives the lake a look of its own (one undo step), an edit to it shows in the
     // viewport at once, and the debug views switch.
+    // Gameplay foundations, part 5: a door's hinge keyed in the Timeline panel, scrubbed without touching the scene,
+    // then played by the game (autoplay).
+    private static async Task TimelineChecks(MainWindow window, Action<bool, string> check, Action<Window, string> shot)
+    {
+        var doc = window.Doc;
+        if (window.FindDockable("Timeline") is { } dockable) window.DockFactory.SetActiveDockable(dockable);
+        await Task.Delay(300);
+        var panel = window.GetVisualDescendants().OfType<TimelinePanel>().FirstOrDefault();
+        var count = doc.Scene.Entities.Count;
+        var door = doc.Create("Door", new JsonObject { ["primitive"] = new JsonObject { ["shape"] = "box", ["size"] = new JsonArray(0.2, 2, 0.2) } },
+                              new Vec3(0, 30, 0));
+        var hinge = door == null ? null : doc.Create("Hinge", new JsonObject { ["primitive"] = new JsonObject { ["shape"] = "box", ["size"] = new JsonArray(1, 2, 0.1) } },
+                                                     new Vec3(0, 0, 0), door);
+        if (panel == null || door == null || hinge == null)
+        {
+            check(false, "timeline: the panel, a door and its hinge");
+            return;
+        }
+        doc.Select(door);
+        await Task.Delay(200);
+        var made = doc.TimelineCommand(new JsonObject { ["op"] = "new", ["entity"] = door, ["name"] = "open", ["length"] = 1.0 });
+        doc.Select(door);
+        await Task.Delay(300);
+        check(made != null && panel.Timeline == "open", $"timeline: New timeline gives the door an 'open' timeline ({panel.Timeline})");
+        // Pose and key: closed at 0, open (90 degrees) at 1 s.
+        panel.SetTarget("Hinge");
+        panel.ScrubTo(0);
+        var keyed0 = panel.Key("rotation");
+        var turned = new Transform(new Vec3(0, 0, 0), Quat.FromEulerDegrees(new Vec3(0, 90, 0)), new Vec3(1, 1, 1));
+        doc.SetTransform(hinge, turned);
+        panel.ScrubTo(1.0);
+        var keyed1 = panel.Key("rotation");
+        check(keyed0 && keyed1 && panel.Tracks.Count == 1 && (panel.Tracks[0]?["keys"] as JsonArray)?.Count == 2,
+              $"timeline: two keys of the hinge's rotation ({panel.Tracks.Count} track(s))");
+        // Scrub to 0.5: the viewport shows it half open, the scene still says 90.
+        panel.ScrubTo(0.5);
+        await Task.Delay(300);
+        shot(window, "editor_45_timeline.png");
+        // What the engine shows (a preview isn't an edit: the editor's own copy of the scene, and the Inspector, keep the
+        // real values, so the engine's scene is read directly).
+        double HingeYaw() => SceneSnapshot.FromJson(Native.Scene(doc.Handle) ?? "{}").Entities.FirstOrDefault(e => e.Id == hinge)
+                                 ?.Transform.Rotation.ToEulerDegrees().Y ?? 0;
+        var shown = HingeYaw();
+        var undoLabel = doc.Scene.UndoLabel;
+        panel.Stop();
+        var real = HingeYaw();
+        check(Math.Abs(shown - 45) < 1 && Math.Abs(real - 90) < 1e-3 && doc.Scene.UndoLabel == undoLabel,
+              $"timeline: scrubbing to 0.5 s shows the hinge at {shown:0.#} degrees, Stop puts it back at {real:0.#}, no undo step");
+        // Play: the door's animation player autoplays 'open'; the hinge turns towards 90 in the game.
+        doc.SetTransform(hinge, new Transform(new Vec3(0, 0, 0), Quat.Identity, new Vec3(1, 1, 1)));
+        window.TogglePlay();
+        var clock = Stopwatch.StartNew();
+        double yaw = 0;
+        while (clock.Elapsed.TotalSeconds < 5)
+        {
+            await Task.Delay(250);
+            doc.Refresh();
+            yaw = doc.Scene.Entities.FirstOrDefault(e => e.Id == hinge)?.Transform.Rotation.ToEulerDegrees().Y ?? 0;
+            if (yaw > 89) break;
+        }
+        window.TogglePlay();
+        check(yaw > 89 && yaw < 91, $"timeline: playing the game, the hinge opens to 90 degrees ({yaw:0.#})");
+        doc.Undo();  // the hinge's reset
+        doc.Undo();  // the hinge turned to 90
+        doc.Undo();  // the animation player
+        doc.Undo();  // the hinge
+        doc.Undo();  // the door
+        check(doc.Scene.Entities.Count == count, "timeline: undo takes the door away again");
+    }
+
     private static async Task WaterPanelChecks(MainWindow window, string waterId, Action<bool, string> check, Action<Window, string> shot)
     {
         var doc = window.Doc;

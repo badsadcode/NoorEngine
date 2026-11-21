@@ -16,6 +16,7 @@ noor_add_module(game
         src/tilemap.cpp
         src/display.cpp
         src/camera_follow.cpp
+        src/timeline.cpp
         src/texture_library.cpp
         src/material_library.cpp
         src/environment_library.cpp

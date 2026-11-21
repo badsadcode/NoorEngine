@@ -38,7 +38,7 @@ extern "C" {
  * 8: audio (ADR-011) in play mode; noor_doc_set_audio_device; noor_rt_api v2 (sound).
  * 9: noor_viewport_set_play (play mode ticked on the viewport's render thread, in step with the
  *    screen); "mouse_capture" viewport events. */
-#define NOOR_EDITOR_API_VERSION 31u
+#define NOOR_EDITOR_API_VERSION 32u
 
 NOOR_API uint32_t noor_editor_api_version(void);
 
@@ -202,6 +202,24 @@ NOOR_API const char* noor_doc_water(noor_doc* doc, const char* command);
    noor_viewport_set_options takes "view": "2d" | "3d" (v30): the 2D view looks straight down -Z, orthographic; the
    right or middle button (or Alt + left) pans, the wheel zooms at the pointer. */
 NOOR_API const char* noor_doc_tilemap(noor_doc* doc, const char* command);
+/* v32: the Timeline panel (gameplay foundations, part 5). noor_doc_timeline runs one command:
+     {"op": "list"} -> {"timelines": [{"id", "path", "name"}]}
+     {"op": "info", "entity"} -> {"autoplay", "timelines": {name: {"id", "path", "name", "length", "loop",
+         "tracks": [{"target", "kind": "value" | "call" | "emit", "property", "keys": [{"t", "v", "ease"} | {"t", "function",
+         "args"} | {"t", "message", "data"}]}]}}}
+     {"op": "new", "entity", "name", "asset"?, "length"?, "loop"?} -> {"id", "path"}: a .noortimeline (Assets/Timelines/
+         <entity>_<name> unless given) added to the entity's animation_player (one undo step; the first is its autoplay)
+     {"op": "set", "entity", "timeline", "length"?, "loop"?}
+     {"op": "key", "entity", "timeline", "t", "target" (path from the entity, "" itself), "property", "value"?, "ease"?}
+         -> {"track", "keys", "value"}: a value key; without "value", what the scene shows now. A key at the same time is
+         replaced.
+     {"op": "event", "entity", "timeline", "t", "target"?, "function" + "args"? | "message" + "data"?}: a call or emit key
+     {"op": "remove_key", "entity", "timeline", "track", "key"}
+     {"op": "preview", "entity", "timeline", "t"} -> {"t", "changed", "previewing"}: the viewport shows the scene as the
+         timeline has it at t, without touching the scene or its undo history; {"op": "preview_end"} puts it back (any
+         edit, undo, save or Play does too).
+   Timeline files are written at once (key edits aren't undoable steps). NULL on error (noor_last_error). */
+NOOR_API const char* noor_doc_timeline(noor_doc* doc, const char* command);
 /* v27: the Animation panel (Milestone 8C, part 6). noor_doc_animation runs one command:
      {"op": "model", "asset": "Assets/x.glb"} -> {"path", "guid", "name", "clips": [{"name", "duration", "channels", "nodes"}],
         "nodes": [{"name", "parent", "joint"}], "skinned", "bone_map": {"preset", "usable", "bones": [{"bone" ("LeftHand"),

@@ -1,0 +1,114 @@
+{
+  "noor_scene": 2,
+  "id": "0ce4f40b-6b5f-5202-a6cc-bef10f0c73e1",
+  "name": "Main_CSharp",
+  "entities": [
+    {
+      "id": "0ddbbef6-134b-5322-868a-303f969d093d",
+      "name": "Camera",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          1,
+          6
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "camera": {
+          "fov": 60,
+          "ev100": 14
+        }
+      }
+    },
+    {
+      "id": "aa998fc3-0bc8-506b-88a7-55e4ef8aeed3",
+      "name": "Door",
+      "layer": "default",
+      "tags": [],
+      "parent": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "light": {
+          "type": "point",
+          "intensity": 0,
+          "range": 5
+        },
+        "animation_player": {
+          "timelines": {
+            "open": "105889ab-a157-516b-a9f1-04d5533ca5d4"
+          }
+        },
+        "script": {
+          "file": "Scripts/CsDoor.cs"
+        }
+      }
+    },
+    {
+      "id": "00bbf399-a394-516d-b4ab-6c7b6205ea06",
+      "name": "Hinge",
+      "layer": "default",
+      "tags": [],
+      "parent": "aa998fc3-0bc8-506b-88a7-55e4ef8aeed3",
+      "transform": {
+        "position": [
+          0.5,
+          1,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "components": {
+        "primitive": {
+          "shape": "box",
+          "size": [
+            1,
+            2,
+            0.1
+          ],
+          "color": "#C08040"
+        }
+      }
+    }
+  ]
+}

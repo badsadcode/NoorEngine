@@ -4,6 +4,20 @@ Technical, honest, newest first. "Works" means tested; anything else says what i
 
 ## [Unreleased] — Milestone 8 done (8A sky and environments, 8B particles and sprites, 8C skeletal animation, 8D water)
 
+### 2026-11-21 — Gameplay foundations, part 5: animating any property (timelines)
+**Added**
+- `.noortimeline` assets (`asset/timeline_asset.h`: value, call and emit tracks; `key_span`), registered by the asset
+  registry (importer "timeline"); [docs/animation/TIMELINES.md](docs/animation/TIMELINES.md).
+- The `animation_player` component and `game::TimelineSystem` (`apply_timeline`, `timeline_target`), added to every
+  game world; `runtime::api::play_timeline`, `stop_timeline`, `current_timeline`; Lua `e:play_timeline`,
+  `e:stop_timeline`, `e:timeline`; C# `PlayTimeline`, `StopTimeline`, `Timeline`; rt API v17.
+- `runtime::read_property`, `blendable`, `write_property` (shared by tweens and timelines).
+- Editor API v32: `noor_doc_timeline` (list, info, new, set, key, event, remove_key, preview, preview_end); the
+  **Timeline** tab in NoorEditor (`TimelinePanel.cs`).
+
+**Tests:** `test_timeline.cpp`, `api/test_timeline_api.cpp`, the smoke test's timeline steps,
+`tests/data/timeline_project` and `player.timeline_lua_csharp`.
+
 ### 2026-11-21 — Gameplay foundations, part 4: tweens
 **Added**
 - `runtime/tween.h`: `Tweens` (owned by the World, stepped after the systems' update), `ease()` (22 easings),

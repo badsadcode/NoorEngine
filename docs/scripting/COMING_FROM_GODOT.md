@@ -66,7 +66,7 @@ after the 2D foundations ([why that order](../milestones/M9_PLAN.md#the-order-fr
 | `get_tree().paused = true`, a node's `process_mode = ALWAYS` | `noor.set_paused(true)`; the script's **Runs while paused** (`"pause": "always"`) | ✅ (part 2) |
 | `Engine.time_scale` | `noor.set_time_scale(0.25)` | ✅ (part 2) |
 | **Tween**: `create_tween().tween_property(door, "position", up, 0.5).set_ease(...)` | `door:tween("position", up, 0.5, "ease_out")`; `loops`, `yoyo`, `delay`, `on_done`, `t:wait()`; C#: `door.Tween(...)` | ✅ (gameplay foundations, part 4) |
-| **AnimationPlayer**: animate any property (position, colour, a door opening), call functions on a timeline | Sprite animations and skeletal clips only | **Animating any property: not yet** (planned) |
+| **AnimationPlayer**: animate any property, call methods on a track, the Animation panel | `animation_player` + `.noortimeline` timelines (value, call and emit tracks), the **Timeline** tab, `e:play_timeline("open")` ([Timelines](../animation/TIMELINES.md)) | ✅ (gameplay foundations, part 5); no curve editor or blending between timelines yet |
 | `preload("res://Bullet.tscn").instantiate()`, `add_child` | `noor.spawn("Assets/Bullet.noorprefab", position [, euler, parent])` / `Noor.Spawn(...)` | ✅ (gameplay foundations, part 1) |
 | Groups: `add_to_group`, `is_in_group`, `get_tree().get_nodes_in_group()` | Tags: `e:add_tag`, `e:has_tag`, `noor.find_all(tag)` | ✅ (part 1) |
 | Setting a CharacterBody's `global_position` (a respawn) | `e:teleport(position)` (physics owns where a character is) | ✅ (part 1) |

@@ -29,6 +29,13 @@ class World;
 // "ease_out", "ease_in_out" are quad's). nullopt for an unknown name.
 [[nodiscard]] std::optional<double> ease(std::string_view name, double t);
 
+// The property code tweens and timelines share (gameplay foundations, parts 4 and 5): a property's value now (nothing if
+// the entity hasn't got it), whether two values can be blended, and writing the blend of two values at k (0..1; past 1
+// for overshooting easings).
+[[nodiscard]] std::optional<asset::Json> read_property(World& w, const Guid& e, std::string_view property);
+[[nodiscard]] bool blendable(std::string_view property, const asset::Json& a, const asset::Json& b);
+void write_property(World& w, const Guid& e, std::string_view property, const asset::Json& from, const asset::Json& to, double k);
+
 struct TweenOptions {
     double delay = 0.0;   // seconds before it starts (its starting value is read then)
     int loops = 1;        // how many times it plays; -1: forever

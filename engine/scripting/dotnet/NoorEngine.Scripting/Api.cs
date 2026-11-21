@@ -213,6 +213,16 @@ public sealed unsafe class Entity : IEquatable<Entity>
         if (id == 0) throw new InvalidOperationException($"Tween '{property}' on '{Name}': {Engine.Str(Engine.A.LastError())}");
         return new Tween(id);
     }
+    /// <summary>Plays its animation_player's timeline `name` from the start (gameplay foundations, part 5); false if it has
+    /// no such timeline. When one that doesn't loop ends, the entity sends "timeline_end" ({"name"}).</summary>
+    public unsafe bool PlayTimeline(string name, float speed = 1)
+    {
+        fixed (byte* n = Engine.Utf8(name)) return Engine.A.Timeline(Id, 0, n, speed) != null;
+    }
+    public unsafe void StopTimeline() => Engine.A.Timeline(Id, 1, null, 0);
+    /// <summary>The timeline it's playing, or null.</summary>
+    public unsafe string? Timeline => Engine.Str(Engine.A.Timeline(Id, 2, null, 0));
+
     private static string F(float f) => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Sends a message from this entity: whoever listens to it hears it at once (gameplay foundations, part 3).

@@ -30,7 +30,7 @@ that use all of it; every existing golden and yardstick unchanged.
 | 2 ✅ | **Time**: timers (`noor.after(seconds, fn)`, `noor.every`), waiting inside a hook (`noor.wait(seconds)`, Luau coroutines; C#'s `await`), **pause** (the game's clock stops, physics and animation with it; UI and real-time timers go on), time scale (slow motion) | Timers fire on the right fixed step, the same in a built game; a paused game's world doesn't move while its pause menu does; coroutines stopped cleanly when their entity is destroyed |
 | 3 ✅ | **Messages between scripts** (Godot's signals): `e:emit("opened", data)`, `e:on("opened", fn)` (listening to another entity), `noor.on(...)` for game-wide messages; calling a function on another entity's script (`e:call("open")`); engine events as messages too; listeners tidied away when either side is destroyed | Order of delivery is the order sent, within a frame, deterministic; a door opened by a lever two entities away; nothing leaks after 10,000 spawn-and-destroy cycles |
 | 4 ✅ | **Tweens**: `noor.tween(e, "position", to, seconds, "ease_out")` for transforms, colours, a component's numbers; sequences and parallel groups; on finish callbacks; easing functions | Every easing against its formula; a tween lands exactly on its target; tweens on a destroyed entity stop silently; built game identical |
-| 5 | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
+| 5 ✅ | **Animating any property** (Godot's AnimationPlayer): a `.noortimeline` asset of keyframed tracks (a door's rotation, a light's colour, a component's field, a function call at a moment) played by an `animation_player` component; an editor Timeline panel to key and scrub | A timeline plays the same values as its keys (interpolated by hand); events fire once each; the editor keys a door opening and the game plays it |
 | 6 | **Game UI**: retained widgets (panel, label, button, image, slider, toggle, list, text box), layout (anchors, stacks, grids), themes, **focus and keyboard / gamepad navigation**; `.noorui` files built in a UI editor or from scripts; it lives in the display's picture (2D part 6) | A pause menu and an inventory made in the editor work with mouse, keyboard and gamepad; layout at three resolutions by readback; cost of 500 widgets measured |
 | 6b | **Gamepads and rebinding**: SDL gamepads in the input map (buttons, sticks, triggers, dead zones), several players, hot-plugging, rebinding at run time from a settings menu (saved) | A simulated gamepad drives the platformer and the menus; a pad unplugged and back; rebinding survives a restart |
 | 7 | **Saving and loading**: `noor.save(slot, table)` / `noor.load(slot)` (versioned JSON in the user's save folder, written atomically, a backup kept); a `persist` component that saves chosen entities' state (transform, chosen fields) and restores it; settings saved apart from games | A save from one version loads in the next (a migration test); a crash while saving loses nothing (the atomic write, simulated); a level restored to the bit |
@@ -125,6 +125,28 @@ bounce, turn red) and a kinematic yoyo platform, identical in Lua in a project a
 Not as planned: no separate "sequence and parallel group" objects: tweens run side by side by default, and one after
 another with `on_done`, `delay` or `t:wait()` in a sequence. Found on the way: a 0.5 s tween finished a frame late
 (the same thirty-sixtieths sum as part 2's timers), fixed the same way.
+
+## Part 5 result (2026-11-21)
+Done. **`.noortimeline`** assets ([Timelines](../animation/TIMELINES.md); `asset/timeline_asset.h`): value tracks on the
+entity or its children by path (anything a tween moves, an easing per key), call tracks (a script function, Lua or C#)
+and emit tracks (a message). The **`animation_player`** component and `TimelineSystem` (`game/timeline.h`): named
+timelines, autoplay, speed, looping, keys fired once as play passes them, `timeline_end` when one ends, on the game
+clock. Scripts: `e:play_timeline`, `e:stop_timeline`, `e:timeline()`; C# `PlayTimeline`, `StopTimeline`, `Timeline`
+(rt API v17). **Editor:** `noor_doc_timeline` (editor API v32: list, info, new, set, key from the scene, event,
+remove_key, preview) and the **Timeline** tab (a track view with a ruler and keys, a scrub that previews in the viewport
+without touching the scene or its undo history, Play and Stop, Key position / rotation / scale / property, Add call,
+Delete key). The tweens' property code is shared (`read_property`, `write_property`).
+
+Proved: files parsed, saved and read back the same, keys sorted, bad ones refused; keys around a time (unit); a door
+timeline with a hinge, a light with an easing, call keys and an emit, once each, ending with `timeline_end`; looping
+fires every pass; play, stop and ask from scripts; pausing freezes it (unit); the editor API: new (file and component),
+keys read from the scene, events, info, a preview that shows a moment and leaves the scene and its undo as they were,
+removing keys, errors with reasons (API test); the smoke test makes a door's timeline in the panel, keys the hinge,
+scrubs to 0.5 s (the engine shows 45 degrees, the scene keeps 90, no undo step) and plays the game: the hinge opens; Lua
+in a project, Lua and C# in a built game end on exactly the same state and events (`player.timeline_lua_csharp`).
+
+Exceptions: key edits are saved to the file at once, not undo steps; no key dragging, curve editor or blending between
+timelines; scrubbing doesn't fire call or emit keys.
 
 ## Highest risks (settle early)
 

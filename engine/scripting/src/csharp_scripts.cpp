@@ -378,6 +378,20 @@ int32_t rt_tween_op(int64_t id, int32_t op) {
     return api::tween_active(*t_world, static_cast<std::uint64_t>(id)) ? 1 : 0;
 }
 const char* rt_last_error() { return t_error.c_str(); }
+const char* rt_timeline(noor_rt_entity e, int32_t op, const char* name, float speed) {
+    if (!t_world) return nullptr;
+    const Guid id = from_rt(e);
+    if (op == NOOR_RT_TIMELINE_PLAY) {
+        if (!name || !api::play_timeline(*t_world, id, name, speed)) return nullptr;
+    } else if (op == NOOR_RT_TIMELINE_STOP) {
+        api::stop_timeline(*t_world, id);
+        return nullptr;
+    }
+    const auto now = api::current_timeline(*t_world, id);
+    if (!now) return nullptr;
+    t_text = *now;
+    return t_text.c_str();
+}
 
 double rt_clock(int32_t which) {
     if (!t_world) return 0.0;
@@ -425,6 +439,7 @@ const noor_rt_api kApi = {
     rt_clock, rt_set_clock,
     rt_emit, rt_listen, rt_unlisten, rt_call,
     rt_tween, rt_tween_op, rt_last_error,
+    rt_timeline,
 };
 
 } // namespace

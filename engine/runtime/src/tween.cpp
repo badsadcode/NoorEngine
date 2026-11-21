@@ -84,8 +84,10 @@ bool transform_property(std::string_view p) {
     return p == "position" || p == "euler" || p == "rotation" || p == "scale" || p == "world_position";
 }
 
+} // namespace
+
 // The property's value now, or nothing if the entity hasn't got it.
-std::optional<Json> read(World& w, const Guid& e, std::string_view property) {
+std::optional<Json> read_property(World& w, const Guid& e, std::string_view property) {
     if (property == "position") return api::position(w, e).transform(vec);
     if (property == "euler" || property == "rotation") return api::euler(w, e).transform(vec);
     if (property == "scale") return api::scale(w, e).transform(vec);
@@ -99,7 +101,11 @@ std::optional<Json> read(World& w, const Guid& e, std::string_view property) {
     return v ? std::optional(*v) : std::nullopt;
 }
 
-void write(World& w, const Guid& e, std::string_view property, const Json& from, const Json& to, double k) {
+bool blendable(std::string_view property, const Json& a, const Json& b) {
+    return blend(a, b, 0.0).has_value() || (property == "rotation" && vec_of(b).has_value());
+}
+
+void write_property(World& w, const Guid& e, std::string_view property, const Json& from, const Json& to, double k) {
     if (property == "rotation") {
         const auto a = vec_of(from), b = vec_of(to);
         if (!a || !b) return;
@@ -128,7 +134,6 @@ void write(World& w, const Guid& e, std::string_view property, const Json& from,
     }
 }
 
-} // namespace
 
 std::optional<double> ease(std::string_view name, double t) {
     t = std::clamp(t, 0.0, 1.0);
@@ -168,11 +173,11 @@ std::variant<std::uint64_t, std::string> Tweens::start(World& w, const Guid& ent
                                                       std::string easing, TweenOptions options) {
     if (!w.find(entity)) return std::string("the entity doesn't exist");
     if (!ease(easing, 0.0)) return std::format("unknown easing '{}' (linear, ease_out, cubic_in_out, back_out, bounce_out...)", easing);
-    const auto now = read(w, entity, property);
+    const auto now = read_property(w, entity, property);
     if (!now)
         return std::format("'{}' isn't something this entity has (position, euler, rotation, scale, world_position, or "
                            "\"component.field\" holding a number, numbers or a colour)", property);
-    if (!blend(*now, to, 0.0) && !(property == "rotation" && vec_of(to)))
+    if (!blendable(property, *now, to))
         return std::format("'{}' is {} now; it can't be tweened to {}", property, now->dump(), to.dump());
     // The same entity and property: the new tween takes over.
     std::erase_if(tweens_, [&](const auto& t) { return t.second.entity == entity && t.second.property == property; });
@@ -207,7 +212,7 @@ void Tweens::step(World& w, double dt, double real_dt) {
             if (t.delay > 0.0) continue;
         }
         if (!t.started) {  // its starting point is wherever the value is when it starts
-            const auto now = read(w, t.entity, t.property);
+            const auto now = read_property(w, t.entity, t.property);
             if (!now) {
                 done.push_back(id);
                 continue;
@@ -219,7 +224,7 @@ void Tweens::step(World& w, double dt, double real_dt) {
         // A play (or several, if a frame is longer than a short loop) may finish this frame. A hair of slack, as for
         // timers: thirty steps of 1/60 s add up to 0.49999999999999994, and a 0.5 s tween mustn't take a frame more.
         while (t.elapsed + 1e-9 >= t.seconds) {
-            write(w, t.entity, t.property, t.backwards ? t.to : t.from, t.backwards ? t.from : t.to, 1.0);
+            write_property(w, t.entity, t.property, t.backwards ? t.to : t.from, t.backwards ? t.from : t.to, 1.0);
             if (t.loops_left > 0 && --t.loops_left == 0) break;
             t.elapsed -= t.seconds;
             if (t.yoyo) t.backwards = !t.backwards;
@@ -230,7 +235,7 @@ void Tweens::step(World& w, double dt, double real_dt) {
             continue;
         }
         const double k = *ease(t.ease, t.seconds > 0.0 ? t.elapsed / t.seconds : 1.0);
-        write(w, t.entity, t.property, t.backwards ? t.to : t.from, t.backwards ? t.from : t.to, k);
+        write_property(w, t.entity, t.property, t.backwards ? t.to : t.from, t.backwards ? t.from : t.to, k);
     }
     for (const auto id : done) tweens_.erase(id);
 }

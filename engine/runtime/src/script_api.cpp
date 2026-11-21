@@ -126,6 +126,31 @@ std::variant<std::uint64_t, std::string> tween(World& w, const Guid& e, std::str
 void tween_cancel(World& w, std::uint64_t id) { w.tweens().cancel(id); }
 bool tween_active(World& w, std::uint64_t id) { return w.tweens().active(id); }
 
+bool play_timeline(World& w, const Guid& e, std::string_view name, float speed) {
+    const asset::Json* c = component(w, e, "animation_player");
+    if (!c || !c->is_object() || !c->contains("timelines") || !(*c)["timelines"].contains(std::string(name))) return false;
+    asset::Json p = *c;
+    p["playing"] = std::string(name);
+    p["time"] = nullptr;  // from the start: keys at 0 fire too
+    p["speed"] = std::max(0.0f, speed);
+    set_component(w, e, "animation_player", std::move(p));
+    return true;
+}
+
+void stop_timeline(World& w, const Guid& e) {
+    const asset::Json* c = component(w, e, "animation_player");
+    if (!c || !c->is_object() || !c->contains("playing")) return;
+    asset::Json p = *c;
+    p.erase("playing");
+    set_component(w, e, "animation_player", std::move(p));
+}
+
+std::optional<std::string> current_timeline(World& w, const Guid& e) {
+    const asset::Json* c = component(w, e, "animation_player");
+    if (!c || !c->is_object() || !c->contains("playing") || !(*c)["playing"].is_string()) return std::nullopt;
+    return (*c)["playing"].get<std::string>();
+}
+
 bool has_tag(World& w, const Guid& e, std::string_view tag) {
     const auto* x = w.find(e);
     return x && std::ranges::find(x->tags, tag) != x->tags.end();

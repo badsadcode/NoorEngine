@@ -56,6 +56,7 @@ add_executable(noor_unit_tests
     unit/test_time.cpp
     unit/test_messages.cpp
     unit/test_tweens.cpp
+    unit/test_timeline.cpp
 )
 # ctest splits test names on ';', so a doctest case with one in its name silently runs nothing.
 file(GLOB noor_unit_sources ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
@@ -79,7 +80,7 @@ doctest_discover_tests(noor_unit_tests PROPERTIES LABELS "unit" FAIL_REGULAR_EXP
 # ---- Editor API tests: the document C ABI, as NoorEditor uses it (headless) ----
 if(WIN32)
     # The viewport maths is internal to the DLL, so its source is compiled into the test too.
-    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp api/test_sprite_api.cpp api/test_animation_api.cpp api/test_water_api.cpp api/test_tilemap_api.cpp
+    add_executable(noor_editor_api_tests api/test_document_api.cpp api/test_viewport_tools.cpp api/test_environment_api.cpp api/test_effect_api.cpp api/test_sprite_api.cpp api/test_animation_api.cpp api/test_water_api.cpp api/test_tilemap_api.cpp api/test_timeline_api.cpp
                    ${PROJECT_SOURCE_DIR}/engine/editor_api/src/viewport_tools.cpp)
     target_include_directories(noor_editor_api_tests PRIVATE ${PROJECT_SOURCE_DIR}/engine/editor_api/src)
     target_link_libraries(noor_editor_api_tests PRIVATE noor_editor_api noor::scene noor::terrain noor::procgraph noor::game doctest::doctest)
@@ -879,6 +880,17 @@ if(TARGET noor_scripting_managed)
             -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/tween_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_tween
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tween_check.cmake)
     set_tests_properties(player.tween_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_tween_project)
+
+    # Timelines played from Lua and C# (gameplay foundations, part 5).
+    add_test(NAME cli.build_timeline_project
+        COMMAND $<TARGET_FILE:noor_cli> build ${CMAKE_CURRENT_SOURCE_DIR}/data/timeline_project ${CMAKE_CURRENT_BINARY_DIR}/built_timeline_project)
+    set_tests_properties(cli.build_timeline_project PROPERTIES LABELS "cli" TIMEOUT 180 FIXTURES_SETUP built_timeline_project
+                         PASS_REGULAR_EXPRESSION "Built 'Timeline Test'")
+    add_test(NAME player.timeline_lua_csharp
+        COMMAND ${CMAKE_COMMAND} -DPLAYER=$<TARGET_FILE:noor_player> "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/built_timeline_project/Timeline Test.exe"
+            -DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/data/timeline_project -DWORK=${CMAKE_CURRENT_BINARY_DIR}/player_timeline
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/timeline_check.cmake)
+    set_tests_properties(player.timeline_lua_csharp PROPERTIES LABELS "gpu;player" TIMEOUT 120 FIXTURES_REQUIRED built_timeline_project)
 
     # The sample game, NoorFPS-lite (Milestone 4, part 8): built like a user would, then both the
     # C# scene and its Lua twin play their demo and must score.
