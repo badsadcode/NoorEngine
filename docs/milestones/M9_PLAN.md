@@ -287,7 +287,7 @@ So the order:
    first real NoorEngine game (The Uncounted, Chapter Two: sprites in zones). Note that **3D isometric games like
    Torchlight already work** with part 1's camera tilted (3D models, a fixed angled view); this group is for the 2D kind
    (Diablo 1 and 2: sprites, tiles, sorting) and for platformers.
-2. **Gameplay foundations** (proposed, a plan of its own): spawning, timers, tweens, signals and groups, animating any
+2. **Gameplay foundations** ([plan](M9_GAMEPLAY_PLAN.md), approved 2026-11-21): spawning, timers, tweens, signals and groups, animating any
    property, game UI, saving and loading, level changes, navigation and AI agents. **This is a change to the roadmap**: the spec has no milestone for these, and
    Milestone 9 wouldn't add them. But they're what turns a scene into a game in nearly every genre Tom listed, and a big
    generated world with nothing that can walk round it, be saved, or show a menu isn't a game either.
